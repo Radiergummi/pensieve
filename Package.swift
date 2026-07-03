@@ -22,6 +22,7 @@ let package = Package(
       dependencies: [
         "PensieveKit",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        .product(name: "SQLiteData", package: "sqlite-data"),
       ]
     ),
     .testTarget(
