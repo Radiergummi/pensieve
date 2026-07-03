@@ -26,36 +26,43 @@ public struct ExtractionRunner {
 
     var results: [ExtractionResult] = []
     for event in pending {
-      let detail = (try? JSONDecoder().decode([String: String].self,
-                                              from: Data(event.detailJSON.utf8))) ?? [:]
-      let transcriptPath = detail["transcriptPath"] ?? ""
-      let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: transcriptPath))
+      do {
+        let detail = (try? JSONDecoder().decode([String: String].self,
+                                                from: Data(event.detailJSON.utf8))) ?? [:]
+        let transcriptPath = detail["transcriptPath"] ?? ""
+        let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: transcriptPath))
 
-      let candidates = try await LooseEndExtractor(provider: provider).extract(from: session.messages)
-      let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
+        let candidates = try await LooseEndExtractor(provider: provider).extract(from: session.messages)
+        let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
 
-      let stamp = now()
-      let inserted = try await db.write { db -> Int in
-        // Collapse against existing OPEN loose ends in this project (verbatim, normalized).
-        let existing = try LooseEnd.where { $0.projectID.eq(event.projectID) }.fetchAll(db)
-        var seen = Set(existing.filter { $0.status == "open" }.map { normalizeWhitespace($0.quote) })
-        var insertedCount = 0
-        for v in verified {
-          let key = normalizeWhitespace(v.quote)
-          if seen.contains(key) { continue }   // within- and cross-session dedup
-          seen.insert(key)
-          try LooseEnd.insert {
-            LooseEnd(projectID: event.projectID, sourceEventID: event.id, text: v.text,
-                     quote: v.quote, role: v.role, sourceMessageIndex: v.sourceMessageIndex)
-          }.execute(db)
-          insertedCount += 1
+        let stamp = now()
+        let inserted = try await db.write { db -> Int in
+          // Collapse against existing OPEN loose ends in this project (verbatim, normalized).
+          let existing = try LooseEnd.where { $0.projectID.eq(event.projectID) }.fetchAll(db)
+          var seen = Set(existing.filter { $0.status == "open" }.map { normalizeWhitespace($0.quote) })
+          var insertedCount = 0
+          for v in verified {
+            let key = normalizeWhitespace(v.quote)
+            if seen.contains(key) { continue }   // within- and cross-session dedup
+            seen.insert(key)
+            try LooseEnd.insert {
+              LooseEnd(projectID: event.projectID, sourceEventID: event.id, text: v.text,
+                       quote: v.quote, role: v.role, sourceMessageIndex: v.sourceMessageIndex)
+            }.execute(db)
+            insertedCount += 1
+          }
+          try Event.where { $0.id.eq(event.id) }.update { $0.extractedAt = #bind(stamp) }.execute(db)
+          return insertedCount
         }
-        try Event.where { $0.id.eq(event.id) }.update { $0.extractedAt = #bind(stamp) }.execute(db)
-        return insertedCount
-      }
 
-      results.append(ExtractionResult(sessionID: session.sessionID,
-        proposed: candidates.count, verified: verified.count, inserted: inserted))
+        results.append(ExtractionResult(sessionID: session.sessionID,
+          proposed: candidates.count, verified: verified.count, inserted: inserted))
+      } catch {
+        // A single bad session (provider error, etc.) must never abort the batch or
+        // silently mark the event extracted — leave extractedAt unset so it retries.
+        FileHandle.standardError.write(Data("pensieve: extraction failed for session \(event.id): \(error)\n".utf8))
+        continue
+      }
     }
     return results
   }
