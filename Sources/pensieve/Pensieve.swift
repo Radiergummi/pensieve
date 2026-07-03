@@ -11,6 +11,7 @@ struct Pensieve: ParsableCommand {
     subcommands: [
       CaptureCommit.self, CaptureCheckout.self, IngestSession.self,
       Ingest.self, ListProjects.self, Status.self, Track.self, Group.self,
+      InstallHooks.self,
     ]
   )
 }
