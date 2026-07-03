@@ -5,7 +5,8 @@ Personal (single-user) native-macOS tool that reconstructs *where each of my par
 ## Status
 
 - **Phase 1A — DONE** (merged to `main`): headless capture → ingest → query pipeline + `pensieve` CLI + git-hook installer. 19 tests.
-- **Phase 1B — NEXT**: the intelligence layer (loose-end extraction, grounded summaries, `next`/`digest`). This is the make-or-break validation gate. Not started.
+- **Phase 1B — DONE** (merged to `main`): the intelligence layer (loose-end extraction, verbatim trust gate, on-device guided-generation LLM, grounded summaries, `next`/`digest`). **The make-or-break precision gate PASSED** on real transcripts (0 noise, 0 fabrication across 3 on-device acceptance runs). 56 tests. See `docs/superpowers/phase-1b-outcome.md`.
+- **Phase 1B-org — NEXT**: the typed tree & strands, `Project→Node` rename, strand birth, session hook, organizing CLI — designed against the now-clean real data. See `docs/superpowers/backlog.md`.
 - Later (intended, not scheduled): the SwiftUI app (the actual product — three-pane, Mela-like), `pensieved` background service, CloudKit sync + iOS, widgets/Siri/Spotlight.
 
 ## Build & test
