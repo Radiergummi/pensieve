@@ -1,9 +1,11 @@
 import Foundation
 
 public struct TranscriptMessage: Sendable {
+  public let index: Int
   public let role: String
   public let text: String
   public let timestamp: Date?
+  public let isUserPrompt: Bool
 }
 
 public struct ParsedSession: Sendable {

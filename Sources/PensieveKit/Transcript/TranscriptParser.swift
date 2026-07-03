@@ -13,6 +13,7 @@ public enum TranscriptParser {
     var messages: [TranscriptMessage] = []
     var timestamps: [Date] = []
     var userPrompts = 0
+    var nextIndex = 0
 
     for line in content.split(separator: "\n", omittingEmptySubsequences: true) {
       guard let data = line.data(using: .utf8),
@@ -26,10 +27,14 @@ public enum TranscriptParser {
       let type = obj["type"] as? String
       let message = obj["message"] as? [String: Any]
       let role = (message?["role"] as? String) ?? (type ?? "unknown")
-      let text = extractText(message?["content"])
+      let content = message?["content"]
+      let text = extractText(content)
       if type == "user" { userPrompts += 1 }
+      let isUserPrompt = (type == "user") && !isToolResult(content) && !text.isEmpty
       if !text.isEmpty {
-        messages.append(TranscriptMessage(role: role, text: text, timestamp: timestamp))
+        messages.append(TranscriptMessage(index: nextIndex, role: role, text: text,
+                                          timestamp: timestamp, isUserPrompt: isUserPrompt))
+        nextIndex += 1
       }
     }
 
@@ -46,5 +51,11 @@ public enum TranscriptParser {
       return blocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
     }
     return ""
+  }
+
+  /// True when a `type:"user"` record is actually a tool result, not human prose.
+  private static func isToolResult(_ content: Any?) -> Bool {
+    guard let blocks = content as? [[String: Any]] else { return false }
+    return blocks.contains { ($0["type"] as? String) == "tool_result" }
   }
 }
