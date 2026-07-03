@@ -1,7 +1,7 @@
 # Pensieve — MVP Design
 
 **Date:** 2026-07-03
-**Status:** Approved design, pre-implementation
+**Status:** Approved design. **Phase 1A (capture & ingest) is implemented and merged to `main`** — see `../phase-1a-outcome.md` for what shipped and the concrete design inputs for Phase 1B (the intelligence layer, next up). This document remains the source of truth for overall intent across all phases.
 **Audience:** Personal single-user tool (Moritz). Not a product.
 
 ## Purpose
