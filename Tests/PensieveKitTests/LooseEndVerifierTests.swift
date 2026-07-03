@@ -50,3 +50,27 @@ private let corpus: [TranscriptMessage] = [
                             quote: "add rate limiting soon and more words", messageIndex: 0)
   #expect(LooseEndVerifier.verify(c, messages: spaced) != nil)
 }
+
+@Test func verifierRejectsNormalizedQuoteAt14Chars() {
+  // Quote normalizes to exactly 14 chars — below threshold.
+  let msgs = [msg(0, "user", "this is a test query", userPrompt: true)]
+  let c = LooseEndCandidate(text: "test",
+                            quote: "this is a test", messageIndex: 0)  // "this is a test" → 14 chars when normalized
+  #expect(LooseEndVerifier.verify(c, messages: msgs) == nil)
+}
+
+@Test func verifierAcceptsNormalizedQuoteAt15Chars() {
+  // Quote normalizes to exactly 15 chars — meets threshold.
+  let msgs = [msg(0, "user", "this is a test query", userPrompt: true)]
+  let c = LooseEndCandidate(text: "test",
+                            quote: "this is a test q", messageIndex: 0)  // "this is a test q" → 15 chars when normalized
+  #expect(LooseEndVerifier.verify(c, messages: msgs) != nil)
+}
+
+@Test func verifierRejectsAllWhitespaceQuote() {
+  // Quote is >= 15 whitespace chars but normalizes to empty.
+  let msgs = [msg(0, "user", "some content here", userPrompt: true)]
+  let c = LooseEndCandidate(text: "x",
+                            quote: "               ", messageIndex: 0)  // 15 spaces
+  #expect(LooseEndVerifier.verify(c, messages: msgs) == nil)
+}
