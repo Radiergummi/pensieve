@@ -7,3 +7,10 @@ import Testing
   let out = try await provider.complete(prompt: "hello")
   #expect(out == "echo: hello")
 }
+
+@Test func claudeProviderPropagatesRunnerError() async throws {
+  let provider = ClaudeCLIProvider(run: { _ in throw LLMError.providerFailed("boom") })
+  await #expect(throws: LLMError.self) {
+    try await provider.complete(prompt: "hello")
+  }
+}
