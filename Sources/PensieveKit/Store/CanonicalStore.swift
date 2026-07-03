@@ -66,5 +66,16 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     try #sql(#"CREATE INDEX "idx_events_project" ON "events"("projectID", "occurredAt")"#).execute(db)
     try #sql(#"CREATE UNIQUE INDEX "idx_sources_key_kind" ON "sources"("key", "kind")"#).execute(db)
   }
+  migrator.registerMigration("v3-fingerprint-extraction-provenance") { db in
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "fingerprint" TEXT"#).execute(db)
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedAt" TEXT"#).execute(db)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "role" TEXT NOT NULL DEFAULT ''"#).execute(db)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "sourceMessageIndex" INTEGER NOT NULL DEFAULT 0"#).execute(db)
+    // Backfill fingerprints for already-captured rows so the unique index is meaningful.
+    try #sql(#"UPDATE "events" SET "fingerprint" = json_extract("detailJSON", '$.hash') WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL"#).execute(db)
+    try #sql(#"UPDATE "events" SET "fingerprint" = json_extract("detailJSON", '$.sessionID') WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL"#).execute(db)
+    // NULLs are distinct in a SQLite unique index, so unbackfilled rows (e.g. checkouts) don't collide.
+    try #sql(#"CREATE UNIQUE INDEX "idx_events_source_fingerprint" ON "events"("sourceID", "fingerprint")"#).execute(db)
+  }
   try migrator.migrate(db)
 }
