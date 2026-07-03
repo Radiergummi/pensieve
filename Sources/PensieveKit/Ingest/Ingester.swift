@@ -70,7 +70,6 @@ public struct Ingester {
       // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
       // so a session launched from a subdirectory lands in the same project as its commits.
       let key = Git.run(["rev-parse", "--show-toplevel"], in: cwd) ?? cwd
-      let contents = (try? String(contentsOf: transcriptURL, encoding: .utf8)) ?? ""
       let detail = try encodeJSON(["sessionID": session.sessionID,
                                    "prompts": String(session.userPromptCount),
                                    "transcriptPath": p.transcriptPath])
@@ -79,7 +78,7 @@ public struct Ingester {
         try insertIfNew(db, Event(projectID: project.id, sourceID: source.id,
               occurredAt: session.endedAt ?? row.ts, kind: CaptureKind.ccSession,
               summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail,
-              fingerprint: Fingerprint.session(sessionID: session.sessionID, contents: contents)))
+              fingerprint: Fingerprint.session(sessionID: session.sessionID)))
       }
       return 1
 

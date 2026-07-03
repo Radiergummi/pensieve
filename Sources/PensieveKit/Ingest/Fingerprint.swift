@@ -6,9 +6,10 @@ import CryptoKit
 public enum Fingerprint {
   public static func commit(hash: String) -> String { "commit:\(hash)" }
 
-  public static func session(sessionID: String, contents: String) -> String {
-    "session:\(sessionID):\(sha1(contents))"
-  }
+  // sessionID (a UUID) is already unique per session, and the spec ingests a session once at
+  // terminal state — so a content hash isn't needed and would spuriously create new events for
+  // a transcript that grew between reads.
+  public static func session(sessionID: String) -> String { "session:\(sessionID)" }
 
   /// Checkouts have no natural immutable id; synthesize one (identical toggles may collapse).
   public static func checkout(repo: String, from: String, to: String, branch: String) -> String {

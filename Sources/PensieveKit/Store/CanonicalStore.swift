@@ -72,8 +72,8 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "role" TEXT NOT NULL DEFAULT ''"#).execute(db)
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "sourceMessageIndex" INTEGER NOT NULL DEFAULT 0"#).execute(db)
     // Backfill fingerprints for already-captured rows so the unique index is meaningful.
-    try #sql(#"UPDATE "events" SET "fingerprint" = json_extract("detailJSON", '$.hash') WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL"#).execute(db)
-    try #sql(#"UPDATE "events" SET "fingerprint" = json_extract("detailJSON", '$.sessionID') WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL"#).execute(db)
+    try #sql(#"UPDATE "events" SET "fingerprint" = 'commit:' || json_extract("detailJSON", '$.hash') WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL"#).execute(db)
+    try #sql(#"UPDATE "events" SET "fingerprint" = 'session:' || json_extract("detailJSON", '$.sessionID') WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL"#).execute(db)
     // NULLs are distinct in a SQLite unique index, so unbackfilled rows (e.g. checkouts) don't collide.
     try #sql(#"CREATE UNIQUE INDEX "idx_events_source_fingerprint" ON "events"("sourceID", "fingerprint")"#).execute(db)
   }
