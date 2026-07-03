@@ -5,6 +5,41 @@ none is foreclosed. Revisit when the noted trigger arrives.
 
 ---
 
+## Phase 1B-org: the typed tree & strands (deferred out of the 1B gate)
+
+**Parked:** 2026-07-03, after an adversarial review of the 1B spec.
+**Revisit when:** the 1B gate passes (loose ends real + verbatim-cited, zero hallucinations
+on real projects) — then write a `1B-org` spec designed against the real captured data.
+
+The conceptual model we brainstormed (see the rev-1 discussion) is intentionally deferred so
+1B reaches its make-or-break gate cheaply. It forecloses nothing (additive migration; UUID
+PKs + STRICT keep CloudKit reachable). Carry forward:
+
+- **Typed recursive tree of nodes** — `parentID` (strict tree), open-string `kind`
+  (`domain`/`project`/`strand`/`concept`/`initiative`/`task`/`topic`, soft labels, no enforced
+  levels), `description`, `metadataJSON` bag. The **`Project→Node` rename** goes here too.
+- **Strand birth needs new capture-time signals 1A doesn't record** — worktree identity
+  (resolve via `git rev-parse --git-common-dir`, *not* `--show-toplevel`, which sends a
+  worktree to a separate project), default-branch resolution (`origin/HEAD` → config →
+  fallback), detached-HEAD handling (don't mint a "HEAD" strand). Must avoid strand explosion
+  on short-lived/merged branches and collapse "worktree + branch for one fork" to a single
+  strand. If `metadataJSON` holds the strand's branch key, note it's queried-by-key on the
+  ingest hot path → promote that key to a real column (the YAGNI-blob argument fails here).
+- **Session-start hook + cheap-model strand naming/description** (confirm the exact Claude
+  Code hook event — `SessionStart` may fire before the first prompt exists; `UserPromptSubmit`
+  may be the real signal — against current CC docs).
+- **`group()` must also repoint children's `parentID`** once the tree exists (extend the
+  existing invariant + `groupPreservesLooseEndsAndCheckpoints` test).
+- **Per-kind ingestion-handler protocol** (fingerprint/enrich/extract) — introduce when a 4th
+  source type actually arrives; a `switch` suffices for git+session.
+- **Domain-level recursive rollup** summaries (CTE over descendants) so `status <domain>`
+  shows loose ends sitting in child strands.
+- **Organizing CLI:** `add-node`, `nest`, `rename`, `retype`.
+- **Cross-cutting soft references** (`node_links`, cycles allowed).
+- **Evidence-based loose-end auto-close** (1B only surfaces + ages; never auto-closes).
+
+---
+
 ## Spike: statistical theme discovery across strands (`NLEmbedding`)
 
 **Parked:** 2026-07-03, during Phase 1B brainstorming.
