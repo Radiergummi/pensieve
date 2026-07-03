@@ -21,4 +21,9 @@ import Testing
   // (because text is non-empty) BUT is NOT classified as user prompt (because of guard)
   #expect(s.messages.contains { $0.text.contains("tool result marker phrase") })
   #expect(!userPrompts.contains { $0.text.contains("tool result marker phrase") })
+
+  // Injected/command content (type:"user" but carrying structural markers) is retained
+  // (has text) but is NOT classified as a genuine user prompt.
+  #expect(s.messages.contains { $0.text.contains("injected command marker phrase") })
+  #expect(!userPrompts.contains { $0.text.contains("injected command marker phrase") })
 }

@@ -32,3 +32,29 @@ private struct StubProvider: LLMProvider {
   let ok = LooseEndExtractor.decodeCandidates(#"prefix [{"text":"t","quote":"qqqqqqqqqqqqqqqq","messageIndex":2}] suffix"#)
   #expect(ok.first?.messageIndex == 2)
 }
+
+@Test func chunkFragmentsSplitsOversizedMessageAndPreservesIndex() {
+  let budget = 100
+  let longText = String(repeating: "x", count: budget * 4 + 37) // ~4x budget
+  let messages = [
+    TranscriptMessage(index: 7, role: "user", text: longText, timestamp: nil, isUserPrompt: true),
+  ]
+  let chunks = LooseEndExtractor.chunkFragments(messages, budget: budget)
+  #expect(chunks.count >= 4)
+  for chunk in chunks {
+    let combined = chunk.reduce(0) { $0 + $1.text.count }
+    #expect(combined <= budget)
+    for fragment in chunk {
+      #expect(fragment.index == 7)
+    }
+  }
+}
+
+@Test func chunkFragmentsKeepsSmallMessageInOneChunk() {
+  let messages = [
+    TranscriptMessage(index: 0, role: "user", text: "short prompt", timestamp: nil, isUserPrompt: true),
+  ]
+  let chunks = LooseEndExtractor.chunkFragments(messages, budget: 2500)
+  #expect(chunks.count == 1)
+  #expect(chunks[0].count == 1)
+}

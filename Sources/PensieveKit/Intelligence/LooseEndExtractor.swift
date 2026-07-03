@@ -1,12 +1,21 @@
 import Foundation
 
+/// A slice of a transcript message's text, carrying the message's REAL index so a chunk
+/// never exceeds the model's context window even when a single message is oversized.
+/// Verification resolves `index` back to the full message — a quote from any fragment
+/// is still a substring of that message, so it still verifies.
+struct PromptFragment: Sendable {
+  let index: Int
+  let text: String
+}
+
 /// Proposes loose-end candidates from GENUINE USER PROSE only. The model proposes;
 /// the LooseEndVerifier disposes — so this stage optimizes for recall, not trust.
 public struct LooseEndExtractor {
   private let provider: any LLMProvider
   private let chunkCharBudget: Int
 
-  public init(provider: any LLMProvider, chunkCharBudget: Int = 6000) {
+  public init(provider: any LLMProvider, chunkCharBudget: Int = 2500) {
     self.provider = provider
     self.chunkCharBudget = chunkCharBudget
   }
@@ -15,27 +24,45 @@ public struct LooseEndExtractor {
     let prompts = messages.filter { $0.isUserPrompt }
     guard !prompts.isEmpty else { return [] }
     var candidates: [LooseEndCandidate] = []
-    for chunk in chunked(prompts) {
+    for chunk in Self.chunkFragments(prompts, budget: chunkCharBudget) {
       let raw = try await provider.complete(prompt: Self.buildPrompt(chunk))
       candidates.append(contentsOf: Self.decodeCandidates(raw))
     }
     return candidates
   }
 
-  /// Groups user prompts into windows under the char budget (approximate token control).
-  private func chunked(_ prompts: [TranscriptMessage]) -> [[TranscriptMessage]] {
-    var chunks: [[TranscriptMessage]] = [], current: [TranscriptMessage] = [], size = 0
+  /// Splits every message into ≤-budget fragments, then greedily packs fragments into
+  /// chunks whose combined text stays within budget. Invariant: every fragment's
+  /// `text.count <= budget`, and every chunk's total `text.count <= budget`.
+  static func chunkFragments(_ prompts: [TranscriptMessage], budget: Int) -> [[PromptFragment]] {
+    var chunks: [[PromptFragment]] = [], current: [PromptFragment] = [], size = 0
     for p in prompts {
-      if size + p.text.count > chunkCharBudget, !current.isEmpty {
-        chunks.append(current); current = []; size = 0
+      for fragment in splitIntoFragments(index: p.index, text: p.text, budget: budget) {
+        if size + fragment.text.count > budget, !current.isEmpty {
+          chunks.append(current); current = []; size = 0
+        }
+        current.append(fragment); size += fragment.text.count
       }
-      current.append(p); size += p.text.count
     }
     if !current.isEmpty { chunks.append(current) }
     return chunks
   }
 
-  static func buildPrompt(_ chunk: [TranscriptMessage]) -> String {
+  /// Splits `text` into consecutive character-windows of at most `budget` characters,
+  /// each tagged with the owning message's real index.
+  private static func splitIntoFragments(index: Int, text: String, budget: Int) -> [PromptFragment] {
+    guard budget > 0, text.count > budget else { return [PromptFragment(index: index, text: text)] }
+    var fragments: [PromptFragment] = []
+    var start = text.startIndex
+    while start < text.endIndex {
+      let end = text.index(start, offsetBy: budget, limitedBy: text.endIndex) ?? text.endIndex
+      fragments.append(PromptFragment(index: index, text: String(text[start..<end])))
+      start = end
+    }
+    return fragments
+  }
+
+  static func buildPrompt(_ chunk: [PromptFragment]) -> String {
     let body = chunk.map { "[\($0.index)] \($0.text)" }.joined(separator: "\n\n")
     return """
     You extract LOOSE ENDS from a developer's own messages: things they said they would \
