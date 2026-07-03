@@ -41,30 +41,29 @@ public struct Ingester {
       let p = try JSONDecoder().decode(GitCommitPayload.self, from: data)
       let fields = gitCommitFields(hash: p.hash, repo: p.repoPath, fallbackTime: row.ts)
       let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
-      try db.write { db in
+      let inserted = try db.write { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
-        try Event.insert {
-          Event(projectID: project.id, sourceID: source.id, occurredAt: fields.when,
-                kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail)
-        }.execute(db)
+        return try insertIfNew(db, Event(projectID: project.id, sourceID: source.id, occurredAt: fields.when,
+              kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
+              fingerprint: Fingerprint.commit(hash: p.hash)))
       }
-      return 1
+      return inserted ? 1 : 0
 
     case CaptureKind.gitCheckout:
       let p = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
       let detail = try encodeJSON(["from": p.from, "to": p.to, "branch": p.branch])
-      try db.write { db in
+      let inserted = try db.write { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
-        try Event.insert {
-          Event(projectID: project.id, sourceID: source.id, occurredAt: row.ts,
-                kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail)
-        }.execute(db)
+        return try insertIfNew(db, Event(projectID: project.id, sourceID: source.id, occurredAt: row.ts,
+              kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail,
+              fingerprint: Fingerprint.checkout(repo: p.repoPath, from: p.from, to: p.to, branch: p.branch)))
       }
-      return 1
+      return inserted ? 1 : 0
 
     case CaptureKind.ccSession:
       let p = try JSONDecoder().decode(SessionRefPayload.self, from: data)
-      let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: p.transcriptPath))
+      let transcriptURL = URL(fileURLWithPath: p.transcriptPath)
+      let session = TranscriptParser.parse(fileURL: transcriptURL)
       // No cwd → transcript missing / not yet flushed. THROW so the row stays pending
       // and retries next drain, instead of being silently dropped.
       guard let cwd = session.cwd else { throw IngestError.unattributableSession }
@@ -74,19 +73,29 @@ public struct Ingester {
       let detail = try encodeJSON(["sessionID": session.sessionID,
                                    "prompts": String(session.userPromptCount),
                                    "transcriptPath": p.transcriptPath])
-      try db.write { db in
+      let inserted = try db.write { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.claudeCode)
-        try Event.insert {
-          Event(projectID: project.id, sourceID: source.id,
-                occurredAt: session.endedAt ?? row.ts, kind: CaptureKind.ccSession,
-                summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail)
-        }.execute(db)
+        return try insertIfNew(db, Event(projectID: project.id, sourceID: source.id,
+              occurredAt: session.endedAt ?? row.ts, kind: CaptureKind.ccSession,
+              summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail,
+              fingerprint: Fingerprint.session(sessionID: session.sessionID)))
       }
-      return 1
+      return inserted ? 1 : 0
 
     default:
       return 0   // unknown kind: dropped (still marked ingested by drain), 0 events
     }
+  }
+
+  /// Inserts the event only if no event with the same (sourceID, fingerprint) exists.
+  /// Returns whether an insert actually happened (false when deduped).
+  private func insertIfNew(_ db: Database, _ event: Event) throws -> Bool {
+    let exists = try Event
+      .where { $0.sourceID.eq(event.sourceID) && $0.fingerprint.eq(event.fingerprint) }
+      .fetchOne(db) != nil
+    if exists { return false }
+    try Event.insert { event }.execute(db)
+    return true
   }
 
   /// One `git show` yields subject, ISO-8601 commit date, and the changed-file list.

@@ -66,5 +66,24 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     try #sql(#"CREATE INDEX "idx_events_project" ON "events"("projectID", "occurredAt")"#).execute(db)
     try #sql(#"CREATE UNIQUE INDEX "idx_sources_key_kind" ON "sources"("key", "kind")"#).execute(db)
   }
+  migrator.registerMigration("v3-fingerprint-extraction-provenance") { db in
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "fingerprint" TEXT"#).execute(db)
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedAt" TEXT"#).execute(db)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "role" TEXT NOT NULL DEFAULT ''"#).execute(db)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "sourceMessageIndex" INTEGER NOT NULL DEFAULT 0"#).execute(db)
+    // Backfill fingerprints for already-captured rows so the unique index is meaningful.
+    try #sql(#"UPDATE "events" SET "fingerprint" = 'commit:' || json_extract("detailJSON", '$.hash') WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL"#).execute(db)
+    try #sql(#"UPDATE "events" SET "fingerprint" = 'session:' || json_extract("detailJSON", '$.sessionID') WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL"#).execute(db)
+    // An upgraded 1A DB may already contain two events with the same commit hash / sessionID
+    // under one source (1A had no dedup), which would now backfill to identical fingerprints
+    // and make the unique index below fail. Collapse those, keeping the earliest row. Pre-1B
+    // DBs have no populated looseEnds yet, so the ON DELETE CASCADE this triggers is harmless.
+    try #sql(#"""
+      DELETE FROM "events" WHERE "fingerprint" IS NOT NULL AND "rowid" NOT IN
+        (SELECT MIN("rowid") FROM "events" WHERE "fingerprint" IS NOT NULL GROUP BY "sourceID", "fingerprint")
+      """#).execute(db)
+    // NULLs are distinct in a SQLite unique index, so unbackfilled rows (e.g. checkouts) don't collide.
+    try #sql(#"CREATE UNIQUE INDEX "idx_events_source_fingerprint" ON "events"("sourceID", "fingerprint")"#).execute(db)
+  }
   try migrator.migrate(db)
 }
