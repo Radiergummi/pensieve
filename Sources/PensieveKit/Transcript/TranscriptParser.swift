@@ -20,7 +20,8 @@ public enum TranscriptParser {
       else { continue }   // defensive: skip garbage lines
 
       if cwd == nil, let c = obj["cwd"] as? String { cwd = c }
-      if let ts = obj["timestamp"] as? String, let d = iso.date(from: ts) { timestamps.append(d) }
+      let timestamp = (obj["timestamp"] as? String).flatMap(iso.date(from:))
+      if let timestamp { timestamps.append(timestamp) }
 
       let type = obj["type"] as? String
       let message = obj["message"] as? [String: Any]
@@ -28,8 +29,7 @@ public enum TranscriptParser {
       let text = extractText(message?["content"])
       if type == "user" { userPrompts += 1 }
       if !text.isEmpty {
-        messages.append(TranscriptMessage(role: role, text: text,
-                                          timestamp: (obj["timestamp"] as? String).flatMap(iso.date(from:))))
+        messages.append(TranscriptMessage(role: role, text: text, timestamp: timestamp))
       }
     }
 

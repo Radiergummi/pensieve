@@ -4,9 +4,7 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func allTablesRoundTrip() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("pensieve-schema-\(UUID().uuidString).sqlite")
-  let db = try openCanonicalDatabase(at: url)
+  let db = try openCanonicalDatabase(at: tempURL("pensieve-schema"))
 
   let project = Project(name: "Colibri")
   let source = Source(projectID: project.id, kind: "gitRepo", key: "/Users/moritz/Projects/colibri")

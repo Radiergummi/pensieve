@@ -13,8 +13,7 @@ public final class CaptureSpool {
   private let dbQueue: DatabaseQueue
 
   public init(at url: URL) throws {
-    try FileManager.default.createDirectory(
-      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try PensievePaths.ensureParentDirectory(of: url)
     var config = Configuration()
     config.busyMode = .timeout(5)
     self.dbQueue = try DatabaseQueue(path: url.path, configuration: config)

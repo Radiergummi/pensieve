@@ -3,9 +3,7 @@ import Testing
 @testable import PensieveKit
 
 @Test func spoolAppendsAndDrains() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("capture-\(UUID().uuidString).sqlite")
-  let spool = try CaptureSpool(at: url)
+  let spool = try CaptureSpool(at: tempURL("capture"))
 
   try spool.append(kind: "git.commit", payload: #"{"hash":"abc"}"#)
   try spool.append(kind: "cc.session", payload: #"{"path":"/x.jsonl"}"#)

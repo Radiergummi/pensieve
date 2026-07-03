@@ -4,9 +4,7 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func projectRoundTrips() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("pensieve-test-\(UUID().uuidString).sqlite")
-  let db = try openCanonicalDatabase(at: url)
+  let db = try openCanonicalDatabase(at: tempURL("pensieve-test"))
 
   let p = Project(name: "Cetacean")
   try db.write { db in try Project.insert { p }.execute(db) }

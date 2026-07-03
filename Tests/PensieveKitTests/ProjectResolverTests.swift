@@ -4,9 +4,7 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func resolverAutoCreatesAndReuses() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("resolver-\(UUID().uuidString).sqlite")
-  let db = try openCanonicalDatabase(at: url)
+  let db = try openCanonicalDatabase(at: tempURL("resolver"))
   let resolver = ProjectResolver(db: db)
 
   let a = try resolver.resolve(path: "/Users/moritz/Projects/colibri", kind: "gitRepo")
@@ -22,9 +20,7 @@ import SQLiteData
 }
 
 @Test func groupMergesProjects() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("group-\(UUID().uuidString).sqlite")
-  let db = try openCanonicalDatabase(at: url)
+  let db = try openCanonicalDatabase(at: tempURL("group"))
   let resolver = ProjectResolver(db: db)
 
   let front = try resolver.resolve(path: "/p/app-frontend", kind: "gitRepo")
@@ -38,9 +34,7 @@ import SQLiteData
 }
 
 @Test func groupPreservesLooseEndsAndCheckpoints() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("group-loose-\(UUID().uuidString).sqlite")
-  let db = try openCanonicalDatabase(at: url)
+  let db = try openCanonicalDatabase(at: tempURL("group-loose"))
   let resolver = ProjectResolver(db: db)
 
   let a = try resolver.resolve(path: "/p/primary", kind: "gitRepo")

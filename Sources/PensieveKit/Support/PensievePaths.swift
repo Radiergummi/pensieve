@@ -11,4 +11,10 @@ public enum PensievePaths {
   public static func captureURL() -> URL {
     supportDirectory().appendingPathComponent("capture.sqlite")
   }
+
+  /// Ensures the parent directory of a database file exists before it's opened.
+  public static func ensureParentDirectory(of url: URL) throws {
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+  }
 }

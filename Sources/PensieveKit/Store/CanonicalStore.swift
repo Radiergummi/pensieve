@@ -3,8 +3,7 @@ import SQLiteData   // re-exports GRDB symbols (DatabasePool, Configuration, Dat
                     // If a symbol is missing at compile time, add `import GRDB`.
 
 public func openCanonicalDatabase(at url: URL) throws -> any DatabaseWriter {
-  try FileManager.default.createDirectory(
-    at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+  try PensievePaths.ensureParentDirectory(of: url)
   let configuration = Configuration()
   let db = try DatabasePool(path: url.path, configuration: configuration)  // WAL, multi-process
   try migrateCanonical(db)

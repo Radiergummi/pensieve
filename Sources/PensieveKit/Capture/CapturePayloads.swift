@@ -6,6 +6,11 @@ public enum CaptureKind {
   public static let ccSession = "cc.session"
 }
 
+public enum SourceKind {
+  public static let gitRepo = "gitRepo"
+  public static let claudeCode = "claudeCode"
+}
+
 public struct GitCommitPayload: Codable, Sendable {
   public var repoPath: String; public var hash: String; public var branch: String
   public init(repoPath: String, hash: String, branch: String) {

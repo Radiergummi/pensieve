@@ -4,9 +4,7 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func statusReturnsRecentEvents() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("q-\(UUID().uuidString).sqlite")
-  let db = try openCanonicalDatabase(at: url)
+  let db = try openCanonicalDatabase(at: tempURL("q"))
   let (project, source) = try ProjectResolver(db: db).resolve(path: "/p/colibri", kind: "gitRepo")
   try db.write { db in
     try Event.insert {

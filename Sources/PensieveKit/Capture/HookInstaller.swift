@@ -18,7 +18,7 @@ public enum HookInstaller {
   // Backgrounded (&) and error-swallowed so a missing/slow `pensieve` never affects git.
   public static let postCommitScript = """
     #!/bin/sh
-    # pensieve-managed-hook
+    # \(Self.marker)
     pensieve capture-commit \
       --repo "$(git rev-parse --show-toplevel)" \
       --hash "$(git rev-parse HEAD)" \
@@ -28,7 +28,7 @@ public enum HookInstaller {
 
   public static let postCheckoutScript = """
     #!/bin/sh
-    # pensieve-managed-hook
+    # \(Self.marker)
     # Only branch checkouts ($3 == 1), not file checkouts.
     [ "$3" = "1" ] || exit 0
     pensieve capture-checkout \

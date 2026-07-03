@@ -3,9 +3,7 @@ import Testing
 @testable import PensieveKit
 
 @Test func gitCommitPayloadEncodesToSpool() throws {
-  let url = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("capture-\(UUID().uuidString).sqlite")
-  let spool = try CaptureSpool(at: url)
+  let spool = try CaptureSpool(at: tempURL("capture"))
 
   let payload = GitCommitPayload(repoPath: "/Users/moritz/Projects/colibri", hash: "abc123", branch: "main")
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(payload))

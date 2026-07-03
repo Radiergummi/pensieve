@@ -3,8 +3,7 @@ import Testing
 @testable import PensieveKit
 
 @Test func installsExecutableHooks() throws {
-  let repo = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("hookrepo-\(UUID().uuidString)")
+  let repo = tempURL("hookrepo", ext: nil)
   try FileManager.default.createDirectory(
     at: repo.appendingPathComponent(".git/hooks"), withIntermediateDirectories: true)
 
@@ -19,8 +18,7 @@ import Testing
 }
 
 @Test func refusesToOverwriteForeignHook() throws {
-  let repo = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("hookrepo-\(UUID().uuidString)")
+  let repo = tempURL("hookrepo", ext: nil)
   let hooksDir = repo.appendingPathComponent(".git/hooks")
   try FileManager.default.createDirectory(at: hooksDir, withIntermediateDirectories: true)
 
