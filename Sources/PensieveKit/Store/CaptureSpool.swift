@@ -11,8 +11,6 @@ public struct SpoolRow: Sendable {
 
 public final class CaptureSpool {
   private let dbQueue: DatabaseQueue
-  // ISO8601DateFormatter isn't Sendable, but is safe to share for formatting.
-  nonisolated(unsafe) private static let iso = ISO8601DateFormatter()
 
   public init(at url: URL) throws {
     try FileManager.default.createDirectory(
@@ -35,7 +33,7 @@ public final class CaptureSpool {
     try dbQueue.write { db in
       try db.execute(
         sql: "INSERT INTO captures(ts, kind, payload) VALUES(?, ?, ?)",
-        arguments: [Self.iso.string(from: at), kind, payload])
+        arguments: [at.ISO8601Format(), kind, payload])
     }
   }
 
@@ -45,7 +43,7 @@ public final class CaptureSpool {
         .map { row in
           SpoolRow(
             id: row["id"],
-            ts: Self.iso.date(from: row["ts"]) ?? Date(),
+            ts: (try? Date(row["ts"] as String, strategy: .iso8601)) ?? Date(),
             kind: row["kind"],
             payload: row["payload"])
         }
