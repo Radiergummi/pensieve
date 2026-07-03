@@ -24,6 +24,10 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ]
     ),
-    .testTarget(name: "PensieveKitTests", dependencies: ["PensieveKit"]),
+    .testTarget(
+      name: "PensieveKitTests",
+      dependencies: ["PensieveKit"],
+      resources: [.copy("Fixtures")]
+    ),
   ]
 )

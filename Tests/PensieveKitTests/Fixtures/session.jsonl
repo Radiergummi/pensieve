@@ -1,0 +1,4 @@
+{"type":"user","cwd":"/Users/moritz/Projects/colibri","timestamp":"2026-06-30T10:00:00Z","message":{"role":"user","content":"Add rate limiting and also set the CI deploy vars"}}
+{"type":"assistant","timestamp":"2026-06-30T10:01:00Z","message":{"role":"assistant","content":[{"type":"text","text":"I'll add the limiter now."}]}}
+{"garbage that is not json}
+{"type":"user","cwd":"/Users/moritz/Projects/colibri","timestamp":"2026-06-30T10:05:00Z","message":{"role":"user","content":"looks good"}}
