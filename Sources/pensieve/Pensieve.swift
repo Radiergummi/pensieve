@@ -4,14 +4,14 @@ import PensieveKit
 import SQLiteData
 
 @main
-struct Pensieve: ParsableCommand {
+struct Pensieve: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "pensieve",
     abstract: "Track work across parallel projects.",
     subcommands: [
       CaptureCommit.self, CaptureCheckout.self, IngestSession.self,
       Ingest.self, ListProjects.self, Status.self, Track.self, Group.self,
-      InstallHooks.self,
+      InstallHooks.self, LooseEnds.self, Checkpoint.self,
     ]
   )
 }
