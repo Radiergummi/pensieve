@@ -58,3 +58,35 @@ private struct StubProvider: LLMProvider {
   #expect(chunks.count == 1)
   #expect(chunks[0].count == 1)
 }
+
+@Test func splitChunkHalvesFragmentsThenText() {
+  // Several fragments -> split by fragment.
+  let many = [PromptFragment(index: 1, text: "aa"), PromptFragment(index: 1, text: "bb"),
+              PromptFragment(index: 1, text: "cc"), PromptFragment(index: 1, text: "dd")]
+  let byFragment = LooseEndExtractor.splitChunk(many)
+  #expect(byFragment.count == 2)
+  #expect(byFragment[0].count == 2 && byFragment[1].count == 2)
+  // One fragment -> split its text, preserving index.
+  let one = [PromptFragment(index: 5, text: "abcdefgh")]
+  let byText = LooseEndExtractor.splitChunk(one)
+  #expect(byText.count == 2)
+  #expect(byText[0].first?.text == "abcd" && byText[1].first?.text == "efgh")
+  #expect(byText.allSatisfy { $0.allSatisfy { $0.index == 5 } })
+}
+
+@Test func extractorRecoversFromContextOverflowBySplitting() async throws {
+  // A provider that rejects any prompt over ~1500 chars as a context overflow, but
+  // succeeds (returning one candidate) once the chunk is split small enough.
+  struct OverflowStub: LLMProvider {
+    func complete(prompt: String) async throws -> String {
+      if prompt.count > 1500 {
+        throw LLMError.providerFailed("FoundationModels: exceededContextWindowSize(...)")
+      }
+      return #"[{"text":"t","quote":"qqqqqqqqqqqqqqqqqqqq","messageIndex":9}]"#
+    }
+  }
+  let big = TranscriptMessage(index: 9, role: "user",
+    text: String(repeating: "word ", count: 600), timestamp: nil, isUserPrompt: true) // ~3000 chars
+  let out = try await LooseEndExtractor(provider: OverflowStub()).extract(from: [big])
+  #expect(!out.isEmpty)   // recovered instead of throwing
+}

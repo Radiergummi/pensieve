@@ -20,15 +20,58 @@ public struct LooseEndExtractor {
     self.chunkCharBudget = chunkCharBudget
   }
 
+  /// The smallest chunk we bother re-splitting on a context-overflow retry: if a fragment
+  /// this small still overflows, we skip it rather than loop (it can't exceed the window).
+  static let minFragmentChars = 200
+
   public func extract(from messages: [TranscriptMessage]) async throws -> [LooseEndCandidate] {
     let prompts = messages.filter { $0.isUserPrompt }
     guard !prompts.isEmpty else { return [] }
+    // Keep only the developer's genuine conversational intent — drop pasted briefs, plans,
+    // code, and tool output that the transcript records as `user` turns but aren't intent.
+    let genuine = await IntentClassifier(provider: provider).filterGenuine(prompts)
+    guard !genuine.isEmpty else { return [] }
     var candidates: [LooseEndCandidate] = []
-    for chunk in Self.chunkFragments(prompts, budget: chunkCharBudget) {
-      let raw = try await provider.complete(prompt: Self.buildPrompt(chunk))
-      candidates.append(contentsOf: Self.decodeCandidates(raw))
+    for chunk in Self.chunkFragments(genuine, budget: chunkCharBudget) {
+      candidates.append(contentsOf: try await extractChunk(chunk))
     }
     return candidates
+  }
+
+  /// Completes one chunk; if the model rejects it for exceeding the context window (token
+  /// density varies wildly, so a char budget can't guarantee a fit), split the fragments
+  /// and retry each half — so no chunk ever fails a whole session. Non-overflow errors are
+  /// rethrown for the caller (ExtractionRunner) to isolate per session.
+  private func extractChunk(_ fragments: [PromptFragment]) async throws -> [LooseEndCandidate] {
+    guard !fragments.isEmpty else { return [] }
+    do {
+      let raw = try await provider.complete(prompt: Self.buildPrompt(fragments))
+      return Self.decodeCandidates(raw)
+    } catch {
+      let message = "\(error)".lowercased()
+      let isOverflow = message.contains("exceededcontextwindowsize")
+        || (message.contains("exceeds") && message.contains("context"))
+      let total = fragments.reduce(0) { $0 + $1.text.count }
+      guard isOverflow, total > Self.minFragmentChars else { throw error }
+      var out: [LooseEndCandidate] = []
+      for half in Self.splitChunk(fragments) where !half.isEmpty {
+        out.append(contentsOf: try await extractChunk(half))
+      }
+      return out
+    }
+  }
+
+  /// Splits a chunk into two roughly-equal halves: by fragment when there are several, or
+  /// by character (preserving the message index) when a single fragment is still too big.
+  static func splitChunk(_ fragments: [PromptFragment]) -> [[PromptFragment]] {
+    if fragments.count > 1 {
+      let mid = fragments.count / 2
+      return [Array(fragments[..<mid]), Array(fragments[mid...])]
+    }
+    guard let only = fragments.first, only.text.count > 1 else { return [fragments] }
+    let mid = only.text.index(only.text.startIndex, offsetBy: only.text.count / 2)
+    return [[PromptFragment(index: only.index, text: String(only.text[..<mid]))],
+            [PromptFragment(index: only.index, text: String(only.text[mid...]))]]
   }
 
   /// Splits every message into ≤-budget fragments, then greedily packs fragments into
