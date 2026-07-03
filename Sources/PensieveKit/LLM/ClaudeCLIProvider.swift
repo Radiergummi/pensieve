@@ -21,15 +21,27 @@ public struct ClaudeCLIProvider: LLMProvider {
     process.standardOutput = stdout
     process.standardError = stderr
     do { try process.run() } catch { throw LLMError.providerFailed("spawn: \(error)") }
-    // Write stdin concurrently with reading stdout to avoid deadlock: on prompts/responses
-    // larger than the OS pipe buffer, writing stdin fully before reading stdout would block
-    // the parent while the child blocks writing stdout.
+    // Drain stdin/stdout/stderr concurrently to avoid deadlock: if any one of these
+    // pipes is fully written/read before the others start, the child can block writing
+    // to a full pipe buffer (e.g. large stderr diagnostics) while the parent is stuck
+    // draining a different pipe. Each handle is touched by exactly one thread; the
+    // DispatchGroup wait below establishes a happens-before edge so `errData` is safe
+    // to read on the calling thread afterward.
     DispatchQueue.global().async {
       stdin.fileHandleForWriting.write(Data(prompt.utf8))
       stdin.fileHandleForWriting.closeFile()
     }
+    // Written on the background queue below and read on this thread only after
+    // `stderrGroup.wait()` returns, which establishes a happens-before edge.
+    nonisolated(unsafe) var errData = Data()
+    let stderrGroup = DispatchGroup()
+    stderrGroup.enter()
+    DispatchQueue.global().async {
+      errData = stderr.fileHandleForReading.readDataToEndOfFile()
+      stderrGroup.leave()
+    }
     let data = stdout.fileHandleForReading.readDataToEndOfFile()
-    let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+    stderrGroup.wait()
     process.waitUntilExit()
     guard process.terminationStatus == 0 else {
       let errText = String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
