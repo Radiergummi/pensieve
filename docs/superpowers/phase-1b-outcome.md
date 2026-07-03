@@ -1,6 +1,48 @@
 # Phase 1B — Outcome & Precision Handoff
 
-**Date:** 2026-07-03. **Status:** the intelligence-layer **machinery is built, reviewed, and green (53 tests)** on branch `phase-1b-intelligence` — **not merged**. The make-or-break **precision gate has NOT yet passed**; the acceptance run diagnosed exactly why and what to build next. Read this before continuing 1B.
+**Date:** 2026-07-03. **Status:** the intelligence-layer machinery is built, reviewed, and green (**55 tests**) on branch `phase-1b-intelligence` — **not merged**. The make-or-break **precision gate is now PASSED** (see "Precision gate — RESOLVED" below); the sections after it are the historical diagnosis that led there. Read this before continuing 1B.
+
+## Precision gate — RESOLVED (2026-07-03, same day)
+
+The precision work below was executed and the gate now passes. **Three final on-device acceptance
+runs over the same three real transcripts: 7 / 10 / 8 loose ends, ZERO noise and ZERO fabrication in
+every run** (was 39 with ~25 noise). Counts are stable run-to-run and `verified ≈ proposed` — the
+extractor now sees clean genuine prose. Recall intact (genuine items surface, incl. *"give me a
+prompt to hand to the new agent"*, *"review the entire unpushed diff for convention violations"*, the
+swarm-spec/compose concern, the YAML-tags thread, a full run of real code-review questions).
+
+**What fixed it (three levers, in commit order):**
+1. **Guided generation** for the on-device provider — `FoundationModelsProvider` now returns
+   structured output via a **runtime-built `GenerationSchema`** (`DynamicGenerationSchema` +
+   `GeneratedContent.kind`), *not* the `@Generable` macro. The macro compiles under `swift build`
+   but its plugin fails to load in this CLT-only machine's **test build**; the runtime API needs no
+   macro, so `test.sh` compiles. Structured methods (`extractCandidates`/`classifyGenuineIndices`)
+   sit on `LLMProvider` with text-based defaults, so `claude -p` and all test mocks are unchanged.
+   This ended the "3B won't emit JSON → classifier fails open → no-ops" root cause; the classifier
+   now trusts a structured empty result as *drop* (fail-toward-drop), fail-open only on a throw.
+2. **`isMeta == true` structural gate in `TranscriptParser`** — Claude Code's own flag for injected
+   content it records as `type:"user"` (slash-command bodies like `/simplify`/`/code-review`, **skill
+   bodies**, caveats). This was the dominant remaining noise: the extractor was chunking giant
+   injected skill/command bodies and mining their embedded checklists/rubrics as fake loose ends,
+   which also caused wild run-to-run instability (7 vs 91 proposed). `isMeta` is robust and universal;
+   verified across all three transcripts that it flags only injected content, never genuine prose.
+3. **Inline-tag markers** (backstop for injected content `isMeta` doesn't flag): added
+   `<task-notification>`, `</tool_uses>`, `<subagent`, `[Request interrupted`, `Base directory for
+   this skill:` to the existing command/injection marker list.
+
+**Dead end (recorded so no one retries it):** tightening the *classifier prompt* with explicit
+"a rubric/checklist line is not intent" examples **backfired** — the 3B model is too weak/unstable to
+filter this semantically (the exact examples still leaked, and one run exploded to 91 proposed). The
+leaks were structural injections; the parser (`isMeta`) is the right layer. The classifier prompt was
+reverted to its committed form.
+
+**Verdict: precision gate PASSED; recall spot-check credible; trust guarantee intact.** Next per the
+spec is Phase 1B-org (the typed tree / strands), designed against this now-clean real data — plus the
+deferred minor findings below.
+
+---
+
+*(Historical: the diagnosis that produced the plan above.)*
 
 ## What Phase 1B shipped (branch `phase-1b-intelligence`, 20+ commits)
 

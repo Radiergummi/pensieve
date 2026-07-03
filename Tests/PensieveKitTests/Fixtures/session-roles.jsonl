@@ -6,3 +6,5 @@
 {"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:05:00Z","message":{"role":"user","content":"<command-name>foo</command-name> injected command marker phrase"}}
 {"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:06:00Z","message":{"role":"user","content":"<task-notification>\n<task-id>abc</task-id>\n<usage>subagent result marker phrase</usage>\n</tool_uses>"}}
 {"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:07:00Z","message":{"role":"user","content":"[Request interrupted by user for tool use] interruption marker phrase"}}
+{"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:08:00Z","message":{"role":"user","content":"Base directory for this skill: /x/skills/writing-plans\n\n# Writing Plans\n\nsteps that describe what to do skill body marker phrase"}}
+{"type":"user","isMeta":true,"cwd":"/p/colibri","timestamp":"2026-06-30T10:09:00Z","message":{"role":"user","content":"Run the workflow-backed code review at high effort. isMeta marker phrase with no tag."}}

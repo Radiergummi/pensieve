@@ -35,4 +35,14 @@ import Testing
   // A "[Request interrupted…]" notice is likewise not a genuine user prompt.
   #expect(s.messages.contains { $0.text.contains("interruption marker phrase") })
   #expect(!userPrompts.contains { $0.text.contains("interruption marker phrase") })
+
+  // An injected skill body ("Base directory for this skill:") is not human prose — this is
+  // the dominant noise source (its rubrics/checklists otherwise mine as fake loose ends).
+  #expect(s.messages.contains { $0.text.contains("skill body marker phrase") })
+  #expect(!userPrompts.contains { $0.text.contains("skill body marker phrase") })
+
+  // isMeta:true (Claude Code's own injected-content flag, e.g. slash-command bodies) is the
+  // robust structural gate — filtered even when the text carries NO inline marker tag.
+  #expect(s.messages.contains { $0.text.contains("isMeta marker phrase with no tag") })
+  #expect(!userPrompts.contains { $0.text.contains("isMeta marker phrase with no tag") })
 }
