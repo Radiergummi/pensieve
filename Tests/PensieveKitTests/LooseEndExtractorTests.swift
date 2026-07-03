@@ -53,6 +53,15 @@ private struct StubProvider: LLMProvider {
   #expect(ok.first?.messageIndex == 2)
 }
 
+@Test func decodeCandidatesToleratesTrailingBracketInProse() {
+  // Trailing model prose containing ']' must not truncate/break the parse (regression:
+  // a first-'[' to last-']' slice would swallow the prose and fail to decode -> drop all).
+  let raw = #"[{"text":"t","quote":"qqqqqqqqqqqqqqqq","messageIndex":3}] (only item [1] mattered])"#
+  let out = LooseEndExtractor.decodeCandidates(raw)
+  #expect(out.count == 1)
+  #expect(out.first?.messageIndex == 3)
+}
+
 @Test func chunkFragmentsSplitsOversizedMessageAndPreservesIndex() {
   let budget = 100
   let longText = String(repeating: "x", count: budget * 4 + 37) // ~4x budget

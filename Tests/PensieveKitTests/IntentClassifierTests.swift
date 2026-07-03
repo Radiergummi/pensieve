@@ -51,4 +51,6 @@ private func msg(_ i: Int, _ text: String) -> TranscriptMessage {
   // A candidate object-array (what the extractor returns) is NOT an int array -> nil (fail open).
   #expect(IntentClassifier.decodeIndices(#"[{"text":"t","messageIndex":0}]"#) == nil)
   #expect(IntentClassifier.decodeIndices("no array here") == nil)
+  // Trailing prose containing ']' must not break the parse (regression: last-']' slice).
+  #expect(IntentClassifier.decodeIndices("[0,2] because item 3 was already done ]") == Set([0, 2]))
 }

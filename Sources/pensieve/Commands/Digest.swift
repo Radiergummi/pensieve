@@ -9,7 +9,8 @@ struct Digest: AsyncParsableCommand {
     let db = try openCanonical()
     let builder = SummaryBuilder(provider: makeDefaultLLMProvider())
     print("# Pensieve digest\n")
-    for p in try ProjectQueries.all(db) {
+    // Active projects only, matching the abstract (archived/muted don't belong in a morning digest).
+    for p in try ProjectQueries.all(db) where p.state == "active" {
       guard let sum = try await builder.build(db, projectName: p.name, now: Date()) else { continue }
       print("## \(sum.whatItIs)")
       print("\n_\(sum.lastWorkDone)_  <!-- generated narration -->\n")   // fenced: clearly generated

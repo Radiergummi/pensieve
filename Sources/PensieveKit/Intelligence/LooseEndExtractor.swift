@@ -120,12 +120,9 @@ public struct LooseEndExtractor {
     """
   }
 
-  /// Extracts the first top-level JSON array from arbitrary model output; skips malformed.
+  /// Extracts the first complete top-level JSON array from arbitrary model output; skips malformed.
   public static func decodeCandidates(_ raw: String) -> [LooseEndCandidate] {
-    guard let start = raw.firstIndex(of: "["), let end = raw.lastIndex(of: "]"), start < end
-    else { return [] }
-    let slice = String(raw[start...end])
-    guard let data = slice.data(using: .utf8),
+    guard let slice = firstJSONArray(in: raw), let data = slice.data(using: .utf8),
           let decoded = try? JSONDecoder().decode([LooseEndCandidate].self, from: data)
     else { return [] }
     return decoded

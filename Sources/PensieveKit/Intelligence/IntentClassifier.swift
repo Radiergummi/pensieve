@@ -83,10 +83,7 @@ public struct IntentClassifier {
   /// integer array is parseable (→ caller fails open), so a non-array response — e.g. the
   /// model echoing prose — never silently drops every message.
   static func decodeIndices(_ raw: String) -> Set<Int>? {
-    guard let start = raw.firstIndex(of: "["), let end = raw.lastIndex(of: "]"), start < end
-    else { return nil }
-    let slice = String(raw[start...end])
-    guard let data = slice.data(using: .utf8),
+    guard let slice = firstJSONArray(in: raw), let data = slice.data(using: .utf8),
           let array = try? JSONDecoder().decode([Int].self, from: data)
     else { return nil }
     return Set(array)

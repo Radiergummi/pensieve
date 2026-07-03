@@ -7,10 +7,17 @@ struct LooseEnds: ParsableCommand {
     abstract: "List open, cited loose ends (quote-first).")
   @Flag(name: .long) var all = false
   @Argument var project: String?
+
+  func validate() throws {
+    if all, project != nil {
+      throw ValidationError("Pass a project name or --all, not both.")
+    }
+  }
+
   func run() throws {
     let db = try openCanonical()
     var projectID: UUID? = nil
-    if let project, !all {
+    if let project {   // validate() guarantees --all is not also set
       guard let p = try ProjectQueries.status(db, name: project, limit: 0)?.project else {
         print("no project named '\(project)'"); return
       }
