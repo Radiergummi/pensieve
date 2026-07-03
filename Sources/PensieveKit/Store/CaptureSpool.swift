@@ -15,7 +15,9 @@ public final class CaptureSpool {
   public init(at url: URL) throws {
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    self.dbQueue = try DatabaseQueue(path: url.path)
+    var config = Configuration()
+    config.busyMode = .timeout(5)
+    self.dbQueue = try DatabaseQueue(path: url.path, configuration: config)
     try dbQueue.write { db in
       try db.execute(sql: """
         CREATE TABLE IF NOT EXISTS captures(

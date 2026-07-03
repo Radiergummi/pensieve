@@ -36,3 +36,35 @@ import SQLiteData
   let sources = try db.read { db in try Source.all.fetchAll(db) }
   #expect(sources.allSatisfy { $0.projectID == front.project.id })
 }
+
+@Test func groupPreservesLooseEndsAndCheckpoints() throws {
+  let url = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("group-loose-\(UUID().uuidString).sqlite")
+  let db = try openCanonicalDatabase(at: url)
+  let resolver = ProjectResolver(db: db)
+
+  let a = try resolver.resolve(path: "/p/primary", kind: "gitRepo")
+  let b = try resolver.resolve(path: "/p/secondary", kind: "gitRepo")
+
+  let event = Event(
+    projectID: b.project.id, sourceID: b.source.id, occurredAt: Date(),
+    kind: "git.commit", summary: "x", detailJSON: "{}")
+  try db.write { db in try Event.insert { event }.execute(db) }
+
+  let looseEnd = LooseEnd(
+    projectID: b.project.id, sourceEventID: event.id, text: "todo", quote: "q")
+  try db.write { db in try LooseEnd.insert { looseEnd }.execute(db) }
+
+  let checkpoint = Checkpoint(projectID: b.project.id, note: "n")
+  try db.write { db in try Checkpoint.insert { checkpoint }.execute(db) }
+
+  try ProjectResolver(db: db).group(a.project.id, into: [b.project.id])
+
+  let looseEnds = try db.read { db in try LooseEnd.all.fetchAll(db) }
+  #expect(looseEnds.count == 1)
+  #expect(looseEnds.first?.projectID == a.project.id)
+
+  let checkpoints = try db.read { db in try Checkpoint.all.fetchAll(db) }
+  #expect(checkpoints.count == 1)
+  #expect(checkpoints.first?.projectID == a.project.id)
+}

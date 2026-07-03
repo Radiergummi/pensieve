@@ -7,7 +7,7 @@ public enum Git {
     process.arguments = ["git", "-C", repo] + args
     let pipe = Pipe()
     process.standardOutput = pipe
-    process.standardError = Pipe()
+    process.standardError = FileHandle.nullDevice
     do { try process.run() } catch { return nil }
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()

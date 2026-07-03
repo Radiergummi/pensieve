@@ -35,6 +35,10 @@ public struct ProjectResolver {
           .update { $0.projectID = primaryID }.execute(db)
         try Event.where { $0.projectID.eq(other) }
           .update { $0.projectID = primaryID }.execute(db)
+        try LooseEnd.where { $0.projectID.eq(other) }
+          .update { $0.projectID = primaryID }.execute(db)
+        try Checkpoint.where { $0.projectID.eq(other) }
+          .update { $0.projectID = primaryID }.execute(db)
         try Project.where { $0.id.eq(other) }.delete().execute(db)
       }
     }
