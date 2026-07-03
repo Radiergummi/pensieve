@@ -45,8 +45,7 @@ public struct LooseEndExtractor {
   private func extractChunk(_ fragments: [PromptFragment]) async throws -> [LooseEndCandidate] {
     guard !fragments.isEmpty else { return [] }
     do {
-      let raw = try await provider.complete(prompt: Self.buildPrompt(fragments))
-      return Self.decodeCandidates(raw)
+      return try await provider.extractCandidates(prompt: Self.buildPrompt(fragments))
     } catch {
       let message = "\(error)".lowercased()
       let isOverflow = message.contains("exceededcontextwindowsize")

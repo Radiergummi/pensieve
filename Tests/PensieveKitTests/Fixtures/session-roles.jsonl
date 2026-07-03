@@ -4,3 +4,5 @@
 {"type":"user","timestamp":"2026-06-30T10:03:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"y","content":"done"},{"type":"text","text":"tool result marker phrase"}]}}
 {"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:04:00Z","message":{"role":"user","content":"looks good, ship it"}}
 {"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:05:00Z","message":{"role":"user","content":"<command-name>foo</command-name> injected command marker phrase"}}
+{"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:06:00Z","message":{"role":"user","content":"<task-notification>\n<task-id>abc</task-id>\n<usage>subagent result marker phrase</usage>\n</tool_uses>"}}
+{"type":"user","cwd":"/p/colibri","timestamp":"2026-06-30T10:07:00Z","message":{"role":"user","content":"[Request interrupted by user for tool use] interruption marker phrase"}}

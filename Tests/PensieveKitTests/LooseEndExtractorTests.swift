@@ -27,6 +27,26 @@ private struct StubProvider: LLMProvider {
   #expect(out.first?.quote == "We still need to add rate limiting")
 }
 
+@Test func extractorConsumesStructuredProviderOutput() async throws {
+  // A provider whose `complete` is unusable but whose structured methods return real values
+  // (as the guided-generation Foundation Models provider does). If the pipeline still routed
+  // through `complete`, both stages would collapse (garbage classify -> fail open is harmless,
+  // but garbage extract -> zero candidates); getting the candidate proves it uses the seam.
+  struct StructuredProvider: LLMProvider {
+    func complete(prompt: String) async throws -> String { "GARBAGE, not JSON at all" }
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0] }
+    func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] {
+      [LooseEndCandidate(text: "add rate limiting", quote: "We still need to add rate limiting", messageIndex: 0)]
+    }
+  }
+  let messages = [
+    TranscriptMessage(index: 0, role: "user", text: "We still need to add rate limiting", timestamp: nil, isUserPrompt: true),
+  ]
+  let out = try await LooseEndExtractor(provider: StructuredProvider()).extract(from: messages)
+  #expect(out.count == 1)
+  #expect(out.first?.quote == "We still need to add rate limiting")
+}
+
 @Test func decodeCandidatesSkipsMalformedOutput() {
   #expect(LooseEndExtractor.decodeCandidates("no json here").isEmpty)
   let ok = LooseEndExtractor.decodeCandidates(#"prefix [{"text":"t","quote":"qqqqqqqqqqqqqqqq","messageIndex":2}] suffix"#)

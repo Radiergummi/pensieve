@@ -26,6 +26,19 @@ private func msg(_ i: Int, _ text: String) -> TranscriptMessage {
   #expect(kept.map(\.index) == [0, 1])   // no parseable index array -> keep all
 }
 
+@Test func classifierHonorsStructuredEmptyAsDropAll() async {
+  // A provider whose `complete` would fail open (unparseable -> keep all) but whose
+  // structured method returns an empty array. The classifier must trust the structured
+  // answer and drop all — proving guided output takes effect and fail-open is throw-only.
+  struct DropAllStructured: LLMProvider {
+    func complete(prompt: String) async throws -> String { "not parseable" }
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] { [] }
+  }
+  let messages = [msg(0, "hello"), msg(1, "world")]
+  let kept = await IntentClassifier(provider: DropAllStructured()).filterGenuine(messages)
+  #expect(kept.isEmpty)
+}
+
 @Test func classifierEmptyInputYieldsEmpty() async {
   let classifier = IntentClassifier(provider: FixedProvider(reply: "[]"))
   let kept = await classifier.filterGenuine([])

@@ -9,8 +9,10 @@ import Foundation
 /// The transcript's own metadata cannot separate these (a pasted brief is recorded as a
 /// `promptSource: typed` user message just like real prose), so this is necessarily a
 /// semantic judgment. It runs on the same local `LLMProvider` as extraction (free,
-/// on-device). It FAILS OPEN — on any classifier hiccup it keeps the messages — so a
-/// glitch never silently zeroes out extraction; the verbatim verifier still gates trust.
+/// on-device), which returns a structured (guided-generation) answer it can trust: an
+/// empty result legitimately drops a batch. It fails open only on a *hard provider error*
+/// (a throw), so a transient glitch never silently zeroes out extraction; the verbatim
+/// verifier still gates trust regardless.
 public struct IntentClassifier {
   private let provider: any LLMProvider
   private let batchCharBudget: Int
@@ -27,11 +29,12 @@ public struct IntentClassifier {
     var kept: [TranscriptMessage] = []
     for batch in Self.batches(messages, budget: batchCharBudget) {
       let keep: Set<Int>
-      if let raw = try? await provider.complete(prompt: Self.buildPrompt(batch)),
-         let indices = Self.decodeIndices(raw) {
-        keep = indices
+      if let indices = try? await provider.classifyGenuineIndices(prompt: Self.buildPrompt(batch)) {
+        // Trust the structured answer — an empty set legitimately drops the whole batch.
+        // (With guided generation this is a real classification, not an unparseable no-op.)
+        keep = Set(indices)
       } else {
-        keep = Set(batch.map { $0.index })   // fail open: keep the whole batch
+        keep = Set(batch.map { $0.index })   // fail open only on a hard provider error
       }
       kept.append(contentsOf: batch.filter { keep.contains($0.index) })
     }

@@ -26,4 +26,13 @@ import Testing
   // (has text) but is NOT classified as a genuine user prompt.
   #expect(s.messages.contains { $0.text.contains("injected command marker phrase") })
   #expect(!userPrompts.contains { $0.text.contains("injected command marker phrase") })
+
+  // Subagent-result envelope (<task-notification>/<usage>/</tool_uses>) is a machine
+  // record, not human prose.
+  #expect(s.messages.contains { $0.text.contains("subagent result marker phrase") })
+  #expect(!userPrompts.contains { $0.text.contains("subagent result marker phrase") })
+
+  // A "[Request interrupted…]" notice is likewise not a genuine user prompt.
+  #expect(s.messages.contains { $0.text.contains("interruption marker phrase") })
+  #expect(!userPrompts.contains { $0.text.contains("interruption marker phrase") })
 }
