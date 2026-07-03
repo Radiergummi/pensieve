@@ -16,6 +16,7 @@ public final class CaptureSpool {
     try PensievePaths.ensureParentDirectory(of: url)
     var config = Configuration()
     config.busyMode = .timeout(5)
+    config.prepareDatabase { db in try db.execute(sql: "PRAGMA journal_mode = WAL") }
     self.dbQueue = try DatabaseQueue(path: url.path, configuration: config)
     try dbQueue.write { db in
       try db.execute(sql: """

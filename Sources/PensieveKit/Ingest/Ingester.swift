@@ -1,5 +1,6 @@
 import Foundation
 import SQLiteData
+import GRDB
 
 public struct Ingester {
   let spool: CaptureSpool
@@ -10,66 +11,92 @@ public struct Ingester {
     self.spool = spool; self.db = db; self.resolver = ProjectResolver(db: db)
   }
 
+  enum IngestError: Error { case unattributableSession }
+
+  /// Drains all pending spool rows. Returns the number of canonical events CREATED
+  /// (not rows processed — a dropped unknown-kind row counts 0). A row that throws is
+  /// left unmarked so it retries next drain; successful and dropped rows are marked
+  /// ingested per-row so progress is durable even if a later row fails.
   @discardableResult
   public func drain() throws -> Int {
     let rows = try spool.pending()
-    var done: [Int64] = []
+    var created = 0
     for row in rows {
       do {
-        try ingest(row)
-        done.append(row.id)
+        let n = try ingest(row)
+        try spool.markIngested([row.id])
+        created += n
       } catch {
-        // Leave the row unmarked so it retries next drain; don't abort the batch.
-        continue
+        continue   // leave unmarked; retry next drain
       }
     }
-    try spool.markIngested(done)
-    return done.count
+    return created
   }
 
-  private func ingest(_ row: SpoolRow) throws {
+  /// Returns the number of events created (0 for a dropped unknown kind).
+  private func ingest(_ row: SpoolRow) throws -> Int {
     let data = Data(row.payload.utf8)
     switch row.kind {
     case CaptureKind.gitCommit:
       let p = try JSONDecoder().decode(GitCommitPayload.self, from: data)
-      let (project, source) = try resolver.resolve(path: p.repoPath, kind: SourceKind.gitRepo)
-      let subject = Git.run(["show", "-s", "--format=%s", p.hash], in: p.repoPath) ?? p.hash
-      let when = Git.run(["show", "-s", "--format=%cI", p.hash], in: p.repoPath)
-        .flatMap { ISO8601DateFormatter().date(from: $0) } ?? row.ts
-      let files = Git.run(["show", "--name-only", "--format=", p.hash], in: p.repoPath) ?? ""
-      let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": files])
-      let event = Event(projectID: project.id, sourceID: source.id, occurredAt: when,
-                        kind: CaptureKind.gitCommit, summary: subject, detailJSON: detail)
-      try insert(event)
+      let fields = gitCommitFields(hash: p.hash, repo: p.repoPath, fallbackTime: row.ts)
+      let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
+      try db.write { db in
+        let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
+        try Event.insert {
+          Event(projectID: project.id, sourceID: source.id, occurredAt: fields.when,
+                kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail)
+        }.execute(db)
+      }
+      return 1
 
     case CaptureKind.gitCheckout:
       let p = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
-      let (project, source) = try resolver.resolve(path: p.repoPath, kind: SourceKind.gitRepo)
       let detail = try encodeJSON(["from": p.from, "to": p.to, "branch": p.branch])
-      let event = Event(projectID: project.id, sourceID: source.id, occurredAt: row.ts,
-                        kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail)
-      try insert(event)
+      try db.write { db in
+        let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
+        try Event.insert {
+          Event(projectID: project.id, sourceID: source.id, occurredAt: row.ts,
+                kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail)
+        }.execute(db)
+      }
+      return 1
 
     case CaptureKind.ccSession:
       let p = try JSONDecoder().decode(SessionRefPayload.self, from: data)
       let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: p.transcriptPath))
-      guard let cwd = session.cwd else { return }   // can't attribute without a path
-      let (project, source) = try resolver.resolve(path: cwd, kind: SourceKind.claudeCode)
+      // No cwd → transcript missing / not yet flushed. THROW so the row stays pending
+      // and retries next drain, instead of being silently dropped.
+      guard let cwd = session.cwd else { throw IngestError.unattributableSession }
+      // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
+      // so a session launched from a subdirectory lands in the same project as its commits.
+      let key = Git.run(["rev-parse", "--show-toplevel"], in: cwd) ?? cwd
       let detail = try encodeJSON(["sessionID": session.sessionID,
                                    "prompts": String(session.userPromptCount),
                                    "transcriptPath": p.transcriptPath])
-      let event = Event(projectID: project.id, sourceID: source.id,
-                        occurredAt: session.endedAt ?? row.ts,
-                        kind: CaptureKind.ccSession,
-                        summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail)
-      try insert(event)
+      try db.write { db in
+        let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.claudeCode)
+        try Event.insert {
+          Event(projectID: project.id, sourceID: source.id,
+                occurredAt: session.endedAt ?? row.ts, kind: CaptureKind.ccSession,
+                summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail)
+        }.execute(db)
+      }
+      return 1
 
     default:
-      return   // unknown kind: mark done (drop) — forward-compat, don't wedge the spool
+      return 0   // unknown kind: dropped (still marked ingested by drain), 0 events
     }
   }
 
-  private func insert(_ event: Event) throws {
-    try db.write { db in try Event.insert { event }.execute(db) }
+  /// One `git show` yields subject, ISO-8601 commit date, and the changed-file list.
+  private func gitCommitFields(hash: String, repo: String, fallbackTime: Date)
+    -> (subject: String, when: Date, files: String) {
+    let raw = Git.run(["show", "--name-only", "--format=%s%n%cI", hash], in: repo) ?? ""
+    let lines = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    let subject = lines.first.flatMap { $0.isEmpty ? nil : $0 } ?? hash
+    let when = (lines.count > 1 ? ISO8601DateFormatter().date(from: lines[1]) : nil) ?? fallbackTime
+    let files = lines.dropFirst(2).filter { !$0.isEmpty }.joined(separator: "\n")
+    return (subject, when, files)
   }
 }

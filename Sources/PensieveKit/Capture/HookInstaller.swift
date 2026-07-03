@@ -16,32 +16,35 @@ public enum HookInstaller {
   static let marker = "pensieve-managed-hook"
 
   // Backgrounded (&) and error-swallowed so a missing/slow `pensieve` never affects git.
-  public static let postCommitScript = """
+  public static func postCommitScript(pensievePath: String) -> String { """
     #!/bin/sh
     # \(Self.marker)
-    pensieve capture-commit \
+    \(pensievePath) capture-commit \
       --repo "$(git rev-parse --show-toplevel)" \
       --hash "$(git rev-parse HEAD)" \
       --branch "$(git rev-parse --abbrev-ref HEAD)" >/dev/null 2>&1 &
     exit 0
     """
+  }
 
-  public static let postCheckoutScript = """
+  public static func postCheckoutScript(pensievePath: String) -> String { """
     #!/bin/sh
     # \(Self.marker)
     # Only branch checkouts ($3 == 1), not file checkouts.
     [ "$3" = "1" ] || exit 0
-    pensieve capture-checkout \
+    \(pensievePath) capture-checkout \
       --repo "$(git rev-parse --show-toplevel)" \
       --from "$1" --to "$2" \
       --branch "$(git rev-parse --abbrev-ref HEAD)" >/dev/null 2>&1 &
     exit 0
     """
+  }
 
-  public static func install(inRepo repo: URL) throws -> [URL] {
+  public static func install(inRepo repo: URL, pensievePath: String = "pensieve") throws -> [URL] {
     let hooksDir = repo.appendingPathComponent(".git/hooks", isDirectory: true)
     try FileManager.default.createDirectory(at: hooksDir, withIntermediateDirectories: true)
-    let hooks = [("post-commit", postCommitScript), ("post-checkout", postCheckoutScript)]
+    let hooks = [("post-commit", postCommitScript(pensievePath: pensievePath)),
+                 ("post-checkout", postCheckoutScript(pensievePath: pensievePath))]
 
     // Refuse to clobber foreign hooks: an existing file without our marker is user-owned.
     var conflicts: [URL] = []
