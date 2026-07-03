@@ -16,4 +16,9 @@ import Testing
   #expect(!userPrompts.contains { $0.text.contains("pagination") })
   // tool-result user-record is NOT a user prompt (and has no text, so may be absent)
   #expect(!userPrompts.contains { $0.text.contains("exit 0") })
+
+  // Pin isToolResult guard: message with mixed tool_result+text content IS retained
+  // (because text is non-empty) BUT is NOT classified as user prompt (because of guard)
+  #expect(s.messages.contains { $0.text.contains("tool result marker phrase") })
+  #expect(!userPrompts.contains { $0.text.contains("tool result marker phrase") })
 }
