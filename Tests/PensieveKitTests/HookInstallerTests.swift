@@ -17,6 +17,18 @@ import Testing
   #expect(perms.intValue & 0o111 != 0)   // executable bit set
 }
 
+@Test func bakesAbsolutePensievePath() throws {
+  let repo = tempURL("hookrepo", ext: nil)
+  try FileManager.default.createDirectory(
+    at: repo.appendingPathComponent(".git/hooks"), withIntermediateDirectories: true)
+
+  _ = try HookInstaller.install(inRepo: repo, pensievePath: "/opt/pensieve/bin/pensieve")
+
+  let postCommit = repo.appendingPathComponent(".git/hooks/post-commit")
+  let body = try String(contentsOf: postCommit, encoding: .utf8)
+  #expect(body.contains("/opt/pensieve/bin/pensieve capture-commit"))
+}
+
 @Test func refusesToOverwriteForeignHook() throws {
   let repo = tempURL("hookrepo", ext: nil)
   let hooksDir = repo.appendingPathComponent(".git/hooks")

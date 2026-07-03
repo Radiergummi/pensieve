@@ -7,8 +7,8 @@ struct Track: ParsableCommand {
     abstract: "Explicitly register a repo as a project.")
   @Argument var path: String
   func run() throws {
-    let abs = URL(fileURLWithPath: path).standardizedFileURL.path
-    let r = try ProjectResolver(db: try openCanonical()).resolve(path: abs, kind: "gitRepo")
+    let abs = URL(fileURLWithPath: path).path
+    let r = try ProjectResolver(db: try openCanonical()).resolve(path: abs, kind: SourceKind.gitRepo)
     print("tracking \(r.project.name)")
   }
 }

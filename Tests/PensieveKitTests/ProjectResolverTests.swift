@@ -19,6 +19,26 @@ import SQLiteData
   #expect(projects.count == 1)
 }
 
+@Test func symlinkedPathResolvesToSameProject() throws {
+  let real = tempURL("realdir", ext: nil)
+  try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+  let link = tempURL("linkdir", ext: nil)
+  try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: real.path)
+  guard (try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) != nil else {
+    return   // symlink creation not supported in this environment; nothing to assert
+  }
+
+  let db = try openCanonicalDatabase(at: tempURL("resolver-symlink"))
+  let resolver = ProjectResolver(db: db)
+
+  let a = try resolver.resolve(path: real.path, kind: "gitRepo")
+  let b = try resolver.resolve(path: link.path, kind: "gitRepo")
+
+  #expect(a.project.id == b.project.id)
+  let projects = try db.read { db in try Project.all.fetchAll(db) }
+  #expect(projects.count == 1)
+}
+
 @Test func groupMergesProjects() throws {
   let db = try openCanonicalDatabase(at: tempURL("group"))
   let resolver = ProjectResolver(db: db)
