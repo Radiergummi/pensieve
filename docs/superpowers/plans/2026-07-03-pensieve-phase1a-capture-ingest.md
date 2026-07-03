@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Toolchain:** `swift-tools-version: 6.0`; platform floor `.macOS(.v14)`.
+- **Toolchain:** `swift-tools-version: 6.0`; platform floor `.macOS(.v14)`. This machine is **Command Line Tools only (no Xcode.app)**, so run the test suite with **`./scripts/test.sh`** (a committed wrapper that puts the Swift Testing framework on the search path/rpath) — plain `swift test` fails to load `Testing.framework` here. `swift build` and `swift run` work normally.
 - **Persistence:** SQLiteData `from: "1.6.0"` (built on GRDB). Canonical store uses a GRDB `DatabasePool` (WAL, multi-process). **UUID primary keys** on every canonical table (keeps CloudKit sync reachable later). Tables are `STRICT`. **CREATE TABLE column names must exactly match the Swift `@Table` property names** (no snake_casing).
 - **Two databases:** `capture.sqlite` — dumb, append-only, local, **never synced**; `pensieve.sqlite` — canonical, rich, the only store that will ever sync.
 - **Capture path is sacred:** must be fast and independent of any running process. Git hooks use **only `post-commit` / `post-checkout`** (which run after the ref moves, off the commit critical path), run the CLI backgrounded (`&`) with errors swallowed, so a missing/failing `pensieve` can never break a commit. The capture subcommands do the minimum: append one row to the spool and exit. All git enrichment happens later, in the ingester.
@@ -164,14 +164,14 @@ import SQLiteData
 
 - [ ] **Step 6: Run test to verify it fails**
 
-Run: `swift test --filter projectRoundTrips`
+Run: `./scripts/test.sh --filter projectRoundTrips`
 Expected: FAIL (package doesn't build yet / no such symbol) on first run before code is complete.
 
 - [ ] **Step 7: Make it pass**
 
 Resolve dependencies and build: `swift build`. If the `Date` column errors at the macro layer, annotate the property with `@Column(as: Date.ISO8601Representation.self)` and keep the column `TEXT` — the round-trip test is the arbiter. If a GRDB symbol is unresolved, add `import GRDB` to `CanonicalStore.swift`.
 
-Run: `swift test --filter projectRoundTrips`
+Run: `./scripts/test.sh --filter projectRoundTrips`
 Expected: PASS
 
 - [ ] **Step 8: Commit**
@@ -231,7 +231,7 @@ import SQLiteData
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter allTablesRoundTrip`
+Run: `./scripts/test.sh --filter allTablesRoundTrip`
 Expected: FAIL — `Source`/`Event` types not defined.
 
 - [ ] **Step 3: Write the four model files**
@@ -369,7 +369,7 @@ Add inside `migrateCanonical`, after the `v1-projects` migration:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter allTablesRoundTrip`
+Run: `./scripts/test.sh --filter allTablesRoundTrip`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -421,7 +421,7 @@ import Testing
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter spoolAppendsAndDrains`
+Run: `./scripts/test.sh --filter spoolAppendsAndDrains`
 Expected: FAIL — `CaptureSpool` not defined.
 
 - [ ] **Step 3: Implement `CaptureSpool.swift`**
@@ -493,7 +493,7 @@ public final class CaptureSpool {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `swift test --filter spoolAppendsAndDrains`
+Run: `./scripts/test.sh --filter spoolAppendsAndDrains`
 Expected: PASS. If `Row`/`DatabaseQueue`/`StatementArguments` are unresolved, add `import GRDB`.
 
 - [ ] **Step 5: Commit**
@@ -512,6 +512,7 @@ git commit -m "feat: append-only capture spool"
 - Create: `Sources/pensieve/Pensieve.swift` (ArgumentParser root)
 - Create: `Sources/pensieve/Commands/CaptureCommit.swift`
 - Create: `Sources/pensieve/Commands/CaptureCheckout.swift`
+- **Delete: `Sources/pensieve/main.swift`** (a placeholder stub added in Task 1 so the empty executable target would build). The `@main struct Pensieve` introduced in this task **cannot coexist with a top-level `main.swift`** — Swift errors with "'main' attribute cannot be used in a module that contains top-level code". Delete the stub as part of this task.
 - Test: `Tests/PensieveKitTests/CapturePayloadTests.swift`
 
 **Interfaces:**
@@ -546,7 +547,7 @@ import Testing
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter gitCommitPayloadEncodesToSpool`
+Run: `./scripts/test.sh --filter gitCommitPayloadEncodesToSpool`
 Expected: FAIL — payload types not defined.
 
 - [ ] **Step 3: Implement `CapturePayloads.swift`**
@@ -650,7 +651,7 @@ struct CaptureCheckout: ParsableCommand {
 
 - [ ] **Step 5: Run test + smoke-test the CLI**
 
-Run: `swift test --filter gitCommitPayloadEncodesToSpool`
+Run: `./scripts/test.sh --filter gitCommitPayloadEncodesToSpool`
 Expected: PASS
 
 Run: `PENSIEVE_CAPTURE_DB=/tmp/smoke.sqlite swift run pensieve capture-commit --repo /tmp/r --hash abc --branch main`
@@ -719,7 +720,7 @@ Add resource handling to the test target in `Package.swift`:
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `swift test --filter parsesSessionDefensively`
+Run: `./scripts/test.sh --filter parsesSessionDefensively`
 Expected: FAIL — `TranscriptParser` not defined.
 
 - [ ] **Step 4: Implement `ParsedSession.swift` and `TranscriptParser.swift`**
@@ -801,7 +802,7 @@ public enum TranscriptParser {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter parsesSessionDefensively`
+Run: `./scripts/test.sh --filter parsesSessionDefensively`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -871,7 +872,7 @@ import SQLiteData
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter resolver`
+Run: `./scripts/test.sh --filter resolver`
 Expected: FAIL — `ProjectResolver` not defined.
 
 - [ ] **Step 3: Implement `ProjectResolver.swift`**
@@ -923,7 +924,7 @@ public struct ProjectResolver {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `swift test --filter resolver`
+Run: `./scripts/test.sh --filter resolver`
 Expected: PASS. If StructuredQueries' `where`/`update`/`delete` builder names differ at compile time, consult the generated `Source`/`Project` query API (the macro exposes `.where`, `.update`, `.delete`, `.fetchOne`, `.fetchAll`); adjust closure syntax to match, keeping behavior identical.
 
 - [ ] **Step 5: Commit**
@@ -993,7 +994,7 @@ import SQLiteData
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter ingestsGitCommitIntoEvent`
+Run: `./scripts/test.sh --filter ingestsGitCommitIntoEvent`
 Expected: FAIL — `Git` / `Ingester` not defined.
 
 - [ ] **Step 3: Implement `Git.swift`**
@@ -1096,7 +1097,7 @@ public struct Ingester {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter ingestsGitCommitIntoEvent`
+Run: `./scripts/test.sh --filter ingestsGitCommitIntoEvent`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -1150,7 +1151,7 @@ import SQLiteData
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter statusReturnsRecentEvents`
+Run: `./scripts/test.sh --filter statusReturnsRecentEvents`
 Expected: FAIL — `ProjectQueries` not defined.
 
 - [ ] **Step 3: Implement `ProjectQueries.swift`**
@@ -1309,7 +1310,7 @@ struct Group: ParsableCommand {
 
 - [ ] **Step 5: Run test + smoke-test end-to-end**
 
-Run: `swift test --filter statusReturnsRecentEvents`
+Run: `./scripts/test.sh --filter statusReturnsRecentEvents`
 Expected: PASS
 
 ```bash
@@ -1366,7 +1367,7 @@ import Testing
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter installsExecutableHooks`
+Run: `./scripts/test.sh --filter installsExecutableHooks`
 Expected: FAIL — `HookInstaller` not defined.
 
 - [ ] **Step 3: Implement `HookInstaller.swift`**
@@ -1435,12 +1436,12 @@ Add `InstallHooks.self` to the root `subcommands:` array in `Pensieve.swift`.
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `swift test --filter installsExecutableHooks`
+Run: `./scripts/test.sh --filter installsExecutableHooks`
 Expected: PASS
 
 - [ ] **Step 6: Full suite + commit**
 
-Run: `swift test`
+Run: `./scripts/test.sh`
 Expected: all tests PASS.
 
 ```bash
