@@ -61,4 +61,20 @@ public final class CaptureSpool {
         arguments: StatementArguments(ids))
     }
   }
+
+  /// Newest capture timestamp across ALL rows (including already-ingested), or nil if empty.
+  /// This is the real-time "last capture" heartbeat and must survive ingestion.
+  public func lastCaptureAt() throws -> Date? {
+    try dbQueue.read { db in
+      guard let iso = try String.fetchOne(db, sql: "SELECT max(ts) FROM captures") else { return nil }
+      return try? Date(iso, strategy: .iso8601)
+    }
+  }
+
+  /// Count of un-ingested rows (ingested = 0) without materializing them.
+  public func pendingCount() throws -> Int {
+    try dbQueue.read { db in
+      try Int.fetchOne(db, sql: "SELECT count(*) FROM captures WHERE ingested = 0") ?? 0
+    }
+  }
 }
