@@ -60,6 +60,35 @@ child re-parenting; organizing CLI + tree `list`. Additive migrations v4–v6; t
 
 ---
 
+## Pensieve.app v0.1: the heartbeat window — DONE (2026-07-04)
+
+**Shipped** on branch `feat/pensieve-app-heartbeat` (plan: `plans/2026-07-04-pensieve-app-heartbeat.md`, spec:
+`specs/2026-07-04-pensieve-app-heartbeat-design.md`). 82 tests. Delivered: native read-only SwiftUI
+heartbeat window (`swift run PensieveApp`) over a shared, testable `MonitorSnapshot` kernel (pure gather
+function, never throws, read-only, WAL-safe). Window shows status dot (active/idle/not-set-up), last-capture
+age, spool/event/loose-end counts, polls every 3 s. Unbundled SwiftPM executable (no Xcode, no `.app`
+bundle yet).
+
+### Deferred out of v0.1 (on the roadmap, not foreclosed)
+
+- **Menu-bar item / `LSUIElement` app bundle** — the heartbeat window currently runs as an unbundled
+  SwiftPM executable (dock icon, focus behavior still to be confirmed). Next phase wraps it in a proper
+  `.app` bundle and adds a menu-bar item with `LSUIElement` to hide the dock icon. Own spec required; 
+  revisit the Xcode.app decision there (Command Line Tools suffice for now; Xcode.app may be needed 
+  for code signing, menu-bar item setup, or `.app` bundle best practices).
+
+### Small follow-ups from v0.1 (deferred, non-blocking)
+
+- **`lastCaptureAt` has no staleness cap** — a node with an ancient capture and 0 events currently reads
+  `idle` not `not-set-up` (incorrect signal). Add a staleness check: if `lastCaptureAt` is older than a
+  configured threshold (e.g. 30 days), and `eventCount == 0`, treat as `notSetUp`. *Fixes the edge case
+  where a dormant project looks "idle" rather than "never started."*
+- **Unbundled window visual behavior** — dock icon presence, focus/activation behavior, and close-on-⌘W
+  exit behavior of the unbundled `NSApplication` are still to be confirmed at the menu-bar step (Step 1 
+  verified a window appears, but in-situ behavior may differ once menu-bar integration is added).
+
+---
+
 ## Spike: statistical theme discovery across strands (`NLEmbedding`)
 
 **Parked:** 2026-07-03, during Phase 1B brainstorming.
