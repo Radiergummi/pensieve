@@ -89,6 +89,24 @@ bundle yet).
 
 ---
 
+## Source discovery (`pensieve scan`) — DONE (2026-07-04)
+
+**Shipped** on branch `feat/source-discovery`. 96 tests. Delivered: filesystem-source abstraction
+(`FileSystemSourceType`, `DiscoveredSource`, `DiscoveryCandidate`, `GitSource` with `.git`-directory rule),
+write-free walk (`SourceScanner.discover`), best-effort registration + hook install (`SourceScanner.accept`),
+CLI `pensieve scan <folder> [--recursive] [--accept]`.
+
+### Deferred out of source discovery (on the roadmap, not foreclosed)
+
+- **Proactively suggest new projects learned implicitly** — from session current working directories and
+  commits in unregistered repos, infer candidate projects the user works on but hasn't registered yet.
+  Auto-surface as a `next` suggestion. *Trigger: once capture is flowing from multiple sources.*
+- **Pass 2: source-discovery settings window** — folder picker, recursive toggle, checkbox candidate list.
+  May persist watched folders for periodic rescans. *Pair with the menu-bar step (v0.2);
+  brings source discovery into the app proper.*
+
+---
+
 ## Native localization — German & English
 
 **Requested:** 2026-07-04. Moritz runs macOS in German but may switch to English; Pensieve
