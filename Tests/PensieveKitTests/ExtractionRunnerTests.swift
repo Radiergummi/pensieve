@@ -41,7 +41,7 @@ private func userLine(_ text: String, ts: String) -> String {
 /// a genuine user prompt at dense index 0,1,2,… in order.
 private func writeTranscript(_ texts: [String]) throws -> URL {
   let url = tempURL("transcript", ext: "jsonl")
-  let lines = texts.enumerated().map { i, t in userLine(t, ts: "2026-06-30T10:0\(i):00Z") }
+  let lines = texts.enumerated().map { i, t in userLine(t, ts: String(format: "2026-06-30T10:%02d:00Z", i)) }
   try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
   return url
 }
@@ -187,6 +187,31 @@ private let migrationQuote = "Also remember to write the migration test before m
   // Watermark repaired to the real count.
   let ev = try await db.read { db in try Event.all.fetchAll(db) }.first!
   #expect(ev.extractedMessageCount == 1)
+}
+
+@Test func reextractFromZeroDoesNotResurrectResolvedLooseEnd() async throws {
+  // The shrink→0 path re-mines the WHOLE transcript. A loose end the user already RESOLVED,
+  // whose quote is still verbatim in the transcript, must not be re-inserted as open — the
+  // dedup collapses against all statuses, not just open ones.
+  let db = try openCanonicalDatabase(at: tempURL("run-resurrect"))
+  let quote = rateLimitingQuote
+  let (_, event) = try seedSingleMessageSession(db: db, quote: quote)
+
+  _ = try await ExtractionRunner(db: db, provider: SliceAwareProvider(genuine: [(quote, 0)])).run()
+  // Resolve the extracted loose end, then force the shrink→0 re-extract path.
+  try await db.write { db in
+    try LooseEnd.where { $0.quote.eq(quote) }.update { $0.status = "resolved" }.execute(db)
+    try Event.where { $0.id.eq(event.id) }.update {
+      $0.extractedMessageCount = 99
+      $0.extractedTranscriptSize = 1   // != real size and != -1 → not legacy, forces start=0
+    }.execute(db)
+  }
+
+  let rerun = try await ExtractionRunner(db: db, provider: SliceAwareProvider(genuine: [(quote, 0)])).run()
+  #expect(rerun.first?.inserted == 0)   // resolved quote is deduped, not resurrected
+  let ends = try await db.read { db in try LooseEnd.all.fetchAll(db) }
+  #expect(ends.count == 1)
+  #expect(ends.first?.status == "resolved")   // still resolved; nothing reopened
 }
 
 @Test func legacyRowInitializesWithoutResurrectingResolved() async throws {

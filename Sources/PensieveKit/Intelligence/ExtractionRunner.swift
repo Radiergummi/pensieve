@@ -81,19 +81,25 @@ public struct ExtractionRunner {
 
         let stamp = now()
         let inserted = try await db.write { db -> Int in
-          // Collapse against existing OPEN loose ends in this node (verbatim, normalized).
-          let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
-          var seen = Set(existing.filter { $0.status == "open" }.map { normalizeWhitespace($0.quote) })
           var insertedCount = 0
-          for v in verified {
-            let key = normalizeWhitespace(v.quote)
-            if seen.contains(key) { continue }   // within- and cross-session dedup
-            seen.insert(key)
-            try LooseEnd.insert {
-              LooseEnd(nodeID: event.nodeID, sourceEventID: event.id, text: v.text,
-                       quote: v.quote, role: v.role, sourceMessageIndex: v.sourceMessageIndex)
-            }.execute(db)
-            insertedCount += 1
+          // Collapse against ALL existing loose ends in this node (verbatim, normalized),
+          // regardless of status: re-extraction (the shrink→0 path re-mines the whole
+          // transcript, and a user may restate a quote verbatim) must not resurrect a
+          // RESOLVED loose end the user already dismissed. Skip the scan when there is
+          // nothing to insert.
+          if !verified.isEmpty {
+            let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
+            var seen = Set(existing.map { normalizeWhitespace($0.quote) })
+            for v in verified {
+              let key = normalizeWhitespace(v.quote)
+              if seen.contains(key) { continue }   // within- and cross-session dedup
+              seen.insert(key)
+              try LooseEnd.insert {
+                LooseEnd(nodeID: event.nodeID, sourceEventID: event.id, text: v.text,
+                         quote: v.quote, role: v.role, sourceMessageIndex: v.sourceMessageIndex)
+              }.execute(db)
+              insertedCount += 1
+            }
           }
           // Advance the watermark, size, and last-extracted stamp in the same write.
           try Event.where { $0.id.eq(event.id) }.update {
