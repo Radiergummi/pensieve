@@ -124,3 +124,39 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   let strands = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }
   #expect(strands.isEmpty)                                     // threshold is 2 of the SAME kind
 }
+
+/// A loose end extracted (by a prior drain) from an event that later gets repointed to a
+/// strand must move with it — otherwise LooseEndQueries.open(nodeID: strand) misses it.
+@Test func strandBirthRepointsLooseEndsFromEarlierDrain() async throws {
+  let (repo, _) = try makeCommittedRepo()
+  let spool = try CaptureSpool(at: tempURL("spool"))
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+
+  // First drain: single commit on the feature branch — stays tagged at the project node.
+  try spoolCommits(1, on: "feature-z", repo: repo, spool: spool)
+  _ = try await Ingester(spool: spool, db: db).drain()
+
+  let firstEvent = try await db.read { db in
+    try Event.where { $0.kind.eq(CaptureKind.gitCommit) && $0.branchKey.eq("feature-z") }.fetchAll(db)
+  }.first
+  let projectNodeID = try #require(firstEvent?.nodeID)
+  let looseEnd = LooseEnd(nodeID: projectNodeID, sourceEventID: try #require(firstEvent?.id),
+                          text: "x", quote: "some verbatim quote")
+  try await db.write { db in try LooseEnd.insert { looseEnd }.execute(db) }
+
+  // Second drain: another (distinct) commit on the same branch — crosses the threshold,
+  // strand is born. Written inline (not via spoolCommits, which always writes index `0` and
+  // would produce a no-op/duplicate commit if called again with n: 1 on the same branch).
+  try "feature-z-1".write(to: repo.appendingPathComponent("second.txt"), atomically: true, encoding: .utf8)
+  _ = Git.run(["add", "-A"], in: repo.path)
+  _ = Git.run(["commit", "-m", "feature-z commit 1"], in: repo.path)
+  let secondHash = Git.run(["rev-parse", "HEAD"], in: repo.path)!
+  try spool.append(kind: CaptureKind.gitCommit,
+                   payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: secondHash, branch: "feature-z")))
+  _ = try await Ingester(spool: spool, db: db).drain()
+
+  let strand = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }.first
+  let strandID = try #require(strand?.id)
+  let updated = try await db.read { db in try LooseEnd.where { $0.id.eq(looseEnd.id) }.fetchOne(db) }
+  #expect(updated?.nodeID == strandID)
+}

@@ -166,8 +166,16 @@ public struct Ingester {
 
     let strand = Node(name: branchKey, parentID: projectNodeID, kind: "strand", branchKey: branchKey)
     try Node.insert { strand }.execute(db)
+    let repointedEventIDs = try Event.where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) }
+      .fetchAll(db).map(\.id)
     try Event.where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) }
       .update { $0.nodeID = strand.id }.execute(db)   // repoint every tagged event (all kinds)
+    // Loose ends already extracted from those events (by a prior drain) live on the project
+    // node too — repoint them so LooseEndQueries.open(nodeID: strand) doesn't miss them.
+    for eventID in repointedEventIDs {
+      try LooseEnd.where { $0.sourceEventID.eq(eventID) }
+        .update { $0.nodeID = strand.id }.execute(db)
+    }
     return (strand.id, strand.id)
   }
 
