@@ -15,10 +15,10 @@ import SQLiteData
     try Source.insert { source }.execute(db)
     try Event.insert { event }.execute(db)
   }
-  // New rows default to 0 for both watermark columns.
+  // New rows default to 0 messages and the -1 "never watermarked" sentinel for the size.
   let ev = try db.read { db in try Event.all.fetchAll(db) }.first
   #expect(ev?.extractedMessageCount == 0)
-  #expect(ev?.extractedTranscriptSize == 0)
+  #expect(ev?.extractedTranscriptSize == -1)
 
   // Non-zero values round-trip through the STRICT columns.
   try db.write { db in

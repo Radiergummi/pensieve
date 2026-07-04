@@ -47,17 +47,19 @@ Checked against real `~/.claude/projects/**/*.jsonl` (litellm, docker-swarm, swa
 
 ### Event model — two new fields
 
-Add to `Model/Event.swift` (additive migration **v7**, both `INTEGER NOT NULL DEFAULT 0`):
+Add to `Model/Event.swift` (additive migration **v7**, `INTEGER NOT NULL`):
 
-- `extractedMessageCount: Int` — how many parsed messages have already been extracted (a
+- `extractedMessageCount: Int` (default `0`) — how many parsed messages have already been extracted (a
   watermark/offset into `ParsedSession.messages`; parser indices are dense, 0-based, line-ordered,
   stable under append).
-- `extractedTranscriptSize: Int` — the transcript's byte size at the last extraction; a cheap change
-  detector (a `stat`, no parse).
+- `extractedTranscriptSize: Int` (default **`-1`**) — the transcript's byte size at the last
+  extraction; a cheap change detector (a `stat`, no parse). **`-1` is the "never watermarked"
+  sentinel** — an unambiguous value that cannot collide with any real byte size (including a genuine
+  0-byte transcript), so it distinguishes legacy rows without overloading the meaning of `0`.
 
-`Event.init` gains both, defaulted to `0`; existing call sites (the ingester) are unchanged.
-`extractedAt` stays as the "last extracted at" timestamp and, together with size, distinguishes
-legacy rows (below).
+`Event.init` gains both (`extractedMessageCount = 0`, `extractedTranscriptSize = -1`); existing call
+sites (the ingester) are unchanged. `extractedAt` stays as the "last extracted at" timestamp and,
+together with the `-1` sentinel, distinguishes legacy rows (below).
 
 ### `ExtractionRunner.run()` change
 
@@ -66,12 +68,14 @@ legacy rows (below).
    - unreadable/missing → skip this event (don't crash; retry next run).
    - `size == event.extractedTranscriptSize` → **skip** (unchanged — the cost guard that avoids
      re-parsing multi-MB transcripts every cycle).
-3. **Legacy init (one-time, no extraction):** if `event.extractedAt != nil && event.extractedTranscriptSize == 0`
-   (a row extracted before this feature existed), the prior extraction already covered the transcript
-   as it then stood. Parse to get the message count, set `extractedMessageCount = messages.count` and
-   `extractedTranscriptSize = <current size>`, and **do not extract** this pass. This prevents a
-   post-migration mass re-extraction that would resurface every previously-**resolved** loose end.
-   (Genuinely new sessions have `extractedAt == nil` and take the normal path.)
+3. **Legacy init (one-time, no extraction):** if `event.extractedAt != nil && event.extractedTranscriptSize == -1`
+   (a row extracted before this feature existed — its size is still the `-1` "never watermarked"
+   sentinel), the prior extraction already covered the transcript as it then stood. Parse to get the
+   message count, set `extractedMessageCount = messages.count` and `extractedTranscriptSize = <current size>`,
+   and **do not extract** this pass. This prevents a post-migration mass re-extraction that would
+   resurface every previously-**resolved** loose end. (Genuinely new sessions have `extractedAt == nil`
+   and take the normal path.) Because a real 0-byte transcript reads as size `0 ≠ -1`, the size gate in
+   step 2 never traps it, and after this init records its real size it re-extracts correctly on growth.
 4. Otherwise parse and choose the slice start with a **clamp/guard** (crash- and misalignment-proof):
    - if `messages.count >= event.extractedMessageCount` → `start = event.extractedMessageCount`
      (normal incremental slice).
@@ -123,8 +127,14 @@ earlier content — is undetectable by size and not exhibited by append-only eve
   line completes and the file grows, re-run picks the now-complete message up at index N with no
   offset drift. (Confirms the watermark is robust to mid-write reads.)
 
-Migration test (`SchemaV7Tests` or extend the schema tests): a session `Event` round-trips with the
-two new fields defaulting to 0; the columns are `INTEGER NOT NULL DEFAULT 0` on the STRICT table.
+- **Legacy 0-byte transcript re-extracts on growth (regression for the `-1` sentinel):** a legacy row
+  (`extractedAt != nil`, size `-1`) whose real transcript is 0 bytes → first run legacy-inits it
+  (records real size `0`, no extraction); after the file grows, the next run extracts the new content
+  (does **not** swallow it). Under the old `size == 0` sentinel this trapped forever, then swallowed.
+
+Migration test (`SchemaV7Tests` or extend the schema tests): a session `Event` round-trips with
+`extractedMessageCount` defaulting to `0` and `extractedTranscriptSize` to the `-1` sentinel; the
+columns are `INTEGER NOT NULL` (`DEFAULT 0` and `DEFAULT -1`) on the STRICT table.
 
 All under `./scripts/test.sh`.
 
@@ -138,7 +148,8 @@ All under `./scripts/test.sh`.
   ends (unchanged). If a resolved loose end's exact quote reappears in genuinely new content it will
   resurface as open — accepted as correct (it came up again). The legacy-init path (step 3) exists
   specifically so this does **not** fire en masse for all historical content at migration time.
-- **Detecting same-size/same-count in-place rewrites** — see Robustness; accepted limitation.
+- **Detecting same-size/same-count in-place rewrites** — see Robustness; accepted limitation. (Note:
+  the earlier "0-byte legacy transcript" gap is **closed** by the `-1` sentinel, not accepted.)
 
 ## Open constraints
 
@@ -163,4 +174,5 @@ All under `./scripts/test.sh`.
   single, tight plan. Daemon/hook explicitly separated.
 - **Ambiguity pinned:** change detection = byte size; watermark = parsed-message count; slice start =
   clamped (`messages.count >= watermark ? watermark : 0`, log on reset); verify against full messages;
-  legacy rows = `extractedAt != nil && size == 0` → init without extracting.
+  legacy rows = `extractedAt != nil && size == -1` (the "never watermarked" sentinel) → init without
+  extracting.

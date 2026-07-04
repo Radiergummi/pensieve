@@ -45,10 +45,11 @@ public struct ExtractionRunner {
         let messageCount = session.messages.count
 
         // Legacy init (one-time, no extraction): a row extracted before this feature existed
-        // has extractedAt set but size still 0. Its prior extraction already covered the
-        // transcript as it then stood, so initialize the watermark/size WITHOUT extracting —
-        // otherwise migration would resurface every previously-resolved loose end.
-        if event.extractedAt != nil && event.extractedTranscriptSize == 0 {
+        // has extractedAt set but size still the -1 "never watermarked" sentinel. Its prior
+        // extraction already covered the transcript as it then stood, so initialize the
+        // watermark/size WITHOUT extracting — otherwise migration would resurface every
+        // previously-resolved loose end.
+        if event.extractedAt != nil && event.extractedTranscriptSize == -1 {
           try await db.write { db in
             try Event.where { $0.id.eq(event.id) }.update {
               $0.extractedMessageCount = messageCount

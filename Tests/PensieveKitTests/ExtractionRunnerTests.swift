@@ -171,11 +171,11 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(try await db.read { db in try LooseEnd.all.fetchAll(db) }.count == 1)
 
   // Simulate a rewrite/filter change: watermark far above the current message count, and a
-  // size different from the real file (non-zero, so it is NOT mistaken for a legacy row).
+  // size different from the real file (not -1, so it is NOT mistaken for a legacy row).
   try await db.write { db in
     try Event.where { $0.id.eq(event.id) }.update {
       $0.extractedMessageCount = 99
-      $0.extractedTranscriptSize = 1   // != real size and != 0
+      $0.extractedTranscriptSize = 1   // != real size and != -1
     }.execute(db)
   }
 
@@ -194,8 +194,8 @@ private let migrationQuote = "Also remember to write the migration test before m
   let resolvedQuote = rateLimitingQuote
   let (transcript, event) = try seedSingleMessageSession(db: db, quote: resolvedQuote)
 
-  // Simulate a pre-feature row: extractedAt set, size still 0, count 0; and a RESOLVED loose
-  // end whose quote is still in the transcript.
+  // Simulate a pre-feature row: extractedAt set, size still the -1 sentinel (init default),
+  // count 0; and a RESOLVED loose end whose quote is still in the transcript.
   try await db.write { db in
     try Event.where { $0.id.eq(event.id) }.update { $0.extractedAt = #bind(Date(timeIntervalSince1970: 1)) }.execute(db)
     try LooseEnd.insert {
@@ -225,6 +225,36 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(after2.filter { $0.status == "open" }.map { $0.quote } == [newQuote])
 }
 
+@Test func legacyZeroByteTranscriptThatGrowsExtractsNewContent() async throws {
+  // Regression for the -1 sentinel: a legacy row whose real transcript is 0 bytes must not be
+  // trapped. Under the old `size == 0` sentinel the size gate (0 == stored 0) skipped it forever,
+  // and once it grew, legacy-init swallowed the new content. With -1, size 0 is a real size.
+  let db = try openCanonicalDatabase(at: tempURL("run-legacy-empty"))
+  let transcript = tempURL("transcript", ext: "jsonl")
+  try Data().write(to: transcript)                       // a genuine 0-byte transcript
+  let event = try makeSessionEvent(db: db, transcript: transcript)
+  try await db.write { db in
+    try Event.where { $0.id.eq(event.id) }
+      .update { $0.extractedAt = #bind(Date(timeIntervalSince1970: 1)) }.execute(db)
+  }
+
+  // First run: 0 != -1 so the size gate does NOT skip; legacy-init records the real size (0)
+  // and extracts nothing.
+  let init1 = try await ExtractionRunner(db: db, provider: SliceAwareProvider()).run()
+  #expect(init1.isEmpty)
+  let ev1 = try await db.read { db in try Event.all.fetchAll(db) }.first!
+  #expect(ev1.extractedTranscriptSize == 0)              // real size recorded; no longer the sentinel
+  #expect(ev1.extractedMessageCount == 0)
+
+  // The transcript later grows with genuinely new content → it must extract, not swallow.
+  try (userLine(rateLimitingQuote, ts: "2026-06-30T10:00:00Z") + "\n")
+    .write(to: transcript, atomically: true, encoding: .utf8)
+  let run2 = try await ExtractionRunner(db: db, provider:
+    SliceAwareProvider(genuine: [(rateLimitingQuote, 0)])).run()
+  #expect(run2.first?.inserted == 1)
+  #expect(try await db.read { db in try LooseEnd.all.fetchAll(db) }.count == 1)
+}
+
 @Test func unreadableTranscriptSkipsAndLeavesWatermarkUnadvanced() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-missing"))
   // Point the event at a path that does not exist.
@@ -236,7 +266,7 @@ private let migrationQuote = "Also remember to write the migration test before m
   let ev = try await db.read { db in try Event.all.fetchAll(db) }.first!
   #expect(ev.extractedAt == nil)              // not marked; will retry
   #expect(ev.extractedMessageCount == 0)
-  #expect(ev.extractedTranscriptSize == 0)
+  #expect(ev.extractedTranscriptSize == -1)   // still the "never watermarked" sentinel
 }
 
 @Test func partialTrailingLinePicksUpAtCorrectIndexAfterCompletion() async throws {

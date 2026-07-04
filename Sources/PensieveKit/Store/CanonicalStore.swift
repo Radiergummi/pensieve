@@ -127,7 +127,10 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
   }
   migrator.registerMigration("v7-incremental-extraction") { db in
     try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedMessageCount" INTEGER NOT NULL DEFAULT 0"#).execute(db)
-    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedTranscriptSize" INTEGER NOT NULL DEFAULT 0"#).execute(db)
+    // -1 = "never watermarked" (unambiguous sentinel that can't collide with a real byte size,
+    // including a genuine 0-byte transcript). Existing rows backfill to -1; the runner's legacy-init
+    // then initializes them once without extracting (see ExtractionRunner.run()).
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedTranscriptSize" INTEGER NOT NULL DEFAULT -1"#).execute(db)
   }
   try migrator.migrate(db)
 }
