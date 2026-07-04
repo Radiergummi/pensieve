@@ -116,12 +116,12 @@ import SQLiteData
 
   _ = try Ingester(spool: spool, db: db).drain()
 
-  let projects = try db.read { db in try Project.all.fetchAll(db) }
+  let projects = try db.read { db in try Node.all.fetchAll(db) }
   #expect(projects.count == 1)
 
   let events = try db.read { db in try Event.all.fetchAll(db) }
   let commitEvent = events.first { $0.kind == CaptureKind.gitCommit }
   let sessionEvent = events.first { $0.kind == CaptureKind.ccSession }
   #expect(commitEvent != nil && sessionEvent != nil)
-  #expect(commitEvent?.projectID == sessionEvent?.projectID)
+  #expect(commitEvent?.nodeID == sessionEvent?.nodeID)
 }

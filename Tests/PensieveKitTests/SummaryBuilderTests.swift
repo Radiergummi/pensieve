@@ -8,12 +8,12 @@ private struct EchoProvider: LLMProvider {
 }
 
 @Test func assembleFactsListsRecentCommitSubjects() {
-  let p = Project(name: "colibri")
+  let p = Node(name: "colibri")
   let s = UUID()
   let events = [
-    Event(projectID: p.id, sourceID: s, occurredAt: Date(), kind: CaptureKind.gitCommit,
+    Event(nodeID: p.id, sourceID: s, occurredAt: Date(), kind: CaptureKind.gitCommit,
           summary: "add auth", detailJSON: "{}", fingerprint: "1"),
-    Event(projectID: p.id, sourceID: s, occurredAt: Date(), kind: CaptureKind.ccSession,
+    Event(nodeID: p.id, sourceID: s, occurredAt: Date(), kind: CaptureKind.ccSession,
           summary: "session (3 prompts)", detailJSON: "{}", fingerprint: "2"),
   ]
   let facts = SummaryBuilder.assembleFacts(project: p, events: events)
@@ -26,7 +26,7 @@ private struct EchoProvider: LLMProvider {
   let (project, source) = try ProjectResolver(db: db).resolve(path: "/p/colibri", kind: SourceKind.gitRepo)
   try await db.write { db in
     try Event.insert {
-      Event(projectID: project.id, sourceID: source.id, occurredAt: Date(), kind: CaptureKind.gitCommit,
+      Event(nodeID: project.id, sourceID: source.id, occurredAt: Date(), kind: CaptureKind.gitCommit,
             summary: "add auth", detailJSON: "{}", fingerprint: "c1")
     }.execute(db)
   }

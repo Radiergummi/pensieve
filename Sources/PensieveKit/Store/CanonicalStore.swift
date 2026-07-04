@@ -85,5 +85,21 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     // NULLs are distinct in a SQLite unique index, so unbackfilled rows (e.g. checkouts) don't collide.
     try #sql(#"CREATE UNIQUE INDEX "idx_events_source_fingerprint" ON "events"("sourceID", "fingerprint")"#).execute(db)
   }
+  // .immediate: keeps foreign-key enforcement ON during this migration so SQLite's
+  // ALTER TABLE RENAME TO / RENAME COLUMN auto-rewrites the FK clauses in "sources",
+  // "events", "looseEnds", "checkpoints" (the default .deferred disables FK checks
+  // first, which suppresses that auto-rewrite and leaves them pointing at "projects").
+  migrator.registerMigration("v4-nodes-tree", foreignKeyChecks: .immediate) { db in
+    try #sql(#"ALTER TABLE "projects" RENAME TO "nodes""#).execute(db)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "parentID" TEXT REFERENCES "nodes"("id") ON DELETE SET NULL"#).execute(db)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'project'"#).execute(db)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "description" TEXT NOT NULL DEFAULT ''"#).execute(db)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "metadataJSON" TEXT NOT NULL DEFAULT '{}'"#).execute(db)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "branchKey" TEXT"#).execute(db)
+    try #sql(#"ALTER TABLE "sources" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
+    try #sql(#"ALTER TABLE "events" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
+    try #sql(#"ALTER TABLE "looseEnds" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
+    try #sql(#"ALTER TABLE "checkpoints" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
+  }
   try migrator.migrate(db)
 }

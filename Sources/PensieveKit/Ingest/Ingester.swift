@@ -43,7 +43,7 @@ public struct Ingester {
       let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
       let inserted = try db.write { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
-        return try insertIfNew(db, Event(projectID: project.id, sourceID: source.id, occurredAt: fields.when,
+        return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id, occurredAt: fields.when,
               kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
               fingerprint: Fingerprint.commit(hash: p.hash)))
       }
@@ -54,7 +54,7 @@ public struct Ingester {
       let detail = try encodeJSON(["from": p.from, "to": p.to, "branch": p.branch])
       let inserted = try db.write { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
-        return try insertIfNew(db, Event(projectID: project.id, sourceID: source.id, occurredAt: row.ts,
+        return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.ts,
               kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail,
               fingerprint: Fingerprint.checkout(repo: p.repoPath, from: p.from, to: p.to, branch: p.branch)))
       }
@@ -75,7 +75,7 @@ public struct Ingester {
                                    "transcriptPath": p.transcriptPath])
       let inserted = try db.write { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.claudeCode)
-        return try insertIfNew(db, Event(projectID: project.id, sourceID: source.id,
+        return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id,
               occurredAt: session.endedAt ?? row.ts, kind: CaptureKind.ccSession,
               summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail,
               fingerprint: Fingerprint.session(sessionID: session.sessionID)))

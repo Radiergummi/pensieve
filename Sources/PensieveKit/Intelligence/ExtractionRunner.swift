@@ -38,7 +38,7 @@ public struct ExtractionRunner {
         let stamp = now()
         let inserted = try await db.write { db -> Int in
           // Collapse against existing OPEN loose ends in this project (verbatim, normalized).
-          let existing = try LooseEnd.where { $0.projectID.eq(event.projectID) }.fetchAll(db)
+          let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
           var seen = Set(existing.filter { $0.status == "open" }.map { normalizeWhitespace($0.quote) })
           var insertedCount = 0
           for v in verified {
@@ -46,7 +46,7 @@ public struct ExtractionRunner {
             if seen.contains(key) { continue }   // within- and cross-session dedup
             seen.insert(key)
             try LooseEnd.insert {
-              LooseEnd(projectID: event.projectID, sourceEventID: event.id, text: v.text,
+              LooseEnd(nodeID: event.nodeID, sourceEventID: event.id, text: v.text,
                        quote: v.quote, role: v.role, sourceMessageIndex: v.sourceMessageIndex)
             }.execute(db)
             insertedCount += 1
