@@ -89,6 +89,26 @@ bundle yet).
 
 ---
 
+## Native localization — German & English
+
+**Requested:** 2026-07-04. Moritz runs macOS in German but may switch to English; Pensieve
+should support both via **native macOS facilities** (no custom i18n layer).
+
+**The native path:** SwiftUI `String(localized:)` / `LocalizedStringKey` + `.strings`/`.xcstrings`
+catalogs, with the app following the system language automatically (`AppleLanguages`). Format dates
+via `Date.FormatStyle` / `RelativeDateTimeFormatter` (already locale-aware) and numbers via
+locale-aware formatters — no hardcoded strings in views. Applies to the SwiftUI app surface
+(`PensieveApp` and later three-pane views), NOT the CLI or captured/user data.
+
+**Scope boundary (grounding caveat):** localize only *chrome* — labels, buttons, status words
+("active"/"idle"), section titles. **Never translate captured content, quotes, loose-end text, or
+LLM-generated strand names** — those are provenance-bearing user data and must stay verbatim.
+
+*Trigger: when the app grows real UI text worth translating (menu-bar step or the three-pane app);
+premature to catalog the two-label heartbeat window alone.*
+
+---
+
 ## Spike: statistical theme discovery across strands (`NLEmbedding`)
 
 **Parked:** 2026-07-03, during Phase 1B brainstorming.
