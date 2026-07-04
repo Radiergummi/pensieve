@@ -66,6 +66,16 @@ private func makeSessionEvent(db: any DatabaseWriter, transcript: URL) throws ->
   return event
 }
 
+/// Seeds a single-message session (transcript on disk + persisted cc.session Event) in one step.
+private func seedSingleMessageSession(db: any DatabaseWriter, quote: String) throws -> (transcript: URL, event: Event) {
+  let transcript = try writeTranscript([quote])
+  return (transcript, try makeSessionEvent(db: db, transcript: transcript))
+}
+
+/// The two fixture quotes reused across the incremental tests — the same input under one name.
+private let rateLimitingQuote = "We still need to add rate limiting before launch"
+private let migrationQuote = "Also remember to write the migration test before merging"
+
 @Test func runnerStoresOnlyVerifiedLooseEnds() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-canon"))
   // A cc.session event pointing at the roles fixture (its cwd is /p/colibri).
@@ -102,10 +112,9 @@ private func makeSessionEvent(db: any DatabaseWriter, transcript: URL) throws ->
 
 @Test func reextractsOnlyNewMessagesOnGrowth() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-growth"))
-  let rate = "We still need to add rate limiting before launch"
-  let migration = "Also remember to write the migration test before merging"
-  let transcript = try writeTranscript([rate])
-  _ = try makeSessionEvent(db: db, transcript: transcript)
+  let rate = rateLimitingQuote
+  let migration = migrationQuote
+  let (transcript, _) = try seedSingleMessageSession(db: db, quote: rate)
 
   // Run 1: only msg 0 exists → the rate-limiting loose end is inserted.
   let run1 = try await ExtractionRunner(db: db, provider:
@@ -140,9 +149,8 @@ private func makeSessionEvent(db: any DatabaseWriter, transcript: URL) throws ->
 
 @Test func unchangedTranscriptIsNoOp() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-noop"))
-  let quote = "We still need to add rate limiting before launch"
-  let transcript = try writeTranscript([quote])
-  _ = try makeSessionEvent(db: db, transcript: transcript)
+  let quote = rateLimitingQuote
+  _ = try seedSingleMessageSession(db: db, quote: quote)
 
   _ = try await ExtractionRunner(db: db, provider: SliceAwareProvider(genuine: [(quote, 0)])).run()
   #expect(try await db.read { db in try LooseEnd.all.fetchAll(db) }.count == 1)
@@ -156,9 +164,8 @@ private func makeSessionEvent(db: any DatabaseWriter, transcript: URL) throws ->
 
 @Test func countDropReextractsFromZeroWithoutCrashOrDuplicate() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-shrink"))
-  let quote = "We still need to add rate limiting before launch"
-  let transcript = try writeTranscript([quote])
-  let event = try makeSessionEvent(db: db, transcript: transcript)
+  let quote = rateLimitingQuote
+  let (_, event) = try seedSingleMessageSession(db: db, quote: quote)
 
   _ = try await ExtractionRunner(db: db, provider: SliceAwareProvider(genuine: [(quote, 0)])).run()
   #expect(try await db.read { db in try LooseEnd.all.fetchAll(db) }.count == 1)
@@ -184,9 +191,8 @@ private func makeSessionEvent(db: any DatabaseWriter, transcript: URL) throws ->
 
 @Test func legacyRowInitializesWithoutResurrectingResolved() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-legacy"))
-  let resolvedQuote = "We still need to add rate limiting before launch"
-  let transcript = try writeTranscript([resolvedQuote])
-  let event = try makeSessionEvent(db: db, transcript: transcript)
+  let resolvedQuote = rateLimitingQuote
+  let (transcript, event) = try seedSingleMessageSession(db: db, quote: resolvedQuote)
 
   // Simulate a pre-feature row: extractedAt set, size still 0, count 0; and a RESOLVED loose
   // end whose quote is still in the transcript.
@@ -210,7 +216,7 @@ private func makeSessionEvent(db: any DatabaseWriter, transcript: URL) throws ->
   #expect(ev1.extractedTranscriptSize > 0)
 
   // A later append then extracts only the genuinely new content.
-  let newQuote = "Also remember to write the migration test before merging"
+  let newQuote = migrationQuote
   try appendRawLine(transcript, userLine(newQuote, ts: "2026-06-30T10:05:00Z"))
   let run2 = try await ExtractionRunner(db: db, provider: SliceAwareProvider(genuine: [(newQuote, 1)])).run()
   #expect(run2.first?.inserted == 1)
@@ -235,8 +241,8 @@ private func makeSessionEvent(db: any DatabaseWriter, transcript: URL) throws ->
 
 @Test func partialTrailingLinePicksUpAtCorrectIndexAfterCompletion() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-partial"))
-  let q0 = "We still need to add rate limiting before launch"
-  let q1 = "Also remember to write the migration test before merging"
+  let q0 = rateLimitingQuote
+  let q1 = migrationQuote
   let transcript = try writeTranscript([q0])
   // Append a half-written (invalid-JSON) trailing line: the parser skips it (1 message).
   try appendRawLine(transcript, "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Als")

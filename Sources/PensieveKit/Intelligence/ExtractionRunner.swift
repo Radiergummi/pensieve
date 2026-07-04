@@ -42,16 +42,16 @@ public struct ExtractionRunner {
         if size == event.extractedTranscriptSize { continue }
 
         let session = TranscriptParser.parse(fileURL: fileURL)
+        let messageCount = session.messages.count
 
         // Legacy init (one-time, no extraction): a row extracted before this feature existed
         // has extractedAt set but size still 0. Its prior extraction already covered the
         // transcript as it then stood, so initialize the watermark/size WITHOUT extracting —
         // otherwise migration would resurface every previously-resolved loose end.
         if event.extractedAt != nil && event.extractedTranscriptSize == 0 {
-          let count = session.messages.count
           try await db.write { db in
             try Event.where { $0.id.eq(event.id) }.update {
-              $0.extractedMessageCount = count
+              $0.extractedMessageCount = messageCount
               $0.extractedTranscriptSize = size
             }.execute(db)
           }
@@ -60,7 +60,7 @@ public struct ExtractionRunner {
 
         // Choose the slice start with a clamp/guard (crash- and misalignment-proof).
         let start: Int
-        if session.messages.count >= event.extractedMessageCount {
+        if messageCount >= event.extractedMessageCount {
           start = event.extractedMessageCount        // normal incremental slice
         } else {
           // Fewer messages than the watermark: the transcript shrank/was rewritten, or the
@@ -79,7 +79,6 @@ public struct ExtractionRunner {
         let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
 
         let stamp = now()
-        let newCount = session.messages.count
         let inserted = try await db.write { db -> Int in
           // Collapse against existing OPEN loose ends in this node (verbatim, normalized).
           let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
@@ -98,7 +97,7 @@ public struct ExtractionRunner {
           // Advance the watermark, size, and last-extracted stamp in the same write.
           try Event.where { $0.id.eq(event.id) }.update {
             $0.extractedAt = #bind(stamp)
-            $0.extractedMessageCount = newCount
+            $0.extractedMessageCount = messageCount
             $0.extractedTranscriptSize = size
           }.execute(db)
           return insertedCount
