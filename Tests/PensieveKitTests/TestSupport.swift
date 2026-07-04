@@ -28,3 +28,10 @@ func addWorktree(to repo: URL, branch: String) throws -> URL {
   _ = Git.run(["worktree", "add", "-b", branch, wt.path], in: repo.path)
   return wt
 }
+
+/// A fresh empty temp directory (not a repo).
+func makePlainDir(_ prefix: String = "plain") throws -> URL {
+  let dir = tempURL(prefix, ext: nil)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  return dir
+}
