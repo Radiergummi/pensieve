@@ -55,11 +55,14 @@ public struct MonitorSnapshot: Equatable, Sendable {
 - `gather(canonicalURL:spoolURL:now:activeWithin:)` opens each store read-only, computes the
   fields, and never throws out to the caller — any unreachable/missing store degrades to
   `.notSetUp` with nil/zero fields (this is the expected pre-dogfood state, not an error).
-- **Status rule** (from `lastCaptureAt` vs `now`, threshold `activeWithin` default **15 min**):
-  - stores unreachable / canonical store missing → `.notSetUp`
-  - `lastCaptureAt` within `activeWithin` → `.active`
-  - otherwise (reachable, but quiet) → `.idle`  ← the normal resting state; capture is
-    event-driven, so `.active` only lights up right after a commit / session start.
+- **Status rule** (spool-driven, so it reassures during the pre-ingest window — hooks firing but
+  `ingest` not yet run; threshold `activeWithin` default **15 min**):
+  - nothing captured *and* nothing ingested (no spool captures, `spoolPending == 0`, and
+    `eventCount == 0`) → `.notSetUp`
+  - `lastCaptureAt` within `activeWithin` of `now` → `.active` (even if the canonical store
+    doesn't exist yet — capture is working before the first ingest)
+  - otherwise (something exists, but the last capture is old) → `.idle`  ← the normal resting
+    state; capture is event-driven, so `.active` only lights up right after a commit / session start.
 
 ### 2. `Pensieve` app target (new executable, thin render)
 
