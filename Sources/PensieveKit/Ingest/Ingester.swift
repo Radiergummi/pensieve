@@ -6,24 +6,31 @@ public struct Ingester {
   let spool: CaptureSpool
   let db: any DatabaseWriter
   let resolver: ProjectResolver
+  let llm: (any LLMProvider)?
 
-  public init(spool: CaptureSpool, db: any DatabaseWriter) {
-    self.spool = spool; self.db = db; self.resolver = ProjectResolver(db: db)
+  public init(spool: CaptureSpool, db: any DatabaseWriter, llm: (any LLMProvider)? = nil) {
+    self.spool = spool; self.db = db; self.resolver = ProjectResolver(db: db); self.llm = llm
   }
 
   enum IngestError: Error { case unattributableSession }
+
+  /// Non-async wrappers so `db.write`/`db.read` resolve to GRDB's synchronous overload even
+  /// when called from `ingest` (now `async`) — a bare trailing closure there is ambiguous
+  /// with GRDB's `async` `write`/`read` overloads and triggers spurious Sendable diagnostics.
+  private func writeSync<T>(_ updates: (Database) throws -> T) throws -> T { try db.write(updates) }
+  private func readSync<T>(_ value: (Database) throws -> T) throws -> T { try db.read(value) }
 
   /// Drains all pending spool rows. Returns the number of canonical events CREATED
   /// (not rows processed — a dropped unknown-kind row counts 0). A row that throws is
   /// left unmarked so it retries next drain; successful and dropped rows are marked
   /// ingested per-row so progress is durable even if a later row fails.
   @discardableResult
-  public func drain() throws -> Int {
+  public func drain() async throws -> Int {
     let rows = try spool.pending()
     var created = 0
     for row in rows {
       do {
-        let n = try ingest(row)
+        let n = try await ingest(row)
         try spool.markIngested([row.id])
         created += n
       } catch {
@@ -34,7 +41,7 @@ public struct Ingester {
   }
 
   /// Returns the number of events created (0 for a dropped unknown kind).
-  private func ingest(_ row: SpoolRow) throws -> Int {
+  private func ingest(_ row: SpoolRow) async throws -> Int {
     let data = Data(row.payload.utf8)
     switch row.kind {
     case CaptureKind.gitCommit:
@@ -43,19 +50,27 @@ public struct Ingester {
       let branchKey = Git.strandBranchKey(branch: p.branch, defaultBranch: Git.defaultBranch(in: p.repoPath))
       let fields = gitCommitFields(hash: p.hash, repo: p.repoPath, fallbackTime: row.ts)
       let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
-      let inserted = try db.write { db -> Bool in
+      let outcome = try writeSync { db -> (inserted: Bool, born: UUID?) in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.gitRepo)
-        return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id, occurredAt: fields.when,
-              kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
-              fingerprint: Fingerprint.commit(hash: p.hash), branchKey: branchKey))
+        let dup = try Event.where { $0.sourceID.eq(source.id) && $0.fingerprint.eq(Fingerprint.commit(hash: p.hash)) }
+          .fetchOne(db) != nil
+        if dup { return (false, nil) }
+        let attr = try attributeToNode(db, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.gitCommit)
+        try Event.insert {
+          Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: fields.when,
+                kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
+                fingerprint: Fingerprint.commit(hash: p.hash), branchKey: branchKey)
+        }.execute(db)
+        return (true, attr.bornStrand)
       }
-      return inserted ? 1 : 0
+      if let born = outcome.born { await nameStrand(born, branchKey: branchKey ?? "") }
+      return outcome.inserted ? 1 : 0
 
     case CaptureKind.gitCheckout:
       let p = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
       let key = Git.commonDir(in: p.repoPath) ?? ProjectResolver.canonical(p.repoPath)
       let detail = try encodeJSON(["from": p.from, "to": p.to, "branch": p.branch])
-      let inserted = try db.write { db -> Bool in
+      let inserted = try writeSync { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.gitRepo)
         return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.ts,
               kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail,
@@ -76,23 +91,31 @@ public struct Ingester {
       let detail = try encodeJSON(["sessionID": session.sessionID,
                                    "prompts": String(session.userPromptCount),
                                    "transcriptPath": p.transcriptPath])
-      let inserted = try db.write { db -> Bool in
+      let outcome = try writeSync { db -> (inserted: Bool, born: UUID?, branch: String?) in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.claudeCode)
+        let dup = try Event.where { $0.sourceID.eq(source.id) && $0.fingerprint.eq(Fingerprint.session(sessionID: session.sessionID)) }
+          .fetchOne(db) != nil
+        if dup { return (false, nil, nil) }
         let branchKey: String? = {
           guard let sb = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(db),
                 let raw = sb.branch else { return nil }
           return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sb.commonDir))
         }()
-        return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id,
-              occurredAt: session.endedAt ?? row.ts, kind: CaptureKind.ccSession,
-              summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail,
-              fingerprint: Fingerprint.session(sessionID: session.sessionID), branchKey: branchKey))
+        let attr = try attributeToNode(db, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.ccSession)
+        try Event.insert {
+          Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: session.endedAt ?? row.ts,
+                kind: CaptureKind.ccSession, summary: "session (\(session.userPromptCount) prompts)",
+                detailJSON: detail, fingerprint: Fingerprint.session(sessionID: session.sessionID),
+                branchKey: branchKey)
+        }.execute(db)
+        return (true, attr.bornStrand, branchKey)
       }
-      return inserted ? 1 : 0
+      if let born = outcome.born { await nameStrand(born, branchKey: outcome.branch ?? "") }
+      return outcome.inserted ? 1 : 0
 
     case CaptureKind.ccSessionStart:
       let p = try JSONDecoder().decode(SessionStartPayload.self, from: data)
-      try db.write { db in
+      try writeSync { db in
         let exists = try SessionBranch.where { $0.sessionID.eq(p.sessionID) }.fetchOne(db) != nil
         if !exists {
           try SessionBranch.insert {
@@ -118,6 +141,61 @@ public struct Ingester {
     if exists { return false }
     try Event.insert { event }.execute(db)
     return true
+  }
+
+  /// Decides the node an event belongs to, materializing a strand when a branch crosses the
+  /// ≥2-same-kind-events threshold. Runs inside the write transaction. Returns the nodeID to
+  /// stamp on the event, plus the id of a strand *born on this call* (for post-transaction
+  /// naming) or nil.
+  private func attributeToNode(_ db: Database, projectNodeID: UUID,
+                               branchKey: String?, kind: String)
+    throws -> (nodeID: UUID, bornStrand: UUID?) {
+    guard let branchKey else { return (projectNodeID, nil) }
+
+    if let strand = try Node
+      .where({ $0.parentID.eq(projectNodeID) && $0.branchKey.eq(branchKey) && $0.kind.eq("strand") })
+      .fetchOne(db) {
+      return (strand.id, nil)                          // strand already exists → attribute directly
+    }
+
+    // Count same-kind events already tagged with this branch at the project node.
+    let sameKind = try Event
+      .where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) && $0.kind.eq(kind) }
+      .fetchAll(db).count
+    guard sameKind + 1 >= 2 else { return (projectNodeID, nil) }   // not yet — stay tagged
+
+    let strand = Node(name: branchKey, parentID: projectNodeID, kind: "strand", branchKey: branchKey)
+    try Node.insert { strand }.execute(db)
+    try Event.where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) }
+      .update { $0.nodeID = strand.id }.execute(db)   // repoint every tagged event (all kinds)
+    return (strand.id, strand.id)
+  }
+
+  /// Names/describes a freshly materialized strand from its accumulated activity. Non-fatal:
+  /// any failure leaves the branch-name + empty description. Organizational label, not a
+  /// surfaced claim — outside the verbatim gate by design.
+  private func nameStrand(_ strandID: UUID, branchKey: String) async {
+    guard let llm else { return }
+    let summaries: [String] = (try? readSync { db in
+      try Event.where { $0.nodeID.eq(strandID) }
+        .order { $0.occurredAt.desc() }.limit(20).fetchAll(db).map(\.summary)
+    }) ?? []
+    guard !summaries.isEmpty else { return }
+    let prompt = """
+    Below is recent activity on a branch of work called "\(branchKey)". In 3-6 words on line 1, \
+    give it a human-readable name. On line 2, one sentence describing it. Do not invent facts \
+    beyond the activity shown.
+
+    \(summaries.joined(separator: "\n"))
+    """
+    guard let out = try? await llm.complete(prompt: prompt) else { return }
+    let lines = out.split(separator: "\n", omittingEmptySubsequences: true)
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+    guard let name = lines.first, !name.isEmpty else { return }
+    let desc = lines.count > 1 ? lines[1] : ""
+    try? writeSync { db in
+      try Node.where { $0.id.eq(strandID) }.update { $0.name = name; $0.description = desc }.execute(db)
+    }
   }
 
   /// One `git show` yields subject, ISO-8601 commit date, and the changed-file list.
