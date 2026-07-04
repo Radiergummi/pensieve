@@ -1,5 +1,4 @@
 import Foundation
-import SQLiteData
 
 /// A filesystem-backed source discovered by inspecting a directory. Pure data — no DB state.
 public struct DiscoveredSource: Equatable, Sendable {

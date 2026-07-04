@@ -56,18 +56,9 @@ public struct SourceScanner {
     var pruned = false
     for type in types {
       if let d = type.detect(directory: dir) {
-        // Normalize directory path to resolve symlinks (e.g., /var → /private/var on macOS)
-        // and strip any trailing slashes for consistent comparison
-        var path = d.directory.resolvingSymlinksInPath().path
-        if path.hasSuffix("/") && path != "/" {
-          path.removeLast()
-        }
         let normalized = DiscoveredSource(
-          kind: d.kind,
-          directory: URL(fileURLWithPath: path, isDirectory: false),
-          identityKey: d.identityKey,
-          displayName: d.displayName
-        )
+          kind: d.kind, directory: Self.normalizedDirectory(d.directory),
+          identityKey: d.identityKey, displayName: d.displayName)
         found.append(normalized)
         if type.prunesChildrenWhenDetected { pruned = true }
       }
@@ -84,13 +75,16 @@ public struct SourceScanner {
       let vals = try? child.resourceValues(forKeys: keys)
       guard vals?.isDirectory == true, vals?.isSymbolicLink != true else { continue }  // dirs only; never follow symlinks
       if Self.noiseDirs.contains(child.lastPathComponent) { continue }
-      // Normalize child URL paths to ensure symlinks are resolved consistently throughout the walk
-      var childPath = child.resolvingSymlinksInPath().path
-      if childPath.hasSuffix("/") && childPath != "/" {
-        childPath.removeLast()
-      }
-      let normalizedChild = URL(fileURLWithPath: childPath, isDirectory: false)
-      walk(normalizedChild, depth: depth + 1, recursive: recursive, into: &found)
+      walk(Self.normalizedDirectory(child), depth: depth + 1, recursive: recursive, into: &found)
     }
+  }
+
+  /// Resolves symlinks and strips a trailing slash so directory URLs compare equal regardless of
+  /// spelling. On macOS `resolvingSymlinksInPath` maps `/private/var…` → `/var…` (and leaves
+  /// `/var…` unchanged) — this is what makes discovered paths match the already-resolved `root`.
+  private static func normalizedDirectory(_ url: URL) -> URL {
+    var path = url.resolvingSymlinksInPath().path
+    if path.hasSuffix("/") && path != "/" { path.removeLast() }
+    return URL(fileURLWithPath: path, isDirectory: false)
   }
 }

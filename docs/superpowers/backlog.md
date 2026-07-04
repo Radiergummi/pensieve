@@ -105,6 +105,18 @@ CLI `pensieve scan <folder> [--recursive] [--accept]`.
   May persist watched folders for periodic rescans. *Pair with the menu-bar step (v0.2);
   brings source discovery into the app proper.*
 
+### Small follow-ups from the source-discovery whole-branch review (deferred, non-blocking)
+
+- **`SourceScanner`'s `(kind, identityKey)` dedup set is untested (near-dead code).** Because
+  `GitSource.detect` requires a `.git` *directory*, no non-symlink walk path reaches the same repo
+  twice, so the dedup collision branch never fires with the current single kind. A direct unit test
+  with a stub `FileSystemSourceType` emitting two `DiscoveredSource`s that share one `identityKey`
+  would close the gap. Low risk; the dedup is insurance for future kinds.
+- **`normalizedDirectory` builds its URL with `isDirectory: false`** (a directory mislabeled as a
+  file) to preserve `URL ==` equality with test-created repo URLs. Fix to `isDirectory: true` when
+  the affected tests are switched to compare `.path` instead of whole-`URL` equality.
+- **Idempotent-accept test doesn't assert `setupFailed` stayed empty** on the second `accept`.
+
 ---
 
 ## Native localization — German & English
