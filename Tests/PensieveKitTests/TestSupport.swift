@@ -42,3 +42,11 @@ func makeSymlink(at link: URL, to target: URL) throws -> URL {
   try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
   return link
 }
+
+/// Writes a non-pensieve post-commit hook into a repo (simulates a user-owned hook).
+func writeForeignHook(in repo: URL) throws {
+  let hooks = repo.appendingPathComponent(".git/hooks")
+  try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+  try "#!/bin/sh\necho foreign\n".write(to: hooks.appendingPathComponent("post-commit"),
+                                        atomically: true, encoding: .utf8)
+}

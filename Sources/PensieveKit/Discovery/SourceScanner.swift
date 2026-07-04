@@ -1,6 +1,13 @@
 import Foundation
 import SQLiteData
 
+public struct AcceptResult: Sendable {
+  public var registered: [DiscoveredSource] = []
+  public var alreadyRegistered: [DiscoveredSource] = []
+  public var setupFailed: [(DiscoveredSource, String)] = []
+  public init() {}
+}
+
 public struct SourceScanner {
   let types: [any FileSystemSourceType]
   public init(types: [any FileSystemSourceType]) { self.types = types }
@@ -23,6 +30,26 @@ public struct SourceScanner {
         return DiscoveryCandidate(source: s, alreadyRegistered: exists)
       }
     }
+  }
+
+  /// Best-effort per candidate: find-or-create the Source(+Node), then run the type's capture
+  /// setup. An onRegister failure (e.g. foreign hooks) is recorded and the Source is kept; the
+  /// batch never aborts on it. Rethrows only on a catastrophic DB failure.
+  public func accept(_ candidates: [DiscoveredSource], db: any DatabaseWriter) throws -> AcceptResult {
+    var result = AcceptResult()
+    let resolver = ProjectResolver(db: db)
+    for c in candidates {
+      let existedBefore = try db.read { db in
+        try Source.where { $0.kind.eq(c.kind) && $0.key.eq(c.identityKey) }.fetchOne(db) != nil
+      }
+      _ = try resolver.resolve(path: c.identityKey, kind: c.kind)   // find-or-create (own write tx)
+      if existedBefore { result.alreadyRegistered.append(c) } else { result.registered.append(c) }
+      if let type = types.first(where: { $0.kind == c.kind }) {
+        do { try type.onRegister(c) }
+        catch { result.setupFailed.append((c, String(describing: error))) }
+      }
+    }
+    return result
   }
 
   private func walk(_ dir: URL, depth: Int, recursive: Bool, into found: inout [DiscoveredSource]) {

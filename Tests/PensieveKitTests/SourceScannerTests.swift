@@ -86,3 +86,53 @@ private func repo(in parent: URL, _ name: String) throws -> URL {
   let found = try scanner().discover(root: root, recursive: true, db: db)   // must not hang
   #expect(found.map { $0.source.directory.lastPathComponent } == ["alpha"])
 }
+
+@Test func acceptRegistersAndHooksThenIsIdempotent() throws {
+  let root = try makePlainDir("root")
+  let a = try repo(in: root, "alpha")
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let cands = try scanner().discover(root: root, recursive: false, db: db).map(\.source)
+
+  let r1 = try scanner().accept(cands, db: db)
+  #expect(r1.registered.count == 1)
+  #expect(r1.setupFailed.isEmpty)
+  #expect(try db.read { db in try Source.all.fetchAll(db).count } == 1)
+  // hook installed with our marker
+  let hook = try String(contentsOf: a.appendingPathComponent(".git/hooks/post-commit"), encoding: .utf8)
+  #expect(hook.contains("pensieve-managed-hook"))
+
+  let r2 = try scanner().accept(cands, db: db)           // re-accept: clean no-op
+  #expect(r2.alreadyRegistered.count == 1)
+  #expect(r2.registered.isEmpty)
+  #expect(try db.read { db in try Source.all.fetchAll(db).count } == 1)   // no duplicate
+}
+
+@Test func acceptForeignHookRepoRecordsFailureButKeepsSourceAndContinues() throws {
+  let root = try makePlainDir("root")
+  let bad = try repo(in: root, "bad"); try writeForeignHook(in: bad)
+  _ = try repo(in: root, "good")
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let cands = try scanner().discover(root: root, recursive: false, db: db).map(\.source)
+
+  let r = try scanner().accept(cands, db: db)
+  #expect(r.registered.count == 2)                        // BOTH sources created (batch not aborted)
+  #expect(r.setupFailed.count == 1)                       // bad repo's hook install refused
+  #expect(r.setupFailed.first?.0.directory.lastPathComponent == "bad")
+  #expect(try db.read { db in try Source.all.fetchAll(db).count } == 2)  // bad still tracked
+}
+
+@Test func acceptOnWorktreeTreeDoesNotThrowAndHooksOnlyMain() throws {
+  let root = try makePlainDir("root")
+  let main = try repo(in: root, "main")
+  _ = Git.run(["worktree", "add", "-b", "inside", root.appendingPathComponent("main-wt").path], in: main.path)
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let cands = try scanner().discover(root: root, recursive: true, db: db).map(\.source)
+
+  let r = try scanner().accept(cands, db: db)             // must NOT throw
+  #expect(r.registered.count == 1)
+  #expect(r.setupFailed.isEmpty)
+  // worktree's .git is still a file (never hooked)
+  var isDir: ObjCBool = true
+  _ = FileManager.default.fileExists(atPath: root.appendingPathComponent("main-wt/.git").path, isDirectory: &isDir)
+  #expect(isDir.boolValue == false)
+}
