@@ -39,21 +39,24 @@ public struct Ingester {
     switch row.kind {
     case CaptureKind.gitCommit:
       let p = try JSONDecoder().decode(GitCommitPayload.self, from: data)
+      let key = Git.commonDir(in: p.repoPath) ?? ProjectResolver.canonical(p.repoPath)
+      let branchKey = Git.strandBranchKey(branch: p.branch, defaultBranch: Git.defaultBranch(in: p.repoPath))
       let fields = gitCommitFields(hash: p.hash, repo: p.repoPath, fallbackTime: row.ts)
       let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
       let inserted = try db.write { db -> Bool in
-        let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
+        let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.gitRepo)
         return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id, occurredAt: fields.when,
               kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
-              fingerprint: Fingerprint.commit(hash: p.hash)))
+              fingerprint: Fingerprint.commit(hash: p.hash), branchKey: branchKey))
       }
       return inserted ? 1 : 0
 
     case CaptureKind.gitCheckout:
       let p = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
+      let key = Git.commonDir(in: p.repoPath) ?? ProjectResolver.canonical(p.repoPath)
       let detail = try encodeJSON(["from": p.from, "to": p.to, "branch": p.branch])
       let inserted = try db.write { db -> Bool in
-        let (project, source) = try resolver.resolve(db, path: p.repoPath, kind: SourceKind.gitRepo)
+        let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.gitRepo)
         return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.ts,
               kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail,
               fingerprint: Fingerprint.checkout(repo: p.repoPath, from: p.from, to: p.to, branch: p.branch)))
@@ -69,7 +72,7 @@ public struct Ingester {
       guard let cwd = session.cwd else { throw IngestError.unattributableSession }
       // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
       // so a session launched from a subdirectory lands in the same project as its commits.
-      let key = Git.run(["rev-parse", "--show-toplevel"], in: cwd) ?? cwd
+      let key = Git.commonDir(in: cwd) ?? ProjectResolver.canonical(cwd)
       let detail = try encodeJSON(["sessionID": session.sessionID,
                                    "prompts": String(session.userPromptCount),
                                    "transcriptPath": p.transcriptPath])

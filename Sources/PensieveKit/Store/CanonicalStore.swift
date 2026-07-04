@@ -101,5 +101,8 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     try #sql(#"ALTER TABLE "looseEnds" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
     try #sql(#"ALTER TABLE "checkpoints" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
   }
+  migrator.registerMigration("v5-event-branchkey") { db in
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "branchKey" TEXT"#).execute(db)
+  }
   try migrator.migrate(db)
 }

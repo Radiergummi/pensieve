@@ -12,6 +12,15 @@ public struct ProjectResolver {
     URL(fileURLWithPath: path).resolvingSymlinksInPath().path
   }
 
+  /// Human-readable node name from an identity key. A git common-dir ends in `.git`;
+  /// name the node after the repo directory, not ".git".
+  static func displayName(forKey key: String) -> String {
+    let url = URL(fileURLWithPath: key)
+    return url.lastPathComponent == ".git"
+      ? url.deletingLastPathComponent().lastPathComponent
+      : url.lastPathComponent
+  }
+
   public func resolve(path: String, kind: String) throws -> (project: Node, source: Source) {
     try db.write { db in try resolve(db, path: path, kind: kind) }
   }
@@ -33,7 +42,7 @@ public struct ProjectResolver {
       return (project, source)
     }
     // 3. Brand-new project + source.
-    let project = Node(name: (path as NSString).lastPathComponent)
+    let project = Node(name: Self.displayName(forKey: path))
     let source = Source(nodeID: project.id, kind: kind, key: path)
     try Node.insert { project }.execute(db)
     try Source.insert { source }.execute(db)

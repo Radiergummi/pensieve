@@ -21,3 +21,10 @@ func makeCommittedRepo(message: String = "first commit") throws -> (repo: URL, h
   let hash = Git.run(["rev-parse", "HEAD"], in: repo.path)!
   return (repo, hash)
 }
+
+/// Adds a linked worktree on a new branch to an existing repo; returns its path.
+func addWorktree(to repo: URL, branch: String) throws -> URL {
+  let wt = tempURL("worktree", ext: nil)
+  _ = Git.run(["worktree", "add", "-b", branch, wt.path], in: repo.path)
+  return wt
+}
