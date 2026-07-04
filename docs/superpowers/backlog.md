@@ -44,6 +44,20 @@ child re-parenting; organizing CLI + tree `list`. Additive migrations v4–v6; t
   pre-v4 `projects` row migrated through v4 (GRDB migrator exposes no `upTo:` seam via
   `openCanonicalDatabase`; migration SQL is simple + additive).
 
+### From the 2026-07-04 real-data validation run
+
+- **Strand naming echoes the newest commit** — on-device naming tends to reuse the most recent
+  commit's subject as the strand name rather than synthesizing across the branch's activity
+  (real run: a `feat/compose-swarm-reconciliation` strand got named *"Improved code formatting"*
+  after its newest commit). Best-effort metadata, **outside the trust gate by design**, and
+  fixable with `rename`. *Revisit if strand labels feel consistently off; the naming prompt could
+  weight the branchKey and the span of commits, not just the latest summary.* The description was
+  correctly grounded — only the short name is weak.
+- **(FIXED 2026-07-04) Fractional-second timestamps** — `TranscriptParser` used a default
+  `ISO8601DateFormatter`, which rejects Claude Code's `…:43.382Z` timestamps, leaving
+  `startedAt`/`endedAt` nil so every session event was stamped at ingest time and dormancy read
+  `0d`. Fixed (fractional-then-plain fallback) + regression test `parsesFractionalSecondTimestamps`.
+
 ---
 
 ## Spike: statistical theme discovery across strands (`NLEmbedding`)
