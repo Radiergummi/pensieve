@@ -20,24 +20,68 @@ public struct ExtractionRunner {
   }
 
   public func run() async throws -> [ExtractionResult] {
-    let pending = try await db.read { db in
+    // Every cc.session event is a candidate now — the extract-once filter is gone; a
+    // byte-size gate and a message-count watermark decide what (if anything) to re-extract.
+    let events = try await db.read { db in
       try Event.where { $0.kind.eq(CaptureKind.ccSession) }.fetchAll(db)
-    }.filter { $0.extractedAt == nil }
+    }
 
     var results: [ExtractionResult] = []
-    for event in pending {
+    for event in events {
       do {
         let detail = (try? JSONDecoder().decode([String: String].self,
                                                 from: Data(event.detailJSON.utf8))) ?? [:]
-        let transcriptPath = detail["transcriptPath"] ?? ""
-        let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: transcriptPath))
+        let fileURL = URL(fileURLWithPath: detail["transcriptPath"] ?? "")
 
-        let candidates = try await LooseEndExtractor(provider: provider).extract(from: session.messages)
+        // Cheap change detector: stat the byte size, no parse. Unreadable/missing → skip
+        // (leave the watermark unadvanced so it retries next run; never crash the batch).
+        guard let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+          continue
+        }
+        // Unchanged since last extraction → skip (avoids re-parsing multi-MB transcripts).
+        if size == event.extractedTranscriptSize { continue }
+
+        let session = TranscriptParser.parse(fileURL: fileURL)
+
+        // Legacy init (one-time, no extraction): a row extracted before this feature existed
+        // has extractedAt set but size still 0. Its prior extraction already covered the
+        // transcript as it then stood, so initialize the watermark/size WITHOUT extracting —
+        // otherwise migration would resurface every previously-resolved loose end.
+        if event.extractedAt != nil && event.extractedTranscriptSize == 0 {
+          let count = session.messages.count
+          try await db.write { db in
+            try Event.where { $0.id.eq(event.id) }.update {
+              $0.extractedMessageCount = count
+              $0.extractedTranscriptSize = size
+            }.execute(db)
+          }
+          continue
+        }
+
+        // Choose the slice start with a clamp/guard (crash- and misalignment-proof).
+        let start: Int
+        if session.messages.count >= event.extractedMessageCount {
+          start = event.extractedMessageCount        // normal incremental slice
+        } else {
+          // Fewer messages than the watermark: the transcript shrank/was rewritten, or the
+          // parser now filters more. Re-extract from 0 — the quote-dedup makes this safe.
+          start = 0
+          FileHandle.standardError.write(Data(
+            "pensieve: re-extracting \(session.sessionID) from 0: transcript boundary changed\n".utf8))
+        }
+
+        // Extract only the new slice (start <= messages.count always → subscript is valid;
+        // an empty slice means nothing new). Verify against the FULL message list: the
+        // verifier resolves candidates by absolute messageIndex, so slicing the extractor's
+        // INPUT never breaks index resolution or sourceMessageIndex.
+        let slice = Array(session.messages[start...])
+        let candidates = try await LooseEndExtractor(provider: provider).extract(from: slice)
         let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
 
         let stamp = now()
+        let newCount = session.messages.count
         let inserted = try await db.write { db -> Int in
-          // Collapse against existing OPEN loose ends in this project (verbatim, normalized).
+          // Collapse against existing OPEN loose ends in this node (verbatim, normalized).
           let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
           var seen = Set(existing.filter { $0.status == "open" }.map { normalizeWhitespace($0.quote) })
           var insertedCount = 0
@@ -51,7 +95,12 @@ public struct ExtractionRunner {
             }.execute(db)
             insertedCount += 1
           }
-          try Event.where { $0.id.eq(event.id) }.update { $0.extractedAt = #bind(stamp) }.execute(db)
+          // Advance the watermark, size, and last-extracted stamp in the same write.
+          try Event.where { $0.id.eq(event.id) }.update {
+            $0.extractedAt = #bind(stamp)
+            $0.extractedMessageCount = newCount
+            $0.extractedTranscriptSize = size
+          }.execute(db)
           return insertedCount
         }
 
@@ -59,7 +108,7 @@ public struct ExtractionRunner {
           proposed: candidates.count, verified: verified.count, inserted: inserted))
       } catch {
         // A single bad session (provider error, etc.) must never abort the batch or
-        // silently mark the event extracted — leave extractedAt unset so it retries.
+        // silently advance the watermark — leave it unset so it retries next run.
         FileHandle.standardError.write(Data("pensieve: extraction failed for session \(event.id): \(error)\n".utf8))
         continue
       }
