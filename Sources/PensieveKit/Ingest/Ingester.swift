@@ -15,8 +15,9 @@ public struct Ingester {
   enum IngestError: Error { case unattributableSession }
 
   /// Non-async wrappers so `db.write`/`db.read` resolve to GRDB's synchronous overload even
-  /// when called from `ingest` (now `async`) — a bare trailing closure there is ambiguous
-  /// with GRDB's `async` `write`/`read` overloads and triggers spurious Sendable diagnostics.
+  /// when called from an `async` context (`ingest`/`nameStrand`) — a bare trailing closure
+  /// there is ambiguous with GRDB's `async` `write`/`read` overloads and triggers spurious
+  /// Sendable diagnostics.
   private func writeSync<T>(_ updates: (Database) throws -> T) throws -> T { try db.write(updates) }
   private func readSync<T>(_ value: (Database) throws -> T) throws -> T { try db.read(value) }
 

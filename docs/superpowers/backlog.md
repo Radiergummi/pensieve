@@ -5,38 +5,44 @@ none is foreclosed. Revisit when the noted trigger arrives.
 
 ---
 
-## Phase 1B-org: the typed tree & strands (deferred out of the 1B gate)
+## Phase 1B-org: the typed tree & strands — DONE (2026-07-04)
 
-**Parked:** 2026-07-03, after an adversarial review of the 1B spec.
-**Revisit when:** the 1B gate passes (loose ends real + verbatim-cited, zero hallucinations
-on real projects) — then write a `1B-org` spec designed against the real captured data.
+**Shipped** on branch `phase-1b-org` (plan: `plans/2026-07-04-pensieve-phase1b-org.md`, spec:
+`specs/2026-07-03-pensieve-phase1b-org-design.md`). 75 tests, subagent-driven with a per-task
+review gate + an opus whole-branch review. Delivered: the `Project→Node` rename + strict
+recursive typed tree; git-common-dir source keying (worktree unification); conservative
+tag-then-materialize strand birth (≥2 same-kind events) with lossless repoint of events **and**
+their loose ends; `SessionStart` hook + `SessionBranch`; on-device strand naming; `group()`
+child re-parenting; organizing CLI + tree `list`. Additive migrations v4–v6; trust gate untouched.
 
-The conceptual model we brainstormed (see the rev-1 discussion) is intentionally deferred so
-1B reaches its make-or-break gate cheaply. It forecloses nothing (additive migration; UUID
-PKs + STRICT keep CloudKit reachable). Carry forward:
+### Deferred out of 1B-org (on the roadmap, not foreclosed)
 
-- **Typed recursive tree of nodes** — `parentID` (strict tree), open-string `kind`
-  (`domain`/`project`/`strand`/`concept`/`initiative`/`task`/`topic`, soft labels, no enforced
-  levels), `description`, `metadataJSON` bag. The **`Project→Node` rename** goes here too.
-- **Strand birth needs new capture-time signals 1A doesn't record** — worktree identity
-  (resolve via `git rev-parse --git-common-dir`, *not* `--show-toplevel`, which sends a
-  worktree to a separate project), default-branch resolution (`origin/HEAD` → config →
-  fallback), detached-HEAD handling (don't mint a "HEAD" strand). Must avoid strand explosion
-  on short-lived/merged branches and collapse "worktree + branch for one fork" to a single
-  strand. If `metadataJSON` holds the strand's branch key, note it's queried-by-key on the
-  ingest hot path → promote that key to a real column (the YAGNI-blob argument fails here).
-- **Session-start hook + cheap-model strand naming/description** (confirm the exact Claude
-  Code hook event — `SessionStart` may fire before the first prompt exists; `UserPromptSubmit`
-  may be the real signal — against current CC docs).
-- **`group()` must also repoint children's `parentID`** once the tree exists (extend the
-  existing invariant + `groupPreservesLooseEndsAndCheckpoints` test).
-- **Per-kind ingestion-handler protocol** (fingerprint/enrich/extract) — introduce when a 4th
-  source type actually arrives; a `switch` suffices for git+session.
-- **Domain-level recursive rollup** summaries (CTE over descendants) so `status <domain>`
-  shows loose ends sitting in child strands.
-- **Organizing CLI:** `add-node`, `nest`, `rename`, `retype`.
+- **Domain-level recursive rollup** summaries (CTE over descendants) so `status <domain>` shows
+  loose ends sitting in child strands. *Trigger: when the tree is deep enough to want rollups.*
+- **Per-kind ingestion-handler protocol** (fingerprint/enrich/extract) — a `switch` suffices for
+  git+session. *Trigger: a 4th source type.*
 - **Cross-cutting soft references** (`node_links`, cycles allowed).
-- **Evidence-based loose-end auto-close** (1B only surfaces + ages; never auto-closes).
+- **Evidence-based loose-end auto-close** (1B/1B-org only surface + age; never auto-close).
+- **`SessionEnd` auto-ingest wiring** — session *content* ingestion still runs via
+  `pensieve ingest-session --path`; auto-triggering it from a hook is deferred.
+- **Retroactive worktree-merge / source re-keying in migration** — v4–v6 do NOT re-key
+  pre-1B-org sources to common-dir; a pre-existing repo forks into a new node on its next
+  post-upgrade ingest (lossless, fixable with `group()`). Accepted per spec §8.
+
+### Small follow-ups from the 1B-org whole-branch review (deferred, non-blocking)
+
+- **`nest` / `add --parent` cycle guard** — no check prevents nesting a node under its own
+  descendant; a resulting cycle becomes an island `list` silently drops (no infinite loop).
+  Add a walk-to-root guard. *Protects the `list` view, the tool's main surface.*
+- **`NodeCommands.find` name-collision handling** — name-addressed CLI resolves an arbitrary
+  row when two nodes share a name (plausible: two `auth` strands). UUID is the preferred path;
+  add an "ambiguous name" guard or note it in help text.
+- **`SettingsHookInstaller` presence check** is a substring `.contains("capture-session-start")`
+  (low risk; our own command string).
+- **`SessionBranch` has no retention/GC** — one row per session forever (fine at single-user scale).
+- **True v3→v4 upgrade test** — `SchemaV4Tests` exercises the head schema but not a seeded
+  pre-v4 `projects` row migrated through v4 (GRDB migrator exposes no `upTo:` seam via
+  `openCanonicalDatabase`; migration SQL is simple + additive).
 
 ---
 
