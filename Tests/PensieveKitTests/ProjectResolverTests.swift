@@ -72,6 +72,10 @@ import SQLiteData
   let checkpoint = Checkpoint(nodeID: b.project.id, note: "n")
   try db.write { db in try Checkpoint.insert { checkpoint }.execute(db) }
 
+  // A child node under B must re-parent to A on merge, not orphan.
+  let child = Node(name: "b-strand", parentID: b.project.id, kind: "strand", branchKey: "feature")
+  try db.write { db in try Node.insert { child }.execute(db) }
+
   try ProjectResolver(db: db).group(a.project.id, into: [b.project.id])
 
   let looseEnds = try db.read { db in try LooseEnd.all.fetchAll(db) }
@@ -81,4 +85,7 @@ import SQLiteData
   let checkpoints = try db.read { db in try Checkpoint.all.fetchAll(db) }
   #expect(checkpoints.count == 1)
   #expect(checkpoints.first?.nodeID == a.project.id)
+
+  let reparented = try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) }
+  #expect(reparented?.parentID == a.project.id)
 }

@@ -60,6 +60,8 @@ public struct ProjectResolver {
           .update { $0.nodeID = primaryID }.execute(db)
         try Checkpoint.where { $0.nodeID.eq(other) }
           .update { $0.nodeID = primaryID }.execute(db)
+        try Node.where { $0.parentID.eq(other) }
+          .update { $0.parentID = #bind(primaryID) }.execute(db)
         try Node.where { $0.id.eq(other) }.delete().execute(db)
       }
     }
