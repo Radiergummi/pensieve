@@ -15,3 +15,32 @@ public enum Git {
     return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
+
+public extension Git {
+  /// The repo-identity directory that unifies all worktrees of one repo. `--git-common-dir`
+  /// returns the *main* repo's `.git` even from a linked worktree. nil when `path` is not a repo.
+  static func commonDir(in repo: String) -> String? {
+    guard let raw = run(["rev-parse", "--path-format=absolute", "--git-common-dir"], in: repo)
+    else { return nil }
+    return URL(fileURLWithPath: raw).resolvingSymlinksInPath().path
+  }
+
+  /// Best-effort default branch: origin/HEAD → init.defaultBranch → probe main/master → "main".
+  static func defaultBranch(in repo: String) -> String {
+    if let ref = run(["symbolic-ref", "refs/remotes/origin/HEAD"], in: repo),
+       let name = ref.split(separator: "/").last, !name.isEmpty {
+      return String(name)
+    }
+    if let cfg = run(["config", "init.defaultBranch"], in: repo), !cfg.isEmpty { return cfg }
+    if run(["rev-parse", "--verify", "--quiet", "refs/heads/main"], in: repo) != nil { return "main" }
+    if run(["rev-parse", "--verify", "--quiet", "refs/heads/master"], in: repo) != nil { return "master" }
+    return "main"
+  }
+
+  /// Pure decision: the branch key worth tagging on an event, or nil for default/detached/empty.
+  static func strandBranchKey(branch: String, defaultBranch: String) -> String? {
+    let b = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    if b.isEmpty || b == "HEAD" || b == defaultBranch { return nil }
+    return b
+  }
+}

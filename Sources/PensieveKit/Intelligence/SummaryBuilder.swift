@@ -12,7 +12,7 @@ public struct SummaryBuilder {
   public init(provider: any LLMProvider) { self.provider = provider }
 
   /// Deterministic fact sheet the model is allowed to narrate — and nothing beyond it.
-  public static func assembleFacts(project: Project, events: [Event]) -> String {
+  public static func assembleFacts(project: Node, events: [Event]) -> String {
     let lines = events.prefix(15).map { "- \($0.kind): \($0.summary)" }.joined(separator: "\n")
     return "Project: \(project.name)\nRecent activity:\n\(lines)"
   }
@@ -27,7 +27,7 @@ public struct SummaryBuilder {
     \(facts)
     """
     let narration = (try? await provider.complete(prompt: prompt)) ?? facts   // fall back to raw facts
-    let ends = try LooseEndQueries.open(db, projectID: status.project.id, now: now)
+    let ends = try LooseEndQueries.open(db, nodeID: status.project.id, now: now)
     return ProjectSummary(
       whatItIs: "\(status.project.name) — \(status.project.state)",
       lastWorkDone: narration,

@@ -8,11 +8,11 @@ public struct LooseEndView: Sendable {
 }
 
 public enum LooseEndQueries {
-  public static func open(_ db: any DatabaseWriter, projectID: UUID?, now: Date) throws -> [LooseEndView] {
+  public static func open(_ db: any DatabaseWriter, nodeID: UUID?, now: Date) throws -> [LooseEndView] {
     try db.read { db in
       let ends: [LooseEnd]
-      if let projectID {
-        ends = try LooseEnd.where { $0.projectID.eq(projectID) && $0.status.eq("open") }.fetchAll(db)
+      if let nodeID {
+        ends = try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq("open") }.fetchAll(db)
       } else {
         ends = try LooseEnd.where { $0.status.eq("open") }.fetchAll(db)
       }

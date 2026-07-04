@@ -2,8 +2,10 @@ import ArgumentParser
 import PensieveKit
 
 struct ListProjects: ParsableCommand {
-  static let configuration = CommandConfiguration(commandName: "list")
+  static let configuration = CommandConfiguration(commandName: "list",
+    abstract: "List the node tree (strands nested under their projects).")
   func run() throws {
-    for p in try ProjectQueries.all(try openCanonical()) { print("\(p.name)  [\(p.state)]") }
+    let nodes = try ProjectQueries.all(try openCanonical())
+    for line in NodeTree.render(nodes) { print(line) }
   }
 }

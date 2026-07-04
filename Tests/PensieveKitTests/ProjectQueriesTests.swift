@@ -8,7 +8,7 @@ import SQLiteData
   let (project, source) = try ProjectResolver(db: db).resolve(path: "/p/colibri", kind: "gitRepo")
   try db.write { db in
     try Event.insert {
-      Event(projectID: project.id, sourceID: source.id, occurredAt: Date(),
+      Event(nodeID: project.id, sourceID: source.id, occurredAt: Date(),
             kind: "git.commit", summary: "did a thing", detailJSON: "{}")
     }.execute(db)
   }

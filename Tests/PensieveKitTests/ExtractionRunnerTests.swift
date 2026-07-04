@@ -14,7 +14,7 @@ private struct CannedProvider: LLMProvider {
   let url = Bundle.module.url(forResource: "session-roles", withExtension: "jsonl", subdirectory: "Fixtures")!
   let (project, source) = try ProjectResolver(db: db).resolve(path: "/p/colibri", kind: SourceKind.claudeCode)
   let detail = try encodeJSON(["sessionID": "session-roles", "prompts": "2", "transcriptPath": url.path])
-  let event = Event(projectID: project.id, sourceID: source.id, occurredAt: Date(),
+  let event = Event(nodeID: project.id, sourceID: source.id, occurredAt: Date(),
                     kind: CaptureKind.ccSession, summary: "s", detailJSON: detail,
                     fingerprint: "fp-run")
   try await db.write { db in try Event.insert { event }.execute(db) }

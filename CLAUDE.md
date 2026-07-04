@@ -6,7 +6,7 @@ Personal (single-user) native-macOS tool that reconstructs *where each of my par
 
 - **Phase 1A — DONE** (merged to `main`): headless capture → ingest → query pipeline + `pensieve` CLI + git-hook installer. 19 tests.
 - **Phase 1B — DONE** (merged to `main`): the intelligence layer (loose-end extraction, verbatim trust gate, on-device guided-generation LLM, grounded summaries, `next`/`digest`). **The make-or-break precision gate PASSED** on real transcripts (0 noise, 0 fabrication across 3 on-device acceptance runs). 56 tests. See `docs/superpowers/phase-1b-outcome.md`.
-- **Phase 1B-org — NEXT**: the typed tree & strands, `Project→Node` rename, strand birth, session hook, organizing CLI — designed against the now-clean real data. See `docs/superpowers/backlog.md`.
+- **Phase 1B-org — DONE** (merged to `main`): the typed tree & strands. `Project→Node` rename + strict recursive tree (`parentID`/`kind`/`description`/`metadataJSON`/`branchKey`); git-common-dir source keying (unifies worktrees into one node); auto-birth *strand* nodes from git/session activity (tag-then-materialize, ≥2 same-kind events, lossless repoint of events **and** their loose ends); `SessionStart` hook + `SessionBranch` (captures a session's branch); on-device strand naming (best-effort, outside the trust gate); `group()` re-parents children; organizing CLI (`add-node`/`nest`/`rename`/`retype`) + tree-aware `list`. Additive migrations v4–v6; **trust gate untouched**. 75 tests. See `docs/superpowers/plans/2026-07-04-pensieve-phase1b-org.md`.
 - Later (intended, not scheduled): the SwiftUI app (the actual product — three-pane, Mela-like), `pensieved` background service, CloudKit sync + iOS, widgets/Siri/Spotlight.
 
 ## Build & test

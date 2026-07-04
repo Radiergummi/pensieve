@@ -6,10 +6,10 @@ import SQLiteData
 @Test func projectRoundTrips() throws {
   let db = try openCanonicalDatabase(at: tempURL("pensieve-test"))
 
-  let p = Project(name: "Cetacean")
-  try db.write { db in try Project.insert { p }.execute(db) }
+  let p = Node(name: "Cetacean")
+  try db.write { db in try Node.insert { p }.execute(db) }
 
-  let fetched = try db.read { db in try Project.all.fetchAll(db) }
+  let fetched = try db.read { db in try Node.all.fetchAll(db) }
   #expect(fetched.count == 1)
   #expect(fetched.first?.name == "Cetacean")
 }

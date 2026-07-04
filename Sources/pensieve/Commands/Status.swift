@@ -12,7 +12,7 @@ struct Status: ParsableCommand {
     }
     print("# \(s.project.name)")
     for e in s.recentEvents { print("  \(e.occurredAt) \(e.kind)  \(e.summary)") }
-    let ends = try LooseEndQueries.open(db, projectID: s.project.id, now: Date())
+    let ends = try LooseEndQueries.open(db, nodeID: s.project.id, now: Date())
     guard !ends.isEmpty else { return }
     print("\n## Open loose ends (\(ends.count))")
     for v in ends {
