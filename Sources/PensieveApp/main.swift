@@ -7,11 +7,11 @@ import PensieveKit
 enum Stores {
   static var canonicalURL: URL {
     if let o = ProcessInfo.processInfo.environment["PENSIEVE_DB"] { return URL(fileURLWithPath: o) }
-    return (try? PensievePaths.canonicalURL()) ?? URL(fileURLWithPath: "/nonexistent")
+    return PensievePaths.canonicalURL()
   }
   static var spoolURL: URL {
     if let o = ProcessInfo.processInfo.environment["PENSIEVE_CAPTURE_DB"] { return URL(fileURLWithPath: o) }
-    return (try? PensievePaths.captureURL()) ?? URL(fileURLWithPath: "/nonexistent")
+    return PensievePaths.captureURL()
   }
 }
 

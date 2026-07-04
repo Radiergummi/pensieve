@@ -29,17 +29,16 @@ public struct MonitorSnapshot: Equatable, Sendable {
     var lastCapture: Date? = nil
     var pending = 0
     if FileManager.default.fileExists(atPath: spoolURL.path),
-       let spool = try? CaptureSpool(at: spoolURL) {
-      lastCapture = try? spool.lastCaptureAt()
-      pending = (try? spool.pendingCount()) ?? 0
+       let stats = try? CaptureSpool.readOnlyStats(at: spoolURL) {
+      lastCapture = stats.lastCaptureAt
+      pending = stats.pending
     }
 
-    // Canonical store: ingested state. Only open an existing store (opening an already-migrated
-    // store performs no data writes).
+    // Canonical store: ingested state. Only open an existing store (read-only, no migrator run).
     var events = 0
     var loose = 0
     if FileManager.default.fileExists(atPath: canonicalURL.path),
-       let db = try? openCanonicalDatabase(at: canonicalURL) {
+       let db = try? openCanonicalDatabaseReadOnly(at: canonicalURL) {
       events = (try? db.read { db in try Event.all.fetchAll(db).count }) ?? 0
       loose = (try? db.read { db in
         try LooseEnd.where { $0.status.eq("open") }.fetchAll(db).count
