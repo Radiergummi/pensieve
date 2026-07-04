@@ -35,3 +35,10 @@ func makePlainDir(_ prefix: String = "plain") throws -> URL {
   try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
   return dir
 }
+
+/// Creates a symlink at `link` pointing to `target`. Returns the link URL.
+@discardableResult
+func makeSymlink(at link: URL, to target: URL) throws -> URL {
+  try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+  return link
+}
