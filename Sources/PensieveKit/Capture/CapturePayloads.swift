@@ -4,6 +4,7 @@ public enum CaptureKind {
   public static let gitCommit = "git.commit"
   public static let gitCheckout = "git.checkout"
   public static let ccSession = "cc.session"
+  public static let ccSessionStart = "cc.session.start"
 }
 
 public enum SourceKind {
@@ -28,6 +29,15 @@ public struct GitCheckoutPayload: Codable, Sendable {
 public struct SessionRefPayload: Codable, Sendable {
   public var transcriptPath: String
   public init(transcriptPath: String) { self.transcriptPath = transcriptPath }
+}
+
+public struct SessionStartPayload: Codable, Sendable {
+  public var sessionID: String; public var cwd: String
+  public var branch: String; public var commonDir: String; public var transcriptPath: String
+  public init(sessionID: String, cwd: String, branch: String, commonDir: String, transcriptPath: String) {
+    self.sessionID = sessionID; self.cwd = cwd; self.branch = branch
+    self.commonDir = commonDir; self.transcriptPath = transcriptPath
+  }
 }
 
 public func encodeJSON<T: Encodable>(_ v: T) throws -> String {

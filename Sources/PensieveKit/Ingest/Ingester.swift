@@ -78,12 +78,31 @@ public struct Ingester {
                                    "transcriptPath": p.transcriptPath])
       let inserted = try db.write { db -> Bool in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.claudeCode)
+        let branchKey: String? = {
+          guard let sb = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(db),
+                let raw = sb.branch else { return nil }
+          return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sb.commonDir))
+        }()
         return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id,
               occurredAt: session.endedAt ?? row.ts, kind: CaptureKind.ccSession,
               summary: "session (\(session.userPromptCount) prompts)", detailJSON: detail,
-              fingerprint: Fingerprint.session(sessionID: session.sessionID)))
+              fingerprint: Fingerprint.session(sessionID: session.sessionID), branchKey: branchKey))
       }
       return inserted ? 1 : 0
+
+    case CaptureKind.ccSessionStart:
+      let p = try JSONDecoder().decode(SessionStartPayload.self, from: data)
+      try db.write { db in
+        let exists = try SessionBranch.where { $0.sessionID.eq(p.sessionID) }.fetchOne(db) != nil
+        if !exists {
+          try SessionBranch.insert {
+            SessionBranch(sessionID: p.sessionID,
+                          branch: p.branch.isEmpty ? nil : p.branch,
+                          commonDir: p.commonDir)
+          }.execute(db)
+        }
+      }
+      return 0
 
     default:
       return 0   // unknown kind: dropped (still marked ingested by drain), 0 events

@@ -104,5 +104,17 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
   migrator.registerMigration("v5-event-branchkey") { db in
     try #sql(#"ALTER TABLE "events" ADD COLUMN "branchKey" TEXT"#).execute(db)
   }
+  migrator.registerMigration("v6-session-branches") { db in
+    try #sql("""
+      CREATE TABLE "sessionBranches"(
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "sessionID" TEXT NOT NULL,
+        "branch" TEXT,
+        "commonDir" TEXT NOT NULL,
+        "createdAt" TEXT NOT NULL
+      ) STRICT
+      """).execute(db)
+    try #sql(#"CREATE UNIQUE INDEX "idx_sessionbranches_sessionid" ON "sessionBranches"("sessionID")"#).execute(db)
+  }
   try migrator.migrate(db)
 }
