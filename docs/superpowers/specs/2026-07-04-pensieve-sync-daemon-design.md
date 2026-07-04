@@ -1,6 +1,13 @@
 # Sync Daemon — Auto-Drain & Session Ingestion (Design)
 
-**Date:** 2026-07-04. **Status:** approved in brainstorming, ready for a plan.
+**Date:** 2026-07-04. **Status:** DEFERRED / TO BE REVISED. An adversarial review found the §B
+mtime-grace recall approach **critically flawed** (it silently drops loose ends from the back half of
+paused/resumed sessions). The fix — **incremental re-extraction + a SessionEnd hook** — was split into
+its own prerequisite sub-project (`…-incremental-reextraction-design.md`). This daemon spec will be
+revised to depend on that (SessionEnd-hook trigger, mtime-grace demoted to a backstop) + the confirmed
+fixes (launchd `PATH` for the `claude -p` fallback — extraction under launchd was **verified working**;
+create the log dir; honest "drain writes the spool via `markIngested`" note). Do not implement from this
+version.
 
 ## Goal
 
