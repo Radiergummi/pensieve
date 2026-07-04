@@ -45,3 +45,14 @@ private func readJSON(_ url: URL) throws -> [String: Any] {
   #expect(commands?.contains("/other/tool run") == true)
   #expect(commands?.contains("/opt/pensieve capture-session-start") == true)
 }
+
+@Test func installThrowsOnMalformedSettingsAndLeavesFileUntouched() throws {
+  let url = tempURL("settings", ext: "json")
+  let malformed = "{ this is not json"
+  try malformed.write(to: url, atomically: true, encoding: .utf8)
+  #expect(throws: SettingsHookInstallError.self) {
+    try SettingsHookInstaller.install(settingsURL: url, pensievePath: "/opt/pensieve")
+  }
+  let onDisk = try String(contentsOf: url, encoding: .utf8)
+  #expect(onDisk == malformed)
+}

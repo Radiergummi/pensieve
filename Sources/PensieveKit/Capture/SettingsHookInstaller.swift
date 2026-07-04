@@ -1,5 +1,16 @@
 import Foundation
 
+public enum SettingsHookInstallError: Error, CustomStringConvertible {
+  case unparseableSettings(URL)
+
+  public var description: String {
+    switch self {
+    case .unparseableSettings(let url):
+      return "Refusing to modify \(url.path): existing content is not a valid JSON object. Fix or remove it, then re-run."
+    }
+  }
+}
+
 /// Idempotent JSON merge of the Claude Code `SessionStart` hook into a settings.json.
 /// Preserves all existing content and never modifies foreign hook entries.
 public enum SettingsHookInstaller {
@@ -9,8 +20,11 @@ public enum SettingsHookInstaller {
   @discardableResult
   public static func install(settingsURL: URL, pensievePath: String) throws -> Bool {
     var root: [String: Any] = [:]
-    if let data = try? Data(contentsOf: settingsURL),
-       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+    if FileManager.default.fileExists(atPath: settingsURL.path) {
+      guard let data = try? Data(contentsOf: settingsURL),
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw SettingsHookInstallError.unparseableSettings(settingsURL)
+      }
       root = obj
     }
     var hooks = root["hooks"] as? [String: Any] ?? [:]
