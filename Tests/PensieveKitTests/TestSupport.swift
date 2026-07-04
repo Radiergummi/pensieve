@@ -28,3 +28,25 @@ func addWorktree(to repo: URL, branch: String) throws -> URL {
   _ = Git.run(["worktree", "add", "-b", branch, wt.path], in: repo.path)
   return wt
 }
+
+/// A fresh empty temp directory (not a repo).
+func makePlainDir(_ prefix: String = "plain") throws -> URL {
+  let dir = tempURL(prefix, ext: nil)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  return dir
+}
+
+/// Creates a symlink at `link` pointing to `target`. Returns the link URL.
+@discardableResult
+func makeSymlink(at link: URL, to target: URL) throws -> URL {
+  try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+  return link
+}
+
+/// Writes a non-pensieve post-commit hook into a repo (simulates a user-owned hook).
+func writeForeignHook(in repo: URL) throws {
+  let hooks = repo.appendingPathComponent(".git/hooks")
+  try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+  try "#!/bin/sh\necho foreign\n".write(to: hooks.appendingPathComponent("post-commit"),
+                                        atomically: true, encoding: .utf8)
+}

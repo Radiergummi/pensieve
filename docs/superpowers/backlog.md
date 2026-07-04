@@ -89,6 +89,36 @@ bundle yet).
 
 ---
 
+## Source discovery (`pensieve scan`) — DONE (2026-07-04)
+
+**Shipped** on branch `feat/source-discovery`. 96 tests. Delivered: filesystem-source abstraction
+(`FileSystemSourceType`, `DiscoveredSource`, `DiscoveryCandidate`, `GitSource` with `.git`-directory rule),
+write-free walk (`SourceScanner.discover`), best-effort registration + hook install (`SourceScanner.accept`),
+CLI `pensieve scan <folder> [--recursive] [--accept]`.
+
+### Deferred out of source discovery (on the roadmap, not foreclosed)
+
+- **Proactively suggest new projects learned implicitly** — from session current working directories and
+  commits in unregistered repos, infer candidate projects the user works on but hasn't registered yet.
+  Auto-surface as a `next` suggestion. *Trigger: once capture is flowing from multiple sources.*
+- **Pass 2: source-discovery settings window** — folder picker, recursive toggle, checkbox candidate list.
+  May persist watched folders for periodic rescans. *Pair with the menu-bar step (v0.2);
+  brings source discovery into the app proper.*
+
+### Small follow-ups from the source-discovery whole-branch review (deferred, non-blocking)
+
+- **`SourceScanner`'s `(kind, identityKey)` dedup set is untested (near-dead code).** Because
+  `GitSource.detect` requires a `.git` *directory*, no non-symlink walk path reaches the same repo
+  twice, so the dedup collision branch never fires with the current single kind. A direct unit test
+  with a stub `FileSystemSourceType` emitting two `DiscoveredSource`s that share one `identityKey`
+  would close the gap. Low risk; the dedup is insurance for future kinds.
+- **`normalizedDirectory` builds its URL with `isDirectory: false`** (a directory mislabeled as a
+  file) to preserve `URL ==` equality with test-created repo URLs. Fix to `isDirectory: true` when
+  the affected tests are switched to compare `.path` instead of whole-`URL` equality.
+- **Idempotent-accept test doesn't assert `setupFailed` stayed empty** on the second `accept`.
+
+---
+
 ## Native localization — German & English
 
 **Requested:** 2026-07-04. Moritz runs macOS in German but may switch to English; Pensieve
