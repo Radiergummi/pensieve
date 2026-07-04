@@ -125,5 +125,9 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
       """).execute(db)
     try #sql(#"CREATE UNIQUE INDEX "idx_sessionbranches_sessionid" ON "sessionBranches"("sessionID")"#).execute(db)
   }
+  migrator.registerMigration("v7-incremental-extraction") { db in
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedMessageCount" INTEGER NOT NULL DEFAULT 0"#).execute(db)
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedTranscriptSize" INTEGER NOT NULL DEFAULT 0"#).execute(db)
+  }
   try migrator.migrate(db)
 }
