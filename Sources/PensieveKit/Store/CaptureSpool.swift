@@ -85,6 +85,7 @@ public final class CaptureSpool {
   public static func readOnlyStats(at url: URL) throws -> (lastCaptureAt: Date?, pending: Int) {
     var config = Configuration()
     config.readonly = true
+    config.busyMode = .timeout(5)
     let dbQueue = try DatabaseQueue(path: url.path, configuration: config)
     return try dbQueue.read { db in
       let lastCaptureAt: Date?

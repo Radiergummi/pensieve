@@ -53,11 +53,10 @@ struct HeartbeatView: View {
       Text(dot.0).foregroundStyle(dot.1).font(.headline)
       Text(lastCaptureLine).foregroundStyle(.secondary).font(.subheadline)
       Divider()
-      Text("Spool:  \(model.snapshot.spoolPending) pending")
-      Text("Events: \(model.snapshot.eventCount)")
-      Text("Loose ends: \(model.snapshot.looseEndCount)")
+      Text("Spool:  \(model.snapshot.spoolPending) pending").monospacedDigit()
+      Text("Events: \(model.snapshot.eventCount)").monospacedDigit()
+      Text("Loose ends: \(model.snapshot.looseEndCount)").monospacedDigit()
     }
-    .font(.system(.body, design: .monospaced))
     .padding(20)
     .frame(width: 280, alignment: .leading)
   }
