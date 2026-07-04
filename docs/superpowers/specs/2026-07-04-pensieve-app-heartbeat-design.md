@@ -64,12 +64,13 @@ public struct MonitorSnapshot: Equatable, Sendable {
   - otherwise (something exists, but the last capture is old) → `.idle`  ← the normal resting
     state; capture is event-driven, so `.active` only lights up right after a commit / session start.
 
-### 2. `Pensieve` app target (new executable, thin render)
+### 2. `PensieveApp` app target (new executable, thin render)
 
-A new SwiftPM `executableTarget` named **`Pensieve`** (product `Pensieve`) depending on
+A new SwiftPM `executableTarget` named **`PensieveApp`** (product `PensieveApp`) depending on
 `PensieveKit`. ~40 lines of SwiftUI/AppKit: an `NSApplication` hosting one `NSWindow` with an
 `NSHostingView`. A `Timer` fires every **3 s**, calls `MonitorSnapshot.gather(...)`, and updates
-an `@Observable`/`ObservableObject` the view renders. No business logic in the target.
+an `@Observable`/`ObservableObject` the view renders. No business logic in the target. (Target
+renamed from `Pensieve` to avoid a case-insensitive-APFS collision with the `pensieve` CLI target.)
 
 The window renders the agreed minimal layout:
 
@@ -135,7 +136,7 @@ writes.
 
 ## Packaging & how to run
 
-- `swift run Pensieve` launches the window (dev workflow for now).
+- `swift run PensieveApp` launches the window (dev workflow for now).
 - **First implementation step must verify the window actually appears** when launched as an
   unbundled SwiftPM executable (compile+link already confirmed in a spike; runtime display of an
   unbundled `NSApplication` window is the one open risk). If an unbundled window misbehaves

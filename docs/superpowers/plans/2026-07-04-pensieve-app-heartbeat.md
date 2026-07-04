@@ -4,7 +4,7 @@
 
 **Goal:** Build the first window of `Pensieve.app` — a native, read-only "heartbeat" that shows Pensieve is alive and collecting work (status dot, last-capture age, spool/event/loose-end counts).
 
-**Architecture:** A pure, testable `MonitorSnapshot.gather(...)` in `PensieveKit` reads both stores read-only and computes the heartbeat; a thin new `Pensieve` SwiftUI executable target polls it every 3 s and renders one window. The logic lives in the kit so the future `pensieved` daemon reuses it.
+**Architecture:** A pure, testable `MonitorSnapshot.gather(...)` in `PensieveKit` reads both stores read-only and computes the heartbeat; a thin new `PensieveApp` SwiftUI executable target polls it every 3 s and renders one window. The logic lives in the kit so the future `pensieved` daemon reuses it.
 
 **Tech Stack:** Swift 6, SwiftPM, SwiftUI/AppKit (no Xcode — Command Line Tools only), SQLiteData (GRDB-backed), Swift Testing.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Build/test `PensieveKit` with `./scripts/test.sh` (optionally `--filter <name>`), NOT `swift test`** — this machine is Command Line Tools–only. `swift build` / `swift run` work normally.
-- **Command Line Tools only (no Xcode.app).** SwiftUI compiles/links under CLT (verified in a spike). Build the app with `swift build` / `swift run Pensieve`.
+- **Command Line Tools only (no Xcode.app).** SwiftUI compiles/links under CLT (verified in a spike). Build the app with `swift build` / `swift run PensieveApp`.
 - **SQLiteData predicates use `.eq(x)`, NOT `== x`** (e.g. `.where { $0.status.eq("open") }`). `==` is unavailable.
 - **Count with `.fetchAll(db).count`** — the house pattern (`NextQueries.swift:23`); do not assume a `.fetchCount` API exists.
 - Kind strings live in `CaptureKind` / `SourceKind` (`CapturePayloads.swift`) — reuse the constants.
@@ -35,13 +35,13 @@
 
 **Created:**
 - `Sources/PensieveKit/Query/MonitorSnapshot.swift` — the `MonitorSnapshot` value + `gather(...)`. One responsibility: read both stores read-only and compute the heartbeat.
-- `Sources/Pensieve/main.swift` — the thin SwiftUI/AppKit app target: an `NSApplication` + one `NSWindow` hosting a SwiftUI view that polls `gather` on a 3 s timer.
+- `Sources/PensieveApp/main.swift` — the thin SwiftUI/AppKit app target: an `NSApplication` + one `NSWindow` hosting a SwiftUI view that polls `gather` on a 3 s timer. (Target named `PensieveApp` to avoid a case-insensitive-APFS collision with the `pensieve` CLI target.)
 - `Tests/PensieveKitTests/CaptureSpoolTests.swift` — tests for the two new spool helpers.
 - `Tests/PensieveKitTests/MonitorSnapshotTests.swift` — tests for `gather`.
 
 **Modified:**
 - `Sources/PensieveKit/Store/CaptureSpool.swift` — add `lastCaptureAt()` + `pendingCount()`.
-- `Package.swift` — add the `Pensieve` executable product + target.
+- `Package.swift` — add the `PensieveApp` executable product + target.
 
 ---
 
@@ -314,28 +314,28 @@ The thin SwiftUI/AppKit render. No logic beyond formatting; it polls `MonitorSna
 
 **Interfaces:**
 - Consumes: `MonitorSnapshot` (Task 2); `PensievePaths.canonicalURL()` / `captureURL()`; `PENSIEVE_DB` / `PENSIEVE_CAPTURE_DB` env overrides.
-- Produces: the `Pensieve` executable (`swift run Pensieve`).
+- Produces: the `PensieveApp` executable (`swift run PensieveApp`).
 
 - [ ] **Step 1: Add the executable product + target to `Package.swift`**
 
 In `Package.swift`, add to `products`:
 
 ```swift
-    .executable(name: "Pensieve", targets: ["Pensieve"]),
+    .executable(name: "PensieveApp", targets: ["PensieveApp"]),
 ```
 
 and add to `targets`:
 
 ```swift
     .executableTarget(
-      name: "Pensieve",
+      name: "PensieveApp",
       dependencies: ["PensieveKit"]
     ),
 ```
 
 - [ ] **Step 2: Write the app**
 
-Create `Sources/Pensieve/main.swift`:
+Create `Sources/PensieveApp/main.swift`:
 
 ```swift
 import AppKit
@@ -433,7 +433,7 @@ This is the one open risk from the spec — that an unbundled `NSApplication` wi
 SP=$(mktemp -d)
 export PENSIEVE_CAPTURE_DB="$SP/capture.sqlite" PENSIEVE_DB="$SP/pensieve.sqlite"
 .build/debug/pensieve capture-commit --repo "$PWD" --hash test --branch main   # one real spool row
-swift run Pensieve
+swift run PensieveApp
 ```
 
 Expected: a titled "Pensieve" window appears showing `● active`, `last capture … seconds ago`, `Spool: 1 pending`, `Events: 0`, `Loose ends: 0`. Close the window (⌘W) to exit.
@@ -447,8 +447,8 @@ Expected: all green (adding the app target must not disturb the kit or its tests
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Package.swift Sources/Pensieve/main.swift
-git commit -m "feat: Pensieve.app v0.1 — heartbeat window (swift run Pensieve)"
+git add Package.swift Sources/PensieveApp/main.swift
+git commit -m "feat: Pensieve.app v0.1 — heartbeat window (swift run PensieveApp)"
 ```
 
 ---
@@ -481,7 +481,7 @@ git commit -m "docs: note Pensieve.app v0.1 heartbeat window shipped"
 - §Paths & environment (`PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`, PensievePaths defaults): Task 3 `Stores`. ✅
 - §Concurrency (read-only, WAL-safe, never creates a store, no static ISO formatter): Task 2 existence-checks + `try?` degradation. ✅
 - §Testing (notSetUp / active / idle / counts open-only / lastCaptureAt survives ingest): Tasks 1–2. ✅
-- §Packaging (swift run Pensieve; verify window appears; `.app` fallback): Task 3 Steps 3–4. ✅
+- §Packaging (swift run PensieveApp; verify window appears; `.app` fallback): Task 3 Steps 3–4. ✅
 - §Non-goals: no feed/per-project/menu-bar/bundle/daemon/auto-ingest/writes built. ✅
 
 **Placeholder scan:** no TBD/TODO/"handle edge cases"/"similar to Task N" — every code step carries full code and every run step an exact command + expected output. ✅

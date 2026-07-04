@@ -10,6 +10,15 @@ public func openCanonicalDatabase(at url: URL) throws -> any DatabaseWriter {
   return db
 }
 
+/// Opens an EXISTING canonical store strictly read-only (no migrator run, cannot create the file).
+/// For read-only observers (e.g. `MonitorSnapshot`) that must never write to or contend with the
+/// canonical store's write path.
+public func openCanonicalDatabaseReadOnly(at url: URL) throws -> any DatabaseReader {
+  var configuration = Configuration()
+  configuration.readonly = true
+  return try DatabasePool(path: url.path, configuration: configuration)
+}
+
 func migrateCanonical(_ db: any DatabaseWriter) throws {
   var migrator = DatabaseMigrator()
   migrator.registerMigration("v1-projects") { db in
