@@ -63,6 +63,9 @@ final class AppModel: ObservableObject {
   @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   @Published var briefingCards: [BriefingCard] = []
+  /// Drives the ⌘K Quick Jump palette. Hoisted here (from RootView @State) so the "Go" menu command
+  /// can open it.
+  @Published var showPalette = false
   /// "Since when" the Briefing measures movement: the previous launch's timestamp (or 7 days ago on
   /// first run). Fixed for the session so cards don't shift under you while the window is open.
   let briefingSince: Date
@@ -90,6 +93,9 @@ final class AppModel: ObservableObject {
       Task { @MainActor in self?.refresh() }
     }
   }
+
+  /// On-demand equivalent of the launch drain+refresh, for the ⌘R Refresh menu command.
+  func refreshNow() async { await drainThenRefresh() }
 
   private func drainThenRefresh() async {
     if let db, let spool = try? CaptureSpool(at: Stores.spoolURL) {

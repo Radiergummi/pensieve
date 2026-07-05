@@ -29,5 +29,15 @@ struct PensieveApp: App {
     }
     .defaultSize(width: 900, height: 560)
     .windowResizability(.contentMinSize)
+    .commands {
+      SidebarCommands()   // standard Show/Hide Sidebar (⌃⌘S) in the View menu
+      CommandMenu("Go") {
+        Button("Quick Jump…") { model.showPalette = true }
+          .keyboardShortcut("k", modifiers: .command)
+        Divider()
+        Button("Refresh") { Task { await model.refreshNow() } }
+          .keyboardShortcut("r", modifiers: .command)
+      }
+    }
   }
 }
