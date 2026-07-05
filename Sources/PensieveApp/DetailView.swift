@@ -25,11 +25,10 @@ struct DetailView: View {
 
         // LOOSE ENDS (with inline verbatim provenance)
         section("Loose Ends") {
-          let ends = looseEnds
-          if ends.isEmpty {
+          if looseEnds.isEmpty {
             Text("None open.").foregroundStyle(.secondary)
           } else {
-            ForEach(ends, id: \.looseEnd.id) { view in
+            ForEach(looseEnds, id: \.looseEnd.id) { view in
               looseEndRow(view)
             }
           }
@@ -37,11 +36,10 @@ struct DetailView: View {
 
         // RECENT ACTIVITY (deterministic; LLM narration is a later slice)
         section("Recent Activity") {
-          let events = recentEvents
-          if events.isEmpty {
+          if recentEvents.isEmpty {
             Text("No captured activity.").foregroundStyle(.secondary)
           } else {
-            ForEach(events) { event in
+            ForEach(recentEvents) { event in
               HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(event.occurredAt, format: .dateTime.month().day())
                   .font(.caption).monospacedDigit().foregroundStyle(.secondary)

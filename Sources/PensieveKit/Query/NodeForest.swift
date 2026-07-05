@@ -13,11 +13,11 @@ public struct NodeForestNode: Identifiable, Equatable, Sendable {
 /// Turns a flat `[Node]` into a rooted forest by `parentID`. Read-only, deterministic.
 public enum NodeForest {
   public static func build(_ nodes: [Node]) -> [NodeForestNode] {
-    let byID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    let ids = Set(nodes.map(\.id))
     var childrenByParent: [UUID: [Node]] = [:]
     var roots: [Node] = []
     for n in nodes {
-      if let pid = n.parentID, byID[pid] != nil {
+      if let pid = n.parentID, ids.contains(pid) {
         childrenByParent[pid, default: []].append(n)
       } else {
         roots.append(n)   // nil parent, or parent absent from the set → promote to root

@@ -28,7 +28,7 @@ struct SidebarView: View {
       }
     }
     .listStyle(.sidebar)
-    .safeAreaInset(edge: .bottom) { StatusFooter() }
+    .safeAreaInset(edge: .bottom) { StatusFooter(snapshot: model.snapshot) }
   }
 
   private func smartRow(_ kind: SmartListKind, count: Int) -> some View {
@@ -59,11 +59,10 @@ extension NodeForestNode {
   fileprivate var childrenIfAny: [NodeForestNode]? { children.isEmpty ? nil : children }
 }
 
-/// Reuses the read-only heartbeat kernel for a tiny liveness dot at the sidebar's foot.
+/// A tiny liveness dot at the sidebar's foot, driven by the heartbeat snapshot `AppModel` already
+/// polls — no second timer or store connection of its own.
 private struct StatusFooter: View {
-  @State private var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
-                                                spoolPending: 0, eventCount: 0, looseEndCount: 0)
-  private let tick = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
+  let snapshot: MonitorSnapshot
 
   var body: some View {
     HStack(spacing: 6) {
@@ -72,11 +71,6 @@ private struct StatusFooter: View {
       Spacer()
     }
     .padding(.horizontal, 12).padding(.vertical, 8)
-    .onAppear(perform: refresh)
-    .onReceive(tick) { _ in refresh() }
-  }
-  private func refresh() {
-    snapshot = MonitorSnapshot.gather(canonicalURL: Stores.canonicalURL, spoolURL: Stores.spoolURL)
   }
   private var color: Color {
     switch snapshot.status { case .active: return .green; case .idle: return .secondary; case .notSetUp: return .orange }

@@ -20,6 +20,14 @@ enum SmartListKind: String, CaseIterable, Hashable {
     case .recentlyActive: return "dot.radiowaves.left.and.right"
     }
   }
+  /// Which bucket of `SmartLists` this kind selects.
+  var itemsKeyPath: KeyPath<SmartLists, [NextItem]> {
+    switch self {
+    case .whatsNext: return \.whatsNext
+    case .dormant: return \.dormant
+    case .recentlyActive: return \.recentlyActive
+    }
+  }
 }
 
 enum SidebarSelection: Hashable {
@@ -33,6 +41,8 @@ final class AppModel: ObservableObject {
   @Published var forest: [NodeForestNode] = []
   @Published var sidebarSelection: SidebarSelection? = .smartList(.whatsNext)
   @Published var selectedNodeID: UUID?
+  @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
+                                            spoolPending: 0, eventCount: 0, looseEndCount: 0)
 
   private var db: (any DatabaseWriter)?
   private var allNodes: [Node] = []
@@ -55,11 +65,17 @@ final class AppModel: ObservableObject {
   }
 
   func refresh() {
+    // The heartbeat kernel reads the stores standalone (works even with no canonical store), so
+    // gather it here — one poller for the whole window — before the db guard.
+    snapshot = MonitorSnapshot.gather(canonicalURL: Stores.canonicalURL, spoolURL: Stores.spoolURL)
     guard let db else { return }
     let now = Date()
     lists = (try? SmartLists.compute(db, now: now)) ?? lists
-    allNodes = (try? ProjectQueries.all(db)) ?? allNodes
-    forest = NodeForest.build(allNodes)
+    let fetched = (try? ProjectQueries.all(db)) ?? allNodes
+    if fetched != allNodes {   // rebuild the forest only when the node set actually changed
+      allNodes = fetched
+      forest = NodeForest.build(allNodes)
+    }
   }
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
@@ -68,13 +84,7 @@ final class AppModel: ObservableObject {
   func nodesForSelection() -> [Node] {
     switch sidebarSelection {
     case .smartList(let kind):
-      let items: [NextItem]
-      switch kind {
-      case .whatsNext: items = lists.whatsNext
-      case .dormant: items = lists.dormant
-      case .recentlyActive: items = lists.recentlyActive
-      }
-      return items.map(\.project)
+      return lists[keyPath: kind.itemsKeyPath].map(\.project)
     case .node(let id):
       // A tree pick: show that node plus its direct child strands.
       guard let selected = node(id) else { return [] }
@@ -86,12 +96,10 @@ final class AppModel: ObservableObject {
   }
 
   func detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView]) {
-    guard let db else {
-      return (ProjectStatus(project: node, recentEvents: []), [])
-    }
+    let fallback = ProjectStatus(project: node, recentEvents: [])
+    guard let db else { return (fallback, []) }
     let now = Date()
-    let status = (try? ProjectQueries.status(db, node: node, limit: 15))
-      ?? ProjectStatus(project: node, recentEvents: [])
+    let status = (try? ProjectQueries.status(db, node: node, limit: 15)) ?? fallback
     let ends = (try? LooseEndQueries.open(db, nodeID: node.id, now: now)) ?? []
     return (status, ends)
   }
