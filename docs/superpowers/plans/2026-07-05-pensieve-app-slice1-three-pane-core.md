@@ -248,9 +248,13 @@ git commit -m "feat: SmartLists — grounded What's Next / Dormant / Recently Ac
 ### Task 3: `AppModel` + shell skeleton + launch drain
 
 **Files:**
+- Modify: `Sources/PensieveKit/Query/SmartLists.swift` — add a `public init` (see Step 0).
+- Modify: `Sources/PensieveKit/Query/ProjectQueries.swift` — add a `public init` to `ProjectStatus` (see Step 0).
 - Create: `Sources/PensieveApp/AppModel.swift`
 - Create: `Sources/PensieveApp/RootView.swift`
 - Modify: `Sources/PensieveApp/main.swift`
+
+**Cross-module note:** `SmartLists` and `ProjectStatus` are plain `public struct`s whose *synthesized* memberwise init is `internal`, so a different module (`PensieveApp`) cannot construct them. `AppModel` constructs both (an empty `SmartLists` default and a `ProjectStatus` fallback), so Step 0 adds explicit `public init`s. (The `@Table` models — `Node`/`Event`/`LooseEnd` — already get public inits from the macro; only these two hand-written structs need it.)
 
 **Interfaces:**
 - Consumes: `Stores` (existing in `main.swift`), `openCanonicalDatabase(at:) throws -> any DatabaseWriter`, `CaptureSpool(at:) throws`, `Ingester(spool:db:llm:).drain() async throws -> Int`, `SmartLists.compute`, `ProjectQueries.all`, `NodeForest.build`.
@@ -259,12 +263,37 @@ git commit -m "feat: SmartLists — grounded What's Next / Dormant / Recently Ac
   - `enum SmartListKind: String, CaseIterable, Hashable { case whatsNext, dormant, recentlyActive }` with `var title: String` and `var symbol: String`.
   - `@MainActor final class AppModel: ObservableObject` exposing `@Published var lists: SmartLists`, `@Published var forest: [NodeForestNode]`, `@Published var sidebarSelection: SidebarSelection?`, `@Published var selectedNodeID: UUID?`; methods `start()`, `refresh()`, `nodesForSelection() -> [Node]`, `node(_ id: UUID) -> Node?`, and `detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView])`.
 
+- [ ] **Step 0: Make `SmartLists` and `ProjectStatus` publicly constructible**
+
+In `Sources/PensieveKit/Query/SmartLists.swift`, add this initializer inside `struct SmartLists`, immediately after the three stored `public let` properties and before `static func compute`:
+
+```swift
+  public init(whatsNext: [NextItem], dormant: [NextItem], recentlyActive: [NextItem]) {
+    self.whatsNext = whatsNext; self.dormant = dormant; self.recentlyActive = recentlyActive
+  }
+```
+
+In `Sources/PensieveKit/Query/ProjectQueries.swift`, add this initializer inside `struct ProjectStatus`, immediately after its `public let project`/`public let recentEvents` properties:
+
+```swift
+  public init(project: Node, recentEvents: [Event]) {
+    self.project = project; self.recentEvents = recentEvents
+  }
+```
+
+These have the same signatures as the previously-synthesized memberwise inits, so existing in-module call sites (`SmartLists.compute`, `ProjectQueries.recentEvents`) are unaffected.
+
+Verify PensieveKit still compiles and its tests are unaffected:
+Run: `./scripts/test.sh --filter SmartLists` and `./scripts/test.sh --filter ProjectQueries`
+Expected: PASS (no behavior change; only visibility).
+
 - [ ] **Step 1: Write `AppModel`**
 
 ```swift
 // Sources/PensieveApp/AppModel.swift
 import Foundation
 import SwiftUI
+import SQLiteData
 import PensieveKit
 
 enum SmartListKind: String, CaseIterable, Hashable {
@@ -460,7 +489,8 @@ Expected: a resizable 900×560 window titled "Pensieve" opens showing three colu
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/PensieveApp/AppModel.swift Sources/PensieveApp/RootView.swift Sources/PensieveApp/main.swift
+git add Sources/PensieveKit/Query/SmartLists.swift Sources/PensieveKit/Query/ProjectQueries.swift \
+        Sources/PensieveApp/AppModel.swift Sources/PensieveApp/RootView.swift Sources/PensieveApp/main.swift
 git commit -m "feat: three-pane app shell (AppModel + NavigationSplitView) with launch spool drain"
 ```
 
