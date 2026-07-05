@@ -4,6 +4,7 @@ import PensieveKit
 
 struct RootView: View {
   @ObservedObject var model: AppModel
+  @State private var showPalette = false
 
   var body: some View {
     NavigationSplitView {
@@ -22,5 +23,15 @@ struct RootView: View {
       }
     }
     .navigationTitle("Pensieve")
+    // A hidden, zero-size button carries the ⌘K shortcut for the key window.
+    .background {
+      Button("") { showPalette = true }
+        .keyboardShortcut("k", modifiers: .command)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+    .sheet(isPresented: $showPalette) {
+      PaletteView(model: model, isPresented: $showPalette)
+    }
   }
 }
