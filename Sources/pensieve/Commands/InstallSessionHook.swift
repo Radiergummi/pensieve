@@ -8,8 +8,9 @@ struct InstallSessionHook: ParsableCommand {
   func run() throws {
     let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
     let pensievePath = Bundle.main.executablePath ?? "pensieve"
-    let added = try SettingsHookInstaller.install(settingsURL: url, pensievePath: pensievePath)
-    print(added ? "installed SessionStart hook in \(url.path)"
-                : "SessionStart hook already present in \(url.path)")
+    let start = try SettingsHookInstaller.install(settingsURL: url, pensievePath: pensievePath)
+    let end = try SettingsHookInstaller.installSessionEnd(settingsURL: url, pensievePath: pensievePath)
+    print(start ? "installed SessionStart hook in \(url.path)" : "SessionStart hook already present in \(url.path)")
+    print(end ? "installed SessionEnd hook in \(url.path)" : "SessionEnd hook already present in \(url.path)")
   }
 }

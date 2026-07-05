@@ -11,14 +11,29 @@ public enum SettingsHookInstallError: Error, CustomStringConvertible {
   }
 }
 
-/// Idempotent JSON merge of the Claude Code `SessionStart` hook into a settings.json.
-/// Preserves all existing content and never modifies foreign hook entries.
 public enum SettingsHookInstaller {
   static let command = "capture-session-start"
+  static let sessionEndCommand = "capture-session-end"
 
-  /// Returns true if an entry was added, false if ours was already present.
+  /// Installs the `SessionStart` hook. Returns true if added, false if already present.
   @discardableResult
   public static func install(settingsURL: URL, pensievePath: String) throws -> Bool {
+    try installHook(settingsURL: settingsURL, event: "SessionStart", matcher: "startup",
+                    marker: command, command: "\(pensievePath) \(command)")
+  }
+
+  /// Installs the `SessionEnd` hook (matcher "" = all reasons). Returns true if added.
+  @discardableResult
+  public static func installSessionEnd(settingsURL: URL, pensievePath: String) throws -> Bool {
+    try installHook(settingsURL: settingsURL, event: "SessionEnd", matcher: "",
+                    marker: sessionEndCommand, command: "\(pensievePath) \(sessionEndCommand)")
+  }
+
+  /// Idempotent JSON merge of one Claude Code command hook into a settings.json. Preserves all
+  /// existing content and never modifies foreign hook entries. Presence is detected by the
+  /// subcommand `marker` substring (so a changed `pensievePath` is still recognized as ours).
+  private static func installHook(settingsURL: URL, event: String, matcher: String,
+                                  marker: String, command: String) throws -> Bool {
     var root: [String: Any] = [:]
     if FileManager.default.fileExists(atPath: settingsURL.path) {
       guard let data = try? Data(contentsOf: settingsURL),
@@ -28,20 +43,20 @@ public enum SettingsHookInstaller {
       root = obj
     }
     var hooks = root["hooks"] as? [String: Any] ?? [:]
-    var sessionStart = hooks["SessionStart"] as? [[String: Any]] ?? []
+    var group = hooks[event] as? [[String: Any]] ?? []
 
-    let present = sessionStart.contains { group in
-      ((group["hooks"] as? [[String: Any]]) ?? []).contains {
-        ($0["command"] as? String)?.contains(command) == true
+    let present = group.contains { g in
+      ((g["hooks"] as? [[String: Any]]) ?? []).contains {
+        ($0["command"] as? String)?.contains(marker) == true
       }
     }
     if present { return false }
 
-    sessionStart.append([
-      "matcher": "startup",
-      "hooks": [["type": "command", "command": "\(pensievePath) \(command)"]],
+    group.append([
+      "matcher": matcher,
+      "hooks": [["type": "command", "command": command]],
     ])
-    hooks["SessionStart"] = sessionStart
+    hooks[event] = group
     root["hooks"] = hooks
 
     try PensievePaths.ensureParentDirectory(of: settingsURL)
