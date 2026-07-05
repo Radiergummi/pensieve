@@ -160,3 +160,13 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   let updated = try await db.read { db in try LooseEnd.where { $0.id.eq(looseEnd.id) }.fetchOne(db) }
   #expect(updated?.nodeID == strandID)
 }
+
+@Test func sanitizeStrandNameStripsListMarkersQuotesAndTrailingPunctuation() {
+  #expect(Ingester.sanitizeStrandName("1. Event Watermark Fields") == "Event Watermark Fields")
+  #expect(Ingester.sanitizeStrandName("2) Drop Rows") == "Drop Rows")
+  #expect(Ingester.sanitizeStrandName("- Sync daemon") == "Sync daemon")
+  #expect(Ingester.sanitizeStrandName("Security enhancement with admin bypass.") == "Security enhancement with admin bypass")
+  #expect(Ingester.sanitizeStrandName("\"Quoted Name\"") == "Quoted Name")
+  #expect(Ingester.sanitizeStrandName("Already Clean") == "Already Clean")
+  #expect(Ingester.sanitizeStrandName("   ") == nil)
+}

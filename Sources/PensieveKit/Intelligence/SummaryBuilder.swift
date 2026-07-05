@@ -17,8 +17,11 @@ public struct SummaryBuilder {
     return "Project: \(project.name)\nRecent activity:\n\(lines)"
   }
 
-  public func build(_ db: any DatabaseWriter, projectName: String, now: Date) async throws -> ProjectSummary? {
-    guard let status = try ProjectQueries.status(db, name: projectName, limit: 15) else { return nil }
+  public func build(_ db: any DatabaseWriter, node: Node, now: Date) async throws -> ProjectSummary? {
+    // Key off the node the caller holds — NOT its name. Node names aren't unique (two distinct
+    // repos can share a basename), so a name lookup would resolve an arbitrary same-named node
+    // and, e.g., narrate an empty one while the real one's activity stays invisible.
+    let status = try ProjectQueries.status(db, node: node, limit: 15)
     // Nothing captured for this node (e.g. a scanned-but-untouched git repo): skip it rather
     // than hand the model an empty fact sheet, which it "narrates" by hallucinating or echoing
     // the prompt. A loose end can't exist without a source event, so no events ⇒ nothing grounded.

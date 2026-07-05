@@ -187,6 +187,22 @@ public struct Ingester {
     return (strand.id, strand.id)
   }
 
+  /// Cleans an on-device-proposed strand name into a terse organizational label: strips a
+  /// leading list/enumeration marker ("1. ", "2) ", "- ", "* ", "• "), wrapping quotes or
+  /// backticks, and trailing sentence punctuation. Returns nil for empty input so the caller
+  /// keeps the branch-key fallback name. Deterministic — the namer is outside the trust gate,
+  /// but its output still shouldn't read like a numbered list item or a full sentence.
+  static func sanitizeStrandName(_ raw: String) -> String? {
+    var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let marker = s.range(of: #"^(\d+[.)]|[-*•])\s+"#, options: .regularExpression) {
+      s.removeSubrange(marker)
+    }
+    s = s.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+    s = s.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
+    s = s.trimmingCharacters(in: .whitespaces)
+    return s.isEmpty ? nil : s
+  }
+
   /// Names/describes a freshly materialized strand from its accumulated activity. Non-fatal:
   /// any failure leaves the branch-name + empty description. Organizational label, not a
   /// surfaced claim — outside the verbatim gate by design.
@@ -199,15 +215,15 @@ public struct Ingester {
     guard !summaries.isEmpty else { return }
     let prompt = """
     Below is recent activity on a branch of work called "\(branchKey)". In 3-6 words on line 1, \
-    give it a human-readable name. On line 2, one sentence describing it. Do not invent facts \
-    beyond the activity shown.
+    give it a human-readable name — a plain label, not numbered or bulleted, no trailing period. \
+    On line 2, one sentence describing it. Do not invent facts beyond the activity shown.
 
     \(summaries.joined(separator: "\n"))
     """
     guard let out = try? await llm.complete(prompt: prompt) else { return }
     let lines = out.split(separator: "\n", omittingEmptySubsequences: true)
       .map { $0.trimmingCharacters(in: .whitespaces) }
-    guard let name = lines.first, !name.isEmpty else { return }
+    guard let first = lines.first, let name = Self.sanitizeStrandName(first) else { return }
     let desc = lines.count > 1 ? lines[1] : ""
     try? writeSync { db in
       try Node.where { $0.id.eq(strandID) }.update { $0.name = name; $0.description = desc }.execute(db)
