@@ -83,9 +83,16 @@ public struct Ingester {
       let p = try JSONDecoder().decode(SessionRefPayload.self, from: data)
       let transcriptURL = URL(fileURLWithPath: p.transcriptPath)
       let session = TranscriptParser.parse(fileURL: transcriptURL)
-      // No cwd → transcript missing / not yet flushed. THROW so the row stays pending
-      // and retries next drain, instead of being silently dropped.
-      guard let cwd = session.cwd else { throw IngestError.unattributableSession }
+      // No cwd → can't attribute. Distinguish transient from permanent so discovery's
+      // per-cycle re-spool can't loop forever: an empty/unreadable transcript may still fill
+      // later (throw → stays pending, retries next drain); a non-empty transcript that still
+      // has no cwd is corrupt/foreign and will never attribute (drop → drain marks it
+      // ingested, returning 0 events).
+      guard let cwd = session.cwd else {
+        let size = (try? transcriptURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if size == 0 { throw IngestError.unattributableSession }
+        return 0
+      }
       // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
       // so a session launched from a subdirectory lands in the same project as its commits.
       let key = Git.commonDir(in: cwd) ?? ProjectResolver.canonical(cwd)

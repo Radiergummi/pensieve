@@ -44,3 +44,13 @@ public func encodeJSON<T: Encodable>(_ v: T) throws -> String {
   let data = try JSONEncoder().encode(v)
   return String(decoding: data, as: UTF8.self)
 }
+
+/// Decodes a Claude Code `SessionEnd` hook payload (stdin JSON) into a spoolable session ref.
+/// Returns nil for malformed JSON or an empty/absent `transcript_path` — dumb by design: the
+/// hook must never fail a session.
+public func sessionRefFromSessionEndHook(_ data: Data) -> SessionRefPayload? {
+  struct HookInput: Decodable { let transcript_path: String? }
+  guard let h = try? JSONDecoder().decode(HookInput.self, from: data),
+        let path = h.transcript_path, !path.isEmpty else { return nil }
+  return SessionRefPayload(transcriptPath: path)
+}
