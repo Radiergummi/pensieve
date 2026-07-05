@@ -15,6 +15,8 @@ struct RootView: View {
     } detail: {
       if let id = model.selectedNodeID, let node = model.node(id) {
         DetailView(model: model, node: node)
+      } else if model.sidebarSelection == .briefing {
+        BriefingView(model: model)
       } else {
         ContentUnavailableView("Select a project", systemImage: "sidebar.left")
       }
