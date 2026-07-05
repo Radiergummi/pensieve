@@ -21,8 +21,9 @@ order is a recommendation, nothing is foreclosed.
 
 Capture → ingest → grounded/cited loose ends → `next`/`digest` (1A + 1B); the typed tree &
 strands (1B-org); source discovery (`scan`); the launchd auto-flow sync daemon; the v0.1
-heartbeat window. **The make-or-break intelligence gate passed.** Dogfooding is on. This is the
-hard part, done.
+heartbeat window; **the three-pane `Pensieve.app` slices 1–2** (read-only core + Briefing home +
+⌘K palette — see pillar #2). **The make-or-break intelligence gate passed.** Dogfooding is on.
+This is the hard part, done.
 
 ### Pending pillars (sequenced; each needs its own spec unless noted)
 
@@ -30,12 +31,28 @@ hard part, done.
    unbundled heartbeat executable in a real `.app`, add a menu-bar readout, hide the dock icon.
    Revisit the Xcode.app-vs-CLT decision here (signing, bundle). Detail entry below.
 
-2. **The three-pane `Pensieve.app` (Phase 3) — THE product.** *The spine; large; being
-   designed now (own spec forthcoming: `*-pensieve-app-*`).* Sidebar smart-lists ("What's Next",
-   "Dormant", "Blocked") / list / provenance-bearing detail view, live via GRDB observation.
-   Currently one paragraph in the MVP spec — this is the biggest single gap to "finished." The
-   forward ideas **talk-to-the-system** and **forks-as-first-class** (below) live *inside* this
-   app and should be scoped as part of / adjacent to its design.
+2. **The three-pane `Pensieve.app` (Phase 3) — THE product.** *The spine; specced + underway.* Design:
+   `specs/2026-07-05-pensieve-app-three-pane-design.md` (a 6-slice build sequence). Sidebar smart-lists /
+   list / provenance-bearing detail view. The forward ideas **talk-to-the-system** and
+   **forks-as-first-class** (below) live *inside* this app (slices 5 & 6).
+   - ✅ **Slice 1 — read-only core** (merged): `NavigationSplitView`, action-first sidebar (smart lists +
+     node tree), middle list, detail recall view with **inline verbatim provenance**, launch drain.
+     Plan: `plans/2026-07-05-pensieve-app-slice1-three-pane-core.md`.
+   - ✅ **Slice 2 — Briefing home + ⌘K palette** (merged): by-project "since last visit" world map as the
+     default landing (`BriefingQueries`; `lastOpenedAt` in UserDefaults); navigation-only command palette.
+     Plan: `plans/2026-07-05-pensieve-app-slice2-briefing-palette.md`.
+   - ⏳ **Slice 3 — inspector + polish:** ⌘⌥I provenance inspector (quote + surrounding transcript); window
+     tabbing / open-in-new-window; light/dark + materials; **LLM "Last Work Done" narration** (`SummaryBuilder`,
+     deferred from slice 1); `ValueObservation` liveness (replacing the 3 s `Timer`). *Next up.*
+   - ⏳ **Slice 4 — in-app organizing writes:** create / `nest` / `group` / `rename` / `retype` via existing
+     PensieveKit ops + the cycle guard.
+   - ⏳ **Slice 5 — talk-to-system stage 1:** describe a strand → structured create.
+   - ⏳ **Slice 6 — forks surface:** ancestry trail + siblings + "Roads Not Taken" list. **Gated on the
+     fork-capture backend** (see "Forks as first-class" below — that backend is a separate spec, still the
+     long pole).
+   - **Carries from slice reviews (fold in when convenient):** key `lastOpenedAt` per DB path; a shared
+     per-node "latest event + days-dormant + open-loose-end-count" helper (that shape now recurs in
+     `NextQueries` / `MonitorSnapshot` / `BriefingQueries`).
 
 3. **Resident `pensieved` (`SMAppService`) (Phase 2)** — *medium; partially superseded.* The
    launchd one-shot sync daemon already delivers auto-flow, so a resident agent is now a
