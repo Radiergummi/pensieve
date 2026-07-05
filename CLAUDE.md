@@ -48,6 +48,8 @@ Layout: `Sources/PensieveKit/{Model,Store,Capture,Transcript,Ingest,Intelligence
 
 Design-first. For any feature: brainstorm → write a spec/plan under `docs/superpowers/` → execute with review checkpoints (subagent-driven). Surface tradeoffs; keep changes surgical and minimal (YAGNI). Grounded-with-provenance is the north star for the intelligence layer — every AI-surfaced "loose end" must cite real captured text or it doesn't appear.
 
+**Platform primitives first.** Always prefer the first-party / OS-native mechanism over a custom implementation when one exists — SwiftUI `App`/`Scene` lifecycle and `.commands` over a hand-built `NSMenu`, `WindowGroup` window restoration over manual frame autosave, Foundation/AppKit facilities over reinvented equivalents. Reach for a custom path only when the native one is proven insufficient, and say why. This keeps Pensieve idiomatic, small, and durable across OS versions.
+
 ## Where to read next
 
 - `docs/superpowers/specs/2026-07-03-pensieve-mvp-design.md` — the approved design (full intent, all phases).
