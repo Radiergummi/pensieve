@@ -353,11 +353,155 @@ EOF
 
 ---
 
+## Task 3: App icon (runtime Dock icon)
+
+User-requested add-on. Set the running app's Dock/⌘-Tab icon from the artwork in `icons/` via the first-party `NSApplication.applicationIconImage`, shipped as a SwiftPM resource. The app is an **unbundled** SwiftPM executable (no `.app` bundle / asset catalog), so this runtime path is the correct way to set the icon now; the fully bundled `.icon` (Finder icon, all appearances, shown when not running) arrives with the deferred v0.2 bundling pillar, which will consume `icons/Pensieve.icon` as its source.
+
+**Files:**
+- Create: `Sources/PensieveApp/Resources/AppIcon.png` (copy of `icons/Pensieve Exports/Pensieve-iOS-Default-1024@1x.png`)
+- Modify: `Package.swift` (add `resources:` to the `PensieveApp` target)
+- Modify: `Sources/PensieveApp/PensieveApp.swift` (add `import AppKit`, an `AppDelegate`, and the `@NSApplicationDelegateAdaptor`)
+- Also commit: the `icons/` source folder (artwork source-of-truth for v0.2 bundling)
+
+**Interfaces:**
+- Consumes: `struct PensieveApp: App` (Task 1). `Bundle.module` (synthesized once the target has resources).
+- Produces: a Dock icon at runtime. No new public API other tasks depend on.
+
+- [ ] **Step 1: Copy the artwork into the app target's resources**
+
+Run:
+
+```bash
+cd /Users/moritz/Projects/pensieve-gui-base
+mkdir -p Sources/PensieveApp/Resources
+cp "icons/Pensieve Exports/Pensieve-iOS-Default-1024@1x.png" Sources/PensieveApp/Resources/AppIcon.png
+ls -la Sources/PensieveApp/Resources/AppIcon.png
+```
+
+Expected: the file exists (~1 MB PNG).
+
+- [ ] **Step 2: Declare the resource in `Package.swift`**
+
+In `Package.swift`, find:
+
+```swift
+    .executableTarget(
+      name: "PensieveApp",
+      dependencies: ["PensieveKit"]
+    ),
+```
+
+Change to:
+
+```swift
+    .executableTarget(
+      name: "PensieveApp",
+      dependencies: ["PensieveKit"],
+      resources: [.copy("Resources/AppIcon.png")]
+    ),
+```
+
+- [ ] **Step 3: Set the icon at launch via an app delegate**
+
+In `Sources/PensieveApp/PensieveApp.swift`, add `import AppKit` at the top of the import block:
+
+```swift
+import AppKit
+import Foundation
+import SwiftUI
+import PensieveKit
+```
+
+Then, directly above `@main struct PensieveApp: App {`, add the delegate:
+
+```swift
+/// Sets the Dock / ⌘-Tab icon at launch. Pensieve.app is an unbundled SwiftPM executable (no .app
+/// bundle, so no asset-catalog icon yet — that arrives with the v0.2 bundling step). `applicationIconImage`
+/// is the first-party way to set the running app's icon in the meantime; the artwork ships as a
+/// SwiftPM resource loaded via `Bundle.module`.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
+       let image = NSImage(contentsOf: url) {
+      NSApplication.shared.applicationIconImage = image
+    }
+  }
+}
+```
+
+Then wire the delegate into the scene by adding the adaptor property. Find:
+
+```swift
+@main
+struct PensieveApp: App {
+  // One AppModel for the app's lifetime. Its init reads/writes the lastOpenedAt UserDefault.
+  @StateObject private var model = AppModel()
+```
+
+Change to:
+
+```swift
+@main
+struct PensieveApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+  // One AppModel for the app's lifetime. Its init reads/writes the lastOpenedAt UserDefault.
+  @StateObject private var model = AppModel()
+```
+
+- [ ] **Step 4: Build**
+
+Run: `cd /Users/moritz/Projects/pensieve-gui-base && swift build 2>&1 | tail -20`
+Expected: `Build complete!` (no errors). If a SwiftSyntax/macro **linker** error appears, `rm -rf .build` and retry.
+
+- [ ] **Step 5: Smoke-launch without crashing (throwaway store)**
+
+Run:
+
+```bash
+cd /Users/moritz/Projects/pensieve-gui-base
+env PENSIEVE_DB=/tmp/pensieve-smoke.sqlite PENSIEVE_CAPTURE_DB=/tmp/pensieve-smoke-capture.sqlite \
+  swift run PensieveApp > /tmp/pensieve-smoke.log 2>&1 &
+APP_PID=$!
+sleep 8
+if kill "$APP_PID" 2>/dev/null; then echo "LAUNCH-OK (process was alive)"; else echo "CRASHED — see log"; fi
+cat /tmp/pensieve-smoke.log
+```
+
+Expected: `LAUNCH-OK` and no crash in the log. (The Dock icon itself is verified visually by the controller/user — see the acceptance checklist.)
+
+- [ ] **Step 6: Confirm the test suite is still green**
+
+Run: `cd /Users/moritz/Projects/pensieve-gui-base && ./scripts/test.sh 2>&1 | tail -5`
+Expected: all 138 tests pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/moritz/Projects/pensieve-gui-base
+git add Package.swift Sources/PensieveApp/PensieveApp.swift Sources/PensieveApp/Resources/AppIcon.png icons
+git commit -F - <<'EOF'
+feat(app): Dock icon at runtime via applicationIconImage
+
+Ship the app artwork (icons/) and set the running app's Dock / ⌘-Tab icon at
+launch through an NSApplicationDelegate + @NSApplicationDelegateAdaptor, loading
+the 1024 PNG as a SwiftPM resource (Bundle.module). The app is still an unbundled
+executable, so this is the first-party way to set its icon; the fully bundled
+.icon (Finder, all appearances) comes with the v0.2 bundling step, which will
+consume icons/Pensieve.icon as its source.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GsAu7rTTdD77k3xZHZrhm4
+EOF
+```
+
+---
+
 ## Final acceptance checklist (user-run, interactive)
 
 Automated smoke-launches only confirm the app builds and starts without crashing. These interactive behaviors need a human at the keyboard — run the app once (throwaway store) and confirm:
 
 - [ ] Window appears, centered, ~900×560.
+- [ ] **The Dock / ⌘-Tab icon shows the Pensieve artwork** (Task 3).
 - [ ] **Sidebar clears the traffic lights** (safe-area — the §7 check).
 - [ ] Menu bar shows Pensieve / File / Edit / View / Window / Help.
 - [ ] **⌘Q quits** the app.
