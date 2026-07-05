@@ -25,7 +25,9 @@ let window = NSWindow(
   backing: .buffered, defer: false)
 window.title = "Pensieve"
 window.center()
-window.contentView = NSHostingView(rootView: RootView(model: model))
+// Host via a controller (not `contentView = NSHostingView`) so AppKit propagates the titlebar
+// safe-area inset — otherwise the full-height sidebar scrolls up under the traffic-light chrome.
+window.contentViewController = NSHostingController(rootView: RootView(model: model))
 window.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps: true)
 app.run()
