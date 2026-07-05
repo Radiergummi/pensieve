@@ -3,6 +3,68 @@
 Ideas we've deliberately parked so a phase stays focused. Each is on the roadmap;
 none is foreclosed. Revisit when the noted trigger arrives.
 
+The **Roadmap** below is the spine — the sequenced pillars from where we are to the finished
+app. Everything after the first `---` is the detail-ledger: features parked out of specific
+phases, plus forward ideas, each with its own revisit trigger. Read the roadmap for *where
+we're going*; read the ledger for *what we deliberately deferred and why*.
+
+---
+
+## Roadmap — pillars from here to the finished app
+
+**Source of truth for full intent:** `specs/2026-07-03-pensieve-mvp-design.md`. This section
+lifts that spec's phasing + "Later" list into one sequenced place so "what's between here and
+done" isn't split across two documents. **No new scope is invented here** — sizes are honest,
+order is a recommendation, nothing is foreclosed.
+
+### Shipped (the core loop is live)
+
+Capture → ingest → grounded/cited loose ends → `next`/`digest` (1A + 1B); the typed tree &
+strands (1B-org); source discovery (`scan`); the launchd auto-flow sync daemon; the v0.1
+heartbeat window. **The make-or-break intelligence gate passed.** Dogfooding is on. This is the
+hard part, done.
+
+### Pending pillars (sequenced; each needs its own spec unless noted)
+
+1. **Menu-bar item / `LSUIElement` app bundle (v0.2)** — *near-term, small–medium.* Wrap the
+   unbundled heartbeat executable in a real `.app`, add a menu-bar readout, hide the dock icon.
+   Revisit the Xcode.app-vs-CLT decision here (signing, bundle). Detail entry below.
+
+2. **The three-pane `Pensieve.app` (Phase 3) — THE product.** *The spine; large; being
+   designed now (own spec forthcoming: `*-pensieve-app-*`).* Sidebar smart-lists ("What's Next",
+   "Dormant", "Blocked") / list / provenance-bearing detail view, live via GRDB observation.
+   Currently one paragraph in the MVP spec — this is the biggest single gap to "finished." The
+   forward ideas **talk-to-the-system** and **forks-as-first-class** (below) live *inside* this
+   app and should be scoped as part of / adjacent to its design.
+
+3. **Resident `pensieved` (`SMAppService`) (Phase 2)** — *medium; partially superseded.* The
+   launchd one-shot sync daemon already delivers auto-flow, so a resident agent is now a
+   *convenience upgrade* (lower latency, background digest pre-compute), **not** a prerequisite.
+   Decide during app design whether the app's launch/foreground drain + launchd cover this, or a
+   resident agent still earns its keep. May be reorderable with the app per the spec.
+
+4. **CloudKit sync + iOS companion** — *large; on-ramp preserved, unbuilt.* SQLiteData's opt-in
+   `SyncEngine`; sync lives only in the entitled app process (hooks/CLI stay local). "Flip it on,"
+   not "build from scratch" — but still a real phase (conflict handling, iOS UI).
+
+5. **System-integration surfaces** — *medium, each independent.* Widgets / Lock Screen widgets,
+   Siri / Shortcuts, Spotlight indexing. Native, glanceable extensions of the digest/next data.
+
+6. **Real-time monitoring (FSEvents)** — *small–medium.* Replace/augment interval polling with
+   FSEvents on `~/.claude/projects/**` for instant capture. Pure latency win.
+
+7. **Additional source types** — *large, open-ended.* Notion, Entra, browser work, etc. The model
+   already allows non-git sources; this is where the deferred **per-kind ingestion-handler
+   protocol** (below) finally earns its place (trigger: the 4th source type).
+
+8. **Analytics surfaces** — *medium.* Cross-project dependency graphs, dashboards, token-spend
+   charts. Explicitly "Later" in the spec; lowest priority.
+
+**Depth features that thread through the above** (detailed in the ledger, not standalone pillars):
+domain-level recursive rollups, cross-cutting soft references (`node_links`) — which
+forks-as-first-class builds on, statistical theme discovery (`NLEmbedding`), proactive project
+suggestion, and native localization. These deepen existing surfaces rather than standing alone.
+
 ---
 
 ## Phase 1B-org: the typed tree & strands — DONE (2026-07-04)
@@ -164,3 +226,89 @@ recurring themes and candidate cross-cutting strands/concepts automatically.
 **Why it's a perfect Pensieve dogfood case:** this note is itself a `concept`/`topic`
 — a targeted exploration parked for later. When Pensieve can track a strand like this
 (let me forget it for a month, then reload full context and continue), it's working.
+
+---
+
+## App: capture & instruct by talking to the system (prompt input → chat)
+
+**Requested:** 2026-07-05.
+
+**Idea, in two stages:**
+1. **Capture a strand by describing it** — a prompt/text input in the Pensieve UI where I
+   type a description of a new strand and it gets created (name + `description` + `kind`,
+   parented sensibly). The lightweight "quick add a thing I'm about to work on" surface,
+   as opposed to auto-birth from ≥2 captured events. Pairs with the organizing CLI
+   (`add-node`) but conversational and in-app.
+2. **Talk to the system** — a fuller Claude/OpenAI/Gemini chat session embedded in the app
+   for giving instructions in natural language ("nest auth under the platform node",
+   "what did I leave open on the sync daemon", "start a strand for X"). The chat drives the
+   same organizing/query operations the CLI exposes, plus grounded Q&A over captured state.
+
+**Scope note:** stage 1 (structured strand creation from a prompt) is achievable early and
+independently. Stage 2 (a full conversational agent surface) **can be deferred very late** —
+it's a large surface and not on the critical path.
+
+**Constraints & the native path:**
+- **Provider-agnostic** via the existing `LLMProvider` protocol (default shells out to
+  `claude -p`; I have a subscription, **no API key**). "Claude/OpenAI/Gemini" is a
+  someday-choice, not a requirement — don't hardcode a vendor.
+- **Grounding caveat.** When the chat *answers questions* about project state, it stays
+  under the provenance north star — cite captured text, don't fabricate. When it *creates a
+  strand* from my description, the name/description are my own words (user-authored metadata,
+  outside the trust gate, like `rename`), which is fine.
+- A prompt that creates or re-parents nodes is a **write** — it must go through the same
+  validated operations as the CLI (`add-node`/`nest`/`group`), including the deferred
+  cycle guard, not raw SQL from model output.
+
+**Stage 1 now specced:** describe-a-strand → structured create is designed in
+`specs/2026-07-05-pensieve-app-three-pane-design.md` (slice 5). Stage 2 (conversational agent)
+stays deferred to its own later spec.
+
+*Trigger: stage 1 once the app has real interactive UI (the three-pane app, past the
+read-only heartbeat/menu-bar steps). Stage 2 much later, once the read/query surface is solid.*
+
+---
+
+## Forks as first-class: capture & visualize strand ancestry and orphans
+
+**Requested:** 2026-07-05.
+
+**The observation:** working is full of *forks*. Claude offers two choices and I pick one;
+I branch off to do something adjacent; I switch to another branch and carry on there. Each
+is a decision point that splits the work — and today the *road not taken* silently goes cold.
+The strands most likely to be forgotten are exactly the ones orphaned at a fork.
+
+**Idea:** make forks first-class in the strand model and surface them prominently, git-branch-like:
+- **Capture the fork** — a strand carries not just a parent (containment) but a *branched-from*
+  ancestry: which strand/decision-point it split off from, and when. Sibling strands sharing a
+  fork point are visibly related.
+- **Walk back the ancestry** — from any strand, trace its lineage back through the forks that
+  produced it (distinct from the `parentID` containment tree — this is *temporal/causal*
+  ancestry).
+- **Surface orphans at a fork** — when a fork has branches I started and left dormant, show them
+  as "picked up / left open" so I can consciously return to the road not taken.
+
+**Constraints & the native path:**
+- **Ground every fork in real captured signal**, not inference. Candidate sources already in
+  hand: `SessionBranch` (a session's git branch), git branch creation/switch, worktree
+  activity, and — harder — Claude offering explicit choices within a transcript. A fork edge
+  should trace to a captured event, consistent with the north star.
+- This is likely a **new edge type distinct from `parentID`** — closer to the deferred
+  *cross-cutting soft references* (`node_links`, cycles allowed) than to the strict containment
+  tree. Design it as causal/temporal lineage, not by overloading containment.
+- Detecting "Claude presented two choices and I picked one" from a transcript is the ambitious
+  part and may warrant its own spike; branch-switch forks from git/`SessionBranch` are the
+  tractable first cut.
+- **The full pannable "fork canvas" node-graph is parked here as a power-view** — a 2-D map of
+  decision points to walk when many strands accumulate. The app starts with the lightweight
+  *ancestry-trail + siblings* surface instead (chosen in the app design). Revisit the canvas once
+  strand volume makes the trail feel cramped.
+
+**App surface now specced:** the ancestry-trail + siblings view and the *Roads Not Taken* smart
+list are designed in `specs/2026-07-05-pensieve-app-three-pane-design.md` (slice 6), gated on this
+capture backend. This entry is the **capture backend** — the still-needed long pole; brainstorm it
+on its own before that slice.
+
+*Trigger: once strand auto-birth is proven in dogfooding and the app has a visualization surface
+worth walking a tree in (the three-pane app). Branch-switch forks first; transcript-choice
+detection as a later spike.*
