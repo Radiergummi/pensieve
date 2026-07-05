@@ -119,3 +119,19 @@ private struct StubProvider: LLMProvider {
   let out = try await LooseEndExtractor(provider: OverflowStub()).extract(from: [big])
   #expect(!out.isEmpty)   // recovered instead of throwing
 }
+
+@Test func chunkingBreaksOnWhitespaceNotMidWord() {
+  let text = "alpha bravo charlie delta echo foxtrot golf hotel"
+  let words = Set(text.split(separator: " ").map(String.init))
+  let msg = TranscriptMessage(index: 0, role: "user", text: text, timestamp: nil, isUserPrompt: true)
+  let chunks = LooseEndExtractor.chunkFragments([msg], budget: 12)
+  // Reconstruction is exact and no fragment contains a partial (mid-cut) word.
+  let joined = chunks.flatMap { $0 }.map(\.text).joined()
+  #expect(joined == text)
+  for chunk in chunks {
+    for f in chunk {
+      for w in f.text.split(separator: " ") { #expect(words.contains(String(w))) }
+      #expect(f.text.count <= 12)   // budget invariant preserved
+    }
+  }
+}

@@ -68,7 +68,11 @@ public struct LooseEndExtractor {
       return [Array(fragments[..<mid]), Array(fragments[mid...])]
     }
     guard let only = fragments.first, only.text.count > 1 else { return [fragments] }
-    let mid = only.text.index(only.text.startIndex, offsetBy: only.text.count / 2)
+    var mid = only.text.index(only.text.startIndex, offsetBy: only.text.count / 2)
+    // Back up to whitespace so the split point isn't mid-word.
+    if let ws = only.text[..<mid].lastIndex(where: { $0.isWhitespace }) {
+      mid = only.text.index(after: ws)
+    }
     return [[PromptFragment(index: only.index, text: String(only.text[..<mid]))],
             [PromptFragment(index: only.index, text: String(only.text[mid...]))]]
   }
@@ -97,7 +101,13 @@ public struct LooseEndExtractor {
     var fragments: [PromptFragment] = []
     var start = text.startIndex
     while start < text.endIndex {
-      let end = text.index(start, offsetBy: budget, limitedBy: text.endIndex) ?? text.endIndex
+      var end = text.index(start, offsetBy: budget, limitedBy: text.endIndex) ?? text.endIndex
+      // Back up to the last whitespace in the window so we never cut mid-word (which
+      // yields verbatim-but-truncated quotes). If the window is one giant token with no
+      // whitespace, keep the hard cut — it can't be avoided.
+      if end < text.endIndex, let ws = text[start..<end].lastIndex(where: { $0.isWhitespace }) {
+        end = text.index(after: ws)
+      }
       fragments.append(PromptFragment(index: index, text: String(text[start..<end])))
       start = end
     }
