@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import PensieveKit
@@ -14,8 +15,22 @@ enum Stores {
   }
 }
 
+/// Sets the Dock / ⌘-Tab icon at launch. Pensieve.app is an unbundled SwiftPM executable (no .app
+/// bundle, so no asset-catalog icon yet — that arrives with the v0.2 bundling step). `applicationIconImage`
+/// is the first-party way to set the running app's icon in the meantime; the artwork ships as a
+/// SwiftPM resource loaded via `Bundle.module`.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
+       let image = NSImage(contentsOf: url) {
+      NSApplication.shared.applicationIconImage = image
+    }
+  }
+}
+
 @main
 struct PensieveApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   // One AppModel for the app's lifetime. Its init reads/writes the lastOpenedAt UserDefault.
   @StateObject private var model = AppModel()
 

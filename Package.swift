@@ -28,7 +28,8 @@ let package = Package(
     ),
     .executableTarget(
       name: "PensieveApp",
-      dependencies: ["PensieveKit"]
+      dependencies: ["PensieveKit"],
+      resources: [.copy("Resources/AppIcon.png")]
     ),
     .testTarget(
       name: "PensieveKitTests",
