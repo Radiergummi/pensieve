@@ -24,10 +24,6 @@ struct RootView: View {
 }
 
 // TEMP STUBS — replaced in Task 4 (SidebarView) and Task 5 (DetailView/ContentListView)
-struct SidebarView: View {
-  @ObservedObject var model: AppModel
-  var body: some View { Text("sidebar").frame(minWidth: 200) }
-}
 struct ContentListView: View {
   @ObservedObject var model: AppModel
   var body: some View { Text("list").frame(minWidth: 240) }
