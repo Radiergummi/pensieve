@@ -41,9 +41,7 @@ public struct SessionStartPayload: Codable, Sendable {
 }
 
 public func encodeJSON<T: Encodable>(_ v: T) throws -> String {
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.withoutEscapingSlashes]
-  let data = try encoder.encode(v)
+  let data = try JSONEncoder().encode(v)
   return String(decoding: data, as: UTF8.self)
 }
 

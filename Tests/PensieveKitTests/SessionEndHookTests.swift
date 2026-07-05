@@ -20,5 +20,6 @@ import Foundation
   let rows = try spool.pending()
   #expect(rows.count == 1)
   #expect(rows.first?.kind == CaptureKind.ccSession)
-  #expect(rows.first?.payload.contains("/tmp/x.jsonl") == true)
+  let decoded = try JSONDecoder().decode(SessionRefPayload.self, from: Data(rows.first!.payload.utf8))
+  #expect(decoded.transcriptPath == "/tmp/x.jsonl")
 }
