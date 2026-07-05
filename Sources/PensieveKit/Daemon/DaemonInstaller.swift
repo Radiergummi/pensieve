@@ -37,12 +37,15 @@ public enum DaemonInstaller {
   }
 
   /// Reload-always: bootout (ignore "not loaded") then bootstrap (retry the teardown race).
-  public static func load(plistURL: URL, uid: String) {
+  /// Returns true once a bootstrap succeeds; false after exhausting the retries.
+  @discardableResult
+  public static func load(plistURL: URL, uid: String) -> Bool {
     _ = launchctl(["bootout", "gui/\(uid)", plistURL.path])
     for _ in 0..<3 {
-      if launchctl(["bootstrap", "gui/\(uid)", plistURL.path]) == 0 { return }
+      if launchctl(["bootstrap", "gui/\(uid)", plistURL.path]) == 0 { return true }
       Thread.sleep(forTimeInterval: 0.3)   // bootout returns before teardown completes
     }
+    return false
   }
 
   public static func unload(plistURL: URL, uid: String) {

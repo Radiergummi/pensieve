@@ -20,9 +20,13 @@ struct InstallDaemon: ParsableCommand {
       return
     }
 
-    let running = Bundle.main.executablePath ?? ""
+    guard let running = Bundle.main.executablePath else {
+      throw ValidationError("could not determine the running binary path")
+    }
     try DaemonInstaller.writePlist(home: home, runningExecutable: running, plistURL: plistURL)
-    DaemonInstaller.load(plistURL: plistURL, uid: uid)
+    guard DaemonInstaller.load(plistURL: plistURL, uid: uid) else {
+      throw ValidationError("launchctl bootstrap failed after retries; the plist was written to \(plistURL.path) but the agent did not load. Check `launchctl print gui/\(uid)/com.pensieve.sync` and the plist.")
+    }
     print("installed daemon: runs `\(DaemonInstaller.stablePensievePath(home: home)) sync` every 5 min")
   }
 }
