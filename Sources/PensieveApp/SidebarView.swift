@@ -15,6 +15,8 @@ struct SidebarView: View {
         if case .node(let id) = newValue { model.selectedNodeID = id }
         else { model.selectedNodeID = nil }
       })) {
+      Label("Briefing", systemImage: "sun.max")
+        .tag(SidebarSelection.briefing)
       Section("Smart Lists") {
         smartRow(.whatsNext, count: model.lists.whatsNext.count)
         smartRow(.dormant, count: model.lists.dormant.count)
