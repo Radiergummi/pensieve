@@ -182,6 +182,15 @@ widgets/Siri/Spotlight; the fork-capture *backend*; Talk-to-system *stage 2* (co
 agent); the full fork canvas; statistical theme discovery; analytics/dependency-graph surfaces.
 None are foreclosed; each is on the roadmap.
 
+**Architectural note for those future surfaces:** every glance/integration surface — menu-bar
+extra, widgets, Siri/Shortcuts intents, Spotlight indexing — is a **read-only consumer of the
+same grounded query kernel** (the `MonitorSnapshot` / `next` pattern). None re-derives summaries
+or re-implements ranking; they render what the kernel already computes. Widgets, Siri, and
+Spotlight in particular are one coherent "glanceable surfaces" family (roadmap pillar #5) and
+should share one spec; the menu-bar extra (pillar #1) is the heartbeat window's next step. This
+app spec keeps them out of scope but must not foreclose them: keep read/query logic in
+PensieveKit, not in view code, so an extension target can link it.
+
 ## Risks / open concerns
 
 - **Fork surface depends on an unbuilt backend.** Mitigated by slice 6 being last and the surface
