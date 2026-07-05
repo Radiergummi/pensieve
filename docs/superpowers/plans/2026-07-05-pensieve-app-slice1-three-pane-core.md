@@ -22,14 +22,14 @@
 ## File Structure
 
 **Create:**
-- `Sources/PensieveKit/Query/NodeTree.swift` — pure forest builder: `[Node] → [NodeTreeNode]` (parent/child nesting, orphan-promotion, cycle-safe). Tested.
+- `Sources/PensieveKit/Query/NodeForest.swift` — pure forest builder: `[Node] → [NodeForestNode]` (parent/child nesting, orphan-promotion, cycle-safe). Tested.
 - `Sources/PensieveKit/Query/SmartLists.swift` — derives What's Next / Dormant / Recently Active from `NextQueries.ranked`. Tested.
 - `Sources/PensieveApp/AppModel.swift` — `ObservableObject` owning the `DatabaseWriter`; launch drain; 3 s refresh; `@Published` sidebar/detail state; thin glue to the query layer.
 - `Sources/PensieveApp/SidebarView.swift` — smart lists + node-tree outline, one selection binding.
 - `Sources/PensieveApp/ContentListView.swift` — middle column: the node list for the current sidebar selection.
 - `Sources/PensieveApp/DetailView.swift` — recall view with inline-expand provenance.
 - `Sources/PensieveApp/RootView.swift` — the `NavigationSplitView` assembling the three columns.
-- `Tests/PensieveKitTests/NodeTreeTests.swift`
+- `Tests/PensieveKitTests/NodeForestTests.swift`
 - `Tests/PensieveKitTests/SmartListsTests.swift`
 
 **Modify:**
@@ -37,23 +37,24 @@
 
 ---
 
-### Task 1: `NodeTree` — pure forest builder
+### Task 1: `NodeForest` — pure forest builder
 
 **Files:**
-- Create: `Sources/PensieveKit/Query/NodeTree.swift`
-- Test: `Tests/PensieveKitTests/NodeTreeTests.swift`
+- Create: `Sources/PensieveKit/Query/NodeForest.swift`
+- Test: `Tests/PensieveKitTests/NodeForestTests.swift`
 
 **Interfaces:**
 - Consumes: `Node` (from `PensieveKit/Model/Node.swift`: `id: UUID`, `name: String`, `parentID: UUID?`).
 - Produces:
-  - `struct NodeTreeNode: Identifiable, Equatable, Sendable { let node: Node; let children: [NodeTreeNode]; var id: UUID { node.id } }`
-  - `enum NodeTree { static func build(_ nodes: [Node]) -> [NodeTreeNode] }`
+  - `struct NodeForestNode: Identifiable, Equatable, Sendable { let node: Node; let children: [NodeForestNode]; var id: UUID { node.id } }`
+  - `enum NodeForest { static func build(_ nodes: [Node]) -> [NodeForestNode] }`
+  - **Naming note:** do NOT name this `NodeTree` — `Sources/PensieveKit/Query/NodeCommands.swift:53` already declares `public enum NodeTree` (the CLI's indented-tree *renderer*, `render(_:) -> [String]`). This new type is a distinct structured builder for SwiftUI; leave the existing `NodeTree` untouched.
   - Contract: roots = nodes with `parentID == nil` OR whose parent isn't in the input set (orphans promoted to roots, never dropped). Children and roots are sorted by `name`. Nodes reachable only through a parent-cycle are omitted (islanded) — the recursion carries a `visited` set so it can never loop.
 
 - [ ] **Step 1: Write the failing test**
 
 ```swift
-// Tests/PensieveKitTests/NodeTreeTests.swift
+// Tests/PensieveKitTests/NodeForestTests.swift
 import Foundation
 import Testing
 @testable import PensieveKit
@@ -65,7 +66,7 @@ import Testing
   let grandchild = Node(name: "deep", parentID: childA.id, kind: "strand")
   let other = Node(name: "zeta", kind: "project")
 
-  let forest = NodeTree.build([grandchild, childB, root, other, childA])
+  let forest = NodeForest.build([grandchild, childB, root, other, childA])
 
   #expect(forest.map(\.node.name) == ["alpha", "zeta"])           // roots sorted
   #expect(forest[0].children.map(\.node.name) == ["a-strand", "b-strand"])  // children sorted
@@ -78,7 +79,7 @@ import Testing
   let orphan = Node(name: "orphan", parentID: ghostParent, kind: "strand")
   let realRoot = Node(name: "real", kind: "project")
 
-  let forest = NodeTree.build([orphan, realRoot])
+  let forest = NodeForest.build([orphan, realRoot])
 
   // parent isn't in the set → orphan is promoted, never dropped
   #expect(Set(forest.map(\.node.name)) == ["orphan", "real"])
@@ -87,28 +88,28 @@ import Testing
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./scripts/test.sh --filter NodeTree`
-Expected: FAIL — `cannot find 'NodeTree' in scope`.
+Run: `./scripts/test.sh --filter NodeForest`
+Expected: FAIL — `cannot find 'NodeForest' in scope`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```swift
-// Sources/PensieveKit/Query/NodeTree.swift
+// Sources/PensieveKit/Query/NodeForest.swift
 import Foundation
 
 /// A node plus its child nodes, ready for SwiftUI `OutlineGroup`. Pure value type.
-public struct NodeTreeNode: Identifiable, Equatable, Sendable {
+public struct NodeForestNode: Identifiable, Equatable, Sendable {
   public let node: Node
-  public let children: [NodeTreeNode]
+  public let children: [NodeForestNode]
   public var id: UUID { node.id }
-  public init(node: Node, children: [NodeTreeNode]) {
+  public init(node: Node, children: [NodeForestNode]) {
     self.node = node; self.children = children
   }
 }
 
 /// Turns a flat `[Node]` into a rooted forest by `parentID`. Read-only, deterministic.
-public enum NodeTree {
-  public static func build(_ nodes: [Node]) -> [NodeTreeNode] {
+public enum NodeForest {
+  public static func build(_ nodes: [Node]) -> [NodeForestNode] {
     let byID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     var childrenByParent: [UUID: [Node]] = [:]
     var roots: [Node] = []
@@ -119,14 +120,14 @@ public enum NodeTree {
         roots.append(n)   // nil parent, or parent absent from the set → promote to root
       }
     }
-    func make(_ n: Node, _ visited: Set<UUID>) -> NodeTreeNode {
+    func make(_ n: Node, _ visited: Set<UUID>) -> NodeForestNode {
       var visited = visited
       visited.insert(n.id)
       let kids = (childrenByParent[n.id] ?? [])
         .filter { !visited.contains($0.id) }        // cycle guard: can never recurse forever
         .sorted { $0.name < $1.name }
         .map { make($0, visited) }
-      return NodeTreeNode(node: n, children: kids)
+      return NodeForestNode(node: n, children: kids)
     }
     return roots.sorted { $0.name < $1.name }.map { make($0, []) }
   }
@@ -135,14 +136,14 @@ public enum NodeTree {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `./scripts/test.sh --filter NodeTree`
+Run: `./scripts/test.sh --filter NodeForest`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/PensieveKit/Query/NodeTree.swift Tests/PensieveKitTests/NodeTreeTests.swift
-git commit -m "feat: NodeTree — pure [Node] → forest builder for the app sidebar"
+git add Sources/PensieveKit/Query/NodeForest.swift Tests/PensieveKitTests/NodeForestTests.swift
+git commit -m "feat: NodeForest — pure [Node] → forest builder for the app sidebar"
 ```
 
 ---
@@ -247,16 +248,44 @@ git commit -m "feat: SmartLists — grounded What's Next / Dormant / Recently Ac
 ### Task 3: `AppModel` + shell skeleton + launch drain
 
 **Files:**
+- Modify: `Sources/PensieveKit/Query/SmartLists.swift` — add a `public init` (see Step 0).
+- Modify: `Sources/PensieveKit/Query/ProjectQueries.swift` — add a `public init` to `ProjectStatus` (see Step 0).
 - Create: `Sources/PensieveApp/AppModel.swift`
 - Create: `Sources/PensieveApp/RootView.swift`
 - Modify: `Sources/PensieveApp/main.swift`
 
+**Cross-module note:** `SmartLists` and `ProjectStatus` are plain `public struct`s whose *synthesized* memberwise init is `internal`, so a different module (`PensieveApp`) cannot construct them. `AppModel` constructs both (an empty `SmartLists` default and a `ProjectStatus` fallback), so Step 0 adds explicit `public init`s. (The `@Table` models — `Node`/`Event`/`LooseEnd` — already get public inits from the macro; only these two hand-written structs need it.)
+
 **Interfaces:**
-- Consumes: `Stores` (existing in `main.swift`), `openCanonicalDatabase(at:) throws -> any DatabaseWriter`, `CaptureSpool(at:) throws`, `Ingester(spool:db:llm:).drain() async throws -> Int`, `SmartLists.compute`, `ProjectQueries.all`, `NodeTree.build`.
+- Consumes: `Stores` (existing in `main.swift`), `openCanonicalDatabase(at:) throws -> any DatabaseWriter`, `CaptureSpool(at:) throws`, `Ingester(spool:db:llm:).drain() async throws -> Int`, `SmartLists.compute`, `ProjectQueries.all`, `NodeForest.build`.
 - Produces (used by Tasks 4–5):
   - `enum SidebarSelection: Hashable { case smartList(SmartListKind); case node(UUID) }`
   - `enum SmartListKind: String, CaseIterable, Hashable { case whatsNext, dormant, recentlyActive }` with `var title: String` and `var symbol: String`.
-  - `@MainActor final class AppModel: ObservableObject` exposing `@Published var lists: SmartLists`, `@Published var forest: [NodeTreeNode]`, `@Published var sidebarSelection: SidebarSelection?`, `@Published var selectedNodeID: UUID?`; methods `start()`, `refresh()`, `nodesForSelection() -> [Node]`, `node(_ id: UUID) -> Node?`, and `detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView])`.
+  - `@MainActor final class AppModel: ObservableObject` exposing `@Published var lists: SmartLists`, `@Published var forest: [NodeForestNode]`, `@Published var sidebarSelection: SidebarSelection?`, `@Published var selectedNodeID: UUID?`; methods `start()`, `refresh()`, `nodesForSelection() -> [Node]`, `node(_ id: UUID) -> Node?`, and `detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView])`.
+
+- [ ] **Step 0: Make `SmartLists` and `ProjectStatus` publicly constructible**
+
+In `Sources/PensieveKit/Query/SmartLists.swift`, add this initializer inside `struct SmartLists`, immediately after the three stored `public let` properties and before `static func compute`:
+
+```swift
+  public init(whatsNext: [NextItem], dormant: [NextItem], recentlyActive: [NextItem]) {
+    self.whatsNext = whatsNext; self.dormant = dormant; self.recentlyActive = recentlyActive
+  }
+```
+
+In `Sources/PensieveKit/Query/ProjectQueries.swift`, add this initializer inside `struct ProjectStatus`, immediately after its `public let project`/`public let recentEvents` properties:
+
+```swift
+  public init(project: Node, recentEvents: [Event]) {
+    self.project = project; self.recentEvents = recentEvents
+  }
+```
+
+These have the same signatures as the previously-synthesized memberwise inits, so existing in-module call sites (`SmartLists.compute`, `ProjectQueries.recentEvents`) are unaffected.
+
+Verify PensieveKit still compiles and its tests are unaffected:
+Run: `./scripts/test.sh --filter SmartLists` and `./scripts/test.sh --filter ProjectQueries`
+Expected: PASS (no behavior change; only visibility).
 
 - [ ] **Step 1: Write `AppModel`**
 
@@ -264,6 +293,7 @@ git commit -m "feat: SmartLists — grounded What's Next / Dormant / Recently Ac
 // Sources/PensieveApp/AppModel.swift
 import Foundation
 import SwiftUI
+import SQLiteData
 import PensieveKit
 
 enum SmartListKind: String, CaseIterable, Hashable {
@@ -292,7 +322,7 @@ enum SidebarSelection: Hashable {
 @MainActor
 final class AppModel: ObservableObject {
   @Published var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
-  @Published var forest: [NodeTreeNode] = []
+  @Published var forest: [NodeForestNode] = []
   @Published var sidebarSelection: SidebarSelection? = .smartList(.whatsNext)
   @Published var selectedNodeID: UUID?
 
@@ -321,7 +351,7 @@ final class AppModel: ObservableObject {
     let now = Date()
     lists = (try? SmartLists.compute(db, now: now)) ?? lists
     allNodes = (try? ProjectQueries.all(db)) ?? allNodes
-    forest = NodeTree.build(allNodes)
+    forest = NodeForest.build(allNodes)
   }
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
@@ -459,7 +489,8 @@ Expected: a resizable 900×560 window titled "Pensieve" opens showing three colu
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Sources/PensieveApp/AppModel.swift Sources/PensieveApp/RootView.swift Sources/PensieveApp/main.swift
+git add Sources/PensieveKit/Query/SmartLists.swift Sources/PensieveKit/Query/ProjectQueries.swift \
+        Sources/PensieveApp/AppModel.swift Sources/PensieveApp/RootView.swift Sources/PensieveApp/main.swift
 git commit -m "feat: three-pane app shell (AppModel + NavigationSplitView) with launch spool drain"
 ```
 
@@ -472,7 +503,7 @@ git commit -m "feat: three-pane app shell (AppModel + NavigationSplitView) with 
 - Modify: `Sources/PensieveApp/RootView.swift` (remove the `SidebarView` stub)
 
 **Interfaces:**
-- Consumes: `AppModel.lists`, `AppModel.forest`, `AppModel.sidebarSelection`, `SmartListKind`, `SidebarSelection`, `NodeTreeNode`, `MonitorSnapshot.gather` (for the footer status dot).
+- Consumes: `AppModel.lists`, `AppModel.forest`, `AppModel.sidebarSelection`, `SmartListKind`, `SidebarSelection`, `NodeForestNode`, `MonitorSnapshot.gather` (for the footer status dot).
 
 - [ ] **Step 1: Remove the `SidebarView` stub from `RootView.swift`**
 
@@ -633,8 +664,10 @@ struct DetailView: View {
   @ObservedObject var model: AppModel
   let node: Node
   @State private var expanded: Set<UUID> = []
-
-  private var data: (status: ProjectStatus, looseEnds: [LooseEndView]) { model.detail(for: node) }
+  // Loaded once per node selection via `.task(id:)` below — NOT recomputed on every body eval
+  // (calling `model.detail(for:)` in the body would hit the DB on every render).
+  @State private var recentEvents: [Event] = []
+  @State private var looseEnds: [LooseEndView] = []
 
   var body: some View {
     ScrollView {
@@ -650,7 +683,7 @@ struct DetailView: View {
 
         // LOOSE ENDS (with inline verbatim provenance)
         section("Loose Ends") {
-          let ends = data.looseEnds
+          let ends = looseEnds
           if ends.isEmpty {
             Text("None open.").foregroundStyle(.secondary)
           } else {
@@ -662,7 +695,7 @@ struct DetailView: View {
 
         // RECENT ACTIVITY (deterministic; LLM narration is a later slice)
         section("Recent Activity") {
-          let events = data.status.recentEvents
+          let events = recentEvents
           if events.isEmpty {
             Text("No captured activity.").foregroundStyle(.secondary)
           } else {
@@ -681,6 +714,14 @@ struct DetailView: View {
       }
       .padding(24)
       .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    // Runs on first appearance and whenever the selected node changes — one DB read per
+    // selection, not per render. `.task` on a View is MainActor-isolated, so the synchronous
+    // `@MainActor` call to `model.detail(for:)` needs no `await`.
+    .task(id: node.id) {
+      let d = model.detail(for: node)
+      recentEvents = d.status.recentEvents
+      looseEnds = d.looseEnds
     }
   }
 
