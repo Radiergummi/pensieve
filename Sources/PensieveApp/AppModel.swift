@@ -70,6 +70,7 @@ final class AppModel: ObservableObject {
   private var db: (any DatabaseWriter)?
   private var allNodes: [Node] = []
   private var timer: Timer?
+  private var started = false
 
   private static let lastOpenedKey = "pensieve.lastOpenedAt"
 
@@ -80,6 +81,8 @@ final class AppModel: ObservableObject {
   }
 
   func start() {
+    guard !started else { return }
+    started = true
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
     db = try? openCanonicalDatabase(at: Stores.canonicalURL)
     Task { await drainThenRefresh() }

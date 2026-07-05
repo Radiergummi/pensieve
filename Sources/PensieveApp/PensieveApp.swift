@@ -1,0 +1,33 @@
+import Foundation
+import SwiftUI
+import PensieveKit
+
+/// Resolves store locations the same way the CLI does (honors PENSIEVE_DB / PENSIEVE_CAPTURE_DB).
+enum Stores {
+  static var canonicalURL: URL {
+    if let o = ProcessInfo.processInfo.environment["PENSIEVE_DB"] { return URL(fileURLWithPath: o) }
+    return PensievePaths.canonicalURL()
+  }
+  static var spoolURL: URL {
+    if let o = ProcessInfo.processInfo.environment["PENSIEVE_CAPTURE_DB"] { return URL(fileURLWithPath: o) }
+    return PensievePaths.captureURL()
+  }
+}
+
+@main
+struct PensieveApp: App {
+  // One AppModel for the app's lifetime. Its init reads/writes the lastOpenedAt UserDefault.
+  @StateObject private var model = AppModel()
+
+  var body: some Scene {
+    // A single unique window — the correct primitive for one main window. Multi-window/tabbing is
+    // slice 3's job; `Window` gives the standard menu bar, ⌘Q, and scene frame restoration for free.
+    Window("Pensieve", id: "main") {
+      RootView(model: model)
+        .frame(minWidth: 720, minHeight: 420)
+        .task { model.start() }   // idempotent (guarded in AppModel)
+    }
+    .defaultSize(width: 900, height: 560)
+    .windowResizability(.contentMinSize)
+  }
+}
