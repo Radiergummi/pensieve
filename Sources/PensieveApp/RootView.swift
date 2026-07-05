@@ -22,14 +22,3 @@ struct RootView: View {
     .navigationTitle("Pensieve")
   }
 }
-
-// TEMP STUBS — replaced in Task 4 (SidebarView) and Task 5 (DetailView/ContentListView)
-struct ContentListView: View {
-  @ObservedObject var model: AppModel
-  var body: some View { Text("list").frame(minWidth: 240) }
-}
-struct DetailView: View {
-  @ObservedObject var model: AppModel
-  let node: Node
-  var body: some View { Text(node.name) }
-}
