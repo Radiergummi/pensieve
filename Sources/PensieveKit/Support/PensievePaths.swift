@@ -11,6 +11,30 @@ public enum PensievePaths {
   public static func captureURL() -> URL {
     supportDirectory().appendingPathComponent("capture.sqlite")
   }
+  /// The current user's home, resolved via `getpwuid` (correct even when launchd does not
+  /// export HOME) rather than the HOME environment variable.
+  public static func homeDirectory() -> URL {
+    FileManager.default.homeDirectoryForCurrentUser
+  }
+  /// `~/.claude/projects` — where Claude Code writes session transcripts.
+  public static func claudeProjectsURL() -> URL {
+    homeDirectory().appendingPathComponent(".claude/projects", isDirectory: true)
+  }
+  /// `~/Library/Logs/Pensieve` — the daemon's log directory (launchd will not create it).
+  public static func logsDirectory() -> URL {
+    homeDirectory().appendingPathComponent("Library/Logs/Pensieve", isDirectory: true)
+  }
+  public static func syncLogURL() -> URL {
+    logsDirectory().appendingPathComponent("sync.log")
+  }
+  /// `~/Library/LaunchAgents/com.pensieve.sync.plist`.
+  public static func launchAgentURL() -> URL {
+    homeDirectory().appendingPathComponent("Library/LaunchAgents/com.pensieve.sync.plist")
+  }
+  /// The stable installed CLI path baked into the daemon plist (never a `.build` path).
+  public static func installedBinaryURL() -> URL {
+    homeDirectory().appendingPathComponent(".local/bin/pensieve")
+  }
 
   /// Ensures the parent directory of a database file exists before it's opened.
   public static func ensureParentDirectory(of url: URL) throws {
