@@ -14,6 +14,7 @@ struct Pensieve: AsyncParsableCommand {
       InstallHooks.self, LooseEnds.self, CheckpointCommand.self, Next.self, Digest.self,
       CaptureSessionStart.self, CaptureSessionEnd.self, InstallSessionHook.self,
       AddNode.self, Nest.self, RenameNode.self, RetypeNode.self, Scan.self,
+      InstallDaemon.self,
     ]
   )
 }
