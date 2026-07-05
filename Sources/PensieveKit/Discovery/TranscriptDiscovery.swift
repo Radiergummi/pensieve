@@ -23,7 +23,7 @@ public enum TranscriptDiscovery {
         if let mtime = vals?.contentModificationDate,
            now.timeIntervalSince(mtime) > ageBound { continue }          // too old to re-glob
         if isSidechainTranscript(file) { continue }                      // subagent -> precision gate
-        out.append(file.resolvingSymlinksInPath())
+        out.append(file)
       }
     }
     return out
