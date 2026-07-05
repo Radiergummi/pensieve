@@ -19,6 +19,10 @@ public struct SummaryBuilder {
 
   public func build(_ db: any DatabaseWriter, projectName: String, now: Date) async throws -> ProjectSummary? {
     guard let status = try ProjectQueries.status(db, name: projectName, limit: 15) else { return nil }
+    // Nothing captured for this node (e.g. a scanned-but-untouched git repo): skip it rather
+    // than hand the model an empty fact sheet, which it "narrates" by hallucinating or echoing
+    // the prompt. A loose end can't exist without a source event, so no events ⇒ nothing grounded.
+    guard !status.recentEvents.isEmpty else { return nil }
     let facts = Self.assembleFacts(project: status.project, events: status.recentEvents)
     let prompt = """
     Narrate ONLY the facts below into 2-3 sentences of "last work done". Do NOT add any \

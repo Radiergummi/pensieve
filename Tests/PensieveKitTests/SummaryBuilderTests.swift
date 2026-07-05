@@ -34,3 +34,13 @@ private struct EchoProvider: LLMProvider {
   #expect(sum != nil)
   #expect(sum?.lastWorkDone.hasPrefix("NARRATED:") == true)
 }
+
+@Test func summaryBuildReturnsNilForNodeWithNoActivity() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("sum-empty"))
+  // A bare scanned repo: the node/source exist but nothing was ever captured.
+  // build() must skip it rather than narrate an empty fact sheet (which the model
+  // "narrates" by hallucinating or echoing the prompt).
+  _ = try ProjectResolver(db: db).resolve(path: "/p/empty", kind: SourceKind.gitRepo)
+  let sum = try await SummaryBuilder(provider: EchoProvider()).build(db, projectName: "empty", now: Date())
+  #expect(sum == nil)
+}
