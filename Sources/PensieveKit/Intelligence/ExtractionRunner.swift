@@ -76,7 +76,8 @@ public struct ExtractionRunner {
         // verifier resolves candidates by absolute messageIndex, so slicing the extractor's
         // INPUT never breaks index resolution or sourceMessageIndex.
         let slice = Array(session.messages[start...])
-        let candidates = try await LooseEndExtractor(provider: provider).extract(from: slice)
+        let candidates = CandidateFilter.strip(
+          try await LooseEndExtractor(provider: provider).extract(from: slice))
         let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
 
         let stamp = now()

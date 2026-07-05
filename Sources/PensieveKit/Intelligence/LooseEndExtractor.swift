@@ -25,7 +25,7 @@ public struct LooseEndExtractor {
   static let minFragmentChars = 200
 
   public func extract(from messages: [TranscriptMessage]) async throws -> [LooseEndCandidate] {
-    let prompts = messages.filter { $0.isUserPrompt }
+    let prompts = StructuralNoiseFilter.strip(messages.filter { $0.isUserPrompt })
     guard !prompts.isEmpty else { return [] }
     // Keep only the developer's genuine conversational intent — drop pasted briefs, plans,
     // code, and tool output that the transcript records as `user` turns but aren't intent.
@@ -118,7 +118,9 @@ public struct LooseEndExtractor {
     let body = chunk.map { "[\($0.index)] \($0.text)" }.joined(separator: "\n\n")
     return """
     You extract LOOSE ENDS from a developer's own messages: things they said they would \
-    do, planned, or left unfinished, but which may not be done. Only use the text below.
+    do, planned, or left unfinished, but which may not be done. Only use the text below. \
+    Do not extract acknowledgements, approvals, status checks, checklist items, or agent \
+    task briefs (e.g. 'looks good', 'carry on', 'are you done') — those are not loose ends.
 
     Return ONLY a JSON array. Each element: {"text": <short paraphrase>, "quote": <a VERBATIM \
     substring copied exactly from one message, including its original wording and casing>, \

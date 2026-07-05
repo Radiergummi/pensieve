@@ -294,6 +294,23 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(ev.extractedTranscriptSize == -1)   // still the "never watermarked" sentinel
 }
 
+@Test func runnerFiltersClosureCandidatesBeforeInsert() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("cf"))
+  let transcript = try writeTranscript([
+    "we still need to migrate the auth tables before launch",   // index 0 — real
+    "looks good, yes.",                                          // index 1 — closure noise
+  ])
+  let event = try makeSessionEvent(db: db, transcript: transcript)
+  let provider = SliceAwareProvider(genuine: [
+    (quote: "we still need to migrate the auth tables before launch", index: 0),
+    (quote: "looks good, yes.", index: 1),
+  ])
+  _ = try await ExtractionRunner(db: db, provider: provider).run()
+  let quotes = try await db.read { db in try LooseEnd.order { $0.sourceMessageIndex }.fetchAll(db).map(\.quote) }
+  #expect(quotes == ["we still need to migrate the auth tables before launch"])  // closure dropped
+  _ = event
+}
+
 @Test func partialTrailingLinePicksUpAtCorrectIndexAfterCompletion() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-partial"))
   let q0 = rateLimitingQuote

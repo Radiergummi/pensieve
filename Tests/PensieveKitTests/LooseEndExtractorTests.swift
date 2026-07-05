@@ -120,6 +120,22 @@ private struct StubProvider: LLMProvider {
   #expect(!out.isEmpty)   // recovered instead of throwing
 }
 
+@Test func extractDropsBriefMessagesBeforeMining() async throws {
+  let brief = "You are implementing Task 4 of the plan. Return ONLY the diff. Do not deviate.\n## Files\n## Steps\n"
+    + String(repeating: "Detailed surrounding context for the task at hand. ", count: 20)
+  #expect(brief.count >= 800)
+  let messages = [
+    TranscriptMessage(index: 0, role: "user", text: brief, timestamp: nil, isUserPrompt: true),
+    TranscriptMessage(index: 1, role: "user", text: "we still need to add rate limiting", timestamp: nil, isUserPrompt: true),
+  ]
+  let stub = StubProvider { prompt in
+    #expect(!prompt.contains("You are implementing Task 4"))   // brief stripped before classify AND extract
+    return #"[{"text":"add rate limiting","quote":"we still need to add rate limiting","messageIndex":1}]"#
+  }
+  let out = try await LooseEndExtractor(provider: stub).extract(from: messages)
+  #expect(out.map(\.quote) == ["we still need to add rate limiting"])
+}
+
 @Test func chunkingBreaksOnWhitespaceNotMidWord() {
   let text = "alpha bravo charlie delta echo foxtrot golf hotel"
   let words = Set(text.split(separator: " ").map(String.init))
