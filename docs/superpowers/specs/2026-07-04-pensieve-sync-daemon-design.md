@@ -1,6 +1,10 @@
 # Sync Daemon — Auto-Drain & Session Ingestion (Design)
 
-**Date:** 2026-07-04. **Status:** DEFERRED / TO BE REVISED. An adversarial review found the §B
+**Date:** 2026-07-04. **Status:** SUPERSEDED by
+`2026-07-05-pensieve-sync-daemon-design.md` (revised after incremental re-extraction landed:
+grace window dropped, SessionEnd hook added, launchd fixes baked in). Kept for history.
+
+**Original status:** DEFERRED / TO BE REVISED. An adversarial review found the §B
 mtime-grace recall approach **critically flawed** (it silently drops loose ends from the back half of
 paused/resumed sessions). The fix — **incremental re-extraction + a SessionEnd hook** — was split into
 its own prerequisite sub-project (`…-incremental-reextraction-design.md`). This daemon spec will be
