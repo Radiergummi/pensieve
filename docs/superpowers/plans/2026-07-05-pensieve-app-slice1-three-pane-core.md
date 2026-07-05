@@ -664,8 +664,10 @@ struct DetailView: View {
   @ObservedObject var model: AppModel
   let node: Node
   @State private var expanded: Set<UUID> = []
-
-  private var data: (status: ProjectStatus, looseEnds: [LooseEndView]) { model.detail(for: node) }
+  // Loaded once per node selection via `.task(id:)` below — NOT recomputed on every body eval
+  // (calling `model.detail(for:)` in the body would hit the DB on every render).
+  @State private var recentEvents: [Event] = []
+  @State private var looseEnds: [LooseEndView] = []
 
   var body: some View {
     ScrollView {
@@ -681,7 +683,7 @@ struct DetailView: View {
 
         // LOOSE ENDS (with inline verbatim provenance)
         section("Loose Ends") {
-          let ends = data.looseEnds
+          let ends = looseEnds
           if ends.isEmpty {
             Text("None open.").foregroundStyle(.secondary)
           } else {
@@ -693,7 +695,7 @@ struct DetailView: View {
 
         // RECENT ACTIVITY (deterministic; LLM narration is a later slice)
         section("Recent Activity") {
-          let events = data.status.recentEvents
+          let events = recentEvents
           if events.isEmpty {
             Text("No captured activity.").foregroundStyle(.secondary)
           } else {
@@ -712,6 +714,14 @@ struct DetailView: View {
       }
       .padding(24)
       .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    // Runs on first appearance and whenever the selected node changes — one DB read per
+    // selection, not per render. `.task` on a View is MainActor-isolated, so the synchronous
+    // `@MainActor` call to `model.detail(for:)` needs no `await`.
+    .task(id: node.id) {
+      let d = model.detail(for: node)
+      recentEvents = d.status.recentEvents
+      looseEnds = d.looseEnds
     }
   }
 
