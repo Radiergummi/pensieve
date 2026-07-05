@@ -4,6 +4,10 @@ import SQLiteData
 public struct ProjectStatus: Sendable {
   public let project: Node
   public let recentEvents: [Event]
+
+  public init(project: Node, recentEvents: [Event]) {
+    self.project = project; self.recentEvents = recentEvents
+  }
 }
 
 public enum ProjectQueries {

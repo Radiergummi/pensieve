@@ -9,6 +9,10 @@ public struct SmartLists: Sendable {
   public let dormant: [NextItem]
   public let recentlyActive: [NextItem]
 
+  public init(whatsNext: [NextItem], dormant: [NextItem], recentlyActive: [NextItem]) {
+    self.whatsNext = whatsNext; self.dormant = dormant; self.recentlyActive = recentlyActive
+  }
+
   public static func compute(_ db: any DatabaseWriter, now: Date,
                              dormantAfterDays: Int = 14,
                              activeWithinDays: Int = 3) throws -> SmartLists {
