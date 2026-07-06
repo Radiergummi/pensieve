@@ -41,8 +41,14 @@ public struct SessionStartPayload: Codable, Sendable {
 }
 
 public func encodeJSON<T: Encodable>(_ v: T) throws -> String {
-  let data = try JSONEncoder().encode(v)
+  let encoder = JSONEncoder()
+  encoder.outputFormatting = [.sortedKeys]
+  let data = try encoder.encode(v)
   return String(decoding: data, as: UTF8.self)
+}
+
+public func decodeJSON<T: Decodable>(_ s: String) throws -> T {
+  try JSONDecoder().decode(T.self, from: Data(s.utf8))
 }
 
 /// Decodes a Claude Code `SessionEnd` hook payload (stdin JSON) into a spoolable session ref.
