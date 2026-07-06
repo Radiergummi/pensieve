@@ -10,6 +10,9 @@ struct DetailView: View {
   // (calling `model.detail(for:)` in the body would hit the DB on every render).
   @State private var recentEvents: [Event] = []
   @State private var looseEnds: [LooseEndView] = []
+  @State private var lastWorkDone: String?
+  @State private var isNarrating = false
+  @State private var loadedNodeID: UUID?   // which node the current prose belongs to
 
   var body: some View {
     ScrollView {
@@ -20,6 +23,18 @@ struct DetailView: View {
           Text("\(node.kind) · \(node.state)").foregroundStyle(.secondary)
           if !node.description.isEmpty {
             Text(node.description).font(.body).padding(.top, 2)
+          }
+        }
+
+        // LAST WORK DONE (LLM narration; prose-first — a ready recap always wins over an in-flight
+        // flag — and the section is omitted entirely when there's no genuine narration).
+        if let lastWorkDone {
+          section("Last Work Done") {
+            Text(lastWorkDone).font(.body)
+          }
+        } else if isNarrating {
+          section("Last Work Done") {
+            ProgressView().controlSize(.small)
           }
         }
 
@@ -55,13 +70,24 @@ struct DetailView: View {
       .padding(24)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    // Runs on first appearance and whenever the selected node changes — one DB read per
-    // selection, not per render. `.task` on a View is MainActor-isolated, so the synchronous
-    // `@MainActor` call to `model.detail(for:)` needs no `await`.
-    .task(id: node.id) {
+    // Re-runs on node change AND on ⌘R (refreshToken). The body order is load-bearing (two
+    // independent reviews): reset prose only on a NODE change (so a same-node ⌘R keeps the old
+    // recap visible until the new one lands — no flash), reset `isNarrating` on EVERY entry (never
+    // leak `true` across a handoff), and guard `Task.isCancelled` before writing (a superseded
+    // task's await still resumes — don't let a late result render under the new node).
+    .task(id: DetailLoadKey(nodeID: node.id, token: model.refreshToken)) {
+      if loadedNodeID != node.id { lastWorkDone = nil }
+      loadedNodeID = node.id
+      isNarrating = false
       let d = model.detail(for: node)
       recentEvents = d.status.recentEvents
       looseEnds = d.looseEnds
+      if let cached = model.cachedNarration(for: node) { lastWorkDone = cached; return }
+      isNarrating = true
+      let prose = await model.narration(for: node, events: recentEvents)
+      guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
+      lastWorkDone = prose
+      isNarrating = false
     }
   }
 
@@ -106,3 +132,5 @@ struct DetailView: View {
     }
   }
 }
+
+private struct DetailLoadKey: Hashable { let nodeID: UUID; let token: Int }
