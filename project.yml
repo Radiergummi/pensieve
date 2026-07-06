@@ -2,7 +2,7 @@ name: Pensieve
 options:
   bundleIdPrefix: me.mazetti
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "15.0"
 packages:
   PensieveKit:
     path: .
