@@ -22,8 +22,8 @@ Shipped and merged (all on `main`):
   **View ▸ Show/Hide Sidebar** (`SidebarCommands`), **Go ▸ Quick Jump** (⌘K, palette state hoisted from a hidden
   button onto `AppModel`), **Go ▸ Refresh** (⌘R → `AppModel.refreshNow()`). **Runtime Dock icon** via
   `NSApplication.applicationIconImage` (artwork committed under `icons/`). **Bug found + fixed in verification:**
-  an unbundled SwiftPM executable needs an explicit `setActivationPolicy(.regular)` (now in `AppDelegate.
-  applicationWillFinishLaunching`) or it has no Dock/⌘-Tab/menu bar. Spec/plan under
+  an unbundled SwiftPM executable needed an explicit `setActivationPolicy(.regular)` in an `AppDelegate`
+  (both since removed by the Xcode-adoption bundle, which is `.regular` by default). Spec/plan under
   `docs/superpowers/{specs,plans}/2026-07-05-pensieve-app-gui-base-state*`. Subagent-driven, review-clean
   (Opus whole-branch: ready-to-merge, 0 Critical/Important).
 
