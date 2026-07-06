@@ -14,7 +14,7 @@ struct RootView: View {
         .navigationSplitViewColumnWidth(min: 240, ideal: 300)
     } detail: {
       if let id = model.selectedNodeID, let node = model.node(id) {
-        DetailView(model: model, node: node)
+        DetailView(model: model, node: node, allowsInspector: true)
       } else if model.sidebarSelection == .briefing {
         BriefingView(model: model)
       } else {
@@ -25,6 +25,11 @@ struct RootView: View {
     // ⌘K now lives in the "Go" menu (see PensieveApp.commands); the palette state lives on AppModel.
     .sheet(isPresented: $model.showPalette) {
       PaletteView(model: model, isPresented: $model.showPalette)
+    }
+    .inspector(isPresented: $model.showInspector) {
+      let ends = model.selectedNodeID.flatMap(model.node).map { model.detail(for: $0).looseEnds } ?? []
+      InspectorView(model: model, looseEnds: ends)
+        .inspectorColumnWidth(min: 260, ideal: 340, max: 500)
     }
   }
 }

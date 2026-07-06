@@ -59,7 +59,16 @@ final class AppModel: ObservableObject {
   @Published var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
   @Published var forest: [NodeForestNode] = []
   @Published var sidebarSelection: SidebarSelection? = .briefing
-  @Published var selectedNodeID: UUID?
+  @Published var selectedNodeID: UUID? {
+    didSet { if selectedNodeID != oldValue { inspectedLooseEndID = nil } }
+  }
+  /// Drives the ⌘⌥I provenance inspector (main window only). Toggled by the Go ▸ Inspector command.
+  @Published var showInspector = false
+  /// The loose end whose surrounding transcript the inspector shows. Written ONLY by the main
+  /// window's DetailView (allowsInspector == true); cleared when the main selection changes.
+  @Published var inspectedLooseEndID: UUID? {
+    didSet { /* no-op; clearing is driven by selectedNodeID below */ }
+  }
   @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   @Published var briefingCards: [BriefingCard] = []
@@ -172,6 +181,14 @@ final class AppModel: ObservableObject {
     let status = (try? ProjectQueries.status(db, node: node, limit: 15)) ?? fallback
     let ends = (try? LooseEndQueries.open(db, nodeID: node.id, now: now)) ?? []
     return (status, ends)
+  }
+
+  /// Surrounding-transcript provenance for a loose end, resolved off the main actor (file I/O).
+  /// nil only when the source event is missing; a present-but-unavailable transcript returns a
+  /// ProvenanceContext with `transcriptAvailable == false`.
+  func provenance(for looseEnd: LooseEnd) async -> ProvenanceContext? {
+    guard let db else { return nil }
+    return try? await Task.detached { try ProvenanceQueries.context(db, looseEnd: looseEnd) }.value
   }
 
   /// Cached narration for `node`, if generated this session. Synchronous — lets the view render a

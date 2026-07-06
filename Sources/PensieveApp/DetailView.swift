@@ -5,6 +5,8 @@ import PensieveKit
 struct DetailView: View {
   @ObservedObject var model: AppModel
   let node: Node
+  /// When false (recall window), tapping a loose end never writes the shared inspector selection.
+  var allowsInspector: Bool = true
   @State private var expanded: Set<UUID> = []
   // Loaded once per node selection via `.task(id:)` below — NOT recomputed on every body eval
   // (calling `model.detail(for:)` in the body would hit the DB on every render).
@@ -97,6 +99,7 @@ struct DetailView: View {
     VStack(alignment: .leading, spacing: 6) {
       Button {
         if isOpen { expanded.remove(id) } else { expanded.insert(id) }
+        if allowsInspector { model.inspectedLooseEndID = id }
       } label: {
         HStack(spacing: 6) {
           Image(systemName: isOpen ? "chevron.down" : "chevron.right")

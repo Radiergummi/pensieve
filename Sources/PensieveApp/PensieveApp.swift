@@ -39,6 +39,8 @@ struct PensieveApp: App {
         Divider()
         Button("Refresh") { Task { await model.refreshNow() } }
           .keyboardShortcut("r", modifiers: .command)
+        Button("Inspector") { model.showInspector.toggle() }
+          .keyboardShortcut("i", modifiers: [.command, .option])
       }
     }
 
