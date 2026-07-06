@@ -77,6 +77,12 @@ final class AppModel: ObservableObject {
   private var allNodes: [Node] = []
   private var timer: Timer?
   private var started = false
+  private lazy var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
+  private var narrationCache: [UUID: String] = [:]
+  /// Bumped on launch + ⌘R (drainThenRefresh). Views key their reload `.task` on it so the OPEN
+  /// detail re-narrates after a refresh. The 3 s Timer calls `refresh()` (not drainThenRefresh), so
+  /// this never bumps per tick.
+  @Published private(set) var refreshToken = 0
 
   private static let lastOpenedKey = "pensieve.lastOpenedAt"
 
@@ -105,6 +111,8 @@ final class AppModel: ObservableObject {
       _ = try? await Ingester(spool: spool, db: db).drain()   // no LLM: spool → events only
     }
     refresh()
+    narrationCache.removeAll()   // launch/⌘R: recaps may be stale — regenerate on next open
+    refreshToken += 1
     await SpotlightIndexer.reindex()   // launch + ⌘R only (not the 3 s timer, which calls refresh() directly)
   }
 
@@ -164,5 +172,20 @@ final class AppModel: ObservableObject {
     let status = (try? ProjectQueries.status(db, node: node, limit: 15)) ?? fallback
     let ends = (try? LooseEndQueries.open(db, nodeID: node.id, now: now)) ?? []
     return (status, ends)
+  }
+
+  /// Cached narration for `node`, if generated this session. Synchronous — lets the view render a
+  /// cached recap instantly, with no spinner.
+  func cachedNarration(for node: Node) -> String? { narrationCache[node.id] }
+
+  /// The "Last Work Done" narration for `node`. Returns a session-cached result instantly; otherwise
+  /// generates it off the main actor via the Sendable SummaryBuilder, caches a non-nil result, and
+  /// returns it. nil when there's nothing to narrate or no provider is reachable (failures are not
+  /// cached, so a later ⌘R/open can still produce one).
+  func narration(for node: Node, events: [Event]) async -> String? {
+    if let cached = narrationCache[node.id] { return cached }
+    let text = await summaryBuilder.narrate(project: node, events: events)
+    if let text { narrationCache[node.id] = text }
+    return text
   }
 }
