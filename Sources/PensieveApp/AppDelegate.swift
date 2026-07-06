@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   weak var model: AppModel? {
     didSet { flush() }
   }
-  private var buffered: [DeepLink] = []
+  private var buffered: DeepLink?   // holds a link that arrived before the model was wired (most recent wins)
 
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
@@ -20,14 +20,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       if let model {
         model.pendingDeepLink = link
       } else {
-        buffered.append(link)
+        buffered = link
       }
     }
   }
 
   private func flush() {
-    guard let model, let last = buffered.last else { return }
-    model.pendingDeepLink = last   // most recent wins; earlier buffered links are superseded
-    buffered.removeAll()
+    guard let model, let link = buffered else { return }
+    model.pendingDeepLink = link
+    buffered = nil
   }
 }

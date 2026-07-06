@@ -107,6 +107,14 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
+  /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
+  /// skipping the briefing cards / forest that only the main window needs.
+  func refreshGlance() {
+    snapshot = MonitorSnapshot.gather(canonicalURL: Stores.canonicalURL, spoolURL: Stores.spoolURL)
+    guard let db else { return }
+    lists = (try? SmartLists.compute(db, now: Date())) ?? lists
+  }
+
   func refresh() {
     // The heartbeat kernel reads the stores standalone (works even with no canonical store), so
     // gather it here — one poller for the whole window — before the db guard.
