@@ -36,8 +36,8 @@
 - **Modify** `Sources/PensieveApp/RootView.swift` — attach `.inspector`; the ⌘⌥N open-window `.onChange` (Tasks 2–3).
 - **Modify** `Sources/PensieveApp/PensieveApp.swift` — Go ▸ Inspector (⌘⌥I) command; the recall `WindowGroup`; File ▸ Open in New Window (⌘⌥N) command (Tasks 2–3).
 - **Create** `Sources/PensieveApp/RecallWindowView.swift` — the focused recall scene root (Task 3).
-- **Create** `Sources/PensieveApp/NodeStateStyle.swift` — semantic color + SF Symbol per surfaced state (Task 3).
-- **Modify** `Sources/PensieveApp/SidebarView.swift` — apply `NodeStateStyle` to smart-list rows (Task 3).
+- **Modify** `Sources/PensieveApp/AppModel.swift` — add a semantic `color` to the existing `SmartListKind` (Task 3; reuses its `.symbol`, avoids a parallel enum).
+- **Modify** `Sources/PensieveApp/SidebarView.swift` — tint the smart-list row icons with `kind.color` (Task 3).
 - **Create** `Sources/PensieveKit/Support/Debouncer.swift` — trailing-edge coalescer (Task 4).
 - **Create** `Tests/PensieveKitTests/DebouncerTests.swift` — debouncer tests (Task 4).
 - **Create** `Sources/PensieveKit/Support/DirectoryWatcher.swift` — `FSEventStream` directory watcher (Task 4).
@@ -483,15 +483,14 @@ git commit -m "feat: ⌘⌥I provenance inspector (surrounding transcript contex
 
 **Files:**
 - Create: `Sources/PensieveApp/RecallWindowView.swift`
-- Create: `Sources/PensieveApp/NodeStateStyle.swift`
 - Modify: `Sources/PensieveApp/PensieveApp.swift`
 - Modify: `Sources/PensieveApp/RootView.swift`
 - Modify: `Sources/PensieveApp/AppModel.swift`
 - Modify: `Sources/PensieveApp/SidebarView.swift`
 
 **Interfaces:**
-- Consumes: `DetailView(model:node:allowsInspector:)`, `AppModel.node(_:)`, `AppModel.start()`, `AppModel.selectedNodeID`.
-- Produces: `AppModel.openNodeRequest: UUID?`, `RecallWindowView(model:nodeID:)`, `NodeStateStyle`.
+- Consumes: `DetailView(model:node:allowsInspector:)`, `AppModel.node(_:)`, `AppModel.start()`, `AppModel.selectedNodeID`, the existing `SmartListKind` (`.title`, `.symbol`).
+- Produces: `AppModel.openNodeRequest: UUID?`, `RecallWindowView(model:nodeID:)`, `SmartListKind.color`.
 
 - [ ] **Step 1: Add the open-in-new-window request signal to `AppModel`**
 
@@ -504,20 +503,11 @@ In `Sources/PensieveApp/AppModel.swift`, add:
   @Published var openNodeRequest: UUID?
 ```
 
-- [ ] **Step 2: Create `NodeStateStyle` (semantic color + symbol, only for surfaced states)**
+- [ ] **Step 2: Add a semantic `color` to the existing `SmartListKind`**
 
-Create `Sources/PensieveApp/NodeStateStyle.swift`:
+In `Sources/PensieveApp/AppModel.swift`, `SmartListKind` already has `.title` and `.symbol`. Add a `color` computed property using system semantic roles (auto-adapting in light/dark; only the three surfaced buckets — `blocked`/`orphaned` are gated/unbuilt per the parent design, deliberately not styled):
 
 ```swift
-// Sources/PensieveApp/NodeStateStyle.swift
-import SwiftUI
-
-/// Semantic styling for the states the app actually surfaces today (the three smart-list buckets).
-/// Uses system semantic color roles so it holds in light and dark with no per-appearance tuning.
-/// (blocked/orphaned are gated/unbuilt per the parent design — deliberately not styled here.)
-enum NodeStateStyle {
-  case whatsNext, dormant, recentlyActive
-
   var color: Color {
     switch self {
     case .whatsNext: return .accentColor
@@ -525,38 +515,20 @@ enum NodeStateStyle {
     case .recentlyActive: return .green
     }
   }
-  var symbol: String {
-    switch self {
-    case .whatsNext: return "star.fill"
-    case .dormant: return "pause.circle"
-    case .recentlyActive: return "dot.radiowaves.left.and.right"
-    }
-  }
-
-  init(_ kind: SmartListKind) {
-    switch kind {
-    case .whatsNext: self = .whatsNext
-    case .dormant: self = .dormant
-    case .recentlyActive: self = .recentlyActive
-    }
-  }
-}
 ```
 
-- [ ] **Step 3: Apply `NodeStateStyle` in the sidebar smart-list rows**
+(`AppModel.swift` already `import SwiftUI`, so `Color` is in scope.)
 
-In `Sources/PensieveApp/SidebarView.swift`, where each smart-list row renders its `Label`/icon, use the style's color + symbol. (Match the existing row layout; example for the smart-list `Label`:)
+- [ ] **Step 3: Tint the sidebar smart-list icons with `kind.color`**
+
+In `Sources/PensieveApp/SidebarView.swift`, `smartRow(_:count:)` renders the icon as `Image(systemName: kind.symbol)`. Add the tint (surgical — nothing else changes):
 
 ```swift
-        Label {
-          Text(kind.title)
-        } icon: {
-          Image(systemName: NodeStateStyle(kind).symbol)
-            .foregroundStyle(NodeStateStyle(kind).color)
-        }
+    } icon: {
+      Image(systemName: kind.symbol)
+        .foregroundStyle(kind.color)
+    }
 ```
-
-Keep everything else in the row unchanged (surgical).
 
 - [ ] **Step 4: Create `RecallWindowView`**
 
@@ -653,7 +625,7 @@ Expected: launches, no crash. (Human carry: select a node, ⌘⌥N opens a recal
 - [ ] **Step 9: Commit**
 
 ```bash
-git add Sources/PensieveApp/RecallWindowView.swift Sources/PensieveApp/NodeStateStyle.swift Sources/PensieveApp/PensieveApp.swift Sources/PensieveApp/RootView.swift Sources/PensieveApp/AppModel.swift Sources/PensieveApp/SidebarView.swift
+git add Sources/PensieveApp/RecallWindowView.swift Sources/PensieveApp/PensieveApp.swift Sources/PensieveApp/RootView.swift Sources/PensieveApp/AppModel.swift Sources/PensieveApp/SidebarView.swift
 git commit -m "feat: recall WindowGroup (⌘⌥N) + semantic-color sidebar polish"
 ```
 
@@ -925,7 +897,7 @@ git commit -m "feat: event-driven liveness — ValueObservation + FSEvents watch
 
 ## Self-Review (completed against the spec)
 
-**Spec coverage:** Part 1 Liveness → Task 4 (ValueObservation + spool `-wal`/canonical `-wal` directory watches + debounce + busy timeout + Spotlight-on-refresh + Timer removal). Part 2 Inspector → Tasks 1 (kernel, `isUserPrompt`+quote guard, honest fallback) + 2 (`.inspector`, ⌘⌥I, `allowsInspector` gate, clear-on-`selectedNodeID`, `provenance(for:)`, dim non-user). Part 3 Recall windows → Task 3 (`WindowGroup(for: UUID.self)`, ⌘⌥N via `openNodeRequest`→RootView `openWindow`, `allowsInspector: false`, cold-restore `model.start()` + `ContentUnavailableView`). Part 4 Polish → Task 3 (`NodeStateStyle`, system roles, only surfaced states, sidebar apply). Out-of-scope items untouched. ✔
+**Spec coverage:** Part 1 Liveness → Task 4 (ValueObservation + spool `-wal`/canonical `-wal` directory watches + debounce + busy timeout + Spotlight-on-refresh + Timer removal). Part 2 Inspector → Tasks 1 (kernel, `isUserPrompt`+quote guard, honest fallback) + 2 (`.inspector`, ⌘⌥I, `allowsInspector` gate, clear-on-`selectedNodeID`, `provenance(for:)`, dim non-user). Part 3 Recall windows → Task 3 (`WindowGroup(for: UUID.self)`, ⌘⌥N via `openNodeRequest`→RootView `openWindow`, `allowsInspector: false`, cold-restore `model.start()` + `ContentUnavailableView`). Part 4 Polish → Task 3 (`SmartListKind.color`, system roles, only surfaced states, sidebar icon tint). Out-of-scope items untouched. ✔
 
 **Placeholder scan:** No TBD/TODO; every code step shows real code; every command has expected output. ✔
 
