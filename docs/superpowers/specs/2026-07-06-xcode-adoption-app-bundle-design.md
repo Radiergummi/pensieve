@@ -18,8 +18,8 @@ git-clean). Signing: **ad-hoc** ("sign to run locally").
 ## Why now / why this shape
 
 - The app is a personal, non-distributed macOS tool run on the author's own Mac (macOS 26.5.2).
-- Xcode 26.6 is installed but **not active** (`xcode-select` still points at CommandLineTools) **and never
-  first-launched** (so `actool`/`xcodebuild` don't run yet — see Prerequisite).
+- Xcode 26.6 is installed **and now active** (`xcode-select` → `/Applications/Xcode.app`; `xcodebuild`/
+  `actool` verified running — see Prerequisite).
 - The unbundled executable has real, papered-over defects a bundle fixes for free: the app-menu title
   reads the process name ("PensieveApp"), there is no Finder icon, and the app needed an explicit
   `setActivationPolicy(.regular)` workaround to get a Dock/⌘-Tab/menu-bar at all.
@@ -48,22 +48,19 @@ git-clean). Signing: **ad-hoc** ("sign to run locally").
 Spotlight; CloudKit; personal-team / paid signing; dynamic Liquid-Glass icon tuning beyond what the
 `.icon` carries; any change to PensieveKit logic, the CLI, the daemon, capture/ingest, or the trust gate.
 
-## Prerequisite (user-run, documented — NOT agent steps; all need `sudo`)
+## Prerequisite — DONE (verified 2026-07-06)
 
-A bare `xcode-select -s` is **not** sufficient: a freshly-installed Xcode that has never been first-launched
-cannot run `actool`/`xcodebuild` (the adversarial review empirically hit
-`"A required plugin failed to load … try running 'xcodebuild -runFirstLaunch'"`). The full activation is:
+The Xcode toolchain is **active and verified**: `xcode-select -p` → `/Applications/Xcode.app/Contents/
+Developer`, `xcodebuild -version` → **Xcode 26.6**, and `actool --version` runs **cleanly** (no plugin-load
+failure — the Xcode GUI's first-launch already installed the IB/`actool` plugins and accepted the license, so
+the earlier `sudo xcodebuild -runFirstLaunch` / `-license accept` steps proved unnecessary). `swift test` is
+also available natively now. The only sudo step actually required was `sudo xcode-select -s
+/Applications/Xcode.app`, which is done.
 
-```
-sudo xcode-select -s /Applications/Xcode.app
-sudo xcodebuild -runFirstLaunch     # installs the IB/actool plugins + system components
-sudo xcodebuild -license accept     # clears the EULA gate
-```
-
-All build steps below assume these are done. The **first plan task is a hard gate** that *actually runs*
-`xcodebuild -version` **and** `actool --version` (and `xcodegen --version`) and **stops with a clear message
-if any is non-zero** — it must NOT merely check where `xcode-select -p` points (that check passes while
-`actool` is still dead). After activation, re-verify the test flow (see §6 / Testing).
+The **first plan task remains a defensive hard gate**: run `xcodebuild -version`, `actool --version`, and
+`xcodegen --version`, and stop with a clear message if any is non-zero — cheap insurance that exercises the
+tools rather than merely reading `xcode-select -p`. (If `actool` ever regresses to a plugin-load error on a
+fresh machine/session, the remedy is `sudo xcodebuild -runFirstLaunch`.)
 
 ## Design
 
@@ -211,7 +208,7 @@ the framework). Verification:
 
 | Risk | Mitigation |
 |---|---|
-| Xcode installed but never first-launched → `actool`/`xcodebuild` fail (empirically hit) | Prerequisite adds `sudo xcodebuild -runFirstLaunch` + `-license accept`; task-1 gate runs `actool --version`/`xcodebuild -version` and stops on failure (not just `xcode-select -p`). |
+| Toolchain not active for the CLI → `actool`/`xcodebuild` fail | **Resolved**: `xcode-select` switched to Xcode 26.6 and `actool`/`xcodebuild` verified running. Task-1 gate re-checks defensively; remedy `sudo xcodebuild -runFirstLaunch` only if it ever regresses. |
 | `.icon` omitted from the target → icon-less app ships silently | `icons/Pensieve.icon` added to target `sources` **and** `ASSETCATALOG_COMPILER_APPICON_NAME: Pensieve`; launch verification checks Finder/Dock icon. |
 | Signing settings contradiction (`ALLOWED: NO` + identity `-` leaves bundle unsigned) | `CODE_SIGNING_ALLOWED: YES` + `CODE_SIGN_IDENTITY: "-"` + `CODE_SIGNING_REQUIRED: NO` → actually ad-hoc-seals the bundle; verification 4 checks `codesign -dv`. |
 | Menu-title fix relied on a nonexistent `INFOPLIST_KEY_CFBundleName` | Driven by `PRODUCT_NAME` (→ `CFBundleName`); explicit `Info.plist` fallback if the generated plist doesn't take. |
