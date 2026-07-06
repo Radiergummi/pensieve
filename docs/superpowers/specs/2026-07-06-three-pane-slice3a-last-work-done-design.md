@@ -90,7 +90,10 @@ This keeps the trust-sensitive derivation in tested PensieveKit; the app view st
 
 **`AppModel`** (`@MainActor`) — owns the provider + cache and exposes one async accessor:
 - `private lazy var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())` — one
-  provider for the app's lifetime (created lazily on first narration, so launch never probes the LLM).
+  provider for the app's lifetime. Lazy, so **launch** never probes the LLM; the **first narration**
+  does run `makeDefaultLLMProvider()` → `FoundationModelsProbe` (a cheap cached
+  `SystemLanguageModel.default.availability` read) synchronously on the main actor — a few ms,
+  negligible in practice, but honestly not zero.
 - `private var narrationCache: [UUID: String] = [:]`.
 - `private(set) var refreshToken = 0` (`@Published`) — bumped by the refresh path.
 - `func narration(for node: Node, events: [Event]) async -> String?` — returns `narrationCache[node.id]`
@@ -111,36 +114,41 @@ This keeps the trust-sensitive derivation in tested PensieveKit; the app view st
   Spotlight reindex uses; verified against `AppModel`.)
 
 **`DetailView`** — a "Last Work Done" section above Recent Activity:
-- New `@State private var lastWorkDone: String?` and `@State private var isNarrating = false`.
+- New `@State`: `lastWorkDone: String?`, `isNarrating = false`, and `loadedNodeID: UUID?` (tracks
+  which node the current prose belongs to).
 - Change the load to `.task(id: DetailLoadKey(nodeID: node.id, token: model.refreshToken))` (a tiny
   `Hashable` struct) so the open node reloads its events **and** re-narrates after ⌘R — fixing a
-  latent gap (today the open detail view doesn't refresh on ⌘R). `DetailView` is reused across
-  selections (SwiftUI swaps `node`, keeping one instance and its `@State`), so the task body MUST
-  handle the handoff carefully:
+  latent gap (today the open detail view doesn't refresh on ⌘R). `DetailView` is **reused** across
+  selections (confirmed: `RootView` keeps one instance and swaps `node`, so `@State` persists), so
+  the task body must be written exactly as below — the state-machine details are load-bearing:
 
   ```
   .task(id: DetailLoadKey(node.id, model.refreshToken)) {
-    // Reset FIRST so node B never shows node A's prose while B narrates (#1).
-    lastWorkDone = nil
+    // Reset prose ONLY when the node changed — so switching nodes never shows the previous node's
+    // prose, but a same-node ⌘R re-narrate keeps the old recap visible until the new one lands
+    // (no prose→spinner→prose flash).
+    if loadedNodeID != node.id { lastWorkDone = nil }
+    loadedNodeID = node.id
+    isNarrating = false                     // reset on EVERY entry (never leak `true` across handoff)
     let d = model.detail(for: node)
     recentEvents = d.status.recentEvents
     looseEnds = d.looseEnds
-    // Instant on a cache hit — no spinner flicker (#8b).
-    if let cached = model.cachedNarration(for: node) { lastWorkDone = cached; return }
+    if let cached = model.cachedNarration(for: node) { lastWorkDone = cached; return } // instant, isNarrating already false
     isNarrating = true
     let prose = await model.narration(for: node, events: recentEvents)
-    // Guard against a superseded task's late result poisoning the current node (#2): when the
-    // selection changed, SwiftUI cancelled this task, but the await still resumed.
+    // A superseded task (selection changed) was cancelled but its await still resumed — do NOT
+    // write, and do NOT touch isNarrating (the new task owns it; a `defer` here would clobber it).
     guard !Task.isCancelled else { return }
     lastWorkDone = prose
     isNarrating = false
   }
   ```
-- Render: a `LAST WORK DONE` section that shows a small inline `ProgressView` while `isNarrating`,
-  the prose once `lastWorkDone != nil`, and **is omitted entirely** when narration finished `nil`
-  (honest degradation). Recent Activity stays exactly as-is below it. *(Optional, not required: a
-  subtle "recap" caption on the section so the prose never reads as authoritative cited text; the
-  grounded loose ends sit below it. Single-user, low stakes — a plan-time touch at most.)*
+- Render — **prose-first precedence** (pinned, load-bearing): `if let lastWorkDone { prose } else if
+  isNarrating { small inline ProgressView }` else the section is **omitted entirely** (honest
+  degradation). Prose-first guarantees a ready recap always wins over a stale/in-flight flag. Recent
+  Activity stays exactly as-is below it. *(Optional, not required: a subtle "recap" caption so the
+  prose never reads as authoritative cited text; the grounded loose ends sit below it. Single-user,
+  low stakes — a plan-time touch at most.)*
 
 ### Data flow
 
