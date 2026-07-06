@@ -4,7 +4,8 @@ import SQLiteData   // re-exports GRDB symbols (DatabasePool, Configuration, Dat
 
 public func openCanonicalDatabase(at url: URL) throws -> any DatabaseWriter {
   try PensievePaths.ensureParentDirectory(of: url)
-  let configuration = Configuration()
+  var configuration = Configuration()
+  configuration.busyMode = .timeout(5)   // wait, don't throw SQLITE_BUSY, under writer contention
   let db = try DatabasePool(path: url.path, configuration: configuration)  // WAL, multi-process
   try migrateCanonical(db)
   return db
