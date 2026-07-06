@@ -105,6 +105,7 @@ final class AppModel: ObservableObject {
       _ = try? await Ingester(spool: spool, db: db).drain()   // no LLM: spool → events only
     }
     refresh()
+    await SpotlightIndexer.reindex()   // launch + ⌘R only (not the 3 s timer, which calls refresh() directly)
   }
 
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
