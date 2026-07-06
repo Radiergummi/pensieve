@@ -65,8 +65,10 @@ public struct ProjectContext: Sendable {
   }
 
   private static func jsonNameDesc(_ url: URL) -> String? {
-    guard let data = try? Data(contentsOf: url),
-          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+    guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+    defer { try? handle.close() }
+    let data = (try? handle.read(upToCount: 65_536)) ?? Data()   // bound memory; a >64KB manifest is pathological
+    guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
     return joinNameDesc(obj["name"] as? String, obj["description"] as? String)
   }
 
@@ -98,8 +100,14 @@ public struct ProjectContext: Sendable {
     guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
     defer { try? handle.close() }
     let data = (try? handle.read(upToCount: maxBytes)) ?? Data()
-    guard !data.isEmpty, let s = String(data: data, encoding: .utf8) else { return nil }
-    let joined = s.split(separator: "\n", omittingEmptySubsequences: false).prefix(maxLines).joined(separator: "\n")
+    guard !data.isEmpty else { return nil }
+    // If we truncated at exactly maxBytes, a multi-byte character may straddle the cut — drop up
+    // to 3 trailing bytes to recover valid text. A short read that still won't decode is binary.
+    let decoded: String? = data.count == maxBytes
+      ? (0...3).lazy.compactMap { String(data: data.dropLast($0), encoding: .utf8) }.first
+      : String(data: data, encoding: .utf8)
+    guard let text = decoded else { return nil }
+    let joined = text.split(separator: "\n", omittingEmptySubsequences: false).prefix(maxLines).joined(separator: "\n")
     let trimmed = joined.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
   }

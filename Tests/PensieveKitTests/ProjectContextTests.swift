@@ -63,6 +63,15 @@ private func write(_ text: String, to url: URL) throws {
   #expect(ctx.readmeHead == nil)     // only README / README.md / README.txt are read
 }
 
+@Test func gatherRecoversReadmeTruncatedMidMultibyteCharacter() throws {
+  let (repo, _) = try makeCommittedRepo()
+  let body = String(repeating: "a", count: 1023) + "—— tail"   // cut at 1024 bytes lands inside the em dash
+  try write(body, to: repo.appendingPathComponent("README.md"))
+  let ctx = ProjectContext.gather(commonDir: Git.commonDir(in: repo.path)!)
+  #expect(ctx.readmeHead != nil)
+  #expect(ctx.readmeHead?.hasPrefix("aaa") == true)
+}
+
 @Test func namePromptIncludesOnlyPresentSignals() {
   let ctx = ProjectContext(dirName: "laravel-rls", gitRemote: "https://x/laravel-rls.git",
                            readmeHead: nil, claudeMdHead: nil, manifest: "acme/laravel-rls — RLS package")
