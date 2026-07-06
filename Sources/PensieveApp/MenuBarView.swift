@@ -40,7 +40,7 @@ struct MenuBarView: View {
     }
     .padding(12)
     .frame(width: 300)
-    .task { model.refresh() }   // fresh on open (the 3 s Timer is suppressed while the menu is up)
+    .task { model.refresh() }   // refresh on open so the glance is current even between 3 s Timer ticks
   }
 
   @ViewBuilder private var heartbeat: some View {
