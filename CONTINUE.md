@@ -4,27 +4,48 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **merged to `main`** (`a74af56`) and the tree is **clean**. Test suite: **144 tests**, run
-with `./scripts/test.sh` (now a thin `swift test` passthrough; plain `swift test` works too). Capture → ingest → **auto-extract**
-runs unattended (sync daemon).
+Everything below is **on `main`** (HEAD `cf51692`) and the tree is clean **except** one pre-existing uncommitted
+change in `Sources/PensieveKit/Capture/CapturePayloads.swift` (`.sortedKeys` on `encodeJSON` + a `decodeJSON`
+helper) that belongs to the parallel **project-name-inference** work — **not** slice 3b; left untouched. Test
+suite: **173 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest →
+**auto-extract** runs unattended (sync daemon). *(Note: slice 3b was built directly on `main` at the user's
+direction because the parallel session had finished; both efforts' commits interleave cleanly on `main`.)*
 
-**Latest (this session): three-pane slice 3a — LLM "Last Work Done" narration — DONE & merged.** The app's
-**first LLM call**. `DetailView` shows a grounded prose recap above Loose Ends, generated **on-device**
-(`makeDefaultLLMProvider()`), automatic-on-open + progressive (spinner→prose), session-cached (⌘R re-narrates).
-The trust-sensitive boundary is a tested PensieveKit `SummaryBuilder.narrate(project:events:) → String?` that
-returns **nil** — never a facts-dump — on no-events/provider-failure/empty; narration is best-effort, **outside
-the strict cited trust gate** (like strand naming), while loose ends stay cited. `SummaryBuilder` is now
-`Sendable` so the `@MainActor` app awaits it **off-main**. The `.task` state machine (reset-on-node-change,
-`isNarrating` reset every entry, `Task.isCancelled` guard, **prose-first render gated on `loadedNodeID ==
-node.id`**) prevents stale/wrong-node prose. Built subagent-driven; **two independent adversarial spec reviews**
-(caught a wrong-node trust bug + a Swift-6 `Sendable` blocker pre-code) **+ an Opus whole-branch review** (one
-Important one-frame stale-render window → fixed). **150 tests.** Rest of slice 3 (**3b**: `ValueObservation`
-liveness, ⌘⌥I inspector, window/materials polish) deferred. Spec/plan:
+**Latest (this session): three-pane slice 3b — liveness · inspector · recall windows — DONE & on `main`.** Four
+parts, subagent-driven, review-clean. **(1) `ProvenanceContext` kernel** (tested PensieveKit, read-only): loose
+end → source `cc.session` event → **surrounding transcript context**, with a two-part guard (`isUserPrompt`
+**and** the cited message still contains the stored `quote`) so a stale/compacted index never highlights the
+wrong message; degrades honestly (`transcriptAvailable == false` → stored quote + accurate note, never a
+fabrication). **(2) ⌘⌥I inspector**: `.inspector` panel (cited highlighted, machine-envelope messages dimmed);
+`DetailView` gained `allowsInspector: Bool` gating the shared `AppModel.inspectedLooseEndID` write, which clears
+on `selectedNodeID` change — together they prevent cross-window contamination. **(3) Recall
+`WindowGroup(for: UUID.self)`** (⌘⌥N): focused single-node window reusing `DetailView(allowsInspector: false)`,
+**strictly additive** so the `pensieve://`/App-Intents deep-link bridge is untouched; + a `SmartListKind.color`
+sidebar polish. **(4) Liveness**: retired the 3 s `Timer` for `ValueObservation` + two directory `FSEventStream`
+watches (spool + canonical, incl. `-wal`) coalesced via a tested actor `Debouncer` (~150 ms), app-lifetime;
+canonical busy `.timeout`; Spotlight reindex on the debounced refresh. Reviews: **two adversarial spec reviews**
+(spool-`-wal` watch, app-lifetime teardown, `isUserPrompt` guard, shared-state fix, `ValueObservation`
+redundancy) **+ per-task reviews** (caught InspectorView stale-render race + flaky timing tests → deterministic
+injectable-sleep `Debouncer` tests) **+ Opus whole-branch review** (READY-TO-MERGE, 0 Critical/Important; traced
+the self-drain echo → converges). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-06-three-pane-slice3b-liveness-inspector-windowing*`.
+- **Human-verify carries** (need the built app; can't be asserted headlessly): select a loose end → ⌘⌥I shows the
+  surrounding transcript (cited highlighted, non-user dimmed), and a loose end whose transcript is gone shows the
+  honest fallback caption; ⌘⌥N opens a recall window on the selected node, a loose-end tap there does **not** move
+  the main inspector, a 2nd recall window keeps its own node; a new commit/session appears **without ⌘R** and the
+  menu-bar glyph updates on real activity; and **eyeball idle CPU / `sync.log`** for a few seconds after activity
+  settles to confirm the app is quiet (self-drain echo is bounded but has no unit test). Build: `xcodegen generate
+  && xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -derivedDataPath ./.build-xcode
+  build`, then `open ./.build-xcode/Build/Products/Debug/Pensieve.app`.
+- **Deferred Minors** (from reviews, none blocking): the `.inspector` content closure calls `model.detail(for:)`
+  inline (re-runs on RootView body eval while shown — mildly amplified by liveness); `RecallWindowView` looks up
+  `model.node(nodeID)` twice per body eval; `DirectoryWatcher` uses `Unmanaged.passUnretained` + `deinit`-only
+  teardown (safe only because watchers are app-lifetime). ⌘⌥N reads the *main* window's selection.
+
+**Prior this session: three-pane slice 3a — LLM "Last Work Done" narration — DONE & merged.** The app's **first
+LLM call**: `DetailView` shows a grounded on-device prose recap above Loose Ends (`SummaryBuilder.narrate → nil`
+on no-events/failure — best-effort, outside the cited trust gate). Spec/plan:
 `docs/superpowers/{specs,plans}/2026-07-06-three-pane-slice3a-last-work-done*`.
-- **Human-verify carry:** open a real project with activity → a 2–3 sentence recap appears above Loose Ends
-  (spinner→prose); switch projects mid-load → the new one never shows the old recap; re-open → instant (cached);
-  ⌘R → re-narrates; a no-activity node → **no** section. *(Optional deferred touch: a subtle "recap" caption so
-  the prose never reads as cited fact — the design left it optional; opt in during 3b if wanted.)*
 - **Earlier this session (also merged): App Intents foundation + Spotlight (v0.3)** — `NodeEntity`
   (`AppEntity`+`IndexedEntity`) → Spotlight content + Siri/Shortcuts/Spotlight actions; on-device, in-process,
   reuses the `pensieve://` bridge; target bumped 14→15 for `IndexedEntity`. Its human OS-integration checks
@@ -74,10 +95,11 @@ unchanged — no reinstall needed.
 
 **Two live tracks — pick per appetite** (each its own brainstorm→spec→plan):
 
-**Track A — the three-pane app** (the product spine). Slice 3a (LLM narration) just shipped. **Next: slice 3b**
-— ⌘⌥I provenance inspector + `ValueObservation` liveness (retire the 3 s `Timer`; also enables live/background
-Spotlight re-indexing) + window/materials polish. Then slice 4 (organizing writes), 5 (talk-to-system), 6
-(forks, backend-gated). Design: `specs/2026-07-05-pensieve-app-three-pane-design.md`.
+**Track A — the three-pane app** (the product spine). Slices 3a (LLM narration) **and 3b (liveness · inspector ·
+recall windows) just shipped. Next: slice 4 (in-app organizing writes** — create/`nest`/`group`/`rename`/`retype`
+via existing PensieveKit ops, with the walk-to-root cycle guard). Then 5 (talk-to-system), 6 (forks,
+backend-gated). Design: `specs/2026-07-05-pensieve-app-three-pane-design.md`. *(Live/background Spotlight
+re-indexing that slice 3 promised now rides the slice-3b liveness `refresh` debounce — done.)*
 
 **Track B — the next OS-integration surface.** The bundle foundation, `pensieve://`, the menu-bar item, **and
 the App Intents foundation + Spotlight** are done; the App-Intents entity/intent model is **live** as the
