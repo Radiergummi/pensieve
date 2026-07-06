@@ -1,12 +1,27 @@
-# CONTINUE — session handoff (2026-07-05)
+# CONTINUE — session handoff (2026-07-06)
 
 Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (project rules), then this.
 
 ## Where things stand
 
-Everything below is **merged to `main`** (`8fec3c0`) and the tree is **clean**. Test suite: **138 tests**, run
+Everything below is **merged to `main`** (`a74af56`) and the tree is **clean**. Test suite: **144 tests**, run
 with `./scripts/test.sh` (now a thin `swift test` passthrough; plain `swift test` works too). Capture → ingest → **auto-extract**
 runs unattended (sync daemon).
+
+**Latest (this session): Menu-bar item + `pensieve://` deep links (v0.2) — DONE & merged.** The first
+OS-integration surface: a `MenuBarExtra` `.window` popover in the *same* app (capture heartbeat over
+`MonitorSnapshot` + top-5 What's Next over `SmartLists`; status by glyph shape; click-to-jump), plus a
+tested `DeepLink` router (`Sources/PensieveKit/Support/DeepLink.swift`) for the registered `pensieve://`
+scheme. Internal clicks navigate **in-process** via `applyDeepLink`; external `pensieve://` opens go through an
+`NSApplicationDelegateAdaptor` → `pendingDeepLink` → the always-mounted `MenuBarExtra` label's `.onChange` →
+the existing `PaletteDestination.apply(to:)`. Scheme registered via an **XcodeGen-managed Info.plist**
+(`GENERATE_INFOPLIST_FILE` off; version/icon/name keys re-declared, verified by plist diff). **Additive only**
+(dock + Window untouched). Spec/plan: `docs/superpowers/{specs,plans}/2026-07-06-menu-bar-deeplinks*`.
+- **Two carries for whoever's next:** (1) a quick **pending-human visual check** — build the app and eyeball
+  that the popover renders (heartbeat + What's Next) and a row-click jumps into the window; I proved C1 (an
+  external `pensieve://` fronts the app) but the crowded-desktop + accessibility limits here blocked a clean
+  click-through screenshot. (2) Launch Services currently points `pensieve://` at a removed worktree build
+  path — a fresh `xcodegen generate && xcodebuild …` from `main` re-registers it at the real path.
 
 Shipped and merged (all on `main`):
 - **Phase 1A / 1B / 1B-org** — capture→ingest→query, the intelligence layer (grounded, cited loose ends;
@@ -41,20 +56,22 @@ unchanged — no reinstall needed.
 
 ## THE NEXT ACTION (start here)
 
-**The first OS-integration surface(s)** — the Xcode/bundle foundation is **done** (the app is a real
-`Pensieve.app`; Xcode adoption + PensieveKit-as-a-local-SPM-package landed; menu title fixed via `CFBundleName`;
-bundled `.icon` via `actool`). Remaining surfaces, each its own spec, roughly in tooling-cost order:
-- **menu-bar item** (`LSUIElement`) → **Spotlight** (Core Spotlight) → **Siri/Shortcuts** (App Intents,
-  Xcode-gated) → **Widgets** (WidgetKit extension, Xcode-gated) → **CloudKit** (entitlements + paid Developer
-  membership).
+**The next OS-integration surface** — the bundle foundation **and** the first surface (menu-bar item +
+`pensieve://`) are now **done**; the `pensieve://` scheme is **live** as the entry point every later surface
+links back through. Remaining surfaces, each its own spec, roughly in tooling-cost order:
+- **Spotlight** (Core Spotlight) → **App Intents skeleton** (one build lights up Siri + Shortcuts + Spotlight
+  actions + Focus filters) → **Widgets** (WidgetKit extension, Xcode-gated) → **CloudKit** (entitlements + paid
+  Developer membership). *Recommendation:* Spotlight or the App Intents skeleton next — both extend the grounded
+  glance and reuse `pensieve://` for jump-in. Widgets/CloudKit also want **App Groups / a shared container** (so
+  an extension process reads one store) — build that with the first surface that needs a second process.
 
-Tooling tiers to carry into the first surface spec: menu-bar/Spotlight = Command-Line-Tools-friendly;
-Siri/Widgets/CloudKit = hard Xcode gates.
+Tooling tiers to carry into the next surface spec: Spotlight = Command-Line-Tools-friendly;
+App-Intents/Widgets/CloudKit = hard Xcode gates.
 
 > **The durable index of *all* pending work** (every pillar needing brainstorm→spec→plan, plus the parked
 > depth-features and forward ideas with their revisit triggers) lives in **`docs/superpowers/backlog.md`**
 > ("Roadmap" + the deferred ledger). This CONTINUE file is the per-session handoff; the backlog is the
-> long-term list. Kept current as of 2026-07-06 (GUI base-state + Xcode adoption shipped).
+> long-term list. Kept current as of 2026-07-06 (menu-bar item + `pensieve://` shipped).
 
 **Also queued (three-pane app slices 3–6, per `specs/2026-07-05-pensieve-app-three-pane-design.md`):**
 - **3 — inspector + polish:** ⌘⌥I provenance inspector; **LLM "Last Work Done" narration** (via `SummaryBuilder`,

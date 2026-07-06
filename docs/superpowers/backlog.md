@@ -23,10 +23,11 @@ Capture → ingest → grounded/cited loose ends → `next`/`digest` (1A + 1B); 
 strands (1B-org); source discovery (`scan`); the launchd auto-flow sync daemon; the v0.1
 heartbeat window; **the three-pane `Pensieve.app` slices 1–2** (read-only core + Briefing home +
 ⌘K palette — see pillar #2); the **GUI base-state** (SwiftUI `App` lifecycle, standard menu bar,
-⌘K/⌘R `.commands`); and **Xcode adoption** (a real `Pensieve.app` bundle built by XcodeGen with
-PensieveKit as a local SwiftPM package, ad-hoc signed, bundled `icons/Pensieve.icon` via `actool`
-— see pillar #1). **The make-or-break intelligence gate passed.** Dogfooding is on. This is the
-hard part, done.
+⌘K/⌘R `.commands`); **Xcode adoption** (a real `Pensieve.app` bundle built by XcodeGen with
+PensieveKit as a local SwiftPM package, ad-hoc signed, bundled `icons/Pensieve.icon` via `actool`);
+and the **menu-bar item + `pensieve://` deep links (v0.2)** (a `MenuBarExtra` popover glance + a
+tested `DeepLink` router; the `pensieve://` scheme is now **live** — see pillar #1). **The make-or-break
+intelligence gate passed.** Dogfooding is on. This is the hard part, done.
 
 ### Pending pillars (sequenced; each is a brainstorm → spec → plan item unless noted)
 
@@ -35,10 +36,13 @@ brainstorm→spec→plan cycle (the loop in `CONTINUE.md` → "How we work here"
 sections after the first `---` hold the parked depth-features + forward ideas, each with a revisit
 trigger. Order is a recommendation, not a commitment.
 
-1. **Menu-bar item / `LSUIElement` (v0.2)** — *near-term, small.* The real `.app` bundle **and** the
-   Xcode.app-vs-CLT decision are now **DONE** (see Shipped — Xcode 26.6 adopted, XcodeGen bundle,
-   `actool` icon). What remains: a menu-bar status item (a readout over the shared `MonitorSnapshot`
-   kernel) and an optional `LSUIElement` toggle to hide the dock icon. Now unblocked; its own spec.
+1. **Menu-bar item / `LSUIElement` (v0.2)** — ✅ **menu-bar item DONE** (merged 2026-07-06); **`LSUIElement`
+   hide-dock toggle deferred.** Shipped: a `MenuBarExtra` `.window` popover (heartbeat over `MonitorSnapshot`
+   + top-5 What's Next over `SmartLists`; status by glyph shape; click-to-jump) in the *same* app, plus the
+   minimal, tested `pensieve://` `DeepLink` router as its first consumer. Spec/plan:
+   `{specs,plans}/2026-07-06-menu-bar-deeplinks*`. **What remains (deferred → ledger below):** the optional
+   `LSUIElement`/hide-dock toggle (needs a Settings surface); a menu-bar icon count badge; a Dormant/Recently-
+   Active peek in the popover.
 
 2. **The three-pane `Pensieve.app` (Phase 3) — THE product.** *The spine; specced + underway.* Design:
    `specs/2026-07-05-pensieve-app-three-pane-design.md` (a 6-slice build sequence). Sidebar smart-lists /
@@ -111,7 +115,7 @@ availability + deployment-target floors at each surface's spec time.
 5. **Big, deferred, on-ramp preserved:** CloudKit (pillar #4) → iOS / Watch companion.
 
 **A — Glance / ambient (surface state, read-only)**
-- **Menu-bar item** (`MenuBarExtra`) — *small; strong.* Active project, what's-next count, mini digest. **= pillar #1.**
+- **Menu-bar item** (`MenuBarExtra`) — ✅ **DONE (v0.2, 2026-07-06).** Heartbeat + top-5 What's Next popover + click-to-jump. **= pillar #1.**
 - **Desktop / Notification-Center widgets** (WidgetKit) — *small–medium; strong.* "What's Next" / "Dormant" as a glance. Part of pillar #5.
 - **Control Center controls** (`ControlWidget`, macOS 15+) — *small; medium.* "Open briefing" / "Refresh" button; rides on WidgetKit.
 - **Spotlight indexing** (Core Spotlight `CSSearchableItem`) — *medium; strong.* Projects/strands/loose-ends searchable + jump-in. Part of pillar #5.
@@ -124,7 +128,7 @@ availability + deployment-target floors at each surface's spec time.
 - **Spotlight actions** (App Intents in Spotlight, expanded in macOS 26) — *small atop App Intents; good.* Run actions by typing.
 - **Focus filters** (`SetFocusFilterIntent`) — *small; good, very on-brand.* "Work" Focus → filter to work projects / mute personal nudges.
 - **Services menu** (`NSServices`) — *small; medium.* Select text anywhere → create a strand.
-- **URL scheme / deep links** (`pensieve://`) — *tiny; strong, foundational.* Every surface links back in; build early.
+- **URL scheme / deep links** (`pensieve://`) — ✅ **DONE (v0.2, 2026-07-06).** Registered scheme + tested `DeepLink` router (`briefing`/`node/<uuid>`/`smartlist/<kind>`); menu-bar item is the first consumer. Every later surface links back through it.
 
 **C — Capture sources (feed ingest, not surface)**
 - **FSEvents / DispatchSource** — *small–medium; strong.* Real-time monitoring vs interval polling. **= pillar #6.**
@@ -151,6 +155,42 @@ availability + deployment-target floors at each surface's spec time.
 changes): Writing Tools / Image Playground / Genmoji / Visual Intelligence (content-creation AI); Endpoint
 Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print services / legacy Automator
 (App Intents + Shortcuts subsumes the useful part).
+
+---
+
+## Menu-bar item + `pensieve://` deep links (v0.2) — DONE (2026-07-06)
+
+**Shipped** on `main` (`a74af56`; spec/plan `{specs,plans}/2026-07-06-menu-bar-deeplinks*`). 144 tests,
+subagent-driven with per-task review gates + an Opus whole-branch review + `/simplify`. Delivered: a
+`MenuBarExtra` `.window` popover in the *same* app (heartbeat over `MonitorSnapshot` + top-5 What's Next over
+`SmartLists`; status by glyph shape); a tested `DeepLink` router (`Sources/PensieveKit/Support/DeepLink.swift`)
+for the registered `pensieve://` scheme; internal in-process jump-in + external opens via
+`NSApplicationDelegateAdaptor` → `pendingDeepLink` → always-mounted label `.onChange` →
+`PaletteDestination.apply(to:)`. Scheme registered via an XcodeGen-managed Info.plist. Additive only.
+
+### Deferred out of v0.2 (on the roadmap, not foreclosed)
+
+- **`LSUIElement` / hide-dock toggle** — a "menu-bar only (hide dock icon)" preference that flips
+  `NSApp.setActivationPolicy(.regular ↔ .accessory)`. Deferred because there's **no Settings surface** to host
+  it yet and it's a real behavior change. *Trigger: when a Settings/Preferences window exists (pair with it).*
+- **Menu-bar icon count badge** — a numeric open-loose-ends / what's-next count on the menu-bar glyph itself
+  (kept icon-only for v0.2). *Trigger: if the glance wants an at-rest number without opening the popover.*
+- **Dormant / Recently-Active peek in the popover** — the popover shows What's Next only; the other two smart
+  lists live behind "Open Pensieve." *Trigger: if the menu-bar glance should surface dormancy directly.*
+
+### Small follow-ups / notes (deferred, non-blocking)
+
+- **`DeepLink` parsing is lenient** — accepts a trailing slash (`pensieve://briefing/`) and ignores
+  query/fragment. Only ever *more* permissive on otherwise-valid links; never wrong. *Tighten only if a future
+  external caller needs strictness.*
+- **Simultaneous multi-URL batch opens are last-wins** — `AppDelegate.application(_:open:)` collapses a batch
+  to the final link (a `DeepLink?` buffer). Fine for a single-user tool.
+- **`DeepLink.url` (serialize) has no production consumer yet** — internal clicks pass `DeepLink` values
+  directly; external entry only *parses*. It's the symmetric, test-exercised half of the foundational scheme,
+  kept for future surfaces (Spotlight/widgets/notifications) that will *emit* `pensieve://` links.
+- **Pending-human visual check** — the interactive popover click-through (popover renders; a row-click jumps
+  into the window) was not machine-verified (accessibility-restricted + crowded-desktop here); C1 (external
+  `pensieve://` fronts the app) *was* verified at runtime. A ~10 s eyeball on next build closes it.
 
 ---
 
