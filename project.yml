@@ -1,0 +1,26 @@
+name: Pensieve
+options:
+  bundleIdPrefix: me.mazetti
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  PensieveKit:
+    path: .
+targets:
+  Pensieve:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/PensieveApp
+    dependencies:
+      - package: PensieveKit
+        product: PensieveKit
+    settings:
+      base:
+        PRODUCT_NAME: Pensieve
+        PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve
+        GENERATE_INFOPLIST_FILE: "YES"
+        MARKETING_VERSION: "0.2"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGNING_REQUIRED: "NO"

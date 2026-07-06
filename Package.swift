@@ -7,7 +7,6 @@ let package = Package(
   products: [
     .library(name: "PensieveKit", targets: ["PensieveKit"]),
     .executable(name: "pensieve", targets: ["pensieve"]),
-    .executable(name: "PensieveApp", targets: ["PensieveApp"]),
   ],
   dependencies: [
     .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.6.0"),
@@ -25,11 +24,6 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "SQLiteData", package: "sqlite-data"),
       ]
-    ),
-    .executableTarget(
-      name: "PensieveApp",
-      dependencies: ["PensieveKit"],
-      resources: [.copy("Resources/AppIcon.png")]
     ),
     .testTarget(
       name: "PensieveKitTests",

@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import SwiftUI
 import PensieveKit
@@ -15,37 +14,15 @@ enum Stores {
   }
 }
 
-/// Sets the Dock / ⌘-Tab icon at launch. Pensieve.app is an unbundled SwiftPM executable (no .app
-/// bundle, so no asset-catalog icon yet — that arrives with the v0.2 bundling step). `applicationIconImage`
-/// is the first-party way to set the running app's icon in the meantime; the artwork ships as a
-/// SwiftPM resource loaded via `Bundle.module`.
-final class AppDelegate: NSObject, NSApplicationDelegate {
-  func applicationWillFinishLaunching(_ notification: Notification) {
-    // Unbundled SwiftPM executables have no Info.plist to declare them a regular app, so AppKit
-    // does NOT default to `.regular` — the process runs accessory-style with no Dock icon, no
-    // ⌘-Tab entry, and no menu-bar ownership. The imperative bootstrap set this explicitly before
-    // the App-lifecycle migration; restore it here so Pensieve is a normal foreground app.
-    NSApplication.shared.setActivationPolicy(.regular)
-  }
-
-  func applicationDidFinishLaunching(_ notification: Notification) {
-    NSApplication.shared.activate(ignoringOtherApps: true)
-    if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
-       let image = NSImage(contentsOf: url) {
-      NSApplication.shared.applicationIconImage = image
-    }
-  }
-}
-
 @main
 struct PensieveApp: App {
-  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   // One AppModel for the app's lifetime. Its init reads/writes the lastOpenedAt UserDefault.
   @StateObject private var model = AppModel()
 
   var body: some Scene {
-    // A single unique window — the correct primitive for one main window. Multi-window/tabbing is
-    // slice 3's job; `Window` gives the standard menu bar, ⌘Q, and scene frame restoration for free.
+    // A single unique window — the correct primitive for one main window. `Window` gives the standard
+    // menu bar, ⌘Q, and scene frame restoration for free. A real .app bundle makes the app `.regular`
+    // by default, so no manual activation-policy is needed; the icon comes from the bundled .icon.
     Window("Pensieve", id: "main") {
       RootView(model: model)
         .frame(minWidth: 720, minHeight: 420)
