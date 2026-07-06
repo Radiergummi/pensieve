@@ -47,7 +47,9 @@ struct InspectorView: View {
       context = nil
       guard let le = selected else { return }
       loading = true
-      context = await model.provenance(for: le)
+      let result = await model.provenance(for: le)
+      guard !Task.isCancelled else { return }
+      context = result
       loading = false
     }
   }
