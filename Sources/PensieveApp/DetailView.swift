@@ -28,11 +28,11 @@ struct DetailView: View {
 
         // LAST WORK DONE (LLM narration; prose-first — a ready recap always wins over an in-flight
         // flag — and the section is omitted entirely when there's no genuine narration).
-        if let lastWorkDone {
+        if let lastWorkDone, loadedNodeID == node.id {
           section("Last Work Done") {
             Text(lastWorkDone).font(.body)
           }
-        } else if isNarrating {
+        } else if isNarrating, loadedNodeID == node.id {
           section("Last Work Done") {
             ProgressView().controlSize(.small)
           }
