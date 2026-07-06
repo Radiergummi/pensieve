@@ -203,6 +203,67 @@ public struct Ingester {
     return s.isEmpty ? nil : s
   }
 
+  /// Per-pass cap so a big first run (or a flush-and-reingest) can't stall the sync cycle on N
+  /// sequential model calls. The `nameInferred` marker makes the remainder monotonic across passes.
+  static let nameRefineCap = 20
+
+  /// True when `metadataJSON` already carries the "naming attempted" marker.
+  static func nameInferred(inMetadata json: String) -> Bool {
+    let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
+    return (obj?["nameInferred"] as? Bool) ?? false
+  }
+
+  /// Returns `metadataJSON` with the "naming attempted" marker set, preserving other keys.
+  static func settingNameInferred(in json: String) -> String {
+    var obj = ((try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]) ?? [:]
+    obj["nameInferred"] = true
+    guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])
+    else { return json }
+    return String(decoding: data, as: UTF8.self)
+  }
+
+  /// Best-effort, once-per-node display-name inference for git project nodes. Selects untouched,
+  /// single-`gitRepo` project nodes (name still == verbatim default, not already marked), infers
+  /// a name on-device from local repo signals, and writes it — always stamping the marker so each
+  /// node is attempted exactly once. Non-fatal and outside the trust gate (organizational label),
+  /// exactly like `nameStrand`. A no-op when no provider is configured (e.g. the app's drain).
+  func refineProjectNames() async {
+    guard let llm else { return }
+
+    struct Candidate { let id: UUID; let commonDir: String; let metadataJSON: String }
+    let candidates: [Candidate] = (try? readSync { db -> [Candidate] in
+      let projects = try Node.where { $0.kind.eq("project") }.fetchAll(db)
+      var out: [Candidate] = []
+      for node in projects {
+        if Self.nameInferred(inMetadata: node.metadataJSON) { continue }
+        let gitSources = try Source
+          .where { $0.nodeID.eq(node.id) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
+        guard gitSources.count == 1, let key = gitSources.first?.key else { continue }
+        guard node.name == ProjectResolver.displayName(forKey: key) else { continue }
+        out.append(Candidate(id: node.id, commonDir: key, metadataJSON: node.metadataJSON))
+      }
+      return out
+    }) ?? []
+
+    for candidate in candidates.prefix(Self.nameRefineCap) {
+      let ctx = ProjectContext.gather(commonDir: candidate.commonDir)
+      let raw = try? await llm.complete(prompt: ProjectContext.namePrompt(ctx))
+      let firstLine = raw?.split(separator: "\n", omittingEmptySubsequences: true)
+        .first.map(String.init) ?? ""
+      let name = Self.sanitizeStrandName(firstLine)
+      let newMeta = Self.settingNameInferred(in: candidate.metadataJSON)
+      try? writeSync { db in
+        if let name {
+          try Node.where { $0.id.eq(candidate.id) }
+            .update { $0.name = name; $0.metadataJSON = newMeta }.execute(db)
+        } else {
+          try Node.where { $0.id.eq(candidate.id) }
+            .update { $0.metadataJSON = newMeta }.execute(db)
+        }
+      }
+    }
+  }
+
   /// Names/describes a freshly materialized strand from its accumulated activity. Non-fatal:
   /// any failure leaves the branch-name + empty description. Organizational label, not a
   /// surfaced claim — outside the verbatim gate by design.
