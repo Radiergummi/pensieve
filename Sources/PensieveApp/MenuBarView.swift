@@ -14,9 +14,9 @@ extension MonitorSnapshot.Status {
   }
   var label: String {
     switch self {
-    case .active: return "Active"
-    case .idle: return "Idle"
-    case .notSetUp: return "Not set up"
+    case .active: return String(localized: "Active")
+    case .idle: return String(localized: "Idle")
+    case .notSetUp: return String(localized: "Not set up")
     }
   }
 }
@@ -87,7 +87,7 @@ struct MenuBarView: View {
   private var statusLine: String {
     var s = model.snapshot.status.label
     if let last = model.snapshot.lastCaptureAt {
-      s += " · captured \(Self.relativeAge(last))"
+      s += String(localized: " · captured \(Self.relativeAge(last))")
     }
     return s
   }

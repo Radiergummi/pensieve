@@ -119,7 +119,7 @@ struct DetailView: View {
             .overlay(alignment: .leading) {
               Rectangle().fill(.orange).frame(width: 3)
             }
-          Text("\(view.looseEnd.role.isEmpty ? "captured" : view.looseEnd.role) · \(view.occurredAt, format: .dateTime.year().month().day()) · \(view.ageDays)d ago")
+          Text("\(view.looseEnd.role.isEmpty ? String(localized: "captured") : view.looseEnd.role) · \(view.occurredAt, format: .dateTime.year().month().day()) · \(view.ageDays)d ago")
             .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.leading, 18)
@@ -128,9 +128,9 @@ struct DetailView: View {
     .padding(.vertical, 2)
   }
 
-  @ViewBuilder private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+  @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(title.uppercased()).font(.caption).bold().foregroundStyle(.secondary)
+      Text(String(localized: title).uppercased()).font(.caption).bold().foregroundStyle(.secondary)
       content()
     }
   }

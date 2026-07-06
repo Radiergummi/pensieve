@@ -1,6 +1,10 @@
 name: Pensieve
 options:
   bundleIdPrefix: me.mazetti
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - de
   deploymentTarget:
     macOS: "15.0"
 packages:
@@ -28,6 +32,9 @@ targets:
           - CFBundleURLName: me.mazetti.pensieve
             CFBundleURLSchemes:
               - pensieve
+        CFBundleLocalizations:
+          - en
+          - de
     settings:
       base:
         PRODUCT_NAME: Pensieve
@@ -37,3 +44,4 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_ALLOWED: "YES"
         CODE_SIGNING_REQUIRED: "NO"
+        SWIFT_EMIT_LOC_STRINGS: "YES"

@@ -79,6 +79,10 @@ private struct StatusFooter: View {
     switch snapshot.status { case .active: return .green; case .idle: return .secondary; case .notSetUp: return .orange }
   }
   private var label: String {
-    switch snapshot.status { case .active: return "capturing"; case .idle: return "idle"; case .notSetUp: return "not set up" }
+    switch snapshot.status {
+    case .active: return String(localized: "capturing")
+    case .idle: return String(localized: "idle")
+    case .notSetUp: return String(localized: "not set up")
+    }
   }
 }

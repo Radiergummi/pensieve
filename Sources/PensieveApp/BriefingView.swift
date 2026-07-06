@@ -58,9 +58,9 @@ struct BriefingView: View {
     .buttonStyle(.plain)
   }
 
-  @ViewBuilder private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+  @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(title.uppercased()).font(.caption).bold().foregroundStyle(.secondary)
+      Text(String(localized: title).uppercased()).font(.caption).bold().foregroundStyle(.secondary)
       content()
     }
   }
