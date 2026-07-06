@@ -9,9 +9,9 @@ enum SmartListKind: String, CaseIterable, Hashable {
   case whatsNext, dormant, recentlyActive
   var title: String {
     switch self {
-    case .whatsNext: return "What's Next"
-    case .dormant: return "Dormant"
-    case .recentlyActive: return "Recently Active"
+    case .whatsNext: return String(localized: "What's Next")
+    case .dormant: return String(localized: "Dormant")
+    case .recentlyActive: return String(localized: "Recently Active")
     }
   }
   var symbol: String {
