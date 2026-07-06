@@ -40,5 +40,12 @@ struct PensieveApp: App {
           .keyboardShortcut("r", modifiers: .command)
       }
     }
+
+    MenuBarExtra {
+      MenuBarView(model: model)
+    } label: {
+      Image(systemName: model.snapshot.status.glyph)
+    }
+    .menuBarExtraStyle(.window)
   }
 }
