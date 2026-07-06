@@ -8,19 +8,28 @@ Everything below is **merged to `main`** (`a74af56`) and the tree is **clean**. 
 with `./scripts/test.sh` (now a thin `swift test` passthrough; plain `swift test` works too). Capture → ingest → **auto-extract**
 runs unattended (sync daemon).
 
-**Latest (this session): App Intents foundation + Spotlight (v0.3) — DONE & merged.** The second
-OS-integration surface, and the foundation every later App-Intents surface builds on. One `NodeEntity`
-(`AppEntity` + `IndexedEntity`) lights up **Spotlight content** (nodes searchable → tap opens the recall
-view), a parameterized **Show Pensieve List** intent (What's Next / Dormant / Recently Active) + an **Open
-Node** intent → **Siri + Shortcuts + Spotlight actions** via an `AppShortcutsProvider`. Derivation stays in a
-tested PensieveKit kernel (`NodeFacts`/`NodeFactsQueries`, active-only + by-id, **read-only** via
-`openCanonicalDatabaseReadOnly`); the app-target intents/entity/indexer are thin. Intents run **in-process**,
-so `perform()` reuses the shipped `AppDelegate.receive` → `pendingDeepLink` bridge (no new nav path, **no App
-Group**). `SpotlightIndexer` = **clear-then-index** of active nodes on launch + ⌘R (not the 3 s timer).
-**Deployment target 14 → 15** (for `IndexedEntity`); `Package.swift` stays `.macOS(.v14)` (App-Intents code
-is app-target-only). Built subagent-driven in an isolated worktree; per-task reviews clean; **Opus whole-branch
-review: READY TO MERGE, 0 Critical / 0 Important** (the `NodeFacts`↔`NextQueries` math parity was explicitly
-verified — no divergence). **146 tests.** Spec/plan: `docs/superpowers/{specs,plans}/2026-07-06-app-intents-foundation*`.
+**Latest (this session): three-pane slice 3a — LLM "Last Work Done" narration — DONE & merged.** The app's
+**first LLM call**. `DetailView` shows a grounded prose recap above Loose Ends, generated **on-device**
+(`makeDefaultLLMProvider()`), automatic-on-open + progressive (spinner→prose), session-cached (⌘R re-narrates).
+The trust-sensitive boundary is a tested PensieveKit `SummaryBuilder.narrate(project:events:) → String?` that
+returns **nil** — never a facts-dump — on no-events/provider-failure/empty; narration is best-effort, **outside
+the strict cited trust gate** (like strand naming), while loose ends stay cited. `SummaryBuilder` is now
+`Sendable` so the `@MainActor` app awaits it **off-main**. The `.task` state machine (reset-on-node-change,
+`isNarrating` reset every entry, `Task.isCancelled` guard, **prose-first render gated on `loadedNodeID ==
+node.id`**) prevents stale/wrong-node prose. Built subagent-driven; **two independent adversarial spec reviews**
+(caught a wrong-node trust bug + a Swift-6 `Sendable` blocker pre-code) **+ an Opus whole-branch review** (one
+Important one-frame stale-render window → fixed). **150 tests.** Rest of slice 3 (**3b**: `ValueObservation`
+liveness, ⌘⌥I inspector, window/materials polish) deferred. Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-06-three-pane-slice3a-last-work-done*`.
+- **Human-verify carry:** open a real project with activity → a 2–3 sentence recap appears above Loose Ends
+  (spinner→prose); switch projects mid-load → the new one never shows the old recap; re-open → instant (cached);
+  ⌘R → re-narrates; a no-activity node → **no** section. *(Optional deferred touch: a subtle "recap" caption so
+  the prose never reads as cited fact — the design left it optional; opt in during 3b if wanted.)*
+- **Earlier this session (also merged): App Intents foundation + Spotlight (v0.3)** — `NodeEntity`
+  (`AppEntity`+`IndexedEntity`) → Spotlight content + Siri/Shortcuts/Spotlight actions; on-device, in-process,
+  reuses the `pensieve://` bridge; target bumped 14→15 for `IndexedEntity`. Its human OS-integration checks
+  (real Spotlight hit, Siri phrase, Shortcuts, cold-launch) are still yours to run. Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-06-app-intents-foundation*`.
 - **The one carry for whoever's next — the human OS-integration checks** (can't be asserted headlessly; run
   against the **real** store by a normal `open` of the built app): (1) Spotlight-search a real node's name → tap
   → recall view opens *(also try a word only in its `description` — records whether body matching works on this
@@ -63,9 +72,16 @@ unchanged — no reinstall needed.
 
 ## THE NEXT ACTION (start here)
 
-**The next OS-integration surface** — the bundle foundation, `pensieve://`, the menu-bar item, **and the
-App Intents foundation + Spotlight** are now **done**. The App-Intents entity/intent model is **live** and is
-the foundation every later App-Intents surface builds on. Recommended next, each its own spec:
+**Two live tracks — pick per appetite** (each its own brainstorm→spec→plan):
+
+**Track A — the three-pane app** (the product spine). Slice 3a (LLM narration) just shipped. **Next: slice 3b**
+— ⌘⌥I provenance inspector + `ValueObservation` liveness (retire the 3 s `Timer`; also enables live/background
+Spotlight re-indexing) + window/materials polish. Then slice 4 (organizing writes), 5 (talk-to-system), 6
+(forks, backend-gated). Design: `specs/2026-07-05-pensieve-app-three-pane-design.md`.
+
+**Track B — the next OS-integration surface.** The bundle foundation, `pensieve://`, the menu-bar item, **and
+the App Intents foundation + Spotlight** are done; the App-Intents entity/intent model is **live** as the
+foundation later surfaces build on. Recommended:
 - **Focus filters** (`SetFocusFilterIntent`) — ⭐ **user-flagged high value** (free-time side-project workflow:
   a "Personal" Focus surfacing those strands). Builds **directly** on the App-Intents foundation; deferred out
   of the foundation skeleton because it needs its own filtering model + app-state plumbing. **This is the

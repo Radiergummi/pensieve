@@ -54,9 +54,12 @@ trigger. Order is a recommendation, not a commitment.
    - ✅ **Slice 2 — Briefing home + ⌘K palette** (merged): by-project "since last visit" world map as the
      default landing (`BriefingQueries`; `lastOpenedAt` in UserDefaults); navigation-only command palette.
      Plan: `plans/2026-07-05-pensieve-app-slice2-briefing-palette.md`.
-   - ⏳ **Slice 3 — inspector + polish:** ⌘⌥I provenance inspector (quote + surrounding transcript); window
-     tabbing / open-in-new-window; light/dark + materials; **LLM "Last Work Done" narration** (`SummaryBuilder`,
-     deferred from slice 1); `ValueObservation` liveness (replacing the 3 s `Timer`). *Next up.*
+   - ✅ **Slice 3a — LLM "Last Work Done" narration** (merged 2026-07-06): `DetailView` prose recap via a tested
+     `SummaryBuilder.narrate → String?` (nil-honest, outside the cited gate), on-device, automatic + progressive,
+     ⌘R re-narrates. Spec/plan: `{specs,plans}/2026-07-06-three-pane-slice3a-last-work-done*`.
+   - ⏳ **Slice 3b — inspector + liveness + polish:** ⌘⌥I provenance inspector (quote + surrounding transcript);
+     `ValueObservation` liveness (replacing the 3 s `Timer`; also enables live/background Spotlight re-indexing);
+     window tabbing / open-in-new-window; light/dark + materials. *Next up in the three-pane track.*
    - ⏳ **Slice 4 — in-app organizing writes:** create / `nest` / `group` / `rename` / `retype` via existing
      PensieveKit ops + the cycle guard.
    - ⏳ **Slice 5 — talk-to-system stage 1:** describe a strand → structured create.
