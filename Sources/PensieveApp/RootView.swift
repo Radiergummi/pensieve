@@ -4,6 +4,7 @@ import PensieveKit
 
 struct RootView: View {
   @ObservedObject var model: AppModel
+  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     NavigationSplitView {
@@ -30,6 +31,11 @@ struct RootView: View {
       let ends = model.selectedNodeID.flatMap(model.node).map { model.detail(for: $0).looseEnds } ?? []
       InspectorView(model: model, looseEnds: ends)
         .inspectorColumnWidth(min: 260, ideal: 340, max: 500)
+    }
+    .onChange(of: model.openNodeRequest) { _, id in
+      guard let id else { return }
+      openWindow(id: "recall", value: id)
+      model.openNodeRequest = nil
     }
   }
 }

@@ -20,6 +20,13 @@ enum SmartListKind: String, CaseIterable, Hashable {
     case .recentlyActive: return "dot.radiowaves.left.and.right"
     }
   }
+  var color: Color {
+    switch self {
+    case .whatsNext: return .accentColor
+    case .dormant: return .secondary
+    case .recentlyActive: return .green
+    }
+  }
   /// Which bucket of `SmartLists` this kind selects.
   var itemsKeyPath: KeyPath<SmartLists, [NextItem]> {
     switch self {
@@ -78,6 +85,10 @@ final class AppModel: ObservableObject {
   /// Set by the AppDelegate when an external `pensieve://` URL is opened; observed by the
   /// always-mounted menu-bar label, which applies it and clears it back to nil.
   @Published var pendingDeepLink: DeepLink?
+  /// Set by File ▸ Open in New Window (⌘⌥N); observed by RootView, which opens a recall window
+  /// via its own openWindow environment and clears it. (RootView is a View, so it reliably has
+  /// openWindow; a Commands struct's environment access is less reliable — hence this bridge.)
+  @Published var openNodeRequest: UUID?
   /// "Since when" the Briefing measures movement: the previous launch's timestamp (or 7 days ago on
   /// first run). Fixed for the session so cards don't shift under you while the window is open.
   let briefingSince: Date

@@ -42,6 +42,7 @@ struct SidebarView: View {
       }
     } icon: {
       Image(systemName: kind.symbol)
+        .foregroundStyle(kind.color)
     }
     .tag(SidebarSelection.smartList(kind))
   }

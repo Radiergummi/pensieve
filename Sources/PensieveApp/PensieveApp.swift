@@ -33,6 +33,11 @@ struct PensieveApp: App {
     .windowResizability(.contentMinSize)
     .commands {
       SidebarCommands()   // standard Show/Hide Sidebar (⌃⌘S) in the View menu
+      CommandGroup(after: .newItem) {
+        Button("Open in New Window") { model.openNodeRequest = model.selectedNodeID }
+          .keyboardShortcut("n", modifiers: [.command, .option])
+          .disabled(model.selectedNodeID == nil)
+      }
       CommandMenu("Go") {
         Button("Quick Jump…") { model.showPalette = true }
           .keyboardShortcut("k", modifiers: .command)
@@ -41,6 +46,12 @@ struct PensieveApp: App {
           .keyboardShortcut("r", modifiers: .command)
         Button("Inspector") { model.showInspector.toggle() }
           .keyboardShortcut("i", modifiers: [.command, .option])
+      }
+    }
+
+    WindowGroup("Recall", id: "recall", for: UUID.self) { $nodeID in
+      if let nodeID {
+        RecallWindowView(model: model, nodeID: nodeID)
       }
     }
 
