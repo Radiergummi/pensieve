@@ -8,20 +8,27 @@ Everything below is **merged to `main`** (`a74af56`) and the tree is **clean**. 
 with `./scripts/test.sh` (now a thin `swift test` passthrough; plain `swift test` works too). Capture → ingest → **auto-extract**
 runs unattended (sync daemon).
 
-**Latest (this session): Menu-bar item + `pensieve://` deep links (v0.2) — DONE & merged.** The first
-OS-integration surface: a `MenuBarExtra` `.window` popover in the *same* app (capture heartbeat over
-`MonitorSnapshot` + top-5 What's Next over `SmartLists`; status by glyph shape; click-to-jump), plus a
-tested `DeepLink` router (`Sources/PensieveKit/Support/DeepLink.swift`) for the registered `pensieve://`
-scheme. Internal clicks navigate **in-process** via `applyDeepLink`; external `pensieve://` opens go through an
-`NSApplicationDelegateAdaptor` → `pendingDeepLink` → the always-mounted `MenuBarExtra` label's `.onChange` →
-the existing `PaletteDestination.apply(to:)`. Scheme registered via an **XcodeGen-managed Info.plist**
-(`GENERATE_INFOPLIST_FILE` off; version/icon/name keys re-declared, verified by plist diff). **Additive only**
-(dock + Window untouched). Spec/plan: `docs/superpowers/{specs,plans}/2026-07-06-menu-bar-deeplinks*`.
-- **Two carries for whoever's next:** (1) a quick **pending-human visual check** — build the app and eyeball
-  that the popover renders (heartbeat + What's Next) and a row-click jumps into the window; I proved C1 (an
-  external `pensieve://` fronts the app) but the crowded-desktop + accessibility limits here blocked a clean
-  click-through screenshot. (2) Launch Services currently points `pensieve://` at a removed worktree build
-  path — a fresh `xcodegen generate && xcodebuild …` from `main` re-registers it at the real path.
+**Latest (this session): App Intents foundation + Spotlight (v0.3) — DONE & merged.** The second
+OS-integration surface, and the foundation every later App-Intents surface builds on. One `NodeEntity`
+(`AppEntity` + `IndexedEntity`) lights up **Spotlight content** (nodes searchable → tap opens the recall
+view), a parameterized **Show Pensieve List** intent (What's Next / Dormant / Recently Active) + an **Open
+Node** intent → **Siri + Shortcuts + Spotlight actions** via an `AppShortcutsProvider`. Derivation stays in a
+tested PensieveKit kernel (`NodeFacts`/`NodeFactsQueries`, active-only + by-id, **read-only** via
+`openCanonicalDatabaseReadOnly`); the app-target intents/entity/indexer are thin. Intents run **in-process**,
+so `perform()` reuses the shipped `AppDelegate.receive` → `pendingDeepLink` bridge (no new nav path, **no App
+Group**). `SpotlightIndexer` = **clear-then-index** of active nodes on launch + ⌘R (not the 3 s timer).
+**Deployment target 14 → 15** (for `IndexedEntity`); `Package.swift` stays `.macOS(.v14)` (App-Intents code
+is app-target-only). Built subagent-driven in an isolated worktree; per-task reviews clean; **Opus whole-branch
+review: READY TO MERGE, 0 Critical / 0 Important** (the `NodeFacts`↔`NextQueries` math parity was explicitly
+verified — no divergence). **146 tests.** Spec/plan: `docs/superpowers/{specs,plans}/2026-07-06-app-intents-foundation*`.
+- **The one carry for whoever's next — the human OS-integration checks** (can't be asserted headlessly; run
+  against the **real** store by a normal `open` of the built app): (1) Spotlight-search a real node's name → tap
+  → recall view opens *(also try a word only in its `description` — records whether body matching works on this
+  OS; if not, revisit `.content`→`.text` in `NodeEntity.attributeSet`)*; (2) **cold launch** (app fully quit) →
+  "Show Pensieve List" from Shortcuts → app foregrounds on the right list; (3) Shortcuts app lists both actions;
+  (4) Siri "show my dormant projects in Pensieve"; (5) delete a node → ⌘R → its stale Spotlight entry is gone.
+- **Also still open from v0.2:** eyeball the **menu-bar popover** renders (heartbeat + What's Next) and a
+  row-click jumps in — the crowded-desktop/accessibility limits here blocked a clean click-through screenshot.
 
 Shipped and merged (all on `main`):
 - **Phase 1A / 1B / 1B-org** — capture→ingest→query, the intelligence layer (grounded, cited loose ends;
@@ -56,17 +63,20 @@ unchanged — no reinstall needed.
 
 ## THE NEXT ACTION (start here)
 
-**The next OS-integration surface** — the bundle foundation **and** the first surface (menu-bar item +
-`pensieve://`) are now **done**; the `pensieve://` scheme is **live** as the entry point every later surface
-links back through. Remaining surfaces, each its own spec, roughly in tooling-cost order:
-- **Spotlight** (Core Spotlight) → **App Intents skeleton** (one build lights up Siri + Shortcuts + Spotlight
-  actions + Focus filters) → **Widgets** (WidgetKit extension, Xcode-gated) → **CloudKit** (entitlements + paid
-  Developer membership). *Recommendation:* Spotlight or the App Intents skeleton next — both extend the grounded
-  glance and reuse `pensieve://` for jump-in. Widgets/CloudKit also want **App Groups / a shared container** (so
-  an extension process reads one store) — build that with the first surface that needs a second process.
+**The next OS-integration surface** — the bundle foundation, `pensieve://`, the menu-bar item, **and the
+App Intents foundation + Spotlight** are now **done**. The App-Intents entity/intent model is **live** and is
+the foundation every later App-Intents surface builds on. Recommended next, each its own spec:
+- **Focus filters** (`SetFocusFilterIntent`) — ⭐ **user-flagged high value** (free-time side-project workflow:
+  a "Personal" Focus surfacing those strands). Builds **directly** on the App-Intents foundation; deferred out
+  of the foundation skeleton because it needs its own filtering model + app-state plumbing. **This is the
+  recommended next surface.** → then **Widgets** (WidgetKit extension — the first *second process*, so this is
+  where **App Groups / a shared container** get built) → **CloudKit** (entitlements + paid Developer membership).
+- **Deeper Spotlight (roadmap):** index loose-end text; **semantic / vector search** (evaluate `sqlite-vec`,
+  on-device embeddings `NLContextualEmbedding` / Foundation Models SDK, native Spotlight semantic indexing);
+  live/background re-indexing (folds into three-pane slice 3's `ValueObservation` liveness).
 
-Tooling tiers to carry into the next surface spec: Spotlight = Command-Line-Tools-friendly;
-App-Intents/Widgets/CloudKit = hard Xcode gates.
+Tooling tiers: Focus-filters/Widgets/CloudKit = hard Xcode gates (already adopted). The App-Intents +
+Core-Spotlight APIs used here compiled **verbatim** against the SDK — the spec's framework claims held.
 
 > **The durable index of *all* pending work** (every pillar needing brainstorm→spec→plan, plus the parked
 > depth-features and forward ideas with their revisit triggers) lives in **`docs/superpowers/backlog.md`**
