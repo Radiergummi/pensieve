@@ -5,7 +5,7 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 ## Where things stand
 
 Everything below is **merged to `main`** (`8fec3c0`) and the tree is **clean**. Test suite: **138 tests**, run
-with `./scripts/test.sh` (NOT `swift test` — see the Xcode note below). Capture → ingest → **auto-extract**
+with `./scripts/test.sh` (now a thin `swift test` passthrough; plain `swift test` works too). Capture → ingest → **auto-extract**
 runs unattended (sync daemon).
 
 Shipped and merged (all on `main`):
@@ -41,20 +41,15 @@ unchanged — no reinstall needed.
 
 ## THE NEXT ACTION (start here)
 
-**The first OS-integration surface(s)** — the Xcode/bundle foundation is in place. Scope to settle:
-- Real **`.app` bundle** — fixes the app-menu title (currently shows the process name **"PensieveApp"**, wants
-  `CFBundleName` = "Pensieve"), ships the **bundled `.icon`** (replacing the runtime `applicationIconImage`
-  stopgap), enables `LSUIElement`/menu-bar.
-- **Adopt an Xcode app project that consumes PensieveKit as an SPM package** — the key architectural call so
-  Xcode wraps only the shells (app bundle, extensions, entitlements, App Intents) while the tested core
-  (PensieveKit, 138 tests, `./scripts/test.sh`) stays a clean package. Decide this first.
-- Then the surfaces, roughly in tooling-cost order: **menu-bar item** (CLT-friendly) → **Spotlight** (Core
-  Spotlight) → **Siri/Shortcuts** (App Intents, Xcode-gated) → **Widgets** (WidgetKit extension, Xcode-gated)
-  → **CloudKit** (entitlements + paid Developer membership).
+**The first OS-integration surface(s)** — the Xcode/bundle foundation is **done** (the app is a real
+`Pensieve.app`; Xcode adoption + PensieveKit-as-a-local-SPM-package landed; menu title fixed via `CFBundleName`;
+bundled `.icon` via `actool`). Remaining surfaces, each its own spec, roughly in tooling-cost order:
+- **menu-bar item** (`LSUIElement`) → **Spotlight** (Core Spotlight) → **Siri/Shortcuts** (App Intents,
+  Xcode-gated) → **Widgets** (WidgetKit extension, Xcode-gated) → **CloudKit** (entitlements + paid Developer
+  membership).
 
-The **backlog note on the Xcode/surfaces tooling map was deliberately deferred to this brainstorm** (user's
-call) — fold it into the new spec. The tooling tiers: menu-bar/static-icon/Spotlight = Command-Line-Tools-
-friendly; Siri/Widgets/CloudKit = hard Xcode gates.
+Tooling tiers to carry into the first surface spec: menu-bar/Spotlight = Command-Line-Tools-friendly;
+Siri/Widgets/CloudKit = hard Xcode gates.
 
 **Also queued (three-pane app slices 3–6, per `specs/2026-07-05-pensieve-app-three-pane-design.md`):**
 - **3 — inspector + polish:** ⌘⌥I provenance inspector; **LLM "Last Work Done" narration** (via `SummaryBuilder`,
@@ -119,14 +114,16 @@ Design-first, subagent-driven. The proven loop, per feature:
 **Swift / SwiftUI**
 - Predicates: `.eq(x)` NOT `== x`. Reuse `SourceKind`/`CaptureKind` constants. No shared mutable
   `static ISO8601DateFormatter` (Swift 6).
-- **The app target (`Sources/PensieveApp/`) has no unit tests** — verify with `swift build` + a **non-blocking**
-  smoke-launch (background + `kill`; `swift run` blocks on the run loop). Put derivation logic in tested
+- **The app (`Sources/PensieveApp/`) has no unit tests** — verify with an `xcodebuild` build + a **non-blocking**
+  smoke-launch of the inner binary (`./.build-xcode/Build/Products/Debug/Pensieve.app/Contents/MacOS/Pensieve`,
+  background + `kill`; forward throwaway `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`). Put derivation logic in tested
   PensieveKit; keep views thin.
-- **The app now uses the SwiftUI `App` lifecycle** (single `Window` scene) — NOT the old manual `NSWindow` +
-  `NSHostingController`. The framework handles the titlebar safe-area. **Unbundled executables need
-  `setActivationPolicy(.regular)` in the `AppDelegate`** or there's no Dock/⌘-Tab/menu bar. App icon is set at
-  runtime via `applicationIconImage` until a real bundle exists. Prefer first-party primitives (`.commands`,
-  scene restoration) over hand-rolled equivalents — see the "Platform primitives first" principle in `CLAUDE.md`.
+- **The app is a real `.app` bundle built by XcodeGen + Xcode** (`project.yml` is the source of truth; single
+  SwiftUI `Window` scene). Build: `xcodegen generate` → `xcodebuild -project Pensieve.xcodeproj -scheme Pensieve
+  -configuration Debug -derivedDataPath ./.build-xcode build`. The bundle is `.regular` by default (no
+  `setActivationPolicy` workaround) and its icon is the bundled `icons/Pensieve.icon` compiled by `actool` (no
+  runtime `applicationIconImage`). Prefer first-party primitives (`.commands`, scene restoration) — see the
+  "Platform primitives first" principle in `CLAUDE.md`.
 - Foundation Models (on-device) is the default extractor; `claude -p` is the fallback (no API key).
 
 ## Long-term vision (don't lose this)
