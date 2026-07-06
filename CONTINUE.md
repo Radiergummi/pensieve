@@ -4,12 +4,33 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `cf51692`) and the tree is clean **except** one pre-existing uncommitted
-change in `Sources/PensieveKit/Capture/CapturePayloads.swift` (`.sortedKeys` on `encodeJSON` + a `decodeJSON`
-helper) that belongs to the parallel **project-name-inference** work — **not** slice 3b; left untouched. Test
-suite: **173 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest →
-**auto-extract** runs unattended (sync daemon). *(Note: slice 3b was built directly on `main` at the user's
-direction because the parallel session had finished; both efforts' commits interleave cleanly on `main`.)*
+Everything below is **on `main`** (HEAD `802e215`) and the tree is clean. Test suite: **173 tests**, run with
+`./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
+daemon).
+
+**Latest (this session): Pensieve.app localization (String Catalog + German) — DONE & on `main`.** First-party
+Xcode **String Catalog** (`Sources/PensieveApp/Localizable.xcstrings`, English base + German `de`, 44 keys)
+localizing **all app UI chrome**, impersonal/infinitive German; wired via `project.yml`
+(`options.developmentLanguage`/`knownRegions [en,de]`, `CFBundleLocalizations`, `SWIFT_EMIT_LOC_STRINGS`).
+**Chrome only** — content (node names, quotes, descriptions, event summaries, roles, transcripts) never
+localized; content-mixed frames + proper names ("Pensieve"/"Briefing") stay English-fallback. **Gotcha:**
+`xcodebuild … build` does NOT auto-populate the source `.xcstrings` (IDE-only) — keys were reconciled by hand
+against the Swift literals (`%lld`/`%@`). Subagent-driven (Sonnet implementers/task-reviewers, **Opus**
+whole-branch review = READY-TO-MERGE, 0 findings). **Out of scope / deferred follow-up:** App Intents / Siri /
+Shortcuts phrases + the `pensieve` CLI. **Human-verify carry:** native-speaker in-situ tone pass (open the built
+app under the real macOS German language; e.g. "Moved→Bewegt", "capturing→erfasst" read literally). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-06-app-localization-german*`.
+
+**Next up — three-pane slice 4 (in-app organizing writes): design already brainstormed this session, needs its
+own spec/plan.** Agreed shape: **context menus + inline rename** (New Child / Rename / Change Type ▸ / Move to… /
+Merge into… on tree + middle-list rows; toolbar "+" for a top-level node); **all five ops incl. destructive
+merge** with a confirmation dialog. Two load-bearing PensieveKit changes (with tests): a **write-side walk-to-root
+cycle guard in `NodeCommands.nest`** (currently absent — nesting under a descendant would create a cycle), and
+**fix the latent `ProjectResolver.group` self-cycle bug** (merging a parent into its own child leaves the child
+pointing at itself). App write path: `AppModel` already holds a read/write `db` + one shared model across all
+windows; organizing methods call the ops then `refresh()` explicitly (Node-only writes don't trip the
+Event-count `ValueObservation`); Move/Merge pickers filter out self + descendants (UI-level guard on top of the
+write guard). Single-writer principle untouched (it governs *event ingestion*, not organizing metadata).
 
 **Latest (this session): three-pane slice 3b — liveness · inspector · recall windows — DONE & on `main`.** Four
 parts, subagent-driven, review-clean. **(1) `ProvenanceContext` kernel** (tested PensieveKit, read-only): loose
