@@ -33,7 +33,7 @@ struct InspectorView: View {
             // Honest fallback: the stored verbatim quote + why there's no context.
             Text(le.quote).italic().padding(.leading, 10)
               .overlay(alignment: .leading) { Rectangle().fill(.orange).frame(width: 3) }
-            Text("Source transcript no longer on disk.").font(.caption).foregroundStyle(.secondary)
+            Text("Surrounding context unavailable (transcript changed or removed).").font(.caption).foregroundStyle(.secondary)
           }
         } else {
           ContentUnavailableView("Select a loose end", systemImage: "quote.opening",

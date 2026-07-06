@@ -52,6 +52,8 @@ struct PensieveApp: App {
     WindowGroup("Recall", id: "recall", for: UUID.self) { $nodeID in
       if let nodeID {
         RecallWindowView(model: model, nodeID: nodeID)
+      } else {
+        ContentUnavailableView("No project", systemImage: "questionmark.folder")
       }
     }
 
