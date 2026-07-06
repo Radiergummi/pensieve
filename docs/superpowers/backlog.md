@@ -75,6 +75,7 @@ trigger. Order is a recommendation, not a commitment.
 
 5. **System-integration surfaces** — *medium, each independent.* Widgets / Lock Screen widgets,
    Siri / Shortcuts, Spotlight indexing. Native, glanceable extensions of the digest/next data.
+   Fully enumerated in **Platform extension points (candidate surfaces)** below.
 
 6. **Real-time monitoring (FSEvents)** — *small–medium.* Replace/augment interval polling with
    FSEvents on `~/.claude/projects/**` for instant capture. Pure latency win.
@@ -90,6 +91,66 @@ trigger. Order is a recommendation, not a commitment.
 domain-level recursive rollups, cross-cutting soft references (`node_links`) — which
 forks-as-first-class builds on, statistical theme discovery (`NLEmbedding`), proactive project
 suggestion, and native localization. These deepen existing surfaces rather than standing alone.
+
+### Platform extension points (candidate surfaces) — a menu, not a sequence
+
+The macOS / Apple-ecosystem surfaces Pensieve could hook into long-term. **A candidate menu to draw from,
+not a committed order** — each is its own future brainstorm→spec→plan; several already have pillars above
+(cross-linked). **The north-star caveat applies to every one:** glance/voice surfaces read the shared
+grounded kernel (`MonitorSnapshot` / `next` / `digest`) and never re-derive or fabricate — that is what
+keeps them thin. *Fit* = suitability to Pensieve's nature (grounded glance + light query/organize + capture
++ sync); *cost* is rough. Availability is as of **macOS 26 (Tahoe) / Xcode 26** — confirm exact framework
+availability + deployment-target floors at each surface's spec time.
+
+**Recommended build order (when we start picking these up):**
+1. **Foundational — everything leans on them:** `pensieve://` URL scheme / deep links; App Groups / shared
+   container (so extensions read one store); the **App Intents** skeleton.
+2. **Highest glance-value:** menu-bar item (pillar #1) → widgets → Spotlight indexing → *sparing* notifications.
+3. **Highest leverage per effort:** App Intents — one build lights up Siri + Shortcuts + Spotlight actions + Focus filters.
+4. **New capture signal worth the reach:** FSEvents (pillar #6) → active-context (NSWorkspace, then maybe AX) → EventKit.
+5. **Big, deferred, on-ramp preserved:** CloudKit (pillar #4) → iOS / Watch companion.
+
+**A — Glance / ambient (surface state, read-only)**
+- **Menu-bar item** (`MenuBarExtra`) — *small; strong.* Active project, what's-next count, mini digest. **= pillar #1.**
+- **Desktop / Notification-Center widgets** (WidgetKit) — *small–medium; strong.* "What's Next" / "Dormant" as a glance. Part of pillar #5.
+- **Control Center controls** (`ControlWidget`, macOS 15+) — *small; medium.* "Open briefing" / "Refresh" button; rides on WidgetKit.
+- **Spotlight indexing** (Core Spotlight `CSSearchableItem`) — *medium; strong.* Projects/strands/loose-ends searchable + jump-in. Part of pillar #5.
+- **Notifications** (UserNotifications) — *small–medium; strong but sparing.* Grounded nudges (left-open, briefing-ready, dormant); noise risk → rare + cited.
+- **Dock tile** — *tiny; marginal.* Open-loose-ends badge + a recent-projects dock menu.
+
+**B — Intents & automation (hub: App Intents — build once, light up all)**
+- **Siri / Apple Intelligence** — *medium, Xcode-gated; strong.* Grounded Q&A + describe→create strand. Part of pillar #5.
+- **Shortcuts** — *medium; strong.* User-composable automations over the same intents.
+- **Spotlight actions** (App Intents in Spotlight, expanded in macOS 26) — *small atop App Intents; good.* Run actions by typing.
+- **Focus filters** (`SetFocusFilterIntent`) — *small; good, very on-brand.* "Work" Focus → filter to work projects / mute personal nudges.
+- **Services menu** (`NSServices`) — *small; medium.* Select text anywhere → create a strand.
+- **URL scheme / deep links** (`pensieve://`) — *tiny; strong, foundational.* Every surface links back in; build early.
+
+**C — Capture sources (feed ingest, not surface)**
+- **FSEvents / DispatchSource** — *small–medium; strong.* Real-time monitoring vs interval polling. **= pillar #6.**
+- **NSWorkspace active-app notifications** — *small; good.* Lightweight "what am I working on now" (frontmost bundle).
+- **Accessibility API (`AXUIElement`)** — *medium; medium, privacy-sensitive.* Frontmost window title / browser URL; permission-heavy — gate carefully.
+- **EventKit (Calendar / Reminders)** — *medium; medium.* Meetings/reminders as strand context — a genuinely new signal.
+- **Safari App / browser extension** — *large; medium.* Web research as a source. Part of pillar #7 ("browser work").
+- **FinderSync extension** — *medium; medium.* Right-click a repo → "Track in Pensieve" / status badge; a source-discovery on-ramp.
+- **Mail / Messages / Notion / Entra / clipboard** — *large; later.* More non-code sources → the deferred per-kind ingestion handler. Part of pillar #7.
+
+**D — Sync & cross-device**
+- **CloudKit sync** (SQLiteData `SyncEngine`) — *large; strong.* **= pillar #4.**
+- **iOS / iPadOS companion** — *large; strong.* Digest/next on the phone (widgets, Live Activities). Part of pillar #4.
+- **Apple Watch complication** — *medium; marginal-but-delightful.* What's-next glance; rides on the iOS companion.
+- **Handoff / Continuity** — *small; marginal.* Hand off "reviewing project X" Mac↔iPhone.
+- **Live Activities** (iOS; surface in the Mac menu bar via Continuity) — *medium; marginal for a Mac-first tool.* "Capture in progress"; more compelling once the iOS companion exists.
+
+**E — Packaging / background / plumbing**
+- **SMAppService** — *medium; good, partly superseded.* Modern packaged login-item / agent. **= pillar #3.**
+- **App Groups / shared container** — *small; foundational.* One store shared by app + widgets + extensions + Siri; build with the first extension.
+- **BGTaskScheduler** — *later.* iOS-side background refresh (companion only).
+
+**Deliberately skipped** (wrong shape for a grounded project-tracker; revisit only if the product's shape
+changes): Writing Tools / Image Playground / Genmoji / Visual Intelligence (content-creation AI); Endpoint
+Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print services / legacy Automator
+(App Intents + Shortcuts subsumes the useful part).
 
 ---
 
