@@ -2,6 +2,7 @@
 import Foundation
 import SwiftUI
 import SQLiteData
+import GRDB
 import PensieveKit
 
 enum SmartListKind: String, CaseIterable, Hashable {
@@ -95,13 +96,21 @@ final class AppModel: ObservableObject {
 
   private var db: (any DatabaseWriter)?
   private var allNodes: [Node] = []
-  private var timer: Timer?
+  private var observationTask: Task<Void, Never>?
+  private var spoolWatcher: DirectoryWatcher?
+  private var canonicalWatcher: DirectoryWatcher?
+  private lazy var refreshDebouncer = Debouncer(interval: 0.15) { [weak self] in
+    await MainActor.run { self?.refresh(); Task { await self?.reindexSpotlight() } }
+  }
+  private lazy var drainDebouncer = Debouncer(interval: 0.15) { [weak self] in
+    await self?.drainThenRefreshFromWatch()
+  }
   private var started = false
   private lazy var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
   private var narrationCache: [UUID: String] = [:]
   /// Bumped on launch + ⌘R (drainThenRefresh). Views key their reload `.task` on it so the OPEN
-  /// detail re-narrates after a refresh. The 3 s Timer calls `refresh()` (not drainThenRefresh), so
-  /// this never bumps per tick.
+  /// detail re-narrates after a refresh. The watch-driven refreshDebouncer calls `refresh()` (not
+  /// drainThenRefresh), so this never bumps on background liveness updates.
   @Published private(set) var refreshToken = 0
 
   private static let lastOpenedKey = "pensieve.lastOpenedAt"
@@ -118,8 +127,26 @@ final class AppModel: ObservableObject {
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
     db = try? openCanonicalDatabase(at: Stores.canonicalURL)
     Task { await drainThenRefresh() }
-    timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-      Task { @MainActor in self?.refresh() }
+
+    // Liveness (retires the 3 s Timer). Watches are app-lifetime (this @StateObject never deinits),
+    // so the menu-bar glyph stays live even when the main window is closed.
+    if let db {
+      observationTask = Task { [weak self] in
+        let observation = ValueObservation.tracking { db in try Event.fetchCount(db) }
+        do {
+          for try await _ in observation.values(in: db) {
+            await self?.refreshDebouncer.schedule()   // in-process writes (own drains, future edits)
+          }
+        } catch { /* observation ended; watches still cover changes */ }
+      }
+    }
+    let canonicalDir = Stores.canonicalURL.deletingLastPathComponent().path
+    let spoolDir = Stores.spoolURL.deletingLastPathComponent().path
+    canonicalWatcher = DirectoryWatcher(paths: [canonicalDir]) { [weak self] in
+      Task { await self?.refreshDebouncer.schedule() }   // catches the EXTERNAL daemon's writes
+    }
+    spoolWatcher = DirectoryWatcher(paths: [spoolDir]) { [weak self] in
+      Task { await self?.drainDebouncer.schedule() }      // new git/session activity → self-drain
     }
   }
 
@@ -133,8 +160,19 @@ final class AppModel: ObservableObject {
     refresh()
     narrationCache.removeAll()   // launch/⌘R: recaps may be stale — regenerate on next open
     refreshToken += 1
-    await SpotlightIndexer.reindex()   // launch + ⌘R only (not the 3 s timer, which calls refresh() directly)
+    await SpotlightIndexer.reindex()   // launch + ⌘R only (the watch-driven refreshDebouncer handles the rest)
   }
+
+  /// Watch-triggered drain: ingest new spool rows on our own connection. The resulting canonical
+  /// change trips ValueObservation + the canonical watch → refreshDebouncer. Does NOT clear the
+  /// narration cache or bump refreshToken (those are launch/⌘R semantics).
+  private func drainThenRefreshFromWatch() async {
+    if let db, let spool = try? CaptureSpool(at: Stores.spoolURL) {
+      _ = try? await Ingester(spool: spool, db: db).drain()
+    }
+  }
+
+  private func reindexSpotlight() async { await SpotlightIndexer.reindex() }
 
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
   /// skipping the briefing cards / forest that only the main window needs.
