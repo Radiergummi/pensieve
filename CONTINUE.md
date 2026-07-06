@@ -51,6 +51,11 @@ bundled `.icon` via `actool`). Remaining surfaces, each its own spec, roughly in
 Tooling tiers to carry into the first surface spec: menu-bar/Spotlight = Command-Line-Tools-friendly;
 Siri/Widgets/CloudKit = hard Xcode gates.
 
+> **The durable index of *all* pending work** (every pillar needing brainstorm→spec→plan, plus the parked
+> depth-features and forward ideas with their revisit triggers) lives in **`docs/superpowers/backlog.md`**
+> ("Roadmap" + the deferred ledger). This CONTINUE file is the per-session handoff; the backlog is the
+> long-term list. Kept current as of 2026-07-06 (GUI base-state + Xcode adoption shipped).
+
 **Also queued (three-pane app slices 3–6, per `specs/2026-07-05-pensieve-app-three-pane-design.md`):**
 - **3 — inspector + polish:** ⌘⌥I provenance inspector; **LLM "Last Work Done" narration** (via `SummaryBuilder`,
   the deterministic "Recent Activity" list is the current stand-in); `ValueObservation` liveness (replacing the

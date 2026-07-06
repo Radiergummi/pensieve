@@ -22,14 +22,23 @@ order is a recommendation, nothing is foreclosed.
 Capture → ingest → grounded/cited loose ends → `next`/`digest` (1A + 1B); the typed tree &
 strands (1B-org); source discovery (`scan`); the launchd auto-flow sync daemon; the v0.1
 heartbeat window; **the three-pane `Pensieve.app` slices 1–2** (read-only core + Briefing home +
-⌘K palette — see pillar #2). **The make-or-break intelligence gate passed.** Dogfooding is on.
-This is the hard part, done.
+⌘K palette — see pillar #2); the **GUI base-state** (SwiftUI `App` lifecycle, standard menu bar,
+⌘K/⌘R `.commands`); and **Xcode adoption** (a real `Pensieve.app` bundle built by XcodeGen with
+PensieveKit as a local SwiftPM package, ad-hoc signed, bundled `icons/Pensieve.icon` via `actool`
+— see pillar #1). **The make-or-break intelligence gate passed.** Dogfooding is on. This is the
+hard part, done.
 
-### Pending pillars (sequenced; each needs its own spec unless noted)
+### Pending pillars (sequenced; each is a brainstorm → spec → plan item unless noted)
 
-1. **Menu-bar item / `LSUIElement` app bundle (v0.2)** — *near-term, small–medium.* Wrap the
-   unbundled heartbeat executable in a real `.app`, add a menu-bar readout, hide the dock icon.
-   Revisit the Xcode.app-vs-CLT decision here (signing, bundle). Detail entry below.
+This is the durable index of *everything still to build*. Each pillar below needs its own
+brainstorm→spec→plan cycle (the loop in `CONTINUE.md` → "How we work here"); the deferred-ledger
+sections after the first `---` hold the parked depth-features + forward ideas, each with a revisit
+trigger. Order is a recommendation, not a commitment.
+
+1. **Menu-bar item / `LSUIElement` (v0.2)** — *near-term, small.* The real `.app` bundle **and** the
+   Xcode.app-vs-CLT decision are now **DONE** (see Shipped — Xcode 26.6 adopted, XcodeGen bundle,
+   `actool` icon). What remains: a menu-bar status item (a readout over the shared `MonitorSnapshot`
+   kernel) and an optional `LSUIElement` toggle to hide the dock icon. Now unblocked; its own spec.
 
 2. **The three-pane `Pensieve.app` (Phase 3) — THE product.** *The spine; specced + underway.* Design:
    `specs/2026-07-05-pensieve-app-three-pane-design.md` (a 6-slice build sequence). Sidebar smart-lists /
