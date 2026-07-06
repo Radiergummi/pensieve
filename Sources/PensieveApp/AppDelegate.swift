@@ -17,11 +17,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       guard let link = DeepLink(url: url) else { continue }
-      if let model {
-        model.pendingDeepLink = link
-      } else {
-        buffered = link
-      }
+      receive(link)
+    }
+  }
+
+  /// Single entry point for a resolved deep link — from an external `pensieve://` open OR an App
+  /// Intent's `perform()`. Forwards to the wired model, else buffers until the model is set.
+  func receive(_ link: DeepLink) {
+    if let model {
+      model.pendingDeepLink = link
+    } else {
+      buffered = link
     }
   }
 
