@@ -118,7 +118,7 @@ availability + deployment-target floors at each surface's spec time.
 - **Menu-bar item** (`MenuBarExtra`) — ✅ **DONE (v0.2, 2026-07-06).** Heartbeat + top-5 What's Next popover + click-to-jump. **= pillar #1.**
 - **Desktop / Notification-Center widgets** (WidgetKit) — *small–medium; strong.* "What's Next" / "Dormant" as a glance. Part of pillar #5.
 - **Control Center controls** (`ControlWidget`, macOS 15+) — *small; medium.* "Open briefing" / "Refresh" button; rides on WidgetKit.
-- **Spotlight indexing** (Core Spotlight `CSSearchableItem`) — *medium; strong.* Projects/strands/loose-ends searchable + jump-in. Part of pillar #5.
+- **Spotlight indexing** — 🟡 **in progress** as the **App Intents foundation** pillar (spec `specs/2026-07-06-app-intents-foundation-design.md`). Nodes as `IndexedEntity` (macOS 15+) *on* App Intents, not standalone Core Spotlight — one entity model serves Spotlight + Siri + Shortcuts. **Future extensions (roadmap):** index loose-end text; **semantic / vector search** so recall doesn't need exact words — evaluate `sqlite-vec`, on-device embeddings (`NLContextualEmbedding` / Foundation Models SDK), and native Spotlight semantic indexing (shares the embedding substrate with the theme-discovery spike below); live/background re-indexing (slice-3 liveness). Part of pillar #5.
 - **Notifications** (UserNotifications) — *small–medium; strong but sparing.* Grounded nudges (left-open, briefing-ready, dormant); noise risk → rare + cited.
 - **Dock tile** — *tiny; marginal.* Open-loose-ends badge + a recent-projects dock menu.
 
@@ -126,7 +126,7 @@ availability + deployment-target floors at each surface's spec time.
 - **Siri / Apple Intelligence** — *medium, Xcode-gated; strong.* Grounded Q&A + describe→create strand. Part of pillar #5.
 - **Shortcuts** — *medium; strong.* User-composable automations over the same intents.
 - **Spotlight actions** (App Intents in Spotlight, expanded in macOS 26) — *small atop App Intents; good.* Run actions by typing.
-- **Focus filters** (`SetFocusFilterIntent`) — *small; good, very on-brand.* "Work" Focus → filter to work projects / mute personal nudges.
+- **Focus filters** (`SetFocusFilterIntent`) — ⭐ **HIGH VALUE (user-flagged).** *small; very on-brand.* A "Personal" Focus surfaces free-time side-project strands (and a "Work" Focus filters to work projects / mutes personal nudges) — directly serves the user's parallel work/personal-project workflow. **Builds on the App Intents foundation** (spec `specs/2026-07-06-app-intents-foundation-design.md`); deferred out of that skeleton because it needs its own filtering model + app-state plumbing. Its own spec next-ish.
 - **Services menu** (`NSServices`) — *small; medium.* Select text anywhere → create a strand.
 - **URL scheme / deep links** (`pensieve://`) — ✅ **DONE (v0.2, 2026-07-06).** Registered scheme + tested `DeepLink` router (`briefing`/`node/<uuid>`/`smartlist/<kind>`); menu-bar item is the first consumer. Every later surface links back through it.
 
