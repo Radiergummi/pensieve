@@ -18,6 +18,7 @@ enum Stores {
 struct PensieveApp: App {
   // One AppModel for the app's lifetime. Its init reads/writes the lastOpenedAt UserDefault.
   @StateObject private var model = AppModel()
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
   var body: some Scene {
     // A single unique window — the correct primitive for one main window. `Window` gives the standard
@@ -44,7 +45,7 @@ struct PensieveApp: App {
     MenuBarExtra {
       MenuBarView(model: model)
     } label: {
-      Image(systemName: model.snapshot.status.glyph)
+      MenuBarLabel(model: model, appDelegate: appDelegate)
     }
     .menuBarExtraStyle(.window)
   }

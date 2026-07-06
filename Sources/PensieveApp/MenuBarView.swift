@@ -25,6 +25,7 @@ extension MonitorSnapshot.Status {
 /// AppModel and renders only — all data is from the tested MonitorSnapshot / SmartLists kernels.
 struct MenuBarView: View {
   @ObservedObject var model: AppModel
+  @Environment(\.openWindow) private var openWindow
 
   private static let maxRows = 5
 
@@ -57,20 +58,28 @@ struct MenuBarView: View {
       Text("Nothing queued").font(.callout).foregroundStyle(.secondary)
     } else {
       ForEach(items, id: \.project.id) { item in
-        HStack {
-          Text(item.project.name).lineLimit(1)
-          Spacer()
-          Text("\(item.openLooseEnds) open · \(item.daysDormant)d dormant")
-            .font(.caption).foregroundStyle(.secondary)
+        Button {
+          applyDeepLink(.node(item.project.id), model: model, openWindow: openWindow)
+        } label: {
+          HStack {
+            Text(item.project.name).lineLimit(1)
+            Spacer()
+            Text("\(item.openLooseEnds) open · \(item.daysDormant)d dormant")
+              .font(.caption).foregroundStyle(.secondary)
+          }
         }
+        .buttonStyle(.plain)
       }
     }
   }
 
   @ViewBuilder private var footer: some View {
     HStack {
-      Button("Refresh") { Task { await model.refreshNow() } }
+      Button("Open Pensieve") {
+        applyDeepLink(.briefing, model: model, openWindow: openWindow)
+      }
       Spacer()
+      Button("Refresh") { Task { await model.refreshNow() } }
       Button("Quit") { NSApplication.shared.terminate(nil) }
     }
   }
@@ -88,5 +97,27 @@ struct MenuBarView: View {
     let f = RelativeDateTimeFormatter()
     f.unitsStyle = .abbreviated
     return f.localizedString(for: date, relativeTo: Date())
+  }
+}
+
+/// The always-mounted menu-bar label. Being always present, it is the reliable host for: wiring the
+/// AppDelegate to the shared model, ensuring `start()` has run (so What's Next isn't empty even if
+/// the main window never opened), and observing external deep links.
+struct MenuBarLabel: View {
+  @ObservedObject var model: AppModel
+  let appDelegate: AppDelegate
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some View {
+    Image(systemName: model.snapshot.status.glyph)
+      .task {
+        appDelegate.model = model   // flushes any URL that arrived before the model was wired
+        model.start()               // idempotent (guarded in AppModel)
+      }
+      .onChange(of: model.pendingDeepLink) { _, link in
+        guard let link else { return }
+        applyDeepLink(link, model: model, openWindow: openWindow)
+        model.pendingDeepLink = nil
+      }
   }
 }

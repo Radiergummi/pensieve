@@ -66,6 +66,9 @@ final class AppModel: ObservableObject {
   /// Drives the ⌘K Quick Jump palette. Hoisted here (from RootView @State) so the "Go" menu command
   /// can open it.
   @Published var showPalette = false
+  /// Set by the AppDelegate when an external `pensieve://` URL is opened; observed by the
+  /// always-mounted menu-bar label, which applies it and clears it back to nil.
+  @Published var pendingDeepLink: DeepLink?
   /// "Since when" the Briefing measures movement: the previous launch's timestamp (or 7 days ago on
   /// first run). Fixed for the session so cards don't shift under you while the window is open.
   let briefingSince: Date
