@@ -36,6 +36,7 @@ public struct SyncRunner {
                         payload: try encodeJSON(SessionRefPayload(transcriptPath: url.path)))
     }
     ingested += try await ingester.drain()
+    await ingester.refineProjectNames()
 
     let results = try await ExtractionRunner(db: db, provider: provider).run()
     let extracted = results.reduce(0) { $0 + $1.inserted }

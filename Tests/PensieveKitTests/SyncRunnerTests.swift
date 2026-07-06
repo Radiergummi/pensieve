@@ -72,3 +72,31 @@ private func writeSession(_ projects: URL, _ sessionID: String, prompts: Int) th
   }
   #expect((after3?.extractedTranscriptSize ?? -1) > sizeAfter1)   // re-extraction ran on growth
 }
+
+/// A provider that returns a fixed name (and no loose ends) so the refine pass is deterministic.
+private struct NamingProvider: LLMProvider {
+  let name: String
+  func complete(prompt: String) async throws -> String { name }
+  func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] { [] }
+  func classifyGenuineIndices(prompt: String) async throws -> [Int] { [] }
+}
+
+@Test func syncRefinesGitProjectNameAfterDrain() async throws {
+  let projects = tmp("projects", ext: "d")
+  try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+  let spool = try CaptureSpool(at: tmp("sync-spool", ext: "sqlite"))
+  let db = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
+
+  // A committed repo + one spooled commit → a project node born with the verbatim dir name.
+  let (repo, hash) = try makeCommittedRepo()
+  try spool.append(kind: CaptureKind.gitCommit,
+                   payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")))
+
+  let runner = SyncRunner(spool: spool, db: db, provider: NamingProvider(name: "Cool Project"),
+                          projectsDir: projects, now: { Date() })
+  _ = try await runner.run()
+
+  let node = try await db.read { db in try Node.where { $0.kind.eq("project") }.fetchAll(db) }.first!
+  #expect(node.name == "Cool Project")
+  #expect(Ingester.nameInferred(inMetadata: node.metadataJSON) == true)
+}
