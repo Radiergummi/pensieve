@@ -40,7 +40,7 @@ struct MenuBarView: View {
     }
     .padding(12)
     .frame(width: 300)
-    .task { model.refreshGlance() }   // refresh on open so the glance is current even between 3 s Timer ticks
+    .task { model.refreshGlance() }   // refresh on open; the always-mounted label is kept live between opens by the liveness watches
   }
 
   @ViewBuilder private var heartbeat: some View {
