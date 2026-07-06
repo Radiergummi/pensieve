@@ -27,18 +27,21 @@ Shipped and merged (all on `main`):
   `docs/superpowers/{specs,plans}/2026-07-05-pensieve-app-gui-base-state*`. Subagent-driven, review-clean
   (Opus whole-branch: ready-to-merge, 0 Critical/Important).
 
-## Xcode is now installed (changes the roadmap)
+## Xcode adoption — DONE
 
-**Xcode 26.6 is installed** at `/Applications/Xcode.app`, BUT `xcode-select` **still points at
-CommandLineTools** — so it is *installed-not-active*: `xcodebuild`/`actool` still error, `swift test` still
-can't load Swift Testing (keep using `./scripts/test.sh`), and CLI tools behave exactly as before. To activate:
-`sudo xcode-select -s /Applications/Xcode.app` (do this deliberately as part of the packaging work, then
-re-verify the build/test flow). Xcode 26 unlocks: `actool` + the full Icon Composer `.icon` (Liquid-Glass
-appearances), App Intents/Siri, WidgetKit, CloudKit — i.e. the whole OS-integration path.
+The app is now a real **`Pensieve.app`** bundle: **XcodeGen** (`project.yml`, the source of truth) + Xcode
+26.6 (active — `xcode-select` → `/Applications/Xcode.app`), app target linking **PensieveKit as a local
+SwiftPM package**, ad-hoc signed, bundled `icons/Pensieve.icon` via `actool`, `CFBundleName=Pensieve`. The
+unbundled workarounds (setActivationPolicy, runtime applicationIconImage, AppDelegate) are gone. Build:
+`xcodegen generate` → `xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug
+-derivedDataPath ./.build-xcode build`; app at `./.build-xcode/Build/Products/Debug/Pensieve.app`; smoke-launch
+the inner binary (`…/Contents/MacOS/Pensieve`). `Pensieve.xcodeproj/` + `.build-xcode/` are gitignored.
+`swift test` now works natively (`scripts/test.sh` is a thin passthrough). The `pensieve` CLI + daemon are
+unchanged — no reinstall needed.
 
 ## THE NEXT ACTION (start here)
 
-**A packaging & OS-integration brainstorm** (the user's chosen next, now that Xcode is in). Scope to settle:
+**The first OS-integration surface(s)** — the Xcode/bundle foundation is in place. Scope to settle:
 - Real **`.app` bundle** — fixes the app-menu title (currently shows the process name **"PensieveApp"**, wants
   `CFBundleName` = "Pensieve"), ships the **bundled `.icon`** (replacing the runtime `applicationIconImage`
   stopgap), enables `LSUIElement`/menu-bar.
@@ -111,8 +114,7 @@ Design-first, subagent-driven. The proven loop, per feature:
   `~/.local/bin/pensieve`, NEVER from `.build`.
 - On a SwiftSyntax/macro **linker error**, `rm -rf .build` and retry (recurs intermittently; disk has headroom
   now, ~44 GB free).
-- **Xcode is installed but NOT active** — until `sudo xcode-select -s /Applications/Xcode.app`, keep the CLT
-  workflow (`./scripts/test.sh`, not `swift test`).
+- **`xcodebuild` + SPM macros:** first build on a fresh machine needs the macro fingerprints trusted (Xcode "Trust & Enable", or `defaults write com.apple.dt.Xcode IDESkip{PackagePlugin,Macro}FingerprintValidation -bool YES`) — a per-machine setting, not in the repo.
 
 **Swift / SwiftUI**
 - Predicates: `.eq(x)` NOT `== x`. Reuse `SourceKind`/`CaptureKind` constants. No shared mutable
