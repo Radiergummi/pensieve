@@ -40,7 +40,7 @@ enum SmartListKind: String, CaseIterable, Hashable {
 
 /// The node kinds the app surfaces in Change Type / new-node creation (all seven declared kinds).
 enum NodeKindOption {
-  static let all = ["domain", "project", "strand", "concept", "initiative", "task", "topic"]
+  static let all = NodeKind.all
 }
 
 enum SidebarSelection: Hashable {
@@ -83,10 +83,9 @@ final class AppModel: ObservableObject {
   /// Drives the ⌘⌥I provenance inspector (main window only). Toggled by the Go ▸ Inspector command.
   @Published var showInspector = false
   /// The loose end whose surrounding transcript the inspector shows. Written ONLY by the main
-  /// window's DetailView (allowsInspector == true); cleared when the main selection changes.
-  @Published var inspectedLooseEndID: UUID? {
-    didSet { /* no-op; clearing is driven by selectedNodeID below */ }
-  }
+  /// window's DetailView (allowsInspector == true); cleared when the main selection changes
+  /// (see `selectedNodeID`'s didSet above).
+  @Published var inspectedLooseEndID: UUID?
   @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   @Published var briefingCards: [BriefingCard] = []
@@ -256,13 +255,20 @@ final class AppModel: ObservableObject {
     return (status, ends)
   }
 
+  /// Open loose ends for a node — the inspector's slice of `detail(for:)` (no status query).
+  /// Loaded once per selection via the inspector's `.task`, never in a view `body`.
+  func looseEnds(forNode nodeID: UUID) -> [LooseEndView] {
+    guard let db else { return [] }
+    return (try? LooseEndQueries.open(db, nodeID: nodeID, now: Date())) ?? []
+  }
+
   // MARK: - Organizing writes (metadata only; each calls the op then refreshes explicitly, because
   // Node-only writes don't change the Event count the liveness ValueObservation tracks).
 
   /// Default kind for a new node: a child of a project/domain is a strand; everything else a project.
   private func defaultKind(under parentID: UUID?) -> String {
-    guard let parentID, let parent = node(parentID) else { return "project" }
-    return (parent.kind == "project" || parent.kind == "domain") ? "strand" : "project"
+    guard let parentID, let parent = node(parentID) else { return NodeKind.project }
+    return (parent.kind == NodeKind.project || parent.kind == NodeKind.domain) ? NodeKind.strand : NodeKind.project
   }
 
   /// Create a node (nil parent = top level), select it into the middle list, and enter inline rename.

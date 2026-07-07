@@ -2,7 +2,7 @@ import Foundation
 import SQLiteData
 import GRDB
 
-public struct ProjectResolver {
+public struct ProjectResolver: Sendable {
   let db: any DatabaseWriter
   public init(db: any DatabaseWriter) { self.db = db }
 

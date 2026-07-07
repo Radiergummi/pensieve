@@ -2,7 +2,7 @@ import Foundation
 import SQLiteData
 import GRDB
 
-public struct Ingester {
+public struct Ingester: Sendable {
   let spool: CaptureSpool
   let db: any DatabaseWriter
   let resolver: ProjectResolver
@@ -53,8 +53,7 @@ public struct Ingester {
       let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
       let outcome = try writeSync { db -> (inserted: Bool, born: UUID?) in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.gitRepo)
-        let dup = try Event.where { $0.sourceID.eq(source.id) && $0.fingerprint.eq(Fingerprint.commit(hash: p.hash)) }
-          .fetchOne(db) != nil
+        let dup = try eventExists(db, sourceID: source.id, fingerprint: Fingerprint.commit(hash: p.hash))
         if dup { return (false, nil) }
         let attr = try attributeToNode(db, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.gitCommit)
         try Event.insert {
@@ -101,8 +100,7 @@ public struct Ingester {
                                    "transcriptPath": p.transcriptPath])
       let outcome = try writeSync { db -> (inserted: Bool, born: UUID?, branch: String?) in
         let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.claudeCode)
-        let dup = try Event.where { $0.sourceID.eq(source.id) && $0.fingerprint.eq(Fingerprint.session(sessionID: session.sessionID)) }
-          .fetchOne(db) != nil
+        let dup = try eventExists(db, sourceID: source.id, fingerprint: Fingerprint.session(sessionID: session.sessionID))
         if dup { return (false, nil, nil) }
         let branchKey: String? = {
           guard let sb = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(db),
@@ -140,13 +138,16 @@ public struct Ingester {
     }
   }
 
+  /// Whether an event with this (sourceID, fingerprint) already exists — the dedup predicate,
+  /// shared by `insertIfNew` and the git.commit/cc.session branches that dedup before extra work.
+  private func eventExists(_ db: Database, sourceID: UUID, fingerprint: String?) throws -> Bool {
+    try Event.where { $0.sourceID.eq(sourceID) && $0.fingerprint.eq(fingerprint) }.fetchCount(db) > 0
+  }
+
   /// Inserts the event only if no event with the same (sourceID, fingerprint) exists.
   /// Returns whether an insert actually happened (false when deduped).
   private func insertIfNew(_ db: Database, _ event: Event) throws -> Bool {
-    let exists = try Event
-      .where { $0.sourceID.eq(event.sourceID) && $0.fingerprint.eq(event.fingerprint) }
-      .fetchOne(db) != nil
-    if exists { return false }
+    if try eventExists(db, sourceID: event.sourceID, fingerprint: event.fingerprint) { return false }
     try Event.insert { event }.execute(db)
     return true
   }
@@ -161,7 +162,7 @@ public struct Ingester {
     guard let branchKey else { return (projectNodeID, nil) }
 
     if let strand = try Node
-      .where({ $0.parentID.eq(projectNodeID) && $0.branchKey.eq(branchKey) && $0.kind.eq("strand") })
+      .where({ $0.parentID.eq(projectNodeID) && $0.branchKey.eq(branchKey) && $0.kind.eq(NodeKind.strand) })
       .fetchOne(db) {
       return (strand.id, nil)                          // strand already exists → attribute directly
     }
@@ -169,10 +170,10 @@ public struct Ingester {
     // Count same-kind events already tagged with this branch at the project node.
     let sameKind = try Event
       .where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) && $0.kind.eq(kind) }
-      .fetchAll(db).count
+      .fetchCount(db)
     guard sameKind + 1 >= 2 else { return (projectNodeID, nil) }   // not yet — stay tagged
 
-    let strand = Node(name: branchKey, parentID: projectNodeID, kind: "strand", branchKey: branchKey)
+    let strand = Node(name: branchKey, parentID: projectNodeID, kind: NodeKind.strand, branchKey: branchKey)
     try Node.insert { strand }.execute(db)
     let repointedEventIDs = try Event.where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) }
       .fetchAll(db).map(\.id)
@@ -232,7 +233,7 @@ public struct Ingester {
 
     struct Candidate { let id: UUID; let commonDir: String; let metadataJSON: String }
     let candidates: [Candidate] = (try? readSync { db -> [Candidate] in
-      let projects = try Node.where { $0.kind.eq("project") }.fetchAll(db)
+      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db)
       var out: [Candidate] = []
       for node in projects {
         if Self.nameInferred(inMetadata: node.metadataJSON) { continue }

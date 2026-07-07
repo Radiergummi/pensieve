@@ -27,7 +27,7 @@ public enum LooseEndVerifier {
     guard let m = messages.first(where: { $0.index == c.messageIndex }) else { return nil }
     guard m.isUserPrompt else { return nil }
     let haystack = normalizeWhitespace(m.text)
-    guard !needle.isEmpty, haystack.contains(needle) else { return nil }
+    guard haystack.contains(needle) else { return nil }   // needle is already ≥ minQuoteLength, so non-empty
     return VerifiedLooseEnd(text: c.text, quote: c.quote, role: m.role, sourceMessageIndex: m.index)
   }
 }

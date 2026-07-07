@@ -3,7 +3,9 @@ import SQLiteData
 import GRDB
 
 public enum NodeCommands {
-  /// Find a node by UUID string (preferred) or exact name.
+  /// Find a node by UUID string (preferred) or exact name. Node names are NOT unique, so the
+  /// name fallback returns an arbitrary match among duplicates — pass a UUID when the target is
+  /// known (the app always does; only CLI-by-name can hit the ambiguity).
   public static func find(_ db: Database, nameOrID: String) throws -> Node? {
     if let uuid = UUID(uuidString: nameOrID),
        let byID = try Node.where({ $0.id.eq(uuid) }).fetchOne(db) { return byID }
@@ -91,7 +93,7 @@ public enum NodeTree {
     func walk(_ parent: UUID?, depth: Int) {
       for n in (byParent[parent] ?? []).sorted(by: { $0.name < $1.name }) {
         let indent = String(repeating: "  ", count: depth)
-        let kindTag = n.kind == "project" ? "" : " (\(n.kind))"
+        let kindTag = n.kind == NodeKind.project ? "" : " (\(n.kind))"
         lines.append("\(indent)\(n.name)\(kindTag)  [\(n.state)]")
         walk(n.id, depth: depth + 1)
       }

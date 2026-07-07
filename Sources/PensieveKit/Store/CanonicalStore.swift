@@ -1,6 +1,5 @@
 import Foundation
 import SQLiteData   // re-exports GRDB symbols (DatabasePool, Configuration, DatabaseMigrator, #sql).
-                    // If a symbol is missing at compile time, add `import GRDB`.
 
 public func openCanonicalDatabase(at url: URL) throws -> any DatabaseWriter {
   try PensievePaths.ensureParentDirectory(of: url)
@@ -17,6 +16,7 @@ public func openCanonicalDatabase(at url: URL) throws -> any DatabaseWriter {
 public func openCanonicalDatabaseReadOnly(at url: URL) throws -> any DatabaseReader {
   var configuration = Configuration()
   configuration.readonly = true
+  configuration.busyMode = .timeout(5)   // wait out a concurrent writer checkpoint rather than reading empty
   return try DatabasePool(path: url.path, configuration: configuration)
 }
 

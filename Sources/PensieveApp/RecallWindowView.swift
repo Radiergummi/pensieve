@@ -11,15 +11,16 @@ struct RecallWindowView: View {
   let nodeID: UUID
 
   var body: some View {
+    let node = model.node(nodeID)
     Group {
-      if let node = model.node(nodeID) {
+      if let node {
         DetailView(model: model, node: node, allowsInspector: false)
       } else {
         ContentUnavailableView("Project unavailable", systemImage: "questionmark.folder")
       }
     }
     .frame(minWidth: 480, minHeight: 360)
-    .navigationTitle(model.node(nodeID)?.name ?? "Pensieve")
+    .navigationTitle(node?.name ?? "Pensieve")
     .task { model.start() }   // idempotent; ensures the store is open on cold restore
   }
 }

@@ -28,13 +28,9 @@ struct RootView: View {
       PaletteView(model: model, isPresented: $model.showPalette)
     }
     .inspector(isPresented: $model.showInspector) {
-      // Only query when the inspector is actually shown — this closure is part of RootView.body
-      // and re-evaluates on every liveness refresh, so an unconditional detail() runs two DB
-      // queries in the background even while the panel is closed.
-      let ends = model.showInspector
-        ? (model.selectedNodeID.flatMap(model.node).map { model.detail(for: $0).looseEnds } ?? [])
-        : []
-      InspectorView(model: model, looseEnds: ends)
+      // InspectorView loads its own loose ends via `.task(id: selectedNodeID)` — no DB query in
+      // this body closure, which re-evaluates on every liveness refresh.
+      InspectorView(model: model)
         .inspectorColumnWidth(min: 260, ideal: 340, max: 500)
     }
     .onChange(of: model.openNodeRequest) { _, id in

@@ -12,7 +12,7 @@ import Testing
 
   let postCommit = repo.appendingPathComponent(".git/hooks/post-commit")
   let body = try String(contentsOf: postCommit, encoding: .utf8)
-  #expect(body.contains("pensieve capture-commit"))
+  #expect(body.contains("\"pensieve\" capture-commit"))
   let perms = try FileManager.default.attributesOfItem(atPath: postCommit.path)[.posixPermissions] as! NSNumber
   #expect(perms.intValue & 0o111 != 0)   // executable bit set
 }
@@ -26,7 +26,7 @@ import Testing
 
   let postCommit = repo.appendingPathComponent(".git/hooks/post-commit")
   let body = try String(contentsOf: postCommit, encoding: .utf8)
-  #expect(body.contains("/opt/pensieve/bin/pensieve capture-commit"))
+  #expect(body.contains("\"/opt/pensieve/bin/pensieve\" capture-commit"))
 }
 
 @Test func refusesToOverwriteForeignHook() throws {

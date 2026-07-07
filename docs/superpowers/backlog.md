@@ -161,6 +161,46 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## Code-quality review carries — 2026-07-07 (deferred / design questions)
+
+From a full code-quality + idiomatic-Swift review of the whole tree. Most findings were fixed in
+the same pass (Swift 6 mode on the app target — which caught a real non-`Sendable` `Ingester`
+crossing the `@MainActor` boundary; the inspector's in-`body` DB query; a `claude -p` timeout +
+off-cooperative-pool + SIGPIPE guard; `DatabaseReader` widening; `@Sendable` FSEvents callback; a
+`NodeKind` type; and a batch of smaller cleanups). These four were deliberately **not** taken on —
+too big, or a genuine design question.
+
+- **`AppModel` → `@Observable` migration** — the app still uses `ObservableObject`/`@Published`, so
+  any `@Published` write invalidates *every* observing view. That's the root cause of a cluster of
+  small "recomputed in `body`" items: the (now-fixed) inspector re-query, `ContentListView.nodesForSelection()`
+  (filter + O(n log n) sort on every unrelated refresh), and `PaletteView.rows` (re-runs `matchingNodes`
+  each keystroke). `@Observable` scopes invalidation to the properties each view actually reads.
+  Deferred because it's a broad, non-surgical rewrite of every view's state wrappers in an untested
+  target. *Trigger: a dedicated app-target modernization pass, or when broad invalidation shows a cost.*
+- **Organizing-writes silent-failure surfacing** — `AppModel.move/merge/rename/retype/createNode`
+  `try?` the Kit op then unconditionally `refresh()`, so a failed *write* (as opposed to a read) is
+  invisible with no signal why. `try?`-degrade-to-empty is right for reads, worse for user-initiated
+  writes. Needs an error-presentation mechanism the app doesn't have yet. *Trigger: pair with the
+  first Settings/error-surface (same surface the `LSUIElement` toggle waits on).*
+- **`BriefingQueries.cards` N+1-inside-N+1** — fetches *all* events for every active node (no limit)
+  to read `events.first` + a since-count, then calls `LooseEndQueries.open` per node, which itself
+  re-fetches each loose end's source `Event` by id. Fine at single-user scale; a real fix is a query
+  restructuring that risks the tested default landing view for no practical gain today. *Trigger: if
+  the Briefing landing feels slow, or node/event volume grows materially.* (Related: the long-standing
+  "shared per-node latest-event + days-dormant + open-loose-end-count helper" carry under pillar #2.)
+- **`Ingester.drain()` decode-failure poison-pill — design question, intentionally unchanged.** A
+  permanently-undecodable `git.commit` / `git.checkout` / `cc.session.start` spool row throws every
+  drain and is left unmarked, so it's re-processed every launchd cycle forever; only the `cc.session`
+  branch distinguishes transient (retry) from permanent (drop-and-mark). This was **not** flipped
+  because the existing test `failingRowStaysPendingWhileGoodRowProcesses` encodes a deliberate "never
+  silently drop a capture row" decision, and the loop is invisible (`drain`'s `catch { continue }`
+  swallows the cause). The decision to make: keep data-preservation (retry forever, harmless for a
+  single row) vs. treat a *decode* failure as permanent (drop-and-mark) — ideally paired with drain
+  observability so a stuck row is at least logged. *Trigger: if a malformed capture row is ever
+  observed looping, or when adding drain logging/metrics.*
+
+---
+
 ## Menu-bar item + `pensieve://` deep links (v0.2) — DONE (2026-07-06)
 
 **Shipped** on `main` (`a74af56`; spec/plan `{specs,plans}/2026-07-06-menu-bar-deeplinks*`). 144 tests,

@@ -7,6 +7,18 @@ import FoundationModels
 /// working round-trip on this machine. Confirm the exact API names against the current
 /// Apple FoundationModels documentation — reconcile any differences here.
 public enum FoundationModelsProbe {
+  /// Machine-readable availability — the source of truth for provider selection. True iff the
+  /// framework is importable, the OS is macOS 26+, and the model reports `.available` here.
+  /// `availabilityDescription()` is for display only; decisions must not string-match it.
+  public static func isAvailable() -> Bool {
+    #if canImport(FoundationModels)
+    if #available(macOS 26.0, *) {
+      if case .available = SystemLanguageModel.default.availability { return true }
+    }
+    #endif
+    return false
+  }
+
   /// Human-readable availability, safe to call on any macOS (returns a reason string when
   /// the framework or model is unavailable rather than trapping).
   public static func availabilityDescription() -> String {

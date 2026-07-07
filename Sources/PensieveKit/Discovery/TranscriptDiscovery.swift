@@ -38,8 +38,8 @@ public enum TranscriptDiscovery {
   static func isSidechainTranscript(_ url: URL) -> Bool {
     guard let content = try? String(contentsOf: url, encoding: .utf8) else { return false }
     for line in content.split(separator: "\n", omittingEmptySubsequences: true) {
-      guard let data = line.data(using: .utf8),
-            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+      guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+      else { continue }
       if (obj["isSidechain"] as? Bool) == true { return true }
     }
     return false

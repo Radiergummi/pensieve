@@ -5,7 +5,7 @@ struct AddNode: ParsableCommand {
   static let configuration = CommandConfiguration(commandName: "add-node",
     abstract: "Create a node (domain, concept, initiative, …).")
   @Argument var name: String
-  @Option var kind: String = "concept"
+  @Option var kind: String = NodeKind.concept
   @Option var parent: String?
   @Option var description: String = ""
   func run() throws {

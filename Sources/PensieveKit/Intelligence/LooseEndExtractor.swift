@@ -24,6 +24,16 @@ public struct LooseEndExtractor {
   /// this small still overflows, we skip it rather than loop (it can't exceed the window).
   static let minFragmentChars = 200
 
+  /// Whether a provider error signals a context-window overflow (→ re-split and retry).
+  /// Necessarily string-matches: the FoundationModels error is type-erased/wrapped by the time
+  /// it reaches here, so there's no typed signal to switch on. Isolated to one place so a future
+  /// rephrasing is a single edit rather than a silent regression scattered across the retry path.
+  static func isContextOverflow(_ error: Error) -> Bool {
+    let message = "\(error)".lowercased()
+    return message.contains("exceededcontextwindowsize")
+      || (message.contains("exceeds") && message.contains("context"))
+  }
+
   public func extract(from messages: [TranscriptMessage]) async throws -> [LooseEndCandidate] {
     let prompts = StructuralNoiseFilter.strip(messages.filter { $0.isUserPrompt })
     guard !prompts.isEmpty else { return [] }
@@ -47,11 +57,8 @@ public struct LooseEndExtractor {
     do {
       return try await provider.extractCandidates(prompt: Self.buildPrompt(fragments))
     } catch {
-      let message = "\(error)".lowercased()
-      let isOverflow = message.contains("exceededcontextwindowsize")
-        || (message.contains("exceeds") && message.contains("context"))
       let total = fragments.reduce(0) { $0 + $1.text.count }
-      guard isOverflow, total > Self.minFragmentChars else { throw error }
+      guard Self.isContextOverflow(error), total > Self.minFragmentChars else { throw error }
       var out: [LooseEndCandidate] = []
       for half in Self.splitChunk(fragments) where !half.isEmpty {
         out.append(contentsOf: try await extractChunk(half))
@@ -132,11 +139,18 @@ public struct LooseEndExtractor {
     """
   }
 
-  /// Extracts the first complete top-level JSON array from arbitrary model output; skips malformed.
+  /// Extracts the first complete top-level JSON array from arbitrary model output, decoding
+  /// element-by-element so one malformed element drops only itself, not the whole chunk.
   public static func decodeCandidates(_ raw: String) -> [LooseEndCandidate] {
     guard let slice = firstJSONArray(in: raw), let data = slice.data(using: .utf8),
-          let decoded = try? JSONDecoder().decode([LooseEndCandidate].self, from: data)
+          let elements = (try? JSONSerialization.jsonObject(with: data)) as? [Any]
     else { return [] }
-    return decoded
+    let decoder = JSONDecoder()
+    return elements.compactMap { element in
+      guard let elementData = try? JSONSerialization.data(withJSONObject: element),
+            let candidate = try? decoder.decode(LooseEndCandidate.self, from: elementData)
+      else { return nil }
+      return candidate
+    }
   }
 }

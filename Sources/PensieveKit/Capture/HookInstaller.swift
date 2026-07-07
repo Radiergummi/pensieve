@@ -19,7 +19,7 @@ public enum HookInstaller {
   public static func postCommitScript(pensievePath: String) -> String { """
     #!/bin/sh
     # \(Self.marker)
-    \(pensievePath) capture-commit \
+    "\(pensievePath)" capture-commit \
       --repo "$(git rev-parse --show-toplevel)" \
       --hash "$(git rev-parse HEAD)" \
       --branch "$(git rev-parse --abbrev-ref HEAD)" >/dev/null 2>&1 &
@@ -32,7 +32,7 @@ public enum HookInstaller {
     # \(Self.marker)
     # Only branch checkouts ($3 == 1), not file checkouts.
     [ "$3" = "1" ] || exit 0
-    \(pensievePath) capture-checkout \
+    "\(pensievePath)" capture-checkout \
       --repo "$(git rev-parse --show-toplevel)" \
       --from "$1" --to "$2" \
       --branch "$(git rev-parse --abbrev-ref HEAD)" >/dev/null 2>&1 &
@@ -46,13 +46,15 @@ public enum HookInstaller {
     let hooks = [("post-commit", postCommitScript(pensievePath: pensievePath)),
                  ("post-checkout", postCheckoutScript(pensievePath: pensievePath))]
 
-    // Refuse to clobber foreign hooks: an existing file without our marker is user-owned.
+    // Refuse to clobber foreign hooks: an existing file that isn't a readable Pensieve-managed
+    // hook is treated as a conflict — including one we can't read (permissions/encoding), so an
+    // unreadable foreign hook is never silently overwritten.
     var conflicts: [URL] = []
     for (name, _) in hooks {
       let url = hooksDir.appendingPathComponent(name)
-      if let existing = try? String(contentsOf: url, encoding: .utf8), !existing.contains(marker) {
-        conflicts.append(url)
-      }
+      guard FileManager.default.fileExists(atPath: url.path) else { continue }
+      let isOurs = (try? String(contentsOf: url, encoding: .utf8))?.contains(marker) == true
+      if !isOurs { conflicts.append(url) }
     }
     guard conflicts.isEmpty else { throw HookInstallError.existingHooks(conflicts) }
 

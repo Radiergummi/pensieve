@@ -8,7 +8,7 @@ public struct LooseEndView: Sendable {
 }
 
 public enum LooseEndQueries {
-  public static func open(_ db: any DatabaseWriter, nodeID: UUID?, now: Date) throws -> [LooseEndView] {
+  public static func open(_ db: any DatabaseReader, nodeID: UUID?, now: Date) throws -> [LooseEndView] {
     try db.read { db in
       let ends: [LooseEnd]
       if let nodeID {

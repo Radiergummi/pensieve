@@ -7,8 +7,9 @@ import PensieveKit
 /// is no longer on disk — never a fabrication.
 struct InspectorView: View {
   @ObservedObject var model: AppModel
-  /// The loaded loose ends for the current node (for the stored-quote fallback + row lookup).
-  let looseEnds: [LooseEndView]
+  /// Loaded once per node selection via `.task(id:)` below — never in RootView's `body` (which
+  /// re-evaluates the inspector closure on every liveness refresh). For the row lookup + fallback.
+  @State private var looseEnds: [LooseEndView] = []
   @State private var context: ProvenanceContext?
   @State private var loading = false
 
@@ -42,6 +43,9 @@ struct InspectorView: View {
       }
       .padding(16)
       .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .task(id: model.selectedNodeID) {
+      looseEnds = model.selectedNodeID.map { model.looseEnds(forNode: $0) } ?? []
     }
     .task(id: model.inspectedLooseEndID) {
       context = nil

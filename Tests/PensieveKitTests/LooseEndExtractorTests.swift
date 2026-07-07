@@ -62,6 +62,15 @@ private struct StubProvider: LLMProvider {
   #expect(out.first?.messageIndex == 3)
 }
 
+@Test func decodeCandidatesKeepsValidElementsAroundAMalformedOne() {
+  // One well-formed element and one with the wrong type for messageIndex. The good one must
+  // survive — a single bad element shouldn't drop the whole chunk's recall (matches the doc).
+  let raw = #"[{"text":"a","quote":"qqqqqqqqqqqqqqqq","messageIndex":1},{"text":"b","quote":"x","messageIndex":"nope"}]"#
+  let out = LooseEndExtractor.decodeCandidates(raw)
+  #expect(out.count == 1)
+  #expect(out.first?.messageIndex == 1)
+}
+
 @Test func chunkFragmentsSplitsOversizedMessageAndPreservesIndex() {
   let budget = 100
   let longText = String(repeating: "x", count: budget * 4 + 37) // ~4x budget

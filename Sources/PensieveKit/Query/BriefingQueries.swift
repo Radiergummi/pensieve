@@ -27,10 +27,10 @@ private struct NodeActivity {
 }
 
 public enum BriefingQueries {
-  public static func cards(_ db: any DatabaseWriter, since: Date, now: Date) throws -> [BriefingCard] {
+  public static func cards(_ db: any DatabaseReader, since: Date, now: Date) throws -> [BriefingCard] {
     // Collect per-node activity inside one `db.read`, then fetch loose ends afterward — `LooseEndQueries.open`
-    // takes `any DatabaseWriter` and opens its own `db.read`, which can't be called with the `Database` handed
-    // to a closure already inside a read transaction.
+    // opens its own `db.read`, which can't be called with the `Database` handed to a closure already
+    // inside a read transaction.
     let activity: [NodeActivity] = try db.read { db in
       let actives = try Node.where { $0.state.eq("active") }.fetchAll(db)
       var result: [NodeActivity] = []

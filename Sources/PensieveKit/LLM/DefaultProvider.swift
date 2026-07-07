@@ -4,12 +4,7 @@ import Foundation
 /// model reports itself available on this machine. Shared by `makeDefaultLLMProvider()`
 /// and `defaultProviderKind()` so the two can never disagree.
 private func foundationModelsIsSelectable() -> Bool {
-  #if canImport(FoundationModels)
-  if #available(macOS 26.0, *) {
-    return FoundationModelsProbe.availabilityDescription() == "available"
-  }
-  #endif
-  return false
+  FoundationModelsProbe.isAvailable()
 }
 
 /// Local-first selection: Foundation Models when available on this machine, else `claude -p`.

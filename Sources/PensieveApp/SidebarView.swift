@@ -63,12 +63,12 @@ struct SidebarView: View {
 
   private func symbol(for kind: String) -> String {
     switch kind {
-    case "domain": return "folder"
-    case "strand": return "arrow.triangle.branch"
-    case "concept": return "lightbulb"
-    case "initiative": return "flag"
-    case "task": return "checklist"
-    case "topic": return "tag"
+    case NodeKind.domain: return "folder"
+    case NodeKind.strand: return "arrow.triangle.branch"
+    case NodeKind.concept: return "lightbulb"
+    case NodeKind.initiative: return "flag"
+    case NodeKind.task: return "checklist"
+    case NodeKind.topic: return "tag"
     default: return "shippingbox"   // project + any unknown kind
     }
   }

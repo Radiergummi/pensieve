@@ -9,7 +9,7 @@ public struct SpoolRow: Sendable {
   public let payload: String
 }
 
-public final class CaptureSpool {
+public final class CaptureSpool: Sendable {
   private let dbQueue: DatabaseQueue
 
   public init(at url: URL) throws {
