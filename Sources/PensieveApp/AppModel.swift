@@ -118,6 +118,12 @@ final class AppModel: ObservableObject {
   /// the FSEvents watch below into a busy-loop; a long-lived connection reads without that churn.
   private var spool: CaptureSpool?
   private var allNodes: [Node] = []
+  /// The active Focus context ("" = no Focus / unfiltered), mirrored from UserDefaults by the
+  /// SetFocusFilterIntent. Drives the visible-node filter applied in refresh()/refreshGlance().
+  private var activeFocusContext = ""
+  /// Last context the forest was built for — so a context change rebuilds it even when the node set
+  /// is unchanged (the `fetched != allNodes` guard alone would skip it).
+  private var lastForestContext: String?
   private var observationTask: Task<Void, Never>?
   private var spoolWatcher: DirectoryWatcher?
   private var canonicalWatcher: DirectoryWatcher?
@@ -149,6 +155,7 @@ final class AppModel: ObservableObject {
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
     db = try? openCanonicalDatabase(at: Stores.canonicalURL)
     spool = try? CaptureSpool(at: Stores.spoolURL)   // persistent — see the property note above
+    activeFocusContext = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
     Task { await drainThenRefresh() }
 
     // Liveness (retires the 3 s Timer). Watches are app-lifetime (this @StateObject never deinits),
@@ -171,6 +178,12 @@ final class AppModel: ObservableObject {
     spoolWatcher = DirectoryWatcher(paths: [spoolDir]) { [weak self] in
       Task { await self?.drainDebouncer.schedule() }      // new git/session activity → self-drain
     }
+
+    // The SetFocusFilterIntent runs in-process and writes UserDefaults → observe on the main queue.
+    NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,
+                                           object: nil, queue: .main) { [weak self] _ in
+      Task { @MainActor in self?.focusContextDidChange() }
+    }
   }
 
   /// On-demand equivalent of the launch drain+refresh, for the ⌘R Refresh menu command.
@@ -183,7 +196,7 @@ final class AppModel: ObservableObject {
     refresh()
     narrationCache.removeAll()   // launch/⌘R: recaps may be stale — regenerate on next open
     refreshToken += 1
-    await SpotlightIndexer.reindex()   // launch + ⌘R only (the watch-driven refreshDebouncer handles the rest)
+    await SpotlightIndexer.reindex(activeContext: activeFocusContext)   // launch + ⌘R
   }
 
   /// Watch-triggered drain: ingest new spool rows on our own connection. The resulting canonical
@@ -204,14 +217,33 @@ final class AppModel: ObservableObject {
     await reindexSpotlight()
   }
 
-  private func reindexSpotlight() async { await SpotlightIndexer.reindex() }
+  private func reindexSpotlight() async { await SpotlightIndexer.reindex(activeContext: activeFocusContext) }
+
+  /// UserDefaults changed — if the active Focus context flipped, re-filter the window + reindex.
+  private func focusContextDidChange() {
+    let new = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
+    guard new != activeFocusContext else { return }
+    activeFocusContext = new
+    refresh()
+    Task { await SpotlightIndexer.reindex(activeContext: new) }
+  }
+
+  /// Filter a freshly-computed SmartLists to the ids visible under the active context.
+  private func filtered(_ l: SmartLists, _ visible: Set<UUID>) -> SmartLists {
+    SmartLists(
+      whatsNext: l.whatsNext.filter { visible.contains($0.project.id) },
+      dormant: l.dormant.filter { visible.contains($0.project.id) },
+      recentlyActive: l.recentlyActive.filter { visible.contains($0.project.id) })
+  }
 
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
   /// skipping the briefing cards / forest that only the main window needs.
   func refreshGlance() {
     snapshot = MonitorSnapshot.gather(canonical: db, spool: spool)
     guard let db else { return }
-    lists = (try? SmartLists.compute(db, now: Date())) ?? lists
+    guard let raw = try? SmartLists.compute(db, now: Date()) else { return }
+    let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
+    lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
   }
 
   func refresh() {
@@ -220,12 +252,21 @@ final class AppModel: ObservableObject {
     snapshot = MonitorSnapshot.gather(canonical: db, spool: spool)
     guard let db else { return }
     let now = Date()
-    lists = (try? SmartLists.compute(db, now: now)) ?? lists
-    briefingCards = (try? BriefingQueries.cards(db, since: briefingSince, now: now)) ?? briefingCards
     let fetched = (try? ProjectQueries.all(db)) ?? allNodes
-    if fetched != allNodes {   // rebuild the forest only when the node set actually changed
-      allNodes = fetched
-      forest = NodeForest.build(allNodes)
+    let nodesChanged = fetched != allNodes
+    if nodesChanged { allNodes = fetched }
+    let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
+
+    if let raw = try? SmartLists.compute(db, now: now) {
+      lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
+    }
+    if let raw = try? BriefingQueries.cards(db, since: briefingSince, now: now) {
+      briefingCards = activeFocusContext.isEmpty ? raw : raw.filter { visible.contains($0.node.id) }
+    }
+    if nodesChanged || activeFocusContext != lastForestContext {
+      let source = activeFocusContext.isEmpty ? allNodes : allNodes.filter { visible.contains($0.id) }
+      forest = NodeForest.build(source)
+      lastForestContext = activeFocusContext
     }
   }
 
