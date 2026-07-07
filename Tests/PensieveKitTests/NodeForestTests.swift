@@ -27,3 +27,17 @@ import Testing
   // parent isn't in the set → orphan is promoted, never dropped
   #expect(Set(forest.map(\.node.name)) == ["orphan", "real"])
 }
+
+@Test func descendantIDsTransitiveExcludesSelf() {
+  let a = Node(name: "A", kind: "domain")
+  let b = Node(name: "B", parentID: a.id, kind: "project")
+  let c = Node(name: "C", parentID: b.id, kind: "strand")
+  let d = Node(name: "D", kind: "project")   // unrelated root
+  let nodes = [a, b, c, d]
+
+  #expect(NodeForest.descendantIDs(of: a.id, in: nodes) == [b.id, c.id])
+  #expect(!NodeForest.descendantIDs(of: a.id, in: nodes).contains(a.id))
+  #expect(NodeForest.descendantIDs(of: c.id, in: nodes).isEmpty)   // leaf
+  #expect(NodeForest.descendantIDs(of: d.id, in: nodes).isEmpty)   // childless root
+  #expect(NodeForest.descendantIDs(of: UUID(), in: nodes).isEmpty) // unknown id
+}

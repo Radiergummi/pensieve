@@ -25,11 +25,34 @@ public enum NodeCommands {
     }
   }
 
+  /// Reparent `nodeID` under `newParentID` (nil = move to root). Returns false — writing nothing — if
+  /// either id is unknown or the move would create a cycle (`newParentID == nodeID`, or `nodeID` is an
+  /// ancestor of `newParentID`). The read side (`NodeForest.build`) guards display; this guards data.
+  @discardableResult
+  public static func reparent(_ db: any DatabaseWriter, nodeID: UUID, newParentID: UUID?) throws -> Bool {
+    try db.write { db in try reparent(db, nodeID: nodeID, newParentID: newParentID) }
+  }
+
+  /// In-transaction core, so `nest` can reuse the guard inside its own `db.write`.
+  static func reparent(_ db: Database, nodeID: UUID, newParentID: UUID?) throws -> Bool {
+    guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
+    if let newParentID {
+      guard try Node.where({ $0.id.eq(newParentID) }).fetchOne(db) != nil else { return false }
+      // Walk up from the intended parent; hitting nodeID means this move would form a cycle.
+      var cursor: UUID? = newParentID
+      while let current = cursor {
+        if current == nodeID { return false }
+        cursor = try Node.where { $0.id.eq(current) }.fetchOne(db)?.parentID
+      }
+    }
+    try Node.where { $0.id.eq(nodeID) }.update { $0.parentID = #bind(newParentID) }.execute(db)
+    return true
+  }
+
   public static func nest(_ db: any DatabaseWriter, child: String, under parent: String) throws -> Bool {
     try db.write { db in
       guard let c = try find(db, nameOrID: child), let p = try find(db, nameOrID: parent) else { return false }
-      try Node.where { $0.id.eq(c.id) }.update { $0.parentID = #bind(p.id) }.execute(db)
-      return true
+      return try reparent(db, nodeID: c.id, newParentID: p.id)
     }
   }
 

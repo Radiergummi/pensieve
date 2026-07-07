@@ -34,4 +34,18 @@ public enum NodeForest {
     }
     return roots.sorted { $0.name < $1.name }.map { make($0, []) }
   }
+
+  /// All transitive descendants of `id` within `nodes` (excludes `id` itself). Read-only,
+  /// deterministic, and cycle-safe (a visited set guards against any pre-existing bad edge).
+  public static func descendantIDs(of id: UUID, in nodes: [Node]) -> Set<UUID> {
+    var childrenByParent: [UUID: [UUID]] = [:]
+    for n in nodes { if let p = n.parentID { childrenByParent[p, default: []].append(n.id) } }
+    var result: Set<UUID> = []
+    var stack = childrenByParent[id] ?? []
+    while let next = stack.popLast() {
+      guard result.insert(next).inserted else { continue }
+      stack.append(contentsOf: childrenByParent[next] ?? [])
+    }
+    return result
+  }
 }

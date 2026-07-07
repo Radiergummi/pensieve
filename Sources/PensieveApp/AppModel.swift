@@ -38,6 +38,11 @@ enum SmartListKind: String, CaseIterable, Hashable {
   }
 }
 
+/// The node kinds the app surfaces in Change Type / new-node creation (all seven declared kinds).
+enum NodeKindOption {
+  static let all = ["domain", "project", "strand", "concept", "initiative", "task", "topic"]
+}
+
 enum SidebarSelection: Hashable {
   case briefing
   case smartList(SmartListKind)
@@ -70,6 +75,11 @@ final class AppModel: ObservableObject {
   @Published var selectedNodeID: UUID? {
     didSet { if selectedNodeID != oldValue { inspectedLooseEndID = nil } }
   }
+  /// The node currently being renamed in place (drives the row's TextField). nil = not renaming.
+  @Published var renamingNodeID: UUID?
+  /// Non-nil while a Move/Merge picker sheet is up for that node. Mounted in RootView.
+  @Published var movePickerNodeID: UUID?
+  @Published var mergePickerNodeID: UUID?
   /// Drives the ⌘⌥I provenance inspector (main window only). Toggled by the Go ▸ Inspector command.
   @Published var showInspector = false
   /// The loose end whose surrounding transcript the inspector shows. Written ONLY by the main
@@ -230,6 +240,68 @@ final class AppModel: ObservableObject {
     let status = (try? ProjectQueries.status(db, node: node, limit: 15)) ?? fallback
     let ends = (try? LooseEndQueries.open(db, nodeID: node.id, now: now)) ?? []
     return (status, ends)
+  }
+
+  // MARK: - Organizing writes (metadata only; each calls the op then refreshes explicitly, because
+  // Node-only writes don't change the Event count the liveness ValueObservation tracks).
+
+  /// Default kind for a new node: a child of a project/domain is a strand; everything else a project.
+  private func defaultKind(under parentID: UUID?) -> String {
+    guard let parentID, let parent = node(parentID) else { return "project" }
+    return (parent.kind == "project" || parent.kind == "domain") ? "strand" : "project"
+  }
+
+  /// Create a node (nil parent = top level), select it into the middle list, and enter inline rename.
+  /// Renaming happens in the flat content list (OutlineGroup can't be force-expanded), so for a child
+  /// we select the *parent* — the list shows parent + children, including the new one.
+  func createNode(under parentID: UUID?) {
+    guard let db else { return }
+    guard let new = try? NodeCommands.add(db, name: "New Node",
+                                          kind: defaultKind(under: parentID),
+                                          parent: parentID?.uuidString, description: "") else { return }
+    refresh()
+    if let parentID {
+      sidebarSelection = .node(parentID); selectedNodeID = parentID
+    } else {
+      sidebarSelection = .node(new.id); selectedNodeID = new.id
+    }
+    renamingNodeID = new.id
+  }
+
+  func rename(_ nodeID: UUID, to newName: String) {
+    renamingNodeID = nil
+    let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let db, !trimmed.isEmpty else { return }
+    _ = try? NodeCommands.rename(db, node: nodeID.uuidString, to: trimmed)
+    refresh()
+  }
+
+  func retype(_ nodeID: UUID, to kind: String) {
+    guard let db else { return }
+    _ = try? NodeCommands.retype(db, node: nodeID.uuidString, to: kind)
+    refresh()
+  }
+
+  func move(_ nodeID: UUID, under newParentID: UUID?) {
+    guard let db else { return }
+    _ = try? NodeCommands.reparent(db, nodeID: nodeID, newParentID: newParentID)
+    refresh()
+  }
+
+  func merge(_ sourceID: UUID, into targetID: UUID) {
+    guard let db, sourceID != targetID else { return }
+    try? ProjectResolver(db: db).group(targetID, into: [sourceID])
+    // The source node is gone: move any state that referenced it onto the survivor / clear it.
+    if selectedNodeID == sourceID { selectedNodeID = targetID }
+    if sidebarSelection == .node(sourceID) { sidebarSelection = .node(targetID) }
+    if renamingNodeID == sourceID { renamingNodeID = nil }
+    refresh()
+  }
+
+  /// Legal Move/Merge targets for `nodeID`: every node except itself and its descendants.
+  func moveTargets(for nodeID: UUID) -> [Node] {
+    let banned = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
+    return allNodes.filter { !banned.contains($0.id) }.sorted { $0.name < $1.name }
   }
 
   /// Surrounding-transcript provenance for a loose end, resolved off the main actor (file I/O).
