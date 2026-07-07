@@ -52,6 +52,14 @@ public struct ProjectResolver {
   public func group(_ primaryID: UUID, into merged: [UUID]) throws {
     try db.write { db in
       for other in merged where other != primaryID {
+        // If the primary is itself a child of the node being absorbed, promote it to `other`'s parent
+        // first — otherwise the "reparent other's children → primary" step below would set the primary's
+        // own parent to itself (a self-cycle).
+        if let primary = try Node.where({ $0.id.eq(primaryID) }).fetchOne(db), primary.parentID == other {
+          let grandparentID = try Node.where { $0.id.eq(other) }.fetchOne(db)?.parentID
+          try Node.where { $0.id.eq(primaryID) }
+            .update { $0.parentID = #bind(grandparentID) }.execute(db)
+        }
         try Source.where { $0.nodeID.eq(other) }
           .update { $0.nodeID = primaryID }.execute(db)
         try Event.where { $0.nodeID.eq(other) }

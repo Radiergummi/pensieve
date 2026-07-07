@@ -89,3 +89,29 @@ import SQLiteData
   let reparented = try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) }
   #expect(reparented?.parentID == a.project.id)
 }
+
+@Test func groupMergingParentIntoChildRerootsAtGrandparent() throws {
+  let db = try openCanonicalDatabase(at: tempURL("group-selfcycle"))
+  let grand = try #require(try NodeCommands.add(db, name: "Grand", kind: "domain", parent: nil, description: ""))
+  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: "project", parent: "Grand", description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "strand", parent: "Parent", description: ""))
+
+  try ProjectResolver(db: db).group(child.id, into: [parent.id])   // merge parent INTO its own child
+
+  let reloaded = try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) }
+  #expect(reloaded != nil)
+  #expect(reloaded?.parentID == grand.id)     // promoted to grandparent…
+  #expect(reloaded?.parentID != child.id)     // …never itself
+  #expect(try db.read { db in try Node.where { $0.id.eq(parent.id) }.fetchOne(db) } == nil)  // parent gone
+}
+
+@Test func groupMergingRootParentIntoChildMakesChildRoot() throws {
+  let db = try openCanonicalDatabase(at: tempURL("group-selfcycle-root"))
+  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: "project", parent: nil, description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "strand", parent: "Parent", description: ""))
+
+  try ProjectResolver(db: db).group(child.id, into: [parent.id])
+
+  let reloaded = try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) }
+  #expect(reloaded?.parentID == nil)   // parent was a root → child becomes a root
+}
