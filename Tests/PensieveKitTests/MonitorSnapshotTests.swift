@@ -114,3 +114,41 @@ import SQLiteData
   #expect(snap.eventCount == 1)
   #expect(snap.spoolPending == 2)
 }
+
+/// The connection-reusing overload the app uses (to avoid re-firing its store-dir watch) must
+/// produce exactly the same heartbeat as the URL overload for the same stores.
+@Test func gatherFromOpenConnectionsMatchesURLPath() throws {
+  let spoolURL = tempURL("spool-open")
+  let spool = try CaptureSpool(at: spoolURL)
+  let now = Date(timeIntervalSince1970: 5_000_000)
+  try spool.append(kind: CaptureKind.gitCommit, payload: "{}", at: now.addingTimeInterval(-60))
+
+  let canonURL = tempURL("canon-open")
+  let db = try openCanonicalDatabase(at: canonURL)
+  let node = Node(name: "app")
+  let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/app-open/.git")
+  let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: now,
+                 kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
+                 fingerprint: Fingerprint.commit(hash: "open-abc"))
+  try db.write { db in
+    try Node.insert { node }.execute(db)
+    try Source.insert { src }.execute(db)
+    try Event.insert { ev }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t", quote: "q", status: "open")
+    }.execute(db)
+  }
+
+  let viaURL = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: spoolURL, now: now)
+  let viaOpen = MonitorSnapshot.gather(canonical: db, spool: spool, now: now)
+  #expect(viaOpen == viaURL)
+  #expect(viaOpen.status == .active)
+  #expect(viaOpen.eventCount == 1 && viaOpen.looseEndCount == 1 && viaOpen.spoolPending == 1)
+}
+
+/// Nil connections (store not open yet) degrade to `.notSetUp`, matching the absent-store URL path.
+@Test func gatherFromNilConnectionsIsNotSetUp() {
+  let snap = MonitorSnapshot.gather(canonical: nil, spool: nil, now: Date())
+  #expect(snap.status == .notSetUp)
+  #expect(snap.eventCount == 0 && snap.spoolPending == 0 && snap.looseEndCount == 0)
+}

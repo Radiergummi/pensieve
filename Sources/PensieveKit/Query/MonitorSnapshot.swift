@@ -22,6 +22,12 @@ public struct MonitorSnapshot: Equatable, Sendable {
   /// absent/unreachable store degrades that store's fields to zero/nil. Existence is checked
   /// before opening so this never *creates* a store. Status is spool-driven (capture is the
   /// real-time signal), so it reads `.active` even before the first ingest.
+  ///
+  /// Opens short-lived connections — appropriate for the CLI/daemon (short-lived processes). A
+  /// long-running observer that refreshes repeatedly (the app) must use the connection-REUSING
+  /// overload below instead: opening a fresh connection touches the store's `-shm`/`-wal` sidecars,
+  /// and if the observer also watches that directory for changes, the churn re-fires the watch into
+  /// a busy-loop.
   public static func gather(canonicalURL: URL, spoolURL: URL,
                             now: Date = Date(),
                             activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
@@ -39,12 +45,44 @@ public struct MonitorSnapshot: Equatable, Sendable {
     var loose = 0
     if FileManager.default.fileExists(atPath: canonicalURL.path),
        let db = try? openCanonicalDatabaseReadOnly(at: canonicalURL) {
-      events = (try? db.read { db in try Event.all.fetchAll(db).count }) ?? 0
+      events = (try? db.read { db in try Event.fetchCount(db) }) ?? 0
       loose = (try? db.read { db in
-        try LooseEnd.where { $0.status.eq("open") }.fetchAll(db).count
+        try LooseEnd.where { $0.status.eq("open") }.fetchCount(db)
       }) ?? 0
     }
 
+    return classify(lastCapture: lastCapture, pending: pending, events: events, loose: loose,
+                    now: now, activeWithin: activeWithin)
+  }
+
+  /// The same heartbeat computed from ALREADY-OPEN connections — opens nothing. The app must use
+  /// this: its FSEvents watch on the store directory would otherwise be re-fired by the `-shm`/`-wal`
+  /// churn of opening a fresh connection on every refresh, spinning a busy-loop. Pass `nil` for a
+  /// store whose connection isn't open yet; that store's fields degrade to zero/nil, exactly like
+  /// the URL overload treats an absent store.
+  public static func gather(canonical: (any DatabaseReader)?, spool: CaptureSpool?,
+                            now: Date = Date(),
+                            activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
+    var lastCapture: Date? = nil
+    var pending = 0
+    if let spool {
+      lastCapture = try? spool.lastCaptureAt()
+      pending = (try? spool.pendingCount()) ?? 0
+    }
+    var events = 0
+    var loose = 0
+    if let canonical {
+      events = (try? canonical.read { db in try Event.fetchCount(db) }) ?? 0
+      loose = (try? canonical.read { db in
+        try LooseEnd.where { $0.status.eq("open") }.fetchCount(db)
+      }) ?? 0
+    }
+    return classify(lastCapture: lastCapture, pending: pending, events: events, loose: loose,
+                    now: now, activeWithin: activeWithin)
+  }
+
+  private static func classify(lastCapture: Date?, pending: Int, events: Int, loose: Int,
+                               now: Date, activeWithin: TimeInterval) -> MonitorSnapshot {
     let status: Status
     if lastCapture == nil && pending == 0 && events == 0 {
       status = .notSetUp
@@ -53,7 +91,6 @@ public struct MonitorSnapshot: Equatable, Sendable {
     } else {
       status = .idle
     }
-
     return MonitorSnapshot(status: status, lastCaptureAt: lastCapture,
                            spoolPending: pending, eventCount: events, looseEndCount: loose)
   }

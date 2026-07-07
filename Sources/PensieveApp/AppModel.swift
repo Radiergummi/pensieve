@@ -105,6 +105,10 @@ final class AppModel: ObservableObject {
   let briefingSince: Date
 
   private var db: (any DatabaseWriter)?
+  /// Persistent spool connection, reused for BOTH drains and the heartbeat. Opening a fresh
+  /// connection per refresh/drain touches the store dir's `-shm`/`-wal` sidecars, which re-fires
+  /// the FSEvents watch below into a busy-loop; a long-lived connection reads without that churn.
+  private var spool: CaptureSpool?
   private var allNodes: [Node] = []
   private var observationTask: Task<Void, Never>?
   private var spoolWatcher: DirectoryWatcher?
@@ -136,6 +140,7 @@ final class AppModel: ObservableObject {
     started = true
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
     db = try? openCanonicalDatabase(at: Stores.canonicalURL)
+    spool = try? CaptureSpool(at: Stores.spoolURL)   // persistent — see the property note above
     Task { await drainThenRefresh() }
 
     // Liveness (retires the 3 s Timer). Watches are app-lifetime (this @StateObject never deinits),
@@ -164,7 +169,7 @@ final class AppModel: ObservableObject {
   func refreshNow() async { await drainThenRefresh() }
 
   private func drainThenRefresh() async {
-    if let db, let spool = try? CaptureSpool(at: Stores.spoolURL) {
+    if let db, let spool {
       _ = try? await Ingester(spool: spool, db: db).drain()   // no LLM: spool → events only
     }
     refresh()
@@ -177,7 +182,7 @@ final class AppModel: ObservableObject {
   /// change trips ValueObservation + the canonical watch → refreshDebouncer. Does NOT clear the
   /// narration cache or bump refreshToken (those are launch/⌘R semantics).
   private func drainThenRefreshFromWatch() async {
-    if let db, let spool = try? CaptureSpool(at: Stores.spoolURL) {
+    if let db, let spool {
       _ = try? await Ingester(spool: spool, db: db).drain()
     }
   }
@@ -187,15 +192,15 @@ final class AppModel: ObservableObject {
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
   /// skipping the briefing cards / forest that only the main window needs.
   func refreshGlance() {
-    snapshot = MonitorSnapshot.gather(canonicalURL: Stores.canonicalURL, spoolURL: Stores.spoolURL)
+    snapshot = MonitorSnapshot.gather(canonical: db, spool: spool)
     guard let db else { return }
     lists = (try? SmartLists.compute(db, now: Date())) ?? lists
   }
 
   func refresh() {
-    // The heartbeat kernel reads the stores standalone (works even with no canonical store), so
-    // gather it here — one poller for the whole window — before the db guard.
-    snapshot = MonitorSnapshot.gather(canonicalURL: Stores.canonicalURL, spoolURL: Stores.spoolURL)
+    // Heartbeat from the persistent connections (opening fresh ones here would re-fire the store-dir
+    // watch into a busy-loop). Works before the db guard: nil connections degrade to a zero snapshot.
+    snapshot = MonitorSnapshot.gather(canonical: db, spool: spool)
     guard let db else { return }
     let now = Date()
     lists = (try? SmartLists.compute(db, now: now)) ?? lists
