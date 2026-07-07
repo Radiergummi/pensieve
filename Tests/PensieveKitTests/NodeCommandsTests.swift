@@ -72,3 +72,19 @@ import SQLiteData
   let a = try db.read { db in try Node.where { $0.name.eq("A") }.fetchOne(db) }
   #expect(a?.parentID == nil)
 }
+
+@Test func addWritesAppearanceAtomically() throws {
+  let db = try openCanonicalDatabase(at: tempURL("add-appearance"))
+  let n = try #require(try NodeCommands.add(db, name: "Recipes", kind: "project",
+                                            parent: nil, description: "",
+                                            icon: "emoji:🍲", colorTag: "orange"))
+  let stored = try db.read { db in try Node.where { $0.id.eq(n.id) }.fetchOne(db) }
+  #expect(stored?.icon == "emoji:🍲")
+  #expect(stored?.colorTag == "orange")
+
+  // Defaults keep the appearance empty (existing call sites unaffected).
+  let plain = try #require(try NodeCommands.add(db, name: "Plain", kind: "project",
+                                                parent: nil, description: ""))
+  #expect(plain.icon == "")
+  #expect(plain.colorTag == "")
+}

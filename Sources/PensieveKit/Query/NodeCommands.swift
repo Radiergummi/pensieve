@@ -14,14 +14,16 @@ public enum NodeCommands {
 
   @discardableResult
   public static func add(_ db: any DatabaseWriter, name: String, kind: String,
-                         parent: String?, description: String) throws -> Node? {
+                         parent: String?, description: String,
+                         icon: String = "", colorTag: String = "") throws -> Node? {
     try db.write { db in
       var parentID: UUID? = nil
       if let parent {
         guard let p = try find(db, nameOrID: parent) else { return nil }
         parentID = p.id
       }
-      let node = Node(name: name, parentID: parentID, kind: kind, description: description)
+      let node = Node(name: name, parentID: parentID, kind: kind, description: description,
+                      icon: icon, colorTag: colorTag)
       try Node.insert { node }.execute(db)
       return node
     }
