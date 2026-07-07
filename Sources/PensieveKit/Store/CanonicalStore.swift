@@ -133,5 +133,9 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     // then initializes them once without extracting (see ExtractionRunner.run()).
     try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedTranscriptSize" INTEGER NOT NULL DEFAULT -1"#).execute(db)
   }
+  migrator.registerMigration("v8-node-appearance") { db in
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "icon" TEXT NOT NULL DEFAULT ''"#).execute(db)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "colorTag" TEXT NOT NULL DEFAULT ''"#).execute(db)
+  }
   try migrator.migrate(db)
 }
