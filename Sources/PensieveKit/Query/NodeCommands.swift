@@ -109,8 +109,9 @@ public enum NodeCommands {
   }
 
   /// Delete `nodeID` and all its descendants (manual-only). Refused (`.blocked`, nothing written)
-  /// if any node in the subtree has a `Source`. Child rows cascade via FK on node-row delete;
-  /// `nodes.parentID` is SET NULL, so the subtree is deleted explicitly.
+  /// if any node in the subtree has a `Source`, or is an auto-birthed strand (`branchKey` set).
+  /// Child rows cascade via FK on node-row delete; `nodes.parentID` is SET NULL, so the subtree
+  /// is deleted explicitly.
   @discardableResult
   public static func delete(_ db: any DatabaseWriter, nodeID: UUID) throws -> DeleteResult {
     try db.write { db in
@@ -118,9 +119,11 @@ public enum NodeCommands {
       let all = try Node.all.fetchAll(db)
       let ids = NodeForest.descendantIDs(of: nodeID, in: all).union([nodeID])
 
-      // Manual-only guard: any source in the subtree → refuse (would resurrect on next drain).
-      for id in ids where try Source.where({ $0.nodeID.eq(id) }).fetchCount(db) > 0 {
-        return .blocked
+      // Manual-only guard: a subtree node with a live source OR an auto-birthed strand
+      // (branchKey set) would re-materialize on the next drain — refuse.
+      for id in ids {
+        if all.first(where: { $0.id == id })?.branchKey != nil { return .blocked }
+        if try Source.where({ $0.nodeID.eq(id) }).fetchCount(db) > 0 { return .blocked }
       }
 
       var events = 0, looseEnds = 0
@@ -135,12 +138,16 @@ public enum NodeCommands {
     }
   }
 
-  /// True if `nodeID` or any descendant has a `Source` — the app gates the Delete menu item on this.
-  public static func subtreeHasSources(_ db: any DatabaseReader, nodeID: UUID) throws -> Bool {
+  /// True if `nodeID` or any descendant would resurrect on the next drain — has its own `Source`,
+  /// or is an auto-birthed strand (`branchKey` set). The app gates the Delete menu item on this.
+  public static func subtreeIsActivityBorn(_ db: any DatabaseReader, nodeID: UUID) throws -> Bool {
     try db.read { db in
       let all = try Node.all.fetchAll(db)
       let ids = NodeForest.descendantIDs(of: nodeID, in: all).union([nodeID])
-      for id in ids where try Source.where({ $0.nodeID.eq(id) }).fetchCount(db) > 0 { return true }
+      for id in ids {
+        if all.first(where: { $0.id == id })?.branchKey != nil { return true }
+        if try Source.where({ $0.nodeID.eq(id) }).fetchCount(db) > 0 { return true }
+      }
       return false
     }
   }

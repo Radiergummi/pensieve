@@ -128,7 +128,7 @@ import SQLiteData
     try Source.insert { Source(nodeID: child.id, kind: SourceKind.gitRepo, key: "/p/child") }.execute(db)
   }
 
-  #expect(try NodeCommands.subtreeHasSources(db, nodeID: root.id) == true)
+  #expect(try NodeCommands.subtreeIsActivityBorn(db, nodeID: root.id) == true)
   #expect(try NodeCommands.delete(db, nodeID: root.id) == .blocked)
   // Nothing was deleted.
   #expect(try db.read { db in try Node.where { $0.id.eq(root.id) }.fetchOne(db) } != nil)
@@ -138,9 +138,28 @@ import SQLiteData
 @Test func deleteLeafAndUnknown() throws {
   let db = try openCanonicalDatabase(at: tempURL("delete-leaf"))
   let leaf = try #require(try NodeCommands.add(db, name: "Leaf", kind: "project", parent: nil, description: ""))
-  #expect(try NodeCommands.subtreeHasSources(db, nodeID: leaf.id) == false)
+  #expect(try NodeCommands.subtreeIsActivityBorn(db, nodeID: leaf.id) == false)
   #expect(try NodeCommands.delete(db, nodeID: leaf.id) == .deleted(nodes: 1, events: 0, looseEnds: 0))
   #expect(try NodeCommands.delete(db, nodeID: UUID()) == .notFound)
+}
+
+@Test func deleteBlockedForAutoBirthedStrand() throws {
+  let db = try openCanonicalDatabase(at: tempURL("delete-blocked-strand"))
+  // A source-free project (manual node) with an auto-birthed strand child — the strand has NO
+  // Source of its own (its events were repointed from the parent's source), so the old
+  // source-only guard would have let it through.
+  let project = try #require(try NodeCommands.add(db, name: "Colibri", kind: "project", parent: nil, description: ""))
+  let strand = Node(name: "feat", parentID: project.id, kind: NodeKind.strand, branchKey: "feat")
+  try db.write { db in try Node.insert { strand }.execute(db) }
+
+  #expect(try NodeCommands.subtreeIsActivityBorn(db, nodeID: strand.id) == true)
+  #expect(try NodeCommands.delete(db, nodeID: strand.id) == .blocked)
+  #expect(try db.read { db in try Node.where { $0.id.eq(strand.id) }.fetchOne(db) } != nil)   // still present
+
+  // Deleting the source-free parent is blocked too — it has a branchKey descendant.
+  #expect(try NodeCommands.subtreeIsActivityBorn(db, nodeID: project.id) == true)
+  #expect(try NodeCommands.delete(db, nodeID: project.id) == .blocked)
+  #expect(try db.read { db in try Node.where { $0.id.eq(project.id) }.fetchOne(db) } != nil)
 }
 
 @Test func updateEditsAllFieldsAtomically() throws {

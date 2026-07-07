@@ -306,10 +306,10 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
-  /// Whether `nodeID` may be deleted (no live source in its subtree → won't resurrect on sync).
+  /// Whether `nodeID` may be deleted (no live source or auto-birthed strand in its subtree → won't resurrect on sync).
   func canDelete(_ nodeID: UUID) -> Bool {
     guard let db else { return false }
-    return (try? NodeCommands.subtreeHasSources(db, nodeID: nodeID)) == false
+    return (try? NodeCommands.subtreeIsActivityBorn(db, nodeID: nodeID)) == false
   }
 
   func move(_ nodeID: UUID, under newParentID: UUID?) {
