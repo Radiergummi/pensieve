@@ -191,6 +191,11 @@
         }
       }
     },
+    "Context" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kontext" } }
+      }
+    },
     "Delete" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -937,6 +942,11 @@
             "value" : "Typ"
           }
         }
+      }
+    },
+    "Unset" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nicht festgelegt" } }
       }
     },
     "What's Next" : {

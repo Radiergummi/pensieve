@@ -330,23 +330,26 @@ final class AppModel: ObservableObject {
   func presentEditNode(_ node: Node) { editingNode = NodeEditRequest(mode: .edit(node)) }
 
   /// Commit the New Node modal: insert fully-formed, select it.
-  func commitNewNode(parent parentID: UUID?, name: String, kind: String, icon: String, colorTag: String) {
+  func commitNewNode(parent parentID: UUID?, name: String, kind: String,
+                     icon: String, colorTag: String, context: String) {
     guard let db else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty,
           let new = try? NodeCommands.add(db, name: trimmed, kind: kind,
                                           parent: parentID?.uuidString, description: "",
-                                          icon: icon, colorTag: colorTag) else { return }
+                                          icon: icon, colorTag: colorTag, context: context) else { return }
     refresh()
     sidebarSelection = .node(new.id); selectedNodeID = new.id
   }
 
   /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
-  func updateNode(_ nodeID: UUID, name: String, kind: String, icon: String, colorTag: String) {
+  func updateNode(_ nodeID: UUID, name: String, kind: String,
+                  icon: String, colorTag: String, context: String) {
     guard let db else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
-    _ = try? NodeCommands.update(db, nodeID: nodeID, name: trimmed, kind: kind, icon: icon, colorTag: colorTag)
+    _ = try? NodeCommands.update(db, nodeID: nodeID, name: trimmed, kind: kind,
+                                 icon: icon, colorTag: colorTag, context: context)
     refresh()
   }
 

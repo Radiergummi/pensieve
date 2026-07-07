@@ -15,6 +15,7 @@ struct NodeEditor: View {
   @State private var kind = NodeKind.project
   @State private var colorTag = ""          // palette name
   @State private var icon = ""              // stored form "sf:x" / "emoji:x"
+  @State private var context = ""           // "" = unset (inherit); else NodeContext.work/.personal
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -27,6 +28,11 @@ struct NodeEditor: View {
             TextField("Name", text: $name)
             Picker("Type", selection: $kind) {
               ForEach(NodeKind.all, id: \.self) { k in Text(AppearanceStyle.kindLabel(k)).tag(k) }
+            }
+            Picker("Context", selection: $context) {
+              Text("Unset").tag("")
+              Text("Work").tag(NodeContext.work)
+              Text("Personal").tag(NodeContext.personal)
             }
           }
           VStack(alignment: .leading, spacing: 6) {
@@ -88,21 +94,23 @@ struct NodeEditor: View {
       colorTag = style.colorTag
       icon = style.icon
       name = ""
+      context = ""
     case .edit(let node):
       name = node.name
       kind = node.kind
       let a = node.appearance
       colorTag = a.colorTag
       icon = a.icon.storedString
+      context = node.context
     }
   }
 
   private func commit() {
     switch request.mode {
     case .new(let parent):
-      model.commitNewNode(parent: parent, name: name, kind: kind, icon: icon, colorTag: colorTag)
+      model.commitNewNode(parent: parent, name: name, kind: kind, icon: icon, colorTag: colorTag, context: context)
     case .edit(let node):
-      model.updateNode(node.id, name: name, kind: kind, icon: icon, colorTag: colorTag)
+      model.updateNode(node.id, name: name, kind: kind, icon: icon, colorTag: colorTag, context: context)
     }
     dismiss()
   }
