@@ -57,11 +57,13 @@ trigger. Order is a recommendation, not a commitment.
    - ✅ **Slice 3a — LLM "Last Work Done" narration** (merged 2026-07-06): `DetailView` prose recap via a tested
      `SummaryBuilder.narrate → String?` (nil-honest, outside the cited gate), on-device, automatic + progressive,
      ⌘R re-narrates. Spec/plan: `{specs,plans}/2026-07-06-three-pane-slice3a-last-work-done*`.
-   - ⏳ **Slice 3b — inspector + liveness + polish:** ⌘⌥I provenance inspector (quote + surrounding transcript);
-     `ValueObservation` liveness (replacing the 3 s `Timer`; also enables live/background Spotlight re-indexing);
-     window tabbing / open-in-new-window; light/dark + materials. *Next up in the three-pane track.*
-   - ⏳ **Slice 4 — in-app organizing writes:** create / `nest` / `group` / `rename` / `retype` via existing
-     PensieveKit ops + the cycle guard.
+   - ✅ **Slice 3b — inspector + liveness + windows** (merged 2026-07-06): ⌘⌥I provenance inspector,
+     `ValueObservation` + FSEvents liveness (retired the 3 s `Timer`), secondary recall windows.
+   - ✅ **Slice 4 — in-app organizing writes** (merged 2026-07-07): create / `nest` / `group` / `rename` /
+     `retype` via context menus + toolbar, with the unified walk-to-root cycle guard.
+   - ✅ **Visual identity & UX polish** (merged 2026-07-07): per-kind/source icon+color system (migration v8),
+     Reminders-style New/Edit modal, manual delete (guarded against strand resurrection), badges + state orb +
+     GitHub-style timeline, German l10n. *Follow-up UX/IA carries in the dated section below.*
    - ⏳ **Slice 5 — talk-to-system stage 1:** describe a strand → structured create.
    - ⏳ **Slice 6 — forks surface:** ancestry trail + siblings + "Roads Not Taken" list. **Gated on the
      fork-capture backend** (see "Forks as first-class" below — that backend is a separate spec, still the
@@ -198,6 +200,56 @@ too big, or a genuine design question.
   single row) vs. treat a *decode* failure as permanent (drop-and-mark) — ideally paired with drain
   observability so a stuck row is at least logged. *Trigger: if a malformed capture row is ever
   observed looping, or when adding drain logging/metrics.*
+
+---
+
+## App UX & IA polish carries — 2026-07-07 (from dogfooding the visual-identity build)
+
+Observations from using the shipped visual-identity + three-pane app on the real store. Items 1–4 are
+small-to-medium app-target polish (no unit tests → build + smoke + human eyeball); item 5 (the three-pane IA
+change) is the meatiest and wants its **own brainstorm→spec**. Reference screenshots (Reminders parity) are in
+the 2026-07-07 session.
+
+1. **Sidebar tracking indicator — make it feel native.** The liveness footer now has a solid `.background(.bar)`
+   (which fixed the clash) but reads as a bolted-on band, not an Apple-idiomatic treatment. Explore the
+   first-party pattern: a translucent bottom bar with a hairline `Divider`, folding it into the sidebar `List`
+   as a non-selectable status row, or a smaller unobtrusive glyph. *Trigger: the next app-chrome polish pass.*
+2. **New/Edit modal + icon/emoji picker — Reminders-parity layout.** The current modal (name / type / color
+   grid / inline segmented Symbol|Emoji grid) is unbalanced and cramped — the symbol grid reads as a random
+   block. Match Reminders' balance: **Name + Type + a compact color row on the left; a Symbol area on the right
+   whose two buttons open popovers** — a searchable **SF-Symbol grid** popover and the **native emoji picker**
+   (system emoji popover / `NSApp.orderFrontCharacterPalette`) — instead of an always-open inline grid. See the
+   Reminders reference screenshots (balanced two-zone layout + popover pickers). *Trigger: pair with #1 as one
+   "make the chrome feel Apple-native" pass.*
+3. **Use the window toolbar.** Only a "+" toolbar item exists; the top toolbar is otherwise empty. Surface the
+   common actions there (New Node, Edit, Delete, Move/Merge, Refresh, Inspector toggle) as toolbar items/menus,
+   per macOS convention. *Trigger: the polish pass.*
+4. **Prose typography.** Displayed prose (LLM "Last Work Done" narration, node descriptions, loose-end text,
+   timeline summaries) uses a too-small font with poor line height and no measure control. A typographic pass:
+   larger body size, generous line spacing, a readable max-width measure, consistent hierarchy. *Trigger: the
+   polish pass.*
+5. **Three-pane IA — middle pane should show a node's children, not the node itself (own brainstorm→spec).**
+   Today a tree pick shows the node **plus** its child strands in the middle list AND the node's recall on the
+   right — so a strand-less project appears three times (sidebar → middle → detail). Rework: the **middle pane
+   lists the node's children** (strands), not the node itself; a node **without** children (e.g. a project whose
+   real content is its work) shows its **loose ends** in the middle pane instead; the **detail pane** then shows
+   the recall of whatever the middle pane selects. Net: a project's loose ends move into the middle column
+   (reads more naturally) and the self-duplication disappears. Touches `AppModel.nodesForSelection` + detail
+   routing and is a genuine information-architecture decision → **brainstorm→spec before building.**
+
+---
+
+## Sharing — export & share a node's grounded recall (its own spec)
+
+**Forward feature, user-requested (2026-07-07); its own brainstorm→spec→plan due to the detail.** Share a
+node's recall — the grounded, provenance-cited summary + loose ends + recent activity — out of Pensieve. Open
+questions the spec must settle: what a share *contains* (read-only snapshot vs. live); the format(s) (rendered
+document / Markdown / a shareable link / native `NSSharingServicePicker` / `ShareLink` / exported file);
+**whether provenance quotes are included** (captured text is content — sharing it off-device is a privacy
+decision, and the trust gate must still hold: cite real text or omit, never fabricate); single-user export vs.
+sending to a person; and the surface (a Share button in the detail toolbar — ties into carry #3 above). Becomes
+richer if paired with the **CloudKit** pillar (collaborative sharing). *Trigger: after the three-pane IA rework
++ UX-polish pass; scope as a standalone spec.*
 
 ---
 
