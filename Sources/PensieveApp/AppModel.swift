@@ -256,7 +256,7 @@ final class AppModel: ObservableObject {
   /// we select the *parent* — the list shows parent + children, including the new one.
   func createNode(under parentID: UUID?) {
     guard let db else { return }
-    guard let new = try? NodeCommands.add(db, name: String(localized: "New Node"),
+    guard let new = try? NodeCommands.add(db, name: "New Node",
                                           kind: defaultKind(under: parentID),
                                           parent: parentID?.uuidString, description: "") else { return }
     refresh()
@@ -291,7 +291,10 @@ final class AppModel: ObservableObject {
   func merge(_ sourceID: UUID, into targetID: UUID) {
     guard let db, sourceID != targetID else { return }
     try? ProjectResolver(db: db).group(targetID, into: [sourceID])
-    if selectedNodeID == sourceID { selectedNodeID = targetID; sidebarSelection = .node(targetID) }
+    // The source node is gone: move any state that referenced it onto the survivor / clear it.
+    if selectedNodeID == sourceID { selectedNodeID = targetID }
+    if sidebarSelection == .node(sourceID) { sidebarSelection = .node(targetID) }
+    if renamingNodeID == sourceID { renamingNodeID = nil }
     refresh()
   }
 
