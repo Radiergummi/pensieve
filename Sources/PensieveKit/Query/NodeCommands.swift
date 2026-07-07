@@ -86,6 +86,20 @@ public enum NodeCommands {
     }
   }
 
+  /// Atomic edit of a node's user-facing fields (the app's Edit modal). Leaves description,
+  /// parentID, state, branchKey untouched. Returns false — writing nothing — for an unknown id.
+  @discardableResult
+  public static func update(_ db: any DatabaseWriter, nodeID: UUID,
+                            name: String, kind: String, icon: String, colorTag: String) throws -> Bool {
+    try db.write { db in
+      guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
+      try Node.where { $0.id.eq(nodeID) }.update {
+        $0.name = name; $0.kind = kind; $0.icon = icon; $0.colorTag = colorTag
+      }.execute(db)
+      return true
+    }
+  }
+
   /// The outcome of a delete attempt. `.blocked` = the subtree still has a live source, which
   /// `ProjectResolver` would re-create on the next drain — so delete is refused.
   public enum DeleteResult: Equatable, Sendable {

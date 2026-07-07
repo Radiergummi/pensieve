@@ -142,3 +142,18 @@ import SQLiteData
   #expect(try NodeCommands.delete(db, nodeID: leaf.id) == .deleted(nodes: 1, events: 0, looseEnds: 0))
   #expect(try NodeCommands.delete(db, nodeID: UUID()) == .notFound)
 }
+
+@Test func updateEditsAllFieldsAtomically() throws {
+  let db = try openCanonicalDatabase(at: tempURL("node-update"))
+  let n = try #require(try NodeCommands.add(db, name: "Old", kind: "project", parent: nil, description: "keep"))
+  #expect(try NodeCommands.update(db, nodeID: n.id, name: "New", kind: "strand",
+                                  icon: "sf:flag", colorTag: "pink"))
+  let stored = try db.read { db in try Node.where { $0.id.eq(n.id) }.fetchOne(db) }
+  #expect(stored?.name == "New")
+  #expect(stored?.kind == "strand")
+  #expect(stored?.icon == "sf:flag")
+  #expect(stored?.colorTag == "pink")
+  #expect(stored?.description == "keep")   // untouched fields preserved
+  // Unknown id → false, nothing written.
+  #expect(try NodeCommands.update(db, nodeID: UUID(), name: "x", kind: "task", icon: "", colorTag: "") == false)
+}
