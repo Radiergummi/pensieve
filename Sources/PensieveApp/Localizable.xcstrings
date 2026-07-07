@@ -225,6 +225,56 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : " · erfasst %@" } }
       }
+    },
+    "New Node" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neuer Knoten" } }
+      }
+    },
+    "New Child" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues Unterelement" } }
+      }
+    },
+    "Rename" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Umbenennen" } }
+      }
+    },
+    "Change Type" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Typ ändern" } }
+      }
+    },
+    "Move to…" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verschieben nach…" } }
+      }
+    },
+    "Merge into…" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zusammenführen mit…" } }
+      }
+    },
+    "Top level" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Oberste Ebene" } }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abbrechen" } }
+      }
+    },
+    "Merge" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zusammenführen" } }
+      }
+    },
+    "Merge “%@” into “%@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "„%1$@“ mit „%2$@“ zusammenführen? Quellen, Aktivität und offene Enden werden zum Ziel verschoben und das Original gelöscht. Dies kann nicht rückgängig gemacht werden." } }
+      }
     }
   },
   "version" : "1.0"
