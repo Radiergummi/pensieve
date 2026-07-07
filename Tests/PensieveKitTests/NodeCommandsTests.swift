@@ -30,3 +30,45 @@ import SQLiteData
     "    auth (strand)  [active]",
   ])
 }
+
+@Test func reparentRejectsCycle() throws {
+  let db = try openCanonicalDatabase(at: tempURL("reparent-cycle"))
+  let a = try #require(try NodeCommands.add(db, name: "A", kind: "domain", parent: nil, description: ""))
+  let b = try #require(try NodeCommands.add(db, name: "B", kind: "project", parent: "A", description: ""))
+  let c = try #require(try NodeCommands.add(db, name: "C", kind: "strand", parent: "B", description: ""))
+
+  // Move A under its own grandchild C → cycle → refused.
+  #expect(try NodeCommands.reparent(db, nodeID: a.id, newParentID: c.id) == false)
+  // Move B under itself → refused.
+  #expect(try NodeCommands.reparent(db, nodeID: b.id, newParentID: b.id) == false)
+
+  let reloadedA = try db.read { db in try Node.where { $0.id.eq(a.id) }.fetchOne(db) }
+  #expect(reloadedA?.parentID == nil)   // A still a root; nothing was written
+}
+
+@Test func reparentLegalAndToRoot() throws {
+  let db = try openCanonicalDatabase(at: tempURL("reparent-legal"))
+  let a = try #require(try NodeCommands.add(db, name: "A", kind: "domain", parent: nil, description: ""))
+  let b = try #require(try NodeCommands.add(db, name: "B", kind: "project", parent: nil, description: ""))
+
+  #expect(try NodeCommands.reparent(db, nodeID: b.id, newParentID: a.id))
+  #expect(try db.read { db in try Node.where { $0.id.eq(b.id) }.fetchOne(db) }?.parentID == a.id)
+
+  #expect(try NodeCommands.reparent(db, nodeID: b.id, newParentID: nil))   // move back to root
+  #expect(try db.read { db in try Node.where { $0.id.eq(b.id) }.fetchOne(db) }?.parentID == nil)
+}
+
+@Test func reparentUnknownIDReturnsFalse() throws {
+  let db = try openCanonicalDatabase(at: tempURL("reparent-unknown"))
+  #expect(try NodeCommands.reparent(db, nodeID: UUID(), newParentID: nil) == false)
+}
+
+@Test func nestRejectsCycleViaWrapper() throws {
+  let db = try openCanonicalDatabase(at: tempURL("nest-cycle"))
+  _ = try NodeCommands.add(db, name: "A", kind: "domain", parent: nil, description: "")
+  _ = try NodeCommands.add(db, name: "B", kind: "project", parent: "A", description: "")
+  // Nest A under its own child B → refused, tree unchanged.
+  #expect(try NodeCommands.nest(db, child: "A", under: "B") == false)
+  let a = try db.read { db in try Node.where { $0.name.eq("A") }.fetchOne(db) }
+  #expect(a?.parentID == nil)
+}
