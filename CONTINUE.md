@@ -1,36 +1,48 @@
-# CONTINUE — session handoff (2026-07-06)
+# CONTINUE — session handoff (2026-07-07)
 
 Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (project rules), then this.
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `802e215`) and the tree is clean. Test suite: **173 tests**, run with
+Everything below is **on `main`** (HEAD `acba4e9`) and the tree is clean. Test suite: **182 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
 
-**Latest (this session): Pensieve.app localization (String Catalog + German) — DONE & on `main`.** First-party
-Xcode **String Catalog** (`Sources/PensieveApp/Localizable.xcstrings`, English base + German `de`, 44 keys)
-localizing **all app UI chrome**, impersonal/infinitive German; wired via `project.yml`
-(`options.developmentLanguage`/`knownRegions [en,de]`, `CFBundleLocalizations`, `SWIFT_EMIT_LOC_STRINGS`).
-**Chrome only** — content (node names, quotes, descriptions, event summaries, roles, transcripts) never
-localized; content-mixed frames + proper names ("Pensieve"/"Briefing") stay English-fallback. **Gotcha:**
-`xcodebuild … build` does NOT auto-populate the source `.xcstrings` (IDE-only) — keys were reconciled by hand
-against the Swift literals (`%lld`/`%@`). Subagent-driven (Sonnet implementers/task-reviewers, **Opus**
-whole-branch review = READY-TO-MERGE, 0 findings). **Out of scope / deferred follow-up:** App Intents / Siri /
-Shortcuts phrases + the `pensieve` CLI. **Human-verify carry:** native-speaker in-situ tone pass (open the built
-app under the real macOS German language; e.g. "Moved→Bewegt", "capturing→erfasst" read literally). Spec/plan:
-`docs/superpowers/{specs,plans}/2026-07-06-app-localization-german*`.
+**Latest (this session): three-pane slice 4 (in-app organizing writes) — DONE & on `main`.** The app can now
+reorganize the typed tree. Five ops via native `.contextMenu` on **both** sidebar-tree and middle-list rows +
+toolbar "+"/File ▸ New Node (⌘N): **New Child · Rename · Change Type ▸ (all 7 kinds) · Move to… · Merge into…**
+(destructive, `.confirmationDialog`). In-place rename = focused `TextField` (Enter/blur commit, Esc cancel);
+creation renames in the flat middle list (OutlineGroup can't be force-expanded), so New Child selects the
+*parent*. **Two load-bearing PensieveKit correctness fixes (tested):** a unified **guarded
+`NodeCommands.reparent`** (walk-to-root cycle guard; `nest` routes through it) and a **general cycle-safe
+`ProjectResolver.group`** — the survivor is lifted above the highest absorbed node on its own ancestor chain, so
+**no** merge (incl. multi-ancestor-in-one-call / non-adjacent ancestor) can create a self/transitive cycle; the
+initially-planned parent-into-child-only fix was **caught insufficient in the task review and generalized** (a
+concrete CLI-reachable counter-example was reproduced). Plus a pure `NodeForest.descendantIDs` picker guard
+(Move/Merge exclude self+descendants — UI defense-in-depth atop the authoritative write guard). App writes are
+thin on `AppModel` (op → explicit `refresh()`); `merge` moves selection/rename state off the deleted source;
+default new-node **name is plain "New Node", NOT localized** (node names are content → the sync-bound canonical
+store). Subagent-driven (Sonnet impl/review; **Opus** whole-branch = READY-TO-MERGE, 0 Critical/Important; two
+new Minors (stale `sidebarSelection` on merge, localized default name) fixed before merge). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-07-three-pane-slice4-organizing-writes*`.
+- **Merge wrinkle (resolved):** `main` advanced mid-session with two of your commits — `9d54438` (Xcode
+  Build+Run scheme) and `03074fa` (inspector-perf, touches `RootView.swift`) — plus an uncommitted
+  **Xcode-reformatted `Localizable.xcstrings`** (multi-line, +12 auto-extracted App-Intents/Spotlight keys). The
+  branch was **rebased onto `03074fa`** (RootView auto-merged, no conflict) and merged `--no-ff`; a follow-up
+  `chore(l10n)` commit **adopted your reformatted catalog and folded in the 10 slice-4 German keys** (66 keys
+  total). Net: the Xcode String Catalog format is now the committed source of truth.
+- **Human-verify carries** (need the built app, real store, plain `open` — can't be asserted headlessly): rename
+  commit(Enter/blur)/cancel(Esc) in place on tree + middle list; Change Type updates the tree icon; **Move to…
+  and Merge into… never list the node or its descendants** and Move offers "Top level"; the destructive-merge
+  confirmation names both nodes and the merged node's activity re-homes under the target; `pensieve list` matches
+  the app's tree after each op; German renders in situ (`-AppleLanguages '(de)'`). Build: `xcodegen generate &&
+  xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -derivedDataPath ./.build-xcode
+  build`, then `open ./.build-xcode/Build/Products/Debug/Pensieve.app`.
 
-**Next up — three-pane slice 4 (in-app organizing writes): design already brainstormed this session, needs its
-own spec/plan.** Agreed shape: **context menus + inline rename** (New Child / Rename / Change Type ▸ / Move to… /
-Merge into… on tree + middle-list rows; toolbar "+" for a top-level node); **all five ops incl. destructive
-merge** with a confirmation dialog. Two load-bearing PensieveKit changes (with tests): a **write-side walk-to-root
-cycle guard in `NodeCommands.nest`** (currently absent — nesting under a descendant would create a cycle), and
-**fix the latent `ProjectResolver.group` self-cycle bug** (merging a parent into its own child leaves the child
-pointing at itself). App write path: `AppModel` already holds a read/write `db` + one shared model across all
-windows; organizing methods call the ops then `refresh()` explicitly (Node-only writes don't trip the
-Event-count `ValueObservation`); Move/Merge pickers filter out self + descendants (UI-level guard on top of the
-write guard). Single-writer principle untouched (it governs *event ingestion*, not organizing metadata).
+**Next up — track choice (each its own brainstorm→spec→plan):** **three-pane slice 5 (talk-to-system:
+describe→create a strand via `LLMProvider`)**, or the OS-integration track (**Focus filters `SetFocusFilterIntent`**
+⭐, then Widgets/CloudKit), or slice 6 (forks, gated on the unbuilt fork-capture backend). See
+`docs/superpowers/backlog.md` **Roadmap**.
 
 **Latest (this session): three-pane slice 3b — liveness · inspector · recall windows — DONE & on `main`.** Four
 parts, subagent-driven, review-clean. **(1) `ProvenanceContext` kernel** (tested PensieveKit, read-only): loose
