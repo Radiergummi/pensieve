@@ -28,6 +28,7 @@ struct BriefingView: View {
         }
       }
       .padding(24)
+      .frame(maxWidth: Prose.measure, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
@@ -45,7 +46,7 @@ struct BriefingView: View {
           }
         }
         if !c.latestSummary.isEmpty {
-          Text(c.latestSummary).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+          Text(c.latestSummary).prose().foregroundStyle(.secondary).lineLimit(1)
         }
         if let top = c.topLooseEnd {
           Label(top, systemImage: "arrow.right.circle").font(.caption).foregroundStyle(.orange).lineLimit(1)

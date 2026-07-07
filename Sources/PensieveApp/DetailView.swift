@@ -31,7 +31,7 @@ struct DetailView: View {
               Text(AppearanceStyle.stateLabel(node.state)).foregroundStyle(.secondary)
             }
             if !node.description.isEmpty {
-              Text(node.description).font(.body).padding(.top, 2)
+              Text(node.description).prose().padding(.top, 2)
             }
           }
         }
@@ -40,7 +40,7 @@ struct DetailView: View {
         // flag — and the section is omitted entirely when there's no genuine narration).
         if let lastWorkDone, loadedNodeID == node.id {
           section("Last Work Done") {
-            Text(lastWorkDone).font(.body)
+            Text(lastWorkDone).prose()
           }
         } else if isNarrating, loadedNodeID == node.id {
           section("Last Work Done") {
@@ -69,6 +69,7 @@ struct DetailView: View {
         }
       }
       .padding(24)
+      .frame(maxWidth: Prose.measure, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     // Re-runs on node change AND on ⌘R (refreshToken). The body order is load-bearing (two
@@ -103,7 +104,7 @@ struct DetailView: View {
         HStack(spacing: 6) {
           Image(systemName: isOpen ? "chevron.down" : "chevron.right")
             .font(.caption2).foregroundStyle(.secondary)
-          Text(view.looseEnd.text)
+          Text(view.looseEnd.text).prose()
           Spacer()
         }
       }
@@ -113,6 +114,7 @@ struct DetailView: View {
         // The provenance: verbatim quote + where it came from. North-star made visible.
         VStack(alignment: .leading, spacing: 4) {
           Text(view.looseEnd.quote)
+            .prose()
             .italic()
             .padding(.leading, 10)
             .overlay(alignment: .leading) {
@@ -179,7 +181,7 @@ private struct TimelineRow: View {
           Text(event.occurredAt, format: .dateTime.hour().minute())
             .font(.caption2).monospacedDigit().foregroundStyle(.tertiary)
         }
-        Text(event.summary).font(.callout)
+        Text(event.summary).prose()
       }
       Spacer()
     }
