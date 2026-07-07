@@ -4,11 +4,43 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `acba4e9`) and the tree is clean. Test suite: **182 tests**, run with
+Everything below is **on `main`** (HEAD `3ba9da9`) and the tree is clean. Test suite: **196 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
 
-**Latest (this session): three-pane slice 4 (in-app organizing writes) — DONE & on `main`.** The app can now
+**Latest (this session): app visual identity & UX polish — DONE & on `main`.** Seven UX fixes on a shared
+per-kind/per-source **visual-identity system** (localizable label + icon + color; a node may override its own
+icon+color, kind defaults otherwise). **Kit (SwiftUI-free, tested):** migration **v8** adds `nodes.icon`/`colorTag`;
+`VisualIdentity.swift` (`AppearanceIcon` `sf:`/`emoji:` scheme, `NodeKindStyle`, `EventSourceStyle`,
+`Node.appearance`); `NodeCommands.add(icon/colorTag)`, `.update`, and a **manual-only cascade `delete`** —
+`subtreeIsActivityBorn` refuses to delete any node whose subtree holds a live `Source` **or an auto-birthed strand
+(`branchKey != nil`)**, because both re-materialize via `ProjectResolver`/`attributeToNode` on the next drain (the
+strand case was **caught by the Opus whole-branch review** — the source-free guard alone missed it — and fixed +
+re-reviewed). **App (thin views):** `AppearanceStyle` resolver + `NodeBadge`; a **Reminders-style New/Edit modal**
+(name/type/color grid/emoji+SF-symbol picker) that **replaces** inline-rename + the Change Type submenu and writes
+fully-formed nodes; **manual delete** (context menu, disabled on activity-born nodes, destructive confirmation);
+sidebar footer `.background(.bar)` clash fix + **collapsible sections** (`Section(isExpanded:)` in `@AppStorage`);
+icon **badges** + localized **kind label** + colored **state orb** in list/sidebar/header; a **GitHub-style
+day-grouped timeline** with source icon+color+localized label; **German localization** of all new chrome + a
+localized `NodeEntity` Spotlight subtitle. Subagent-driven (12 tasks: Sonnet impl+task-review each; **Opus**
+whole-branch review → 1 Important fixed, minors deferred). Spec/plans:
+`docs/superpowers/{specs,plans}/2026-07-07-app-visual-identity-*`.
+- **Merge wrinkle (resolved):** `main` was at the branch base (no parallel commits) but the checkout had an
+  uncommitted **Xcode reformat of `Localizable.xcstrings`** (reorder + `%lld`→`%@`). Set aside, fast-forwarded the
+  branch, then **reconciled** (`chore(l10n)` `3ba9da9`): a jq **union** kept the reformat (order + specifier
+  changes) and appended the **26** new German chrome keys → **87 keys**; verified `de.lproj` compiles the German.
+  The catalog's whitespace is now jq-serialized (Xcode re-normalizes it on next open); no keys/translations lost.
+- **Human-verify carries** (need the built app, real store, plain `open` — can't be asserted headlessly): footer no
+  longer clashes; sections collapse/expand and persist; the New/Edit modal creates/edits with a chosen color+icon
+  (no empty placeholder); icon badges render in list/sidebar/header (incl. a custom emoji); state-orb color
+  (active=green/muted=orange/archived=gray); the timeline rail + day headers + source badges (eyeball the
+  last-per-day rail stub); **Delete… is disabled on activity-born nodes** (sources or a `branchKey` strand) and
+  enabled+confirmed on manual ones; `pensieve list` matches after; German in situ (`-AppleLanguages '(de)'`) + a
+  native-speaker tone pass on the new copy. Build: `xcodegen generate && xcodebuild -project Pensieve.xcodeproj
+  -scheme Pensieve -configuration Debug -derivedDataPath ./.build-xcode build`, then `open
+  ./.build-xcode/Build/Products/Debug/Pensieve.app`.
+
+**Prior this session: three-pane slice 4 (in-app organizing writes) — DONE & on `main`.** The app can now
 reorganize the typed tree. Five ops via native `.contextMenu` on **both** sidebar-tree and middle-list rows +
 toolbar "+"/File ▸ New Node (⌘N): **New Child · Rename · Change Type ▸ (all 7 kinds) · Move to… · Merge into…**
 (destructive, `.confirmationDialog`). In-place rename = focused `TextField` (Enter/blur commit, Esc cancel);
@@ -128,11 +160,10 @@ unchanged — no reinstall needed.
 
 **Two live tracks — pick per appetite** (each its own brainstorm→spec→plan):
 
-**Track A — the three-pane app** (the product spine). Slices 3a (LLM narration) **and 3b (liveness · inspector ·
-recall windows) just shipped. Next: slice 4 (in-app organizing writes** — create/`nest`/`group`/`rename`/`retype`
-via existing PensieveKit ops, with the walk-to-root cycle guard). Then 5 (talk-to-system), 6 (forks,
-backend-gated). Design: `specs/2026-07-05-pensieve-app-three-pane-design.md`. *(Live/background Spotlight
-re-indexing that slice 3 promised now rides the slice-3b liveness `refresh` debounce — done.)*
+**Track A — the three-pane app** (the product spine). Slices 3a/3b, **slice 4 (organizing writes), and the
+visual-identity & UX-polish pass all shipped. Next: slice 5 (talk-to-system** — describe→create a strand via
+`LLMProvider`), then 6 (forks, backend-gated — brainstorm the fork-capture backend first). Design:
+`specs/2026-07-05-pensieve-app-three-pane-design.md`.
 
 **Track B — the next OS-integration surface.** The bundle foundation, `pensieve://`, the menu-bar item, **and
 the App Intents foundation + Spotlight** are done; the App-Intents entity/intent model is **live** as the
