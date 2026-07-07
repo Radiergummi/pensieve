@@ -876,6 +876,17 @@
         }
       }
     },
+    "Toggle Sidebar" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seitenleiste ein-/ausblenden"
+          }
+        }
+      }
+    },
     "Top level" : {
       "extractionState" : "stale",
       "localizations" : {
