@@ -42,14 +42,14 @@ struct BriefingView: View {
           if c.movedSince > 0 {
             Text("\(c.movedSince) since last visit").metaText()
           } else {
-            Text("dormant \(c.daysDormant)d").font(.footnote).foregroundStyle(.tertiary)
+            Text("dormant \(c.daysDormant)d").font(.system(size: 12)).foregroundStyle(.tertiary)
           }
         }
         if !c.latestSummary.isEmpty {
           Text(c.latestSummary).prose().foregroundStyle(.secondary).lineLimit(1)
         }
         if let top = c.topLooseEnd {
-          Label(top, systemImage: "arrow.right.circle").font(.footnote).foregroundStyle(.orange).lineLimit(1)
+          Label(top, systemImage: "arrow.right.circle").font(.system(size: 12)).foregroundStyle(.orange).lineLimit(1)
         }
       }
       .padding(12)
