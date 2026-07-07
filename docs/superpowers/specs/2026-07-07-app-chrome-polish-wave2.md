@@ -392,3 +392,41 @@ One Sonnet implementer + task-reviewer per task; Opus whole-branch review over t
 
 ## Out of scope (unchanged)
 Backlog item 5 (three-pane IA) and the Sharing pillar — their own specs.
+
+---
+
+## T9 — Single native sidebar toggle + first-party toolbar layout (post-eyeball)
+
+**Problem.** Wave-2 T6 added a custom sidebar-toggle button + `columnVisibility` binding, but
+`NavigationSplitView` already provides a native sidebar toggle (leftmost, in the sidebar) — so there
+are now TWO toggles. First-party apps (Mail/Notes/Reminders) keep the toggle only leftmost in the
+sidebar; put the create action + a content-column header + right-side actions per column.
+
+**Design (mirror Mail/Notes/Reminders):**
+- **Remove the custom toggle + plumbing.** In `RootView`, delete `@State private var columns` and the
+  `columnVisibility: $columns` argument → plain `NavigationSplitView { } content: { } detail: { }`.
+  This restores the single automatic sidebar toggle. Delete the `Image(systemName: "sidebar.left")`
+  toggle Button.
+- **Content-column header** (like Notes' "Alle iCloud / 227 Notizen"): on `ContentListView`'s List
+  add `.navigationTitle("Pensieve")` + `.navigationSubtitle("\(model.projectCount) Projects")`.
+  Remove the split-view-level `.navigationTitle("Pensieve")` (window title stays from the
+  `Window("Pensieve", …)` scene). Add `AppModel.projectCount` = count of top-level project nodes:
+  `allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project }.count` (expose as a computed
+  `var`). *(Scope-sensitive titling — folder/count that changes with selection — is the deferred IA
+  rework, backlog item 5; this is a fixed app-level header.)*
+- **Actions move onto the detail column** (so they render over the detail pane, not the sidebar).
+  Refactor the `detail:` closure into a `@ViewBuilder private var detailColumn` and attach `.toolbar`
+  to it:
+  - `ToolbarItem(placement: .navigation)` → New Node "+" (`plus`, `.help("New Node")`) — detail-leading,
+    like Notes' new-note / Mail's compose.
+  - `ToolbarItemGroup(placement: .primaryAction)` → Refresh (`arrow.clockwise`) then Inspector
+    (`sidebar.right`) — detail-trailing.
+  Remove the old split-view-level `.toolbar`. Keep all four `.sheet`/`.confirmationDialog`,
+  `.inspector`, `.onChange` on the NavigationSplitView unchanged.
+- **Strings:** add `"%lld Projects"` (de `"%lld Projekte"`). Remove the now-orphaned `"Toggle Sidebar"`
+  key (its only consumer was the deleted custom toggle; the native toggle uses the system label).
+
+**Human-verify:** exactly one sidebar toggle (leftmost, in the sidebar); content column shows
+"Pensieve / N Projects"; "+" reads as the detail pane's leading action; refresh + inspector trailing;
+sidebar toggle collapses only the left column. *(If SwiftUI hoists the `.navigation` "+" to
+window-leading instead of detail-leading, that's the one spot to nudge — note it.)*
