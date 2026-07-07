@@ -77,6 +77,9 @@ final class AppModel: ObservableObject {
   }
   /// The node currently being renamed in place (drives the row's TextField). nil = not renaming.
   @Published var renamingNodeID: UUID?
+  /// Non-nil while a Move/Merge picker sheet is up for that node. Mounted in RootView.
+  @Published var movePickerNodeID: UUID?
+  @Published var mergePickerNodeID: UUID?
   /// Drives the ⌘⌥I provenance inspector (main window only). Toggled by the Go ▸ Inspector command.
   @Published var showInspector = false
   /// The loose end whose surrounding transcript the inspector shows. Written ONLY by the main

@@ -42,5 +42,68 @@ struct NodeContextMenu: View {
         }
       }
     }
+    Divider()
+    Button("Move to…") { model.movePickerNodeID = node.id }
+    Button("Merge into…") { model.mergePickerNodeID = node.id }
+  }
+}
+
+/// Reparent `nodeID` under a chosen node (or to top level). Targets exclude self + descendants.
+struct MovePicker: View {
+  @ObservedObject var model: AppModel
+  let nodeID: UUID
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      List {
+        Button("Top level") { model.move(nodeID, under: nil); dismiss() }
+        ForEach(model.moveTargets(for: nodeID)) { target in
+          Button(target.name) { model.move(nodeID, under: target.id); dismiss() }
+        }
+      }
+      .navigationTitle("Move to…")
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+    }
+    .frame(minWidth: 320, minHeight: 400)
+  }
+}
+
+/// Merge `nodeID` into a chosen target (destructive; confirmation required). Targets exclude
+/// self + descendants.
+struct MergePicker: View {
+  @ObservedObject var model: AppModel
+  let nodeID: UUID
+  @Environment(\.dismiss) private var dismiss
+  @State private var pendingTarget: Node?
+
+  var body: some View {
+    NavigationStack {
+      List(model.moveTargets(for: nodeID)) { target in
+        Button(target.name) { pendingTarget = target }
+      }
+      .navigationTitle("Merge into…")
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+    }
+    .frame(minWidth: 320, minHeight: 400)
+    .confirmationDialog(
+      confirmMessage,
+      isPresented: Binding(get: { pendingTarget != nil },
+                           set: { if !$0 { pendingTarget = nil } }),
+      titleVisibility: .visible
+    ) {
+      Button("Merge", role: .destructive) {
+        if let t = pendingTarget { model.merge(nodeID, into: t.id) }
+        dismiss()
+      }
+      Button("Cancel", role: .cancel) { pendingTarget = nil }
+    }
+  }
+
+  private var confirmMessage: String {
+    let source = model.node(nodeID)?.name ?? ""
+    let target = pendingTarget?.name ?? ""
+    // Chrome format string; the two names are %@ args (content). Each named once → 2 args.
+    return String(localized: "Merge “\(source)” into “\(target)”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone.")
   }
 }
