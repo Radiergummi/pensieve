@@ -5,10 +5,7 @@ import Foundation
 public enum NodeContext {
   public static let work = "work"
   public static let personal = "personal"
-  public static let unset = ""
-
-  /// The user-selectable explicit contexts (for the app's Context picker + Focus filter).
-  public static let all = [work, personal]
+  // Unset is the empty string ("") — inherit from the nearest ancestor.
 }
 
 /// Pure context resolution + the Focus-filter visibility predicate. Operates on an in-memory `[Node]`
