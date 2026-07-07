@@ -9,11 +9,7 @@ struct ContentListView: View {
     let items = model.nodesForSelection()
     List(items, selection: $model.selectedNodeID) { node in
       VStack(alignment: .leading, spacing: 2) {
-        if model.renamingNodeID == node.id {
-          NodeNameField(model: model, node: node)
-        } else {
-          Text(node.name)
-        }
+        Text(node.name)
         Text(node.kind).font(.caption).foregroundStyle(.secondary)
       }
       .tag(node.id)

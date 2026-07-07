@@ -34,7 +34,7 @@ struct PensieveApp: App {
     .commands {
       SidebarCommands()   // standard Show/Hide Sidebar (⌃⌘S) in the View menu
       CommandGroup(after: .newItem) {
-        Button("New Node") { model.createNode(under: nil) }
+        Button("New Node") { model.presentNewNode(under: nil) }
           .keyboardShortcut("n", modifiers: .command)
         Button("Open in New Window") { model.openNodeRequest = model.selectedNodeID }
           .keyboardShortcut("n", modifiers: [.command, .option])

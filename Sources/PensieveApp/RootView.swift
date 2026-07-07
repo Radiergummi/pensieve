@@ -40,7 +40,7 @@ struct RootView: View {
     }
     .toolbar {
       ToolbarItem {
-        Button { model.createNode(under: nil) } label: { Image(systemName: "plus") }
+        Button { model.presentNewNode(under: nil) } label: { Image(systemName: "plus") }
           .help("New Node")
       }
     }
@@ -51,6 +51,9 @@ struct RootView: View {
     .sheet(isPresented: Binding(get: { model.mergePickerNodeID != nil },
                                 set: { if !$0 { model.mergePickerNodeID = nil } })) {
       if let id = model.mergePickerNodeID { MergePicker(model: model, nodeID: id) }
+    }
+    .sheet(item: $model.editingNode) { req in
+      NodeEditor(model: model, request: req)
     }
   }
 }

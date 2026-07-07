@@ -38,15 +38,22 @@ enum SmartListKind: String, CaseIterable, Hashable {
   }
 }
 
-/// The node kinds the app surfaces in Change Type / new-node creation (all seven declared kinds).
-enum NodeKindOption {
-  static let all = NodeKind.all
-}
-
 enum SidebarSelection: Hashable {
   case briefing
   case smartList(SmartListKind)
   case node(UUID)
+}
+
+/// A New/Edit modal request. Identifiable so it drives `.sheet(item:)`.
+struct NodeEditRequest: Identifiable {
+  enum Mode { case new(parent: UUID?); case edit(Node) }
+  let mode: Mode
+  var id: String {
+    switch mode {
+    case .new(let p): return "new-\(p?.uuidString ?? "root")"
+    case .edit(let n): return "edit-\(n.id.uuidString)"
+    }
+  }
 }
 
 /// A ⌘K jump target. Navigation only — sets the same selection state the sidebar does.
@@ -75,11 +82,13 @@ final class AppModel: ObservableObject {
   @Published var selectedNodeID: UUID? {
     didSet { if selectedNodeID != oldValue { inspectedLooseEndID = nil } }
   }
-  /// The node currently being renamed in place (drives the row's TextField). nil = not renaming.
-  @Published var renamingNodeID: UUID?
+  /// Drives the New/Edit node modal. nil = closed. Mounted in RootView.
+  @Published var editingNode: NodeEditRequest?
   /// Non-nil while a Move/Merge picker sheet is up for that node. Mounted in RootView.
   @Published var movePickerNodeID: UUID?
   @Published var mergePickerNodeID: UUID?
+  /// Non-nil while the delete confirmation is presented for that node. Mounted in RootView.
+  @Published var pendingDeleteNodeID: UUID?
   /// Drives the ⌘⌥I provenance inspector (main window only). Toggled by the Go ▸ Inspector command.
   @Published var showInspector = false
   /// The loose end whose surrounding transcript the inspector shows. Written ONLY by the main
@@ -266,40 +275,41 @@ final class AppModel: ObservableObject {
   // Node-only writes don't change the Event count the liveness ValueObservation tracks).
 
   /// Default kind for a new node: a child of a project/domain is a strand; everything else a project.
-  private func defaultKind(under parentID: UUID?) -> String {
+  func defaultKind(under parentID: UUID?) -> String {
     guard let parentID, let parent = node(parentID) else { return NodeKind.project }
     return (parent.kind == NodeKind.project || parent.kind == NodeKind.domain) ? NodeKind.strand : NodeKind.project
   }
 
-  /// Create a node (nil parent = top level), select it into the middle list, and enter inline rename.
-  /// Renaming happens in the flat content list (OutlineGroup can't be force-expanded), so for a child
-  /// we select the *parent* — the list shows parent + children, including the new one.
-  func createNode(under parentID: UUID?) {
+  /// Open the New Node modal (replaces the old immediate-insert + inline-rename flow → fixes #3).
+  func presentNewNode(under parentID: UUID?) { editingNode = NodeEditRequest(mode: .new(parent: parentID)) }
+  /// Open the Edit modal for an existing node.
+  func presentEditNode(_ node: Node) { editingNode = NodeEditRequest(mode: .edit(node)) }
+
+  /// Commit the New Node modal: insert fully-formed, select it.
+  func commitNewNode(parent parentID: UUID?, name: String, kind: String, icon: String, colorTag: String) {
     guard let db else { return }
-    guard let new = try? NodeCommands.add(db, name: "New Node",
-                                          kind: defaultKind(under: parentID),
-                                          parent: parentID?.uuidString, description: "") else { return }
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty,
+          let new = try? NodeCommands.add(db, name: trimmed, kind: kind,
+                                          parent: parentID?.uuidString, description: "",
+                                          icon: icon, colorTag: colorTag) else { return }
     refresh()
-    if let parentID {
-      sidebarSelection = .node(parentID); selectedNodeID = parentID
-    } else {
-      sidebarSelection = .node(new.id); selectedNodeID = new.id
-    }
-    renamingNodeID = new.id
+    sidebarSelection = .node(new.id); selectedNodeID = new.id
   }
 
-  func rename(_ nodeID: UUID, to newName: String) {
-    renamingNodeID = nil
-    let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let db, !trimmed.isEmpty else { return }
-    _ = try? NodeCommands.rename(db, node: nodeID.uuidString, to: trimmed)
+  /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
+  func updateNode(_ nodeID: UUID, name: String, kind: String, icon: String, colorTag: String) {
+    guard let db else { return }
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    _ = try? NodeCommands.update(db, nodeID: nodeID, name: trimmed, kind: kind, icon: icon, colorTag: colorTag)
     refresh()
   }
 
-  func retype(_ nodeID: UUID, to kind: String) {
-    guard let db else { return }
-    _ = try? NodeCommands.retype(db, node: nodeID.uuidString, to: kind)
-    refresh()
+  /// Whether `nodeID` may be deleted (no live source in its subtree → won't resurrect on sync).
+  func canDelete(_ nodeID: UUID) -> Bool {
+    guard let db else { return false }
+    return (try? NodeCommands.subtreeHasSources(db, nodeID: nodeID)) == false
   }
 
   func move(_ nodeID: UUID, under newParentID: UUID?) {
@@ -314,7 +324,6 @@ final class AppModel: ObservableObject {
     // The source node is gone: move any state that referenced it onto the survivor / clear it.
     if selectedNodeID == sourceID { selectedNodeID = targetID }
     if sidebarSelection == .node(sourceID) { sidebarSelection = .node(targetID) }
-    if renamingNodeID == sourceID { renamingNodeID = nil }
     refresh()
   }
 
