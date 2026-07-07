@@ -303,6 +303,11 @@
         }
       }
     },
+    "Filter Pensieve by Context" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve nach Kontext filtern" } }
+      }
+    },
     "Git Checkout" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -629,6 +634,16 @@
         }
       }
     },
+    "Pensieve Context" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve-Kontext" } }
+      }
+    },
+    "Personal" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönlich" } }
+      }
+    },
     "Pick a loose end to see its source." : {
       "localizations" : {
         "de" : {
@@ -813,6 +828,21 @@
         }
       }
     },
+    "Show All" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle anzeigen" } }
+      }
+    },
+    "Show Personal" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönliches anzeigen" } }
+      }
+    },
+    "Show Work" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeit anzeigen" } }
+      }
+    },
     "Since %@" : {
       "localizations" : {
         "de" : {
@@ -917,6 +947,11 @@
             "value" : "Als Nächstes"
           }
         }
+      }
+    },
+    "Work" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeit" } }
       }
     }
   },
