@@ -8,9 +8,12 @@ struct ContentListView: View {
   var body: some View {
     let items = model.nodesForSelection()
     List(items, selection: $model.selectedNodeID) { node in
-      VStack(alignment: .leading, spacing: 2) {
-        Text(node.name)
-        Text(node.kind).font(.caption).foregroundStyle(.secondary)
+      HStack(spacing: 10) {
+        NodeBadge(node: node, size: 26)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(node.name)
+          Text(AppearanceStyle.kindLabel(node.kind)).font(.caption).foregroundStyle(.secondary)
+        }
       }
       .tag(node.id)
       .contextMenu { NodeContextMenu(model: model, node: node) }

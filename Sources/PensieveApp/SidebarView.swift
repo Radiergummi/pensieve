@@ -38,7 +38,7 @@ struct SidebarView: View {
   /// type-check the nested Group/if + `.tag` + `.contextMenu` chain inside the OutlineGroup
   /// closure all at once ("unable to type-check this expression in reasonable time").
   @ViewBuilder private func nodeRow(_ item: NodeForestNode) -> some View {
-    Label(item.node.name, systemImage: symbol(for: item.node.kind))
+    Label { Text(item.node.name) } icon: { NodeBadge(node: item.node, size: 18) }
       .tag(SidebarSelection.node(item.node.id))
       .contextMenu { NodeContextMenu(model: model, node: item.node) }
   }
@@ -55,18 +55,6 @@ struct SidebarView: View {
         .foregroundStyle(kind.color)
     }
     .tag(SidebarSelection.smartList(kind))
-  }
-
-  private func symbol(for kind: String) -> String {
-    switch kind {
-    case NodeKind.domain: return "folder"
-    case NodeKind.strand: return "arrow.triangle.branch"
-    case NodeKind.concept: return "lightbulb"
-    case NodeKind.initiative: return "flag"
-    case NodeKind.task: return "checklist"
-    case NodeKind.topic: return "tag"
-    default: return "shippingbox"   // project + any unknown kind
-    }
   }
 }
 

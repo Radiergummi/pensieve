@@ -20,11 +20,19 @@ struct DetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         // WHAT IT IS
-        VStack(alignment: .leading, spacing: 4) {
-          Text(node.name).font(.largeTitle).bold()
-          Text("\(node.kind) · \(node.state)").foregroundStyle(.secondary)
-          if !node.description.isEmpty {
-            Text(node.description).font(.body).padding(.top, 2)
+        HStack(alignment: .top, spacing: 12) {
+          NodeBadge(node: node, size: 44)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(node.name).font(.largeTitle).bold()
+            HStack(spacing: 6) {
+              Text(AppearanceStyle.kindLabel(node.kind)).foregroundStyle(.secondary)
+              Text("·").foregroundStyle(.secondary)
+              Circle().fill(AppearanceStyle.stateColor(node.state)).frame(width: 8, height: 8)
+              Text(AppearanceStyle.stateLabel(node.state)).foregroundStyle(.secondary)
+            }
+            if !node.description.isEmpty {
+              Text(node.description).font(.body).padding(.top, 2)
+            }
           }
         }
 
