@@ -333,6 +333,27 @@ final class AppModel: ObservableObject {
     return allNodes.filter { !banned.contains($0.id) }.sorted { $0.name < $1.name }
   }
 
+  /// Delete a (source-free) node and its subtree via the Kit cascade. Moves selection off it.
+  func deleteNode(_ nodeID: UUID) {
+    guard let db else { return }
+    _ = try? NodeCommands.delete(db, nodeID: nodeID)
+    if selectedNodeID == nodeID { selectedNodeID = nil }
+    if sidebarSelection == .node(nodeID) { sidebarSelection = .briefing }
+    refresh()
+  }
+
+  /// Destructive-confirmation copy for the currently-pending delete. Names the node; warns about
+  /// nested items when the subtree isn't a leaf. (Exact event counts would need a Kit read; the
+  /// subtree shape from the in-memory forest is enough for an honest warning.)
+  func deleteConfirmationText() -> String {
+    guard let id = pendingDeleteNodeID, let n = node(id) else { return "" }
+    let hasChildren = allNodes.contains { $0.parentID == id }
+    if hasChildren {
+      return String(localized: "Delete “\(n.name)” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone.")
+    }
+    return String(localized: "Delete “\(n.name)”? Its captured activity and loose ends are removed. This can’t be undone.")
+  }
+
   /// Surrounding-transcript provenance for a loose end, resolved off the main actor (file I/O).
   /// nil only when the source event is missing; a present-but-unavailable transcript returns a
   /// ProvenanceContext with `transcriptAvailable == false`.

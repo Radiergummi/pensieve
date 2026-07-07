@@ -55,5 +55,15 @@ struct RootView: View {
     .sheet(item: $model.editingNode) { req in
       NodeEditor(model: model, request: req)
     }
+    .confirmationDialog(
+      model.deleteConfirmationText(),
+      isPresented: Binding(get: { model.pendingDeleteNodeID != nil },
+                           set: { if !$0 { model.pendingDeleteNodeID = nil } }),
+      titleVisibility: .visible,
+      presenting: model.pendingDeleteNodeID
+    ) { id in
+      Button("Delete", role: .destructive) { model.deleteNode(id) }
+      Button("Cancel", role: .cancel) {}
+    }
   }
 }
