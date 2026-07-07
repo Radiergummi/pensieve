@@ -24,8 +24,15 @@ struct SidebarView: View {
       }
       Section("Projects") {
         OutlineGroup(model.forest, children: \.childrenIfAny) { item in
-          Label(item.node.name, systemImage: symbol(for: item.node.kind))
-            .tag(SidebarSelection.node(item.node.id))
+          Group {
+            if model.renamingNodeID == item.node.id {
+              NodeNameField(model: model, node: item.node)
+            } else {
+              Label(item.node.name, systemImage: symbol(for: item.node.kind))
+            }
+          }
+          .tag(SidebarSelection.node(item.node.id))
+          .contextMenu { NodeContextMenu(model: model, node: item.node) }
         }
       }
     }
@@ -51,7 +58,11 @@ struct SidebarView: View {
     switch kind {
     case "domain": return "folder"
     case "strand": return "arrow.triangle.branch"
-    default: return "shippingbox"
+    case "concept": return "lightbulb"
+    case "initiative": return "flag"
+    case "task": return "checklist"
+    case "topic": return "tag"
+    default: return "shippingbox"   // project + any unknown kind
     }
   }
 }
