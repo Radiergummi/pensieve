@@ -22,7 +22,7 @@ struct InspectorView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
         if let le = selected {
-          Text("PROVENANCE").font(.caption).bold().foregroundStyle(.secondary)
+          Text("Provenance").sectionHeader()
           Text(le.text).font(.headline)
           if let ctx = context, ctx.transcriptAvailable {
             ForEach(ctx.messages, id: \.index) { msg in

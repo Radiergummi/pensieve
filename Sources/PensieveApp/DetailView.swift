@@ -121,7 +121,7 @@ struct DetailView: View {
               Rectangle().fill(.orange).frame(width: 3)
             }
           Text("\(view.looseEnd.role.isEmpty ? String(localized: "captured") : view.looseEnd.role) · \(view.occurredAt, format: .dateTime.year().month().day()) · \(view.ageDays)d ago")
-            .font(.caption).foregroundStyle(.secondary)
+            .metaText()
         }
         .padding(.leading, 18)
       }
@@ -131,7 +131,7 @@ struct DetailView: View {
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(String(localized: title).uppercased()).font(.caption).bold().foregroundStyle(.secondary)
+      Text(title).sectionHeader()
       content()
     }
   }
@@ -149,11 +149,12 @@ private struct ActivityTimeline: View {
     let days = groups.keys.sorted(by: >)
     VStack(alignment: .leading, spacing: 16) {
       ForEach(days, id: \.self) { day in
-        VStack(alignment: .leading, spacing: 8) {
+        let items = (groups[day] ?? []).sorted { $0.occurredAt > $1.occurredAt }
+        VStack(alignment: .leading, spacing: 12) {
           Text(day, format: .dateTime.weekday(.wide).month().day())
-            .font(.caption).bold().foregroundStyle(.secondary)
-          ForEach((groups[day] ?? []).sorted { $0.occurredAt > $1.occurredAt }) { event in
-            TimelineRow(event: event)
+            .font(.subheadline).fontWeight(.semibold).foregroundStyle(.primary)
+          ForEach(Array(items.enumerated()), id: \.element.id) { idx, event in
+            TimelineRow(event: event, isLast: idx == items.count - 1)
           }
         }
       }
@@ -163,23 +164,24 @@ private struct ActivityTimeline: View {
 
 private struct TimelineRow: View {
   let event: Event
+  let isLast: Bool
 
   var body: some View {
     let style = EventSourceStyle.style(for: event.kind)
     let color = AppearanceStyle.color(style.colorTag)
     HStack(alignment: .top, spacing: 10) {
       VStack(spacing: 0) {
-        Circle().fill(color).frame(width: 10, height: 10).padding(.top, 3)
-        Rectangle().fill(.quaternary).frame(width: 2).frame(maxHeight: .infinity)
+        Circle().fill(color).frame(width: 8, height: 8).padding(.top, 2)
+        if !isLast { Rectangle().fill(.quaternary).frame(width: 1.5).frame(maxHeight: .infinity) }
       }
-      .frame(width: 10)
+      .frame(width: 8)
 
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 6) {
           sourceIcon(style).font(.caption).foregroundStyle(color)
-          Text(AppearanceStyle.sourceLabel(event.kind)).font(.caption).foregroundStyle(.secondary)
+          Text(AppearanceStyle.sourceLabel(event.kind)).metaText()
           Text(event.occurredAt, format: .dateTime.hour().minute())
-            .font(.caption2).monospacedDigit().foregroundStyle(.tertiary)
+            .metaText().monospacedDigit()
         }
         Text(event.summary).prose()
       }

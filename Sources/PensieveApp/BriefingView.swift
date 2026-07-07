@@ -61,7 +61,7 @@ struct BriefingView: View {
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(String(localized: title).uppercased()).font(.caption).bold().foregroundStyle(.secondary)
+      Text(title).sectionHeader()
       content()
     }
   }

@@ -13,4 +13,17 @@ extension View {
   func prose() -> some View {
     self.font(.system(size: 14)).lineSpacing(4)
   }
+  /// Section eyebrow (uppercased, tracked). One consistent treatment for every content section
+  /// header (Detail's Last Work Done / Loose Ends / Recent Activity, Inspector's Provenance,
+  /// Briefing's Moved / Quiet).
+  func sectionHeader() -> some View {
+    self.font(.system(size: 13, weight: .semibold))
+      .textCase(.uppercase)
+      .tracking(0.6)
+      .foregroundStyle(.secondary)
+  }
+  /// Small metadata (timestamps, roles, source labels, dormancy). One caption treatment.
+  func metaText() -> some View {
+    self.font(.footnote).foregroundStyle(.secondary)
+  }
 }

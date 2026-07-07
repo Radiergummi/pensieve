@@ -677,12 +677,12 @@
         }
       }
     },
-    "PROVENANCE" : {
+    "Provenance" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "HERKUNFT"
+            "value" : "Herkunft"
           }
         }
       }
