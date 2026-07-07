@@ -70,13 +70,16 @@ private struct StatusFooter: View {
   let snapshot: MonitorSnapshot
 
   var body: some View {
-    HStack(spacing: 6) {
-      Circle().fill(color).frame(width: 8, height: 8)
-      Text(label).font(.caption).foregroundStyle(.secondary)
-      Spacer()
+    VStack(spacing: 0) {
+      Divider()
+      HStack(spacing: 6) {
+        Circle().fill(color).frame(width: 7, height: 7)
+        Text(label).font(.caption).foregroundStyle(.secondary)
+        Spacer()
+      }
+      .padding(.horizontal, 12).padding(.vertical, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .padding(.horizontal, 12).padding(.vertical, 8)
-    .frame(maxWidth: .infinity, alignment: .leading)
     .background(.bar)
   }
   private var color: Color {
