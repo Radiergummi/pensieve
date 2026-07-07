@@ -51,25 +51,40 @@ public struct ProjectResolver {
 
   public func group(_ primaryID: UUID, into merged: [UUID]) throws {
     try db.write { db in
-      for other in merged where other != primaryID {
-        // If the primary is itself a child of the node being absorbed, promote it to `other`'s parent
-        // first — otherwise the "reparent other's children → primary" step below would set the primary's
-        // own parent to itself (a self-cycle).
-        if let primary = try Node.where({ $0.id.eq(primaryID) }).fetchOne(db), primary.parentID == other {
-          let grandparentID = try Node.where { $0.id.eq(other) }.fetchOne(db)?.parentID
-          try Node.where { $0.id.eq(primaryID) }
-            .update { $0.parentID = #bind(grandparentID) }.execute(db)
+      let absorbed = Set(merged).subtracting([primaryID])
+      guard !absorbed.isEmpty else { return }
+
+      // 1. Lift the primary above any absorbed node on its OWN ancestor chain, so that reattaching
+      //    an absorbed node's children to the primary below can never fold the primary under itself
+      //    or under a soon-deleted node. The primary takes the position of the highest (closest to
+      //    root) absorbed ancestor: its new parent is that ancestor's parent (a survivor, or root).
+      var chain = try Node.where { $0.id.eq(primaryID) }.fetchOne(db)?.parentID
+      var highestAbsorbedAncestorParent: UUID?? = nil   // .some(x) once an absorbed ancestor is seen
+      var guardCount = 0
+      while let current = chain, guardCount < 10_000 {
+        guardCount += 1
+        let parent = try Node.where { $0.id.eq(current) }.fetchOne(db)?.parentID
+        if absorbed.contains(current) { highestAbsorbedAncestorParent = .some(parent) }
+        chain = parent
+      }
+      if let newParent = highestAbsorbedAncestorParent {
+        try Node.where { $0.id.eq(primaryID) }
+          .update { $0.parentID = #bind(newParent) }.execute(db)
+      }
+
+      // 2. Absorb each merged node into the primary.
+      for other in absorbed {
+        try Source.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(db)
+        try Event.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(db)
+        try LooseEnd.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(db)
+        try Checkpoint.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(db)
+        // Reattach other's children to the primary, except the primary itself and other absorbed
+        // nodes (which are being deleted anyway).
+        let children = try Node.where { $0.parentID.eq(other) }.fetchAll(db)
+        for child in children where child.id != primaryID && !absorbed.contains(child.id) {
+          try Node.where { $0.id.eq(child.id) }
+            .update { $0.parentID = #bind(primaryID) }.execute(db)
         }
-        try Source.where { $0.nodeID.eq(other) }
-          .update { $0.nodeID = primaryID }.execute(db)
-        try Event.where { $0.nodeID.eq(other) }
-          .update { $0.nodeID = primaryID }.execute(db)
-        try LooseEnd.where { $0.nodeID.eq(other) }
-          .update { $0.nodeID = primaryID }.execute(db)
-        try Checkpoint.where { $0.nodeID.eq(other) }
-          .update { $0.nodeID = primaryID }.execute(db)
-        try Node.where { $0.parentID.eq(other) }
-          .update { $0.parentID = #bind(primaryID) }.execute(db)
         try Node.where { $0.id.eq(other) }.delete().execute(db)
       }
     }

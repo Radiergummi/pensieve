@@ -115,3 +115,33 @@ import SQLiteData
   let reloaded = try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) }
   #expect(reloaded?.parentID == nil)   // parent was a root → child becomes a root
 }
+
+@Test func groupMergingAncestorChainInOneCallHasNoCycle() throws {
+  let db = try openCanonicalDatabase(at: tempURL("group-multiancestor"))
+  let grand = try #require(try NodeCommands.add(db, name: "Grand", kind: "domain", parent: nil, description: ""))
+  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: "project", parent: "Grand", description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "strand", parent: "Parent", description: ""))
+
+  try ProjectResolver(db: db).group(child.id, into: [grand.id, parent.id])   // whole chain in one call
+
+  let reloaded = try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) }
+  #expect(reloaded != nil)
+  #expect(reloaded?.parentID == nil)        // survivor rises to root, no self/loop
+  #expect(reloaded?.parentID != child.id)
+  #expect(try db.read { db in try Node.all.fetchAll(db) }.count == 1)   // grand + parent gone
+}
+
+@Test func groupMergingNonAdjacentAncestorHasNoCycle() throws {
+  let db = try openCanonicalDatabase(at: tempURL("group-nonadjacent"))
+  let root = try #require(try NodeCommands.add(db, name: "Root", kind: "domain", parent: nil, description: ""))
+  let middle = try #require(try NodeCommands.add(db, name: "Middle", kind: "project", parent: "Root", description: ""))
+  let leaf = try #require(try NodeCommands.add(db, name: "Leaf", kind: "strand", parent: "Middle", description: ""))
+
+  try ProjectResolver(db: db).group(leaf.id, into: [root.id])   // merge non-adjacent grandparent into leaf
+
+  let reloadedLeaf = try db.read { db in try Node.where { $0.id.eq(leaf.id) }.fetchOne(db) }
+  let reloadedMiddle = try db.read { db in try Node.where { $0.id.eq(middle.id) }.fetchOne(db) }
+  #expect(reloadedLeaf?.parentID == nil)          // leaf takes root's position
+  #expect(reloadedMiddle?.parentID == leaf.id)    // middle hangs under the survivor
+  #expect(reloadedLeaf?.parentID != leaf.id)
+}
