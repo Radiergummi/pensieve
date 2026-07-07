@@ -4,6 +4,8 @@ import PensieveKit
 
 struct SidebarView: View {
   @ObservedObject var model: AppModel
+  @AppStorage("sidebar.smartLists.expanded") private var smartExpanded = true
+  @AppStorage("sidebar.projects.expanded") private var projectsExpanded = true
 
   var body: some View {
     List(selection: Binding(
@@ -17,12 +19,12 @@ struct SidebarView: View {
       })) {
       Label("Briefing", systemImage: "sun.max")
         .tag(SidebarSelection.briefing)
-      Section("Smart Lists") {
+      Section("Smart Lists", isExpanded: $smartExpanded) {
         smartRow(.whatsNext, count: model.lists.whatsNext.count)
         smartRow(.dormant, count: model.lists.dormant.count)
         smartRow(.recentlyActive, count: model.lists.recentlyActive.count)
       }
-      Section("Projects") {
+      Section("Projects", isExpanded: $projectsExpanded) {
         OutlineGroup(model.forest, children: \.childrenIfAny) { item in
           nodeRow(item)
         }
@@ -92,6 +94,8 @@ private struct StatusFooter: View {
       Spacer()
     }
     .padding(.horizontal, 12).padding(.vertical, 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.bar)
   }
   private var color: Color {
     switch snapshot.status { case .active: return .green; case .idle: return .secondary; case .notSetUp: return .orange }
