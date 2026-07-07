@@ -24,20 +24,27 @@ struct SidebarView: View {
       }
       Section("Projects") {
         OutlineGroup(model.forest, children: \.childrenIfAny) { item in
-          Group {
-            if model.renamingNodeID == item.node.id {
-              NodeNameField(model: model, node: item.node)
-            } else {
-              Label(item.node.name, systemImage: symbol(for: item.node.kind))
-            }
-          }
-          .tag(SidebarSelection.node(item.node.id))
-          .contextMenu { NodeContextMenu(model: model, node: item.node) }
+          nodeRow(item)
         }
       }
     }
     .listStyle(.sidebar)
     .safeAreaInset(edge: .bottom) { StatusFooter(snapshot: model.snapshot) }
+  }
+
+  /// One tree row. Extracted with an explicit result type so the compiler doesn't have to
+  /// type-check the nested Group/if + `.tag` + `.contextMenu` chain inside the OutlineGroup
+  /// closure all at once ("unable to type-check this expression in reasonable time").
+  @ViewBuilder private func nodeRow(_ item: NodeForestNode) -> some View {
+    Group {
+      if model.renamingNodeID == item.node.id {
+        NodeNameField(model: model, node: item.node)
+      } else {
+        Label(item.node.name, systemImage: symbol(for: item.node.kind))
+      }
+    }
+    .tag(SidebarSelection.node(item.node.id))
+    .contextMenu { NodeContextMenu(model: model, node: item.node) }
   }
 
   private func smartRow(_ kind: SmartListKind, count: Int) -> some View {

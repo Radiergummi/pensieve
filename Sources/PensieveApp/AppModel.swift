@@ -114,7 +114,7 @@ final class AppModel: ObservableObject {
   private var spoolWatcher: DirectoryWatcher?
   private var canonicalWatcher: DirectoryWatcher?
   private lazy var refreshDebouncer = Debouncer(interval: 0.15) { [weak self] in
-    await MainActor.run { self?.refresh(); Task { await self?.reindexSpotlight() } }
+    await self?.refreshFromWatch()
   }
   private lazy var drainDebouncer = Debouncer(interval: 0.15) { [weak self] in
     await self?.drainThenRefreshFromWatch()
@@ -185,6 +185,15 @@ final class AppModel: ObservableObject {
     if let db, let spool {
       _ = try? await Ingester(spool: spool, db: db).drain()
     }
+  }
+
+  /// Watch-triggered refresh: recompute state on the main actor, then reindex Spotlight. Kept as one
+  /// @MainActor method so the debouncer's `await self?.refreshFromWatch()` needs no `MainActor.run`
+  /// wrapper nor a nested `Task` — the nested Task captured the weak-`self` var in concurrently
+  /// executing code, which is an error under the Swift 6 language mode.
+  private func refreshFromWatch() async {
+    refresh()
+    await reindexSpotlight()
   }
 
   private func reindexSpotlight() async { await SpotlightIndexer.reindex() }

@@ -25,7 +25,7 @@ public enum NodeFactsQueries {
   public static func facts(for ids: [UUID], _ db: any DatabaseReader, now: Date) throws -> [NodeFacts] {
     try db.read { db in
       try ids.compactMap { id in
-        guard let node = try Node.where { $0.id.eq(id) }.fetchOne(db) else { return nil }
+        guard let node = try Node.where({ $0.id.eq(id) }).fetchOne(db) else { return nil }
         return try facts(for: node, db, now: now)
       }
     }

@@ -24,6 +24,7 @@ targets:
       path: Sources/PensieveApp/Info.plist
       properties:
         CFBundleName: Pensieve
+        LSApplicationCategoryType: public.app-category.developer-tools
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "1"
         CFBundleIconName: Pensieve
