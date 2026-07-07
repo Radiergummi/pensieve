@@ -1,10 +1,12 @@
 // Sources/PensieveApp/NodeOrganizing.swift
 import SwiftUI
+import AppKit
 import PensieveKit
 
-/// The New/Edit node modal (Reminders-style): name, type, color grid, and an emoji / SF-symbol
-/// picker. Writes go through AppModel → Kit NodeCommands. Replaces the old inline-rename field and
-/// the Change Type submenu.
+/// The New/Edit node modal (Reminders-style two zones): Name + Type + a compact color row on the
+/// left; a large live preview circle + Symbol / Emoji popover buttons on the right. Writes go
+/// through AppModel → Kit NodeCommands. The chosen icon keeps the stored "sf:<name>" / "emoji:<g>"
+/// form.
 struct NodeEditor: View {
   @ObservedObject var model: AppModel
   let request: NodeEditRequest
@@ -14,49 +16,78 @@ struct NodeEditor: View {
   @State private var kind = NodeKind.project
   @State private var colorTag = ""          // palette name
   @State private var icon = ""              // stored form "sf:x" / "emoji:x"
-  @State private var tab: IconTab = .symbol
-  enum IconTab: Hashable { case symbol, emoji }
 
+  @State private var showSymbolPopover = false
+  @State private var symbolQuery = ""
+  // Hidden capture field: the system Character Viewer inserts the picked emoji here; onChange
+  // extracts the emoji grapheme into `icon` and clears the field.
+  @State private var emojiCapture = ""
+  @FocusState private var emojiFieldFocused: Bool
+
+  // An expanded SF-symbol set the Symbol popover searches over.
   private static let symbols = [
-    "folder", "shippingbox", "arrow.triangle.branch", "lightbulb", "flag", "checklist",
-    "tag", "star", "bolt", "book", "hammer", "paintbrush", "cart", "gearshape", "doc.text",
-    "calendar", "person", "house", "globe", "leaf", "cup.and.saucer", "gamecontroller",
-    "music.note", "camera",
+    "folder", "folder.badge.gearshape", "shippingbox", "arrow.triangle.branch", "lightbulb",
+    "flag", "flag.checkered", "checklist", "list.bullet", "tag", "star", "sparkles", "bolt",
+    "book", "books.vertical", "hammer", "wrench.and.screwdriver", "paintbrush", "paintpalette",
+    "cart", "gearshape", "gearshape.2", "doc.text", "doc.richtext", "calendar", "clock", "person",
+    "person.2", "house", "building.2", "globe", "network", "leaf", "cup.and.saucer",
+    "gamecontroller", "music.note", "camera", "photo", "terminal", "cpu", "server.rack",
+    "chart.bar", "chart.line.uptrend.xyaxis", "envelope", "message", "bubble.left", "map",
+    "location", "heart", "flame", "drop", "wand.and.stars", "puzzlepiece", "cube", "shield",
+    "lock", "key", "brain", "graduationcap", "briefcase", "creditcard", "banknote",
   ]
-  private static let emojis = [
-    "🚀", "🎯", "💡", "🔧", "📝", "📦", "🌱", "🔥", "⭐️", "🧠", "🎨", "🍲",
-    "📚", "🏠", "🌍", "🎮", "🎵", "📷", "💰", "🧪", "⚙️", "🗂", "✅", "🐛",
-  ]
+
+  private var filteredSymbols: [String] {
+    let q = symbolQuery.trimmingCharacters(in: .whitespaces).lowercased()
+    guard !q.isEmpty else { return Self.symbols }
+    return Self.symbols.filter { $0.contains(q) }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text(isEdit ? "Edit Node" : "New Node").font(.headline)
 
-      Form {
-        TextField("Name", text: $name)
-        Picker("Type", selection: $kind) {
-          ForEach(NodeKind.all, id: \.self) { k in Text(AppearanceStyle.kindLabel(k)).tag(k) }
-        }
-      }
-
-      VStack(alignment: .leading, spacing: 6) {
-        Text("Color").font(.caption).foregroundStyle(.secondary)
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(30)), count: 6), spacing: 10) {
-          ForEach(AppearanceStyle.palette, id: \.tag) { entry in
-            Circle().fill(entry.color).frame(width: 24, height: 24)
-              .overlay { if entry.tag == colorTag { Circle().stroke(Color.primary, lineWidth: 2).padding(-3) } }
-              .contentShape(Circle())
-              .onTapGesture { colorTag = entry.tag }
+      HStack(alignment: .top, spacing: 24) {
+        // LEFT: form
+        VStack(alignment: .leading, spacing: 14) {
+          Form {
+            TextField("Name", text: $name)
+            Picker("Type", selection: $kind) {
+              ForEach(NodeKind.all, id: \.self) { k in Text(AppearanceStyle.kindLabel(k)).tag(k) }
+            }
+          }
+          VStack(alignment: .leading, spacing: 6) {
+            Text("Color").font(.caption).foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(28)), count: 6), spacing: 8) {
+              ForEach(AppearanceStyle.palette, id: \.tag) { entry in
+                Circle().fill(entry.color).frame(width: 22, height: 22)
+                  .overlay { if entry.tag == colorTag { Circle().stroke(Color.primary, lineWidth: 2).padding(-3) } }
+                  .contentShape(Circle())
+                  .onTapGesture { colorTag = entry.tag }
+              }
+            }
           }
         }
-      }
 
-      VStack(alignment: .leading, spacing: 6) {
-        Picker("", selection: $tab) {
-          Text("Symbol").tag(IconTab.symbol)
-          Text("Emoji").tag(IconTab.emoji)
-        }.pickerStyle(.segmented).labelsHidden()
-        iconGrid
+        // RIGHT: preview + icon pickers
+        VStack(spacing: 12) {
+          preview
+          HStack(spacing: 8) {
+            Button { showSymbolPopover = true } label: { Label("Symbol", systemImage: "square.grid.2x2") }
+              .popover(isPresented: $showSymbolPopover, arrowEdge: .bottom) { symbolPopover }
+            Button { pickEmoji() } label: { Label("Emoji", systemImage: "face.smiling") }
+          }
+          .controlSize(.small)
+          // Zero-size hidden capture field for the Character Viewer.
+          TextField("", text: $emojiCapture)
+            .focused($emojiFieldFocused)
+            .frame(width: 0, height: 0).opacity(0)
+            .onChange(of: emojiCapture) { _, newValue in
+              if let g = Self.firstEmoji(in: newValue) { icon = "emoji:\(g)" }
+              emojiCapture = ""
+            }
+        }
+        .frame(width: 150)
       }
 
       HStack {
@@ -68,30 +99,56 @@ struct NodeEditor: View {
       }
     }
     .padding(20)
-    .frame(width: 440)
+    .frame(width: 480)
     .onAppear(perform: load)
   }
 
   private var isEdit: Bool { if case .edit = request.mode { return true }; return false }
 
-  @ViewBuilder private var iconGrid: some View {
-    let items = tab == .symbol ? Self.symbols.map { "sf:\($0)" } : Self.emojis.map { "emoji:\($0)" }
-    LazyVGrid(columns: Array(repeating: GridItem(.fixed(38)), count: 6), spacing: 10) {
-      ForEach(items, id: \.self) { stored in
-        cell(stored)
-          .frame(width: 34, height: 34)
-          .background { if icon == stored { RoundedRectangle(cornerRadius: 7).fill(Color.accentColor.opacity(0.25)) } }
-          .contentShape(Rectangle())
-          .onTapGesture { icon = stored }
+  private var preview: some View {
+    Circle().fill(AppearanceStyle.color(colorTag)).frame(width: 72, height: 72)
+      .overlay {
+        Group {
+          switch AppearanceIcon.parse(icon) {
+          case .sfSymbol(let n): Image(systemName: n).foregroundStyle(.white)
+          case .emoji(let e):    Text(e)
+          case nil:              Image(systemName: "questionmark").foregroundStyle(.white)
+          }
+        }.font(.system(size: 34))
       }
-    }
   }
 
-  @ViewBuilder private func cell(_ stored: String) -> some View {
-    switch AppearanceIcon.parse(stored) {
-    case .sfSymbol(let n): Image(systemName: n).font(.system(size: 18))
-    case .emoji(let e):    Text(e).font(.system(size: 20))
-    case nil:              EmptyView()
+  private var symbolPopover: some View {
+    VStack(spacing: 8) {
+      TextField("Search symbols", text: $symbolQuery)
+        .textFieldStyle(.roundedBorder)
+      ScrollView {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34)), count: 6), spacing: 8) {
+          ForEach(filteredSymbols, id: \.self) { name in
+            Image(systemName: name).font(.system(size: 18))
+              .frame(width: 30, height: 30)
+              .background { if icon == "sf:\(name)" { RoundedRectangle(cornerRadius: 7).fill(Color.accentColor.opacity(0.25)) } }
+              .contentShape(Rectangle())
+              .onTapGesture { icon = "sf:\(name)"; showSymbolPopover = false }
+          }
+        }
+      }
+      .frame(height: 200)
+    }
+    .padding(12)
+    .frame(width: 260)
+  }
+
+  /// Focus the hidden capture field, then open the system Character Viewer (emoji-and-symbol palette).
+  private func pickEmoji() {
+    emojiFieldFocused = true
+    DispatchQueue.main.async { NSApp.orderFrontCharacterPalette(nil) }
+  }
+
+  /// The first emoji grapheme in `s`, or nil. Ignores ordinary text the Character Viewer might insert.
+  private static func firstEmoji(in s: String) -> Character? {
+    s.first { ch in
+      ch.unicodeScalars.contains { $0.properties.isEmoji && ($0.value > 0x238C || $0.properties.isEmojiPresentation) }
     }
   }
 
