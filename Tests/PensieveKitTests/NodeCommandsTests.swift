@@ -176,3 +176,15 @@ import SQLiteData
   // Unknown id → false, nothing written.
   #expect(try NodeCommands.update(db, nodeID: UUID(), name: "x", kind: "task", icon: "", colorTag: "") == false)
 }
+
+@Test func addAndUpdateRoundTripContext() throws {
+  let db = try openCanonicalDatabase(at: tempURL("nodecmd-context"))
+  let proj = try #require(try NodeCommands.add(db, name: "Garden", kind: "project",
+                                               parent: nil, description: "", context: "personal"))
+  #expect(proj.context == "personal")
+
+  #expect(try NodeCommands.update(db, nodeID: proj.id, name: "Garden", kind: "project",
+                                  icon: "", colorTag: "", context: "work"))
+  let reloaded = try db.read { db in try Node.where { $0.id.eq(proj.id) }.fetchOne(db) }
+  #expect(reloaded?.context == "work")
+}

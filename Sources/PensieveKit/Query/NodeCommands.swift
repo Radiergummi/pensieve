@@ -15,7 +15,7 @@ public enum NodeCommands {
   @discardableResult
   public static func add(_ db: any DatabaseWriter, name: String, kind: String,
                          parent: String?, description: String,
-                         icon: String = "", colorTag: String = "") throws -> Node? {
+                         icon: String = "", colorTag: String = "", context: String = "") throws -> Node? {
     try db.write { db in
       var parentID: UUID? = nil
       if let parent {
@@ -23,7 +23,7 @@ public enum NodeCommands {
         parentID = p.id
       }
       let node = Node(name: name, parentID: parentID, kind: kind, description: description,
-                      icon: icon, colorTag: colorTag)
+                      icon: icon, colorTag: colorTag, context: context)
       try Node.insert { node }.execute(db)
       return node
     }
@@ -90,11 +90,12 @@ public enum NodeCommands {
   /// parentID, state, branchKey untouched. Returns false — writing nothing — for an unknown id.
   @discardableResult
   public static func update(_ db: any DatabaseWriter, nodeID: UUID,
-                            name: String, kind: String, icon: String, colorTag: String) throws -> Bool {
+                            name: String, kind: String, icon: String, colorTag: String,
+                            context: String = "") throws -> Bool {
     try db.write { db in
       guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
       try Node.where { $0.id.eq(nodeID) }.update {
-        $0.name = name; $0.kind = kind; $0.icon = icon; $0.colorTag = colorTag
+        $0.name = name; $0.kind = kind; $0.icon = icon; $0.colorTag = colorTag; $0.context = context
       }.execute(db)
       return true
     }
