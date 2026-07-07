@@ -4,11 +4,39 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `0a7eb0f`) and the tree is clean. Test suite: **196 tests**, run with
+Everything below is **on `main`** (HEAD `171c0e6`) and the tree is clean. Test suite: **204 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
 
-**Latest (this session): app chrome polish batch — DONE & on `main`.** Ten app-target-only ("chrome") polish
+**Latest (this session): Focus filters (Work / Personal context) — DONE & on `main`.** The first
+`SetFocusFilterIntent` surface: when a macOS Focus is active, Pensieve restricts the main window + menu-bar popover +
+Spotlight to the projects/strands matching that Focus's context. **Kit (SwiftUI-free, tested):** migration **v9**
+adds `nodes.context` (`work`/`personal`/`""`unset); `NodeContext.swift` — a `NodeContext` constant enum + pure
+`NodeContextResolver` with **subtree inheritance** (nearest non-empty ancestor wins; child overrides) and a single
+**visibility predicate** `visibleNodeIDs(for:in:)` (mute the opposite explicit context, always show unset, `""` ⇒
+all); `NodeCommands.add/update` grow a defaulted `context`. **App (thin):** `PensieveFocusFilter: SetFocusFilterIntent`
+with an **optional** `@Parameter` (nil on deactivation → persists `""` → unfiltered) writing `UserDefaults`
+(`FocusFilterDefaults.activeContextKey`); `AppModel` seeds it on launch + observes `UserDefaults.didChangeNotification`
+(main-queue hop) → re-filters `lists`/`briefingCards`/`forest` (forest rebuilds on context-only change via a
+`lastForestContext` guard; `allNodes` stays the FULL set) + reindexes Spotlight; `SpotlightIndexer.reindex(activeContext:)`
+filters its index; a **Context picker** (Work/Personal/Unset) in the New/Edit modal. Subagent-driven (7 tasks: Sonnet
+impl + task-review each; **Opus** whole-branch review → READY-TO-MERGE, 0 Critical/Important, 2 Minors both fixed —
+dropped unused `NodeContext.all`/`.unset`). German l10n of all new chrome. Menu-bar filtered too (shared `lists` state;
+user-approved deviation from the spec's original "menu-bar unfiltered"). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-07-focus-filters*`.
+- **Accepted trade-offs (not bugs):** Spotlight reindexes per Focus switch; while in Personal you won't find a Work
+  node by name in Spotlight; if a Focus is deactivated while the app is fully quit, the persisted context reconciles on
+  the next `perform()`/launch read (spec-accepted).
+- **Human-verify carries** (need the built app + real store + System Settings; can't be asserted headlessly): attach the
+  Pensieve filter to a "Personal" Focus in System Settings → set Personal → enable it → main window + menu-bar + tree +
+  Briefing show only personal + unset nodes, Work hidden; disable → everything returns; a "Work" Focus mutes personal;
+  Spotlight surfaces only the visible subset and re-indexes on switch; the modal Context picker sets a node's context and
+  a child inherits its parent's; setting a project to Work hides its whole subtree while in Personal; `pensieve list`
+  unaffected; German in situ (`-AppleLanguages '(de)'`) for the picker + the Settings filter row. Build: `xcodegen
+  generate && xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -derivedDataPath
+  ./.build-xcode build`, then `open ./.build-xcode/Build/Products/Debug/Pensieve.app`.
+
+**Prior this session: app chrome polish batch — DONE & on `main`.** Ten app-target-only ("chrome") polish
 tasks that make Pensieve.app feel Apple-native — **no PensieveKit changes** (196 tests unchanged). Two waves:
 **Wave 1** — (T1) reading-prose typography (`ProseStyle.swift`: 14pt/lineSpacing/680pt measure cap); (T2/T9)
 window toolbar actions moved onto the **detail column** (New Node "+" leading; Refresh + Inspector trailing) with a
