@@ -59,21 +59,12 @@ struct DetailView: View {
           }
         }
 
-        // RECENT ACTIVITY (deterministic; LLM narration is a later slice)
+        // RECENT ACTIVITY (GitHub-style rail timeline)
         section("Recent Activity") {
           if recentEvents.isEmpty {
             Text("No captured activity.").foregroundStyle(.secondary)
           } else {
-            ForEach(recentEvents) { event in
-              HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(event.occurredAt, format: .dateTime.month().day())
-                  .font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                  .frame(width: 52, alignment: .leading)
-                Text(event.summary).font(.callout)
-                Spacer()
-                Text(event.kind).font(.caption2).foregroundStyle(.tertiary)
-              }
-            }
+            ActivityTimeline(events: recentEvents)
           }
         }
       }
@@ -145,3 +136,60 @@ struct DetailView: View {
 }
 
 private struct DetailLoadKey: Hashable { let nodeID: UUID; let token: Int }
+
+/// A GitHub-style vertical-rail timeline: events grouped by day, a colored dot per event on a rail,
+/// the source icon+color, the localized source label, and the summary. No avatars (single-user).
+private struct ActivityTimeline: View {
+  let events: [Event]
+
+  var body: some View {
+    let groups = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.occurredAt) }
+    let days = groups.keys.sorted(by: >)
+    VStack(alignment: .leading, spacing: 16) {
+      ForEach(days, id: \.self) { day in
+        VStack(alignment: .leading, spacing: 8) {
+          Text(day, format: .dateTime.weekday(.wide).month().day())
+            .font(.caption).bold().foregroundStyle(.secondary)
+          ForEach((groups[day] ?? []).sorted { $0.occurredAt > $1.occurredAt }) { event in
+            TimelineRow(event: event)
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct TimelineRow: View {
+  let event: Event
+
+  var body: some View {
+    let style = EventSourceStyle.style(for: event.kind)
+    let color = AppearanceStyle.color(style.colorTag)
+    HStack(alignment: .top, spacing: 10) {
+      VStack(spacing: 0) {
+        Circle().fill(color).frame(width: 10, height: 10).padding(.top, 3)
+        Rectangle().fill(.quaternary).frame(width: 2).frame(maxHeight: .infinity)
+      }
+      .frame(width: 10)
+
+      VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 6) {
+          sourceIcon(style).font(.caption).foregroundStyle(color)
+          Text(AppearanceStyle.sourceLabel(event.kind)).font(.caption).foregroundStyle(.secondary)
+          Text(event.occurredAt, format: .dateTime.hour().minute())
+            .font(.caption2).monospacedDigit().foregroundStyle(.tertiary)
+        }
+        Text(event.summary).font(.callout)
+      }
+      Spacer()
+    }
+  }
+
+  @ViewBuilder private func sourceIcon(_ s: SourceStyle) -> some View {
+    switch AppearanceIcon.parse(s.icon) {
+    case .sfSymbol(let n): Image(systemName: n)
+    case .emoji(let e):    Text(e)
+    case nil:              Image(systemName: "circle.fill")
+    }
+  }
+}
