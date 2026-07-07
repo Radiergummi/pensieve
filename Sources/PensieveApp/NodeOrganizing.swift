@@ -1,6 +1,5 @@
 // Sources/PensieveApp/NodeOrganizing.swift
 import SwiftUI
-import AppKit
 import PensieveKit
 
 /// The New/Edit node modal (Reminders-style two zones): Name + Type + a compact color row on the
@@ -16,32 +15,6 @@ struct NodeEditor: View {
   @State private var kind = NodeKind.project
   @State private var colorTag = ""          // palette name
   @State private var icon = ""              // stored form "sf:x" / "emoji:x"
-
-  @State private var showSymbolPopover = false
-  @State private var symbolQuery = ""
-  // Hidden capture field: the system Character Viewer inserts the picked emoji here; onChange
-  // extracts the emoji grapheme into `icon` and clears the field.
-  @State private var emojiCapture = ""
-  @FocusState private var emojiFieldFocused: Bool
-
-  // An expanded SF-symbol set the Symbol popover searches over.
-  private static let symbols = [
-    "folder", "folder.badge.gearshape", "shippingbox", "arrow.triangle.branch", "lightbulb",
-    "flag", "flag.checkered", "checklist", "list.bullet", "tag", "star", "sparkles", "bolt",
-    "book", "books.vertical", "hammer", "wrench.and.screwdriver", "paintbrush", "paintpalette",
-    "cart", "gearshape", "gearshape.2", "doc.text", "doc.richtext", "calendar", "clock", "person",
-    "person.2", "house", "building.2", "globe", "network", "leaf", "cup.and.saucer",
-    "gamecontroller", "music.note", "camera", "photo", "terminal", "cpu", "server.rack",
-    "chart.bar", "chart.line.uptrend.xyaxis", "envelope", "message", "bubble.left", "map",
-    "location", "heart", "flame", "drop", "wand.and.stars", "puzzlepiece", "cube", "shield",
-    "lock", "key", "brain", "graduationcap", "briefcase", "creditcard", "banknote",
-  ]
-
-  private var filteredSymbols: [String] {
-    let q = symbolQuery.trimmingCharacters(in: .whitespaces).lowercased()
-    guard !q.isEmpty else { return Self.symbols }
-    return Self.symbols.filter { $0.contains(q) }
-  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -69,25 +42,13 @@ struct NodeEditor: View {
           }
         }
 
-        // RIGHT: preview + icon pickers
+        // RIGHT: preview + icon toggles
         VStack(spacing: 12) {
           preview
-          HStack(spacing: 8) {
-            Button { showSymbolPopover = true } label: { Label("Symbol", systemImage: "square.grid.2x2") }
-              .popover(isPresented: $showSymbolPopover, arrowEdge: .bottom) { symbolPopover }
-            Button { pickEmoji() } label: { Label("Emoji", systemImage: "face.smiling") }
-          }
-          .controlSize(.small)
-          // Zero-size hidden capture field for the Character Viewer.
-          TextField("", text: $emojiCapture)
-            .focused($emojiFieldFocused)
-            .frame(width: 0, height: 0).opacity(0)
-            .onChange(of: emojiCapture) { _, newValue in
-              if let g = Self.firstEmoji(in: newValue) { icon = "emoji:\(g)" }
-              emojiCapture = ""
-            }
+          Text("Symbol").metaText()
+          IconToggleRow(icon: $icon, tint: AppearanceStyle.color(colorTag))
         }
-        .frame(width: 150)
+        .frame(width: 160)
       }
 
       HStack {
@@ -116,40 +77,6 @@ struct NodeEditor: View {
           }
         }.font(.system(size: 34))
       }
-  }
-
-  private var symbolPopover: some View {
-    VStack(spacing: 8) {
-      TextField("Search symbols", text: $symbolQuery)
-        .textFieldStyle(.roundedBorder)
-      ScrollView {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34)), count: 6), spacing: 8) {
-          ForEach(filteredSymbols, id: \.self) { name in
-            Image(systemName: name).font(.system(size: 18))
-              .frame(width: 30, height: 30)
-              .background { if icon == "sf:\(name)" { RoundedRectangle(cornerRadius: 7).fill(Color.accentColor.opacity(0.25)) } }
-              .contentShape(Rectangle())
-              .onTapGesture { icon = "sf:\(name)"; showSymbolPopover = false }
-          }
-        }
-      }
-      .frame(height: 200)
-    }
-    .padding(12)
-    .frame(width: 260)
-  }
-
-  /// Focus the hidden capture field, then open the system Character Viewer (emoji-and-symbol palette).
-  private func pickEmoji() {
-    emojiFieldFocused = true
-    DispatchQueue.main.async { NSApp.orderFrontCharacterPalette(nil) }
-  }
-
-  /// The first emoji grapheme in `s`, or nil. Ignores ordinary text the Character Viewer might insert.
-  private static func firstEmoji(in s: String) -> Character? {
-    s.first { ch in
-      ch.unicodeScalars.contains { $0.properties.isEmoji && ($0.value > 0x238C || $0.properties.isEmojiPresentation) }
-    }
   }
 
   private func load() {

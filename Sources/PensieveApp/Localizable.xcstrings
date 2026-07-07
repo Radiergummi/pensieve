@@ -786,6 +786,11 @@
         }
       }
     },
+    "Search" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Suchen" } }
+      }
+    },
     "Search symbols" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Symbole suchen" } }
