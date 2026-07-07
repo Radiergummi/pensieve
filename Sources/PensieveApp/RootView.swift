@@ -19,10 +19,10 @@ struct RootView: View {
   var body: some View {
     NavigationSplitView {
       SidebarView(model: model)
-        .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
     } content: {
       ContentListView(model: model)
-        .navigationSplitViewColumnWidth(min: 240, ideal: 300)
+        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 460)
     } detail: {
       detailColumn
         .toolbar {
@@ -37,6 +37,7 @@ struct RootView: View {
               .help("Inspector")
           }
         }
+        .navigationSplitViewColumnWidth(min: 380, ideal: 380)
     }
     // ⌘K now lives in the "Go" menu (see PensieveApp.commands); the palette state lives on AppModel.
     .sheet(isPresented: $model.showPalette) {

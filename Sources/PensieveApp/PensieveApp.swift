@@ -26,10 +26,10 @@ struct PensieveApp: App {
     // by default, so no manual activation-policy is needed; the icon comes from the bundled .icon.
     Window("Pensieve", id: "main") {
       RootView(model: model)
-        .frame(minWidth: 720, minHeight: 420)
+        .frame(minWidth: 900, minHeight: 480)
         .task { model.start() }   // idempotent (guarded in AppModel)
     }
-    .defaultSize(width: 900, height: 560)
+    .defaultSize(width: 1040, height: 660)
     .windowResizability(.contentMinSize)
     .commands {
       SidebarCommands()   // standard Show/Hide Sidebar (⌃⌘S) in the View menu

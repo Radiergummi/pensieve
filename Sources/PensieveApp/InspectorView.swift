@@ -24,7 +24,7 @@ struct InspectorView: View {
       VStack(alignment: .leading, spacing: 12) {
         if let le = selected {
           Text("Provenance").sectionHeader()
-          Text(le.text).font(.headline)
+          Text(le.text).font(.headline).fixedSize(horizontal: false, vertical: true)
           if let ctx = context, ctx.transcriptAvailable {
             ForEach(ctx.messages, id: \.index) { msg in
               messageRow(msg)
@@ -64,6 +64,8 @@ struct InspectorView: View {
       Text(msg.role).font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
       Markdown(msg.text)
         .markdownTextStyle { FontSize(14) }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.leading, msg.isCited ? 10 : 0)
         .overlay(alignment: .leading) {
           if msg.isCited { Rectangle().fill(.orange).frame(width: 3) }

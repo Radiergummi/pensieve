@@ -24,6 +24,6 @@ extension View {
   }
   /// Small metadata (timestamps, roles, source labels, dormancy). One caption treatment.
   func metaText() -> some View {
-    self.font(.footnote).foregroundStyle(.secondary)
+    self.font(.system(size: 12)).foregroundStyle(.secondary)
   }
 }

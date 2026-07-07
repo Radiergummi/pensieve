@@ -152,7 +152,7 @@ private struct ActivityTimeline: View {
         let items = (groups[day] ?? []).sorted { $0.occurredAt > $1.occurredAt }
         VStack(alignment: .leading, spacing: 12) {
           Text(day, format: .dateTime.weekday(.wide).month().day())
-            .font(.subheadline).fontWeight(.semibold).foregroundStyle(.primary)
+            .font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
           ForEach(Array(items.enumerated()), id: \.element.id) { idx, event in
             TimelineRow(event: event, isLast: idx == items.count - 1)
           }
