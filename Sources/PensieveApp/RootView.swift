@@ -6,6 +6,16 @@ struct RootView: View {
   @ObservedObject var model: AppModel
   @Environment(\.openWindow) private var openWindow
 
+  private var selectedNode: Node? {
+    guard let id = model.selectedNodeID else { return nil }
+    return model.node(id)
+  }
+  /// Delete is enabled only for a selected node that is not activity-born (mirrors NodeContextMenu).
+  private var canDeleteSelection: Bool {
+    guard let id = model.selectedNodeID else { return false }
+    return model.canDelete(id)
+  }
+
   var body: some View {
     NavigationSplitView {
       SidebarView(model: model)
@@ -39,9 +49,39 @@ struct RootView: View {
       model.openNodeRequest = nil
     }
     .toolbar {
-      ToolbarItem {
+      ToolbarItemGroup {
         Button { model.presentNewNode(under: nil) } label: { Image(systemName: "plus") }
           .help("New Node")
+
+        Button { if let n = selectedNode { model.presentEditNode(n) } } label: {
+          Image(systemName: "pencil")
+        }
+        .help("Edit")
+        .disabled(model.selectedNodeID == nil)
+
+        Button { model.movePickerNodeID = model.selectedNodeID } label: {
+          Image(systemName: "arrow.up.and.down.text.horizontal")
+        }
+        .help("Move to…")
+        .disabled(model.selectedNodeID == nil)
+
+        Button { model.mergePickerNodeID = model.selectedNodeID } label: {
+          Image(systemName: "arrow.triangle.merge")
+        }
+        .help("Merge into…")
+        .disabled(model.selectedNodeID == nil)
+
+        Button(role: .destructive) { model.pendingDeleteNodeID = model.selectedNodeID } label: {
+          Image(systemName: "trash")
+        }
+        .help("Delete")
+        .disabled(!canDeleteSelection)
+      }
+      ToolbarItemGroup(placement: .primaryAction) {
+        Button { model.showInspector.toggle() } label: { Image(systemName: "sidebar.trailing") }
+          .help("Inspector")
+        Button { Task { await model.refreshNow() } } label: { Image(systemName: "arrow.clockwise") }
+          .help("Refresh")
       }
     }
     .sheet(isPresented: Binding(get: { model.movePickerNodeID != nil },
