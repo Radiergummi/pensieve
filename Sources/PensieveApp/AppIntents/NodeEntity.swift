@@ -32,6 +32,7 @@ struct NodeEntity: AppEntity, IndexedEntity {
     self.name = facts.node.name
     self.searchBody = facts.node.description
     let n = facts.openLooseEnds
-    self.subtitle = "\(facts.node.kind) · \(n) open loose end\(n == 1 ? "" : "s") · dormant \(facts.daysDormant)d"
+    let kind = String(localized: AppearanceStyle.kindLabel(facts.node.kind))
+    self.subtitle = "\(kind) · \(n) open loose end\(n == 1 ? "" : "s") · dormant \(facts.daysDormant)d"
   }
 }

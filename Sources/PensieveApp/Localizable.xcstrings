@@ -21,6 +21,36 @@
         }
       }
     },
+    "Delete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen"
+          }
+        }
+      }
+    },
+    "Delete…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen …"
+          }
+        }
+      }
+    },
+    "Edit…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearbeiten …"
+          }
+        }
+      }
+    },
     "Merge" : {
       "localizations" : {
         "de" : {
@@ -61,6 +91,16 @@
         }
       }
     },
+    "New Child…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neues Unterelement …"
+          }
+        }
+      }
+    },
     "New Node" : {
       "localizations" : {
         "de" : {
@@ -87,6 +127,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Oberste Ebene"
+          }
+        }
+      }
+    },
+    "Delete “%@”? Its captured activity and loose ends are removed. This can’t be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ löschen? Die erfasste Aktivität und offenen Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+          }
+        }
+      }
+    },
+    "Delete “%@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
           }
         }
       }
@@ -177,6 +237,26 @@
         }
       }
     },
+    "Activity" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktivität"
+          }
+        }
+      }
+    },
+    "Archived" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archiviert"
+          }
+        }
+      }
+    },
     "Briefing" : {
 
     },
@@ -200,6 +280,46 @@
         }
       }
     },
+    "Claude Code Session" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude-Code-Sitzung"
+          }
+        }
+      }
+    },
+    "Color" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Farbe"
+          }
+        }
+      }
+    },
+    "Concept" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konzept"
+          }
+        }
+      }
+    },
+    "Domain" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereich"
+          }
+        }
+      }
+    },
     "Dormant" : {
       "localizations" : {
         "de" : {
@@ -216,6 +336,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ruhend %lldT"
+          }
+        }
+      }
+    },
+    "Edit Node" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knoten bearbeiten"
+          }
+        }
+      }
+    },
+    "Emoji" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emoji"
+          }
+        }
+      }
+    },
+    "Git Checkout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git-Checkout"
+          }
+        }
+      }
+    },
+    "Git Commit" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git-Commit"
           }
         }
       }
@@ -246,6 +406,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Inaktiv"
+          }
+        }
+      }
+    },
+    "Initiative" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Initiative"
           }
         }
       }
@@ -299,6 +469,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bewegt"
+          }
+        }
+      }
+    },
+    "Muted" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stummgeschaltet"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
           }
         }
       }
@@ -425,6 +615,16 @@
         }
       }
     },
+    "Project" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projekt"
+          }
+        }
+      }
+    },
     "Project unavailable" : {
       "localizations" : {
         "de" : {
@@ -525,6 +725,16 @@
         }
       }
     },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern"
+          }
+        }
+      }
+    },
     "Select a loose end" : {
       "localizations" : {
         "de" : {
@@ -571,12 +781,62 @@
         }
       }
     },
+    "Strand" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strang"
+          }
+        }
+      }
+    },
     "Surrounding context unavailable (transcript changed or removed)." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Umgebender Kontext nicht verfügbar (Transkript geändert oder entfernt)."
+          }
+        }
+      }
+    },
+    "Symbol" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symbol"
+          }
+        }
+      }
+    },
+    "Task" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufgabe"
+          }
+        }
+      }
+    },
+    "Topic" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thema"
+          }
+        }
+      }
+    },
+    "Type" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ"
           }
         }
       }
