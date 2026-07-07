@@ -430,3 +430,40 @@ sidebar; put the create action + a content-column header + right-side actions pe
 "Pensieve / N Projects"; "+" reads as the detail pane's leading action; refresh + inspector trailing;
 sidebar toggle collapses only the left column. *(If SwiftUI hoists the `.navigation` "+" to
 window-leading instead of detail-leading, that's the one spot to nudge — note it.)*
+
+---
+
+## T10 — Layout robustness + inspector overflow + timeline font bump (post-QA)
+
+Five dogfooding bugs from resizing/reading the built app.
+
+**#1 Inspector Markdown overflows horizontally** (long inline-code file paths force the block wider
+than the panel → text runs off the right edge). In `InspectorView.messageRow`, constrain the
+`Markdown` to wrap to the column: add `.frame(maxWidth: .infinity, alignment: .leading)` **and**
+`.fixedSize(horizontal: false, vertical: true)` to the `Markdown(msg.text)…` view. Also add
+`.fixedSize(horizontal: false, vertical: true)` to the loose-end title `Text(le.text).font(.headline)`
+so a long title wraps instead of widening the panel.
+
+**#2 Timeline (and meta) fonts read tiny** next to 14pt prose. In `ProseStyle.swift`, bump
+`metaText()` from `.footnote` to `.system(size: 12)` (keep `.foregroundStyle(.secondary)`). In
+`DetailView`'s `ActivityTimeline`, bump the day header from `.font(.subheadline).fontWeight(.semibold)`
+to `.font(.system(size: 14, weight: .semibold))` (keep `.foregroundStyle(.primary)`). Prose stays 14.
+
+**#3/#4/#5 Resize breaks layout** — the sidebar has no max width (drag-to-push-content-out), and the
+window min (720) is below the sum of column mins, so columns clip/overlap at small sizes. Fix with
+firm column bounds + an adequate window min:
+- `RootView` column widths:
+  - sidebar: `.navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)`
+  - content: `.navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 460)`
+  - detail: add `.navigationSplitViewColumnWidth(min: 380)` on `detailColumn` (after the `.toolbar`).
+- `PensieveApp`: bump the `RootView` `.frame(minWidth: 720, minHeight: 420)` → `.frame(minWidth: 900,
+  minHeight: 480)` (≥ 220+280+380 = 880 column mins + slack) and `.defaultSize(width: 900, height: 560)`
+  → `.defaultSize(width: 1040, height: 660)`. Keep `.windowResizability(.contentMinSize)`.
+  The sidebar `max: 340` stops the drag-to-push-out (#5); the window min ≥ column mins stops the
+  clipping/overlap (#3, #4). *(The sidebar section-header clipping in #3 is expected to resolve once
+  the window can't shrink below the column mins; re-verify.)*
+
+**Human-verify:** inspector transcript wraps within the panel (no right-edge overflow) incl. long
+file-path code spans; timeline meta + day header read comfortably (not tiny); the sidebar can't be
+dragged wide enough to push the content/detail out; shrinking the window to its min keeps all three
+columns readable (no clipped section headers / floating counts).
