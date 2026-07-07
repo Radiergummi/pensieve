@@ -10,6 +10,9 @@ options:
 packages:
   PensieveKit:
     path: .
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: "2.4.1"
 targets:
   Pensieve:
     type: application
@@ -20,6 +23,8 @@ targets:
     dependencies:
       - package: PensieveKit
         product: PensieveKit
+      - package: MarkdownUI
+        product: MarkdownUI
     info:
       path: Sources/PensieveApp/Info.plist
       properties:

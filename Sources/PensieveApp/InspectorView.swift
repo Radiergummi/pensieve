@@ -1,6 +1,7 @@
 // Sources/PensieveApp/InspectorView.swift
 import SwiftUI
 import PensieveKit
+import MarkdownUI
 
 /// The ⌘⌥I deep-dive: the surrounding transcript context for the inspected loose end. Cited message
 /// highlighted; non-user (machine-envelope) messages dimmed. Honest "gone" note when the transcript
@@ -59,16 +60,16 @@ struct InspectorView: View {
   }
 
   @ViewBuilder private func messageRow(_ msg: ProvenanceMessage) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(msg.role).font(.caption2).foregroundStyle(.tertiary)
-      Text(msg.text)
-        .font(.callout)
+    VStack(alignment: .leading, spacing: 4) {
+      Text(msg.role).font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
+      Markdown(msg.text)
+        .markdownTextStyle { FontSize(14) }
         .padding(.leading, msg.isCited ? 10 : 0)
         .overlay(alignment: .leading) {
           if msg.isCited { Rectangle().fill(.orange).frame(width: 3) }
         }
     }
-    .opacity(msg.isUserPrompt ? 1 : 0.55)   // dim machine-envelope context
+    .opacity(msg.isUserPrompt ? 1 : 0.7)   // was 0.55 — lift so dimmed context stays readable
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
