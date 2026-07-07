@@ -58,16 +58,9 @@ public struct ProjectResolver {
       //    an absorbed node's children to the primary below can never fold the primary under itself
       //    or under a soon-deleted node. The primary takes the position of the highest (closest to
       //    root) absorbed ancestor: its new parent is that ancestor's parent (a survivor, or root).
-      var chain = try Node.where { $0.id.eq(primaryID) }.fetchOne(db)?.parentID
-      var highestAbsorbedAncestorParent: UUID?? = nil   // .some(x) once an absorbed ancestor is seen
-      var guardCount = 0
-      while let current = chain, guardCount < 10_000 {
-        guardCount += 1
-        let parent = try Node.where { $0.id.eq(current) }.fetchOne(db)?.parentID
-        if absorbed.contains(current) { highestAbsorbedAncestorParent = .some(parent) }
-        chain = parent
-      }
-      if let newParent = highestAbsorbedAncestorParent {
+      let chain = try NodeCommands.ancestorIDs(db, of: primaryID)   // [parent, …, root]
+      if let highest = chain.lastIndex(where: { absorbed.contains($0) }) {
+        let newParent = chain.indices.contains(highest + 1) ? chain[highest + 1] : nil
         try Node.where { $0.id.eq(primaryID) }
           .update { $0.parentID = #bind(newParent) }.execute(db)
       }
@@ -78,10 +71,10 @@ public struct ProjectResolver {
         try Event.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(db)
         try LooseEnd.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(db)
         try Checkpoint.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(db)
-        // Reattach other's children to the primary, except the primary itself and other absorbed
-        // nodes (which are being deleted anyway).
+        // Reattach other's children to the primary, skipping other absorbed nodes (deleted anyway).
+        // Step 1 already lifted the primary off the absorbed set, so it is never among these children.
         let children = try Node.where { $0.parentID.eq(other) }.fetchAll(db)
-        for child in children where child.id != primaryID && !absorbed.contains(child.id) {
+        for child in children where !absorbed.contains(child.id) {
           try Node.where { $0.id.eq(child.id) }
             .update { $0.parentID = #bind(primaryID) }.execute(db)
         }

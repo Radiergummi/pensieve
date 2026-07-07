@@ -38,15 +38,25 @@ public enum NodeCommands {
     guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
     if let newParentID {
       guard try Node.where({ $0.id.eq(newParentID) }).fetchOne(db) != nil else { return false }
-      // Walk up from the intended parent; hitting nodeID means this move would form a cycle.
-      var cursor: UUID? = newParentID
-      while let current = cursor {
-        if current == nodeID { return false }
-        cursor = try Node.where { $0.id.eq(current) }.fetchOne(db)?.parentID
-      }
+      // A cycle would form if nodeID is the new parent itself or any of its ancestors.
+      if newParentID == nodeID { return false }
+      if try ancestorIDs(db, of: newParentID).contains(nodeID) { return false }
     }
     try Node.where { $0.id.eq(nodeID) }.update { $0.parentID = #bind(newParentID) }.execute(db)
     return true
+  }
+
+  /// The ancestor chain of `nodeID` within the current transaction: `[parent, grandparent, …, root]`,
+  /// excluding `nodeID`. Cycle-safe — a visited set bounds a corrupt (pre-existing) parent cycle.
+  static func ancestorIDs(_ db: Database, of nodeID: UUID) throws -> [UUID] {
+    var chain: [UUID] = []
+    var seen: Set<UUID> = [nodeID]
+    var cursor = try Node.where { $0.id.eq(nodeID) }.fetchOne(db)?.parentID
+    while let current = cursor, seen.insert(current).inserted {
+      chain.append(current)
+      cursor = try Node.where { $0.id.eq(current) }.fetchOne(db)?.parentID
+    }
+    return chain
   }
 
   public static func nest(_ db: any DatabaseWriter, child: String, under parent: String) throws -> Bool {
