@@ -42,7 +42,7 @@ struct RootView: View {
     .toolbar {
       ToolbarItemGroup(placement: .navigation) {
         Button {
-          withAnimation { columns = (columns == .detailOnly ? .all : .detailOnly) }
+          withAnimation { columns = (columns == .doubleColumn ? .all : .doubleColumn) }
         } label: { Image(systemName: "sidebar.left") }
           .help("Toggle Sidebar")
         Button { model.presentNewNode(under: nil) } label: { Image(systemName: "plus") }

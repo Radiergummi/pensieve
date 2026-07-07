@@ -40,16 +40,16 @@ struct BriefingView: View {
           Text(c.node.name).font(.headline)
           Spacer()
           if c.movedSince > 0 {
-            Text("\(c.movedSince) since last visit").font(.caption).foregroundStyle(.secondary)
+            Text("\(c.movedSince) since last visit").metaText()
           } else {
-            Text("dormant \(c.daysDormant)d").font(.caption).foregroundStyle(.tertiary)
+            Text("dormant \(c.daysDormant)d").font(.footnote).foregroundStyle(.tertiary)
           }
         }
         if !c.latestSummary.isEmpty {
           Text(c.latestSummary).prose().foregroundStyle(.secondary).lineLimit(1)
         }
         if let top = c.topLooseEnd {
-          Label(top, systemImage: "arrow.right.circle").font(.caption).foregroundStyle(.orange).lineLimit(1)
+          Label(top, systemImage: "arrow.right.circle").font(.footnote).foregroundStyle(.orange).lineLimit(1)
         }
       }
       .padding(12)
