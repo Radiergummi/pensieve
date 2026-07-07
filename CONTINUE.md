@@ -4,11 +4,40 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `3ba9da9`) and the tree is clean. Test suite: **196 tests**, run with
+Everything below is **on `main`** (HEAD `0a7eb0f`) and the tree is clean. Test suite: **196 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
 
-**Latest (this session): app visual identity & UX polish — DONE & on `main`.** Seven UX fixes on a shared
+**Latest (this session): app chrome polish batch — DONE & on `main`.** Ten app-target-only ("chrome") polish
+tasks that make Pensieve.app feel Apple-native — **no PensieveKit changes** (196 tests unchanged). Two waves:
+**Wave 1** — (T1) reading-prose typography (`ProseStyle.swift`: 14pt/lineSpacing/680pt measure cap); (T2/T9)
+window toolbar actions moved onto the **detail column** (New Node "+" leading; Refresh + Inspector trailing) with a
+single **native** sidebar toggle; (T3) native sidebar status bar (hairline over `.background(.bar)`); (T4/T8)
+Reminders-parity New/Edit modal (`IconPicker.swift`) with anchored SF-Symbol search + emoji picker popovers.
+**Wave 2** — (T5) consistent type scale + balanced activity timeline; (T7) inspector renders transcript **Markdown**
+via MarkdownUI 2.4.1; (T9) content-column header ("Pensieve / N Projects"); (T10) layout robustness — firm column
+width bounds (sidebar 220–340 / content 280–460 / detail min 380) + window min 900×480 / default 1040×660, inspector
+Markdown horizontal-overflow wrap, timeline/meta font bumps (12pt meta, 14pt day header). Subagent-driven (Sonnet
+impl+task-review each); **two Opus whole-branch reviews** (waves 1+2 → READY-TO-MERGE 0 Critical/Important; then a
+final review of the post-review T9/T10 delta → READY-TO-MERGE, 0 Critical/Important, 3 cosmetic Minors). Fast-forward
+merged (main was at the branch base; discarded the transient MarkdownUI `Package.resolved` churn — see T7 gotcha).
+Spec/plans: `docs/superpowers/{specs,plans}/2026-07-07-app-chrome-polish-*` (+ `…-wave2.md`).
+- **Minors left as-is (non-blocking):** detail column carries `ideal:380` where spec said `min:380` only (no-op —
+  the flexible last column never binds to it); `"%lld Projects"` is un-pluralized ("1 Projects", matches spec);
+  `firstEmoji(in:)` doesn't detect keycap-digit emoji (e.g. `5️⃣`) — pick silently no-ops (narrow subset).
+- **Human-verify carries** (need the built app, real store, plain `open` — can't be asserted headlessly): prose
+  reads larger/airier with a bounded ~680pt reading column on a wide window (Detail + Briefing); the sidebar bottom
+  bar reads native (hairline + translucent), not bolted-on; each toolbar action opens the same sheet/dialog as the
+  context menu and node-ops disable with no selection; the New/Edit modal is a balanced two-zone layout with a live
+  preview circle, the Symbol popover searches + picks an SF Symbol, and the Emoji popover picks an emoji; inspector
+  transcript Markdown wraps within the panel (no right-edge overflow) incl. long file-path code spans; timeline meta
+  + day header read comfortably; the sidebar can't be dragged wide enough to push content/detail out and shrinking to
+  the window min keeps all three columns readable; German renders in situ (`-AppleLanguages '(de)'`); `pensieve list`
+  matches after a create/edit. Build: `xcodegen generate && xcodebuild -project Pensieve.xcodeproj -scheme Pensieve
+  -configuration Debug -derivedDataPath ./.build-xcode build`, then `open
+  ./.build-xcode/Build/Products/Debug/Pensieve.app`.
+
+**Prior this session: app visual identity & UX polish — DONE & on `main`.** Seven UX fixes on a shared
 per-kind/per-source **visual-identity system** (localizable label + icon + color; a node may override its own
 icon+color, kind defaults otherwise). **Kit (SwiftUI-free, tested):** migration **v8** adds `nodes.icon`/`colorTag`;
 `VisualIdentity.swift` (`AppearanceIcon` `sf:`/`emoji:` scheme, `NodeKindStyle`, `EventSourceStyle`,

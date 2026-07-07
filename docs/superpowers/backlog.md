@@ -210,6 +210,14 @@ small-to-medium app-target polish (no unit tests → build + smoke + human eyeba
 change) is the meatiest and wants its **own brainstorm→spec**. Reference screenshots (Reminders parity) are in
 the 2026-07-07 session.
 
+**✅ Items 1–4 SHIPPED (2026-07-07, merged to `main` `0a7eb0f`)** as the **app chrome polish batch** (two waves,
+10 tasks; spec/plans `{specs,plans}/2026-07-07-app-chrome-polish-*` + `…-wave2.md`). Delivered: (4) reading-prose
+typography (`ProseStyle.swift`, 14pt/measure cap); (3) window toolbar actions on the detail column + single native
+sidebar toggle; (1) native sidebar status bar (hairline + `.bar`); (2) Reminders-parity New/Edit modal with SF-Symbol
+search + emoji popover pickers (`IconPicker.swift`); plus wave-2 refinements (Markdown inspector via MarkdownUI,
+content-column header, layout-robustness column/window bounds, timeline/meta font bumps). No PensieveKit changes.
+Two Opus whole-branch reviews → READY-TO-MERGE. **Item 5 (three-pane IA rework) remains — its own brainstorm→spec.**
+
 1. **Sidebar tracking indicator — make it feel native.** The liveness footer now has a solid `.background(.bar)`
    (which fixed the clash) but reads as a bolted-on band, not an Apple-idiomatic treatment. Explore the
    first-party pattern: a translucent bottom bar with a hairline `Divider`, folding it into the sidebar `List`
