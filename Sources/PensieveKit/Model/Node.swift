@@ -29,14 +29,15 @@ public struct Node: Identifiable, Equatable, Sendable {
   public var branchKey: String?     // set only on kind == NodeKind.strand
   public var icon: String           // "" = use kind default; else "sf:<symbol>" or "emoji:<grapheme>"
   public var colorTag: String       // "" = use kind default; else a palette color name
+  public var context: String        // "" = unset (inherit from ancestor); else "work" | "personal"
 
   public init(id: UUID = UUID(), name: String, state: String = "active", createdAt: Date = Date(),
               parentID: UUID? = nil, kind: String = NodeKind.project, description: String = "",
               metadataJSON: String = "{}", branchKey: String? = nil,
-              icon: String = "", colorTag: String = "") {
+              icon: String = "", colorTag: String = "", context: String = "") {
     self.id = id; self.name = name; self.state = state; self.createdAt = createdAt
     self.parentID = parentID; self.kind = kind; self.description = description
     self.metadataJSON = metadataJSON; self.branchKey = branchKey
-    self.icon = icon; self.colorTag = colorTag
+    self.icon = icon; self.colorTag = colorTag; self.context = context
   }
 }

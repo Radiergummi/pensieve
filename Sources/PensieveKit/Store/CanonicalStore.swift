@@ -137,5 +137,8 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     try #sql(#"ALTER TABLE "nodes" ADD COLUMN "icon" TEXT NOT NULL DEFAULT ''"#).execute(db)
     try #sql(#"ALTER TABLE "nodes" ADD COLUMN "colorTag" TEXT NOT NULL DEFAULT ''"#).execute(db)
   }
+  migrator.registerMigration("v9-node-context") { db in
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "context" TEXT NOT NULL DEFAULT ''"#).execute(db)
+  }
   try migrator.migrate(db)
 }
