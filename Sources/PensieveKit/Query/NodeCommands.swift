@@ -85,6 +85,51 @@ public enum NodeCommands {
       return true
     }
   }
+
+  /// The outcome of a delete attempt. `.blocked` = the subtree still has a live source, which
+  /// `ProjectResolver` would re-create on the next drain — so delete is refused.
+  public enum DeleteResult: Equatable, Sendable {
+    case deleted(nodes: Int, events: Int, looseEnds: Int)
+    case blocked
+    case notFound
+  }
+
+  /// Delete `nodeID` and all its descendants (manual-only). Refused (`.blocked`, nothing written)
+  /// if any node in the subtree has a `Source`. Child rows cascade via FK on node-row delete;
+  /// `nodes.parentID` is SET NULL, so the subtree is deleted explicitly.
+  @discardableResult
+  public static func delete(_ db: any DatabaseWriter, nodeID: UUID) throws -> DeleteResult {
+    try db.write { db in
+      guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return .notFound }
+      let all = try Node.all.fetchAll(db)
+      let ids = NodeForest.descendantIDs(of: nodeID, in: all).union([nodeID])
+
+      // Manual-only guard: any source in the subtree → refuse (would resurrect on next drain).
+      for id in ids where try Source.where({ $0.nodeID.eq(id) }).fetchCount(db) > 0 {
+        return .blocked
+      }
+
+      var events = 0, looseEnds = 0
+      for id in ids {
+        events += try Event.where { $0.nodeID.eq(id) }.fetchCount(db)
+        looseEnds += try LooseEnd.where { $0.nodeID.eq(id) }.fetchCount(db)
+      }
+      for id in ids {
+        try Node.where { $0.id.eq(id) }.delete().execute(db)   // cascades its child-table rows
+      }
+      return .deleted(nodes: ids.count, events: events, looseEnds: looseEnds)
+    }
+  }
+
+  /// True if `nodeID` or any descendant has a `Source` — the app gates the Delete menu item on this.
+  public static func subtreeHasSources(_ db: any DatabaseReader, nodeID: UUID) throws -> Bool {
+    try db.read { db in
+      let all = try Node.all.fetchAll(db)
+      let ids = NodeForest.descendantIDs(of: nodeID, in: all).union([nodeID])
+      for id in ids where try Source.where({ $0.nodeID.eq(id) }).fetchCount(db) > 0 { return true }
+      return false
+    }
+  }
 }
 
 public enum NodeTree {

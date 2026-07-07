@@ -88,3 +88,57 @@ import SQLiteData
   #expect(plain.icon == "")
   #expect(plain.colorTag == "")
 }
+
+@Test func deleteSourceFreeSubtreeCascades() throws {
+  let db = try openCanonicalDatabase(at: tempURL("delete-cascade"))
+  let root = try #require(try NodeCommands.add(db, name: "Root", kind: "domain", parent: nil, description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "project", parent: "Root", description: ""))
+  let sibling = try #require(try NodeCommands.add(db, name: "Sibling", kind: "project", parent: nil, description: ""))
+
+  // A source-free child event + loose end (source-free: no Source row is attached to root/child —
+  // the deleted subtree — though events.sourceID still needs a real row to satisfy its FK, so the
+  // backing source is attached to the untouched sibling instead).
+  let unrelatedSource = Source(nodeID: sibling.id, kind: SourceKind.gitRepo, key: "/p/sibling")
+  let ev = Event(nodeID: child.id, sourceID: unrelatedSource.id, occurredAt: Date(),
+                 kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
+  let le = LooseEnd(nodeID: child.id, sourceEventID: ev.id, text: "todo", quote: "q")
+  try db.write { db in
+    try Source.insert { unrelatedSource }.execute(db)
+    try Event.insert { ev }.execute(db)
+    try LooseEnd.insert { le }.execute(db)
+  }
+
+  let result = try NodeCommands.delete(db, nodeID: root.id)
+  #expect(result == .deleted(nodes: 2, events: 1, looseEnds: 1))   // root + child
+
+  // Root + child gone; their event + loose end gone; sibling untouched.
+  #expect(try db.read { db in try Node.where { $0.id.eq(root.id) }.fetchOne(db) } == nil)
+  #expect(try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) } == nil)
+  #expect(try db.read { db in try Node.where { $0.id.eq(sibling.id) }.fetchOne(db) } != nil)
+  #expect(try db.read { db in try Event.fetchCount(db) } == 0)
+  #expect(try db.read { db in try LooseEnd.fetchCount(db) } == 0)
+}
+
+@Test func deleteBlockedWhenSubtreeHasSource() throws {
+  let db = try openCanonicalDatabase(at: tempURL("delete-blocked"))
+  let root = try #require(try NodeCommands.add(db, name: "Root", kind: "domain", parent: nil, description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "project", parent: "Root", description: ""))
+  // A live source on the *descendant* must block deleting the ancestor.
+  try db.write { db in
+    try Source.insert { Source(nodeID: child.id, kind: SourceKind.gitRepo, key: "/p/child") }.execute(db)
+  }
+
+  #expect(try NodeCommands.subtreeHasSources(db, nodeID: root.id) == true)
+  #expect(try NodeCommands.delete(db, nodeID: root.id) == .blocked)
+  // Nothing was deleted.
+  #expect(try db.read { db in try Node.where { $0.id.eq(root.id) }.fetchOne(db) } != nil)
+  #expect(try db.read { db in try Node.where { $0.id.eq(child.id) }.fetchOne(db) } != nil)
+}
+
+@Test func deleteLeafAndUnknown() throws {
+  let db = try openCanonicalDatabase(at: tempURL("delete-leaf"))
+  let leaf = try #require(try NodeCommands.add(db, name: "Leaf", kind: "project", parent: nil, description: ""))
+  #expect(try NodeCommands.subtreeHasSources(db, nodeID: leaf.id) == false)
+  #expect(try NodeCommands.delete(db, nodeID: leaf.id) == .deleted(nodes: 1, events: 0, looseEnds: 0))
+  #expect(try NodeCommands.delete(db, nodeID: UUID()) == .notFound)
+}
