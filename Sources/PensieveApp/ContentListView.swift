@@ -23,5 +23,7 @@ struct ContentListView: View {
         ContentUnavailableView("Nothing here", systemImage: "tray")
       }
     }
+    .navigationTitle("Pensieve")
+    .navigationSubtitle("\(model.projectCount) Projects")
   }
 }

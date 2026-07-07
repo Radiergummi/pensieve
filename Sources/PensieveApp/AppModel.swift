@@ -231,6 +231,9 @@ final class AppModel: ObservableObject {
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
 
+  /// Count of top-level project nodes, for the content-column header.
+  var projectCount: Int { allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project }.count }
+
   /// The middle-column list for the current sidebar selection.
   func nodesForSelection() -> [Node] {
     switch sidebarSelection {

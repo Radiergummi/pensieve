@@ -5,25 +5,39 @@ import PensieveKit
 struct RootView: View {
   @ObservedObject var model: AppModel
   @Environment(\.openWindow) private var openWindow
-  @State private var columns = NavigationSplitViewVisibility.all
+
+  @ViewBuilder private var detailColumn: some View {
+    if let id = model.selectedNodeID, let node = model.node(id) {
+      DetailView(model: model, node: node, allowsInspector: true)
+    } else if model.sidebarSelection == .briefing {
+      BriefingView(model: model)
+    } else {
+      ContentUnavailableView("Select a project", systemImage: "sidebar.left")
+    }
+  }
 
   var body: some View {
-    NavigationSplitView(columnVisibility: $columns) {
+    NavigationSplitView {
       SidebarView(model: model)
         .navigationSplitViewColumnWidth(min: 200, ideal: 240)
     } content: {
       ContentListView(model: model)
         .navigationSplitViewColumnWidth(min: 240, ideal: 300)
     } detail: {
-      if let id = model.selectedNodeID, let node = model.node(id) {
-        DetailView(model: model, node: node, allowsInspector: true)
-      } else if model.sidebarSelection == .briefing {
-        BriefingView(model: model)
-      } else {
-        ContentUnavailableView("Select a project", systemImage: "sidebar.left")
-      }
+      detailColumn
+        .toolbar {
+          ToolbarItem(placement: .navigation) {
+            Button { model.presentNewNode(under: nil) } label: { Image(systemName: "plus") }
+              .help("New Node")
+          }
+          ToolbarItemGroup(placement: .primaryAction) {
+            Button { Task { await model.refreshNow() } } label: { Image(systemName: "arrow.clockwise") }
+              .help("Refresh")
+            Button { model.showInspector.toggle() } label: { Image(systemName: "sidebar.right") }
+              .help("Inspector")
+          }
+        }
     }
-    .navigationTitle("Pensieve")
     // ⌘K now lives in the "Go" menu (see PensieveApp.commands); the palette state lives on AppModel.
     .sheet(isPresented: $model.showPalette) {
       PaletteView(model: model, isPresented: $model.showPalette)
@@ -38,22 +52,6 @@ struct RootView: View {
       guard let id else { return }
       openWindow(id: "recall", value: id)
       model.openNodeRequest = nil
-    }
-    .toolbar {
-      ToolbarItemGroup(placement: .navigation) {
-        Button {
-          withAnimation { columns = (columns == .doubleColumn ? .all : .doubleColumn) }
-        } label: { Image(systemName: "sidebar.left") }
-          .help("Toggle Sidebar")
-        Button { model.presentNewNode(under: nil) } label: { Image(systemName: "plus") }
-          .help("New Node")
-      }
-      ToolbarItemGroup(placement: .primaryAction) {
-        Button { Task { await model.refreshNow() } } label: { Image(systemName: "arrow.clockwise") }
-          .help("Refresh")
-        Button { model.showInspector.toggle() } label: { Image(systemName: "sidebar.right") }
-          .help("Inspector")
-      }
     }
     .sheet(isPresented: Binding(get: { model.movePickerNodeID != nil },
                                 set: { if !$0 { model.movePickerNodeID = nil } })) {

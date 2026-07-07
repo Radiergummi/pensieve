@@ -44,6 +44,11 @@
     "%@ since last visit" : {
 
     },
+    "%lld Projects" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld Projekte" } }
+      }
+    },
     "%lld open" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -867,16 +872,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufgabe"
-          }
-        }
-      }
-    },
-    "Toggle Sidebar" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seitenleiste ein-/ausblenden"
           }
         }
       }
