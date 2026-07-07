@@ -33,15 +33,15 @@ reacts when that Focus turns on/off.
 4. **Filter semantic = "mute the opposite explicit context; `unset` always shows."** Personal Focus
    shows `personal` + `unset`, hides `work` (and vice-versa). Forgiving — uncategorized work never
    silently vanishes; you only mute what you've explicitly classified.
-5. **Surfaces filtered = the main window + Spotlight.** Menu-bar popover stays unfiltered in v1
-   (near-free later add — same kernel). (User's explicit choice.)
+5. **Surfaces filtered = the main window + the menu-bar popover + Spotlight.** *(Amended during
+   planning: the menu-bar popover shares the `AppModel.lists` state with the main window, so filtering
+   that one shared collection filters both — simpler and more consistent, the ambient glance respects
+   the active Focus. User approved this deviation from the original "menu-bar unfiltered in v1".)*
 6. **Deactivation handled via an *optional* filter parameter** — see Architecture §4. On Focus
    deactivation the system re-runs `perform()` with the parameter **nil**; that is the revert signal.
 
 ## Non-goals (deferred → backlog ledger)
 
-- **Menu-bar popover filtering.** Trivial follow-up (reads the same filtered kernel); left out per
-  the surface choice.
 - **A bulk / right-click "Set Context" action.** The New/Edit modal picker suffices for v1. *(If
   classifying many existing nodes feels tedious in dogfooding, add a context-menu action then.)*
 - **More than two contexts** (clients, learning, …). YAGNI; the fixed enum is a small change to grow.
@@ -98,10 +98,12 @@ boundary in `refresh()` (and `refreshGlance()`), post-computation:
 - **Node tree:** build `NodeForest` from the visible `allNodes` subset (a hidden work project takes
   its whole subtree with it — consistent with inheritance; the forest builder already drops nodes
   whose parent is absent).
-- **Spotlight:** `SpotlightIndexer.reindex()` becomes filter-aware — it clears and re-indexes only
-  the **visible** active nodes, and is re-run when the active context changes. *(Accepted
-  trade-offs, per surface choice: a reindex per Focus switch; while in Personal you won't find a
-  Work node by name in Spotlight.)*
+- **Menu-bar popover:** filtered for free — it reads the same `AppModel.lists`, filtered in both
+  `refresh()` and `refreshGlance()`.
+- **Spotlight:** `SpotlightIndexer.reindex(activeContext:)` becomes filter-aware — it clears and
+  re-indexes only the **visible** active nodes, re-run when the active context changes. *(Accepted
+  trade-offs: a reindex per Focus switch; while in Personal you won't find a Work node by name in
+  Spotlight.)*
 
 `allNodes` itself stays the full set (organizing writes, `node(_:)` lookups, pickers must see
 everything); only the *derived, surfaced* collections are filtered.
@@ -181,5 +183,5 @@ the chrome labels are localized. Impersonal/infinitive German.
   keep it defaulted (`= ""`) and last, so existing callers (CLI `add-node`, tests) are unaffected.
 
 ## Out of scope (own specs / later)
-- Menu-bar filtering; bulk set-context; >2 contexts; notification muting; CLI `--context`; App
+- Bulk set-context; >2 contexts; notification muting; CLI `--context`; App
   Intents phrase for setting context. All noted above; none foreclosed.
