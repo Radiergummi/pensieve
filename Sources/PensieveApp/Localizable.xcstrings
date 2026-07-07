@@ -1,129 +1,518 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Smart Lists" : {
+    "Cancel" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Intelligente Listen" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
       }
     },
-    "Projects" : {
+    "Change Type" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekte" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ ändern"
+          }
+        }
       }
     },
-    "What's Next" : {
+    "Merge" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Als Nächstes" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zusammenführen"
+          }
+        }
+      }
+    },
+    "Merge into…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zusammenführen mit…"
+          }
+        }
+      }
+    },
+    "Move to…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verschieben nach…"
+          }
+        }
+      }
+    },
+    "New Child" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neues Unterelement"
+          }
+        }
+      }
+    },
+    "New Node" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neuer Knoten"
+          }
+        }
+      }
+    },
+    "Rename" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umbenennen"
+          }
+        }
+      }
+    },
+    "Top level" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oberste Ebene"
+          }
+        }
+      }
+    },
+    "Merge “%@” into “%@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%1$@“ mit „%2$@“ zusammenführen? Quellen, Aktivität und offene Enden werden zum Ziel verschoben und das Original gelöscht. Dies kann nicht rückgängig gemacht werden."
+          }
+        }
+      }
+    },
+    " · captured %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · erfasst %@"
+          }
+        }
+      }
+    },
+    "%@" : {
+
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · %@ · %lldd ago" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ · %3$lldd ago"
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld open" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld offen"
+          }
+        }
+      }
+    },
+    "%lld open · %lldd dormant" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld offen · %lldT ruhend"
+          }
+        }
+      }
+    },
+    "%lld since last visit" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld seit letztem Besuch"
+          }
+        }
+      }
+    },
+    "Active" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiv"
+          }
+        }
+      }
+    },
+    "Briefing" : {
+
+    },
+    "captured" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "erfasst"
+          }
+        }
+      }
+    },
+    "capturing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "erfasst"
+          }
+        }
       }
     },
     "Dormant" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ruhend" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ruhend"
+          }
+        }
       }
     },
-    "Recently Active" : {
+    "dormant %lldd" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kürzlich aktiv" } }
-      }
-    },
-    "Moved" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bewegt" } }
-      }
-    },
-    "Quiet" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ruhig" } }
-      }
-    },
-    "Last Work Done" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zuletzt erledigt" } }
-      }
-    },
-    "Loose Ends" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lose Enden" } }
-      }
-    },
-    "Recent Activity" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Letzte Aktivität" } }
-      }
-    },
-    "None open." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine offen." } }
-      }
-    },
-    "No captured activity." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine erfasste Aktivität." } }
-      }
-    },
-    "No captured activity yet." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Noch keine erfasste Aktivität." } }
-      }
-    },
-    "Nothing here" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts hier" } }
-      }
-    },
-    "Nothing queued" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts in Warteschlange" } }
-      }
-    },
-    "Select a project" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekt auswählen" } }
-      }
-    },
-    "Select a loose end" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Loses Ende auswählen" } }
-      }
-    },
-    "Pick a loose end to see its source." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ein loses Ende auswählen, um die Quelle zu sehen." } }
-      }
-    },
-    "PROVENANCE" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "HERKUNFT" } }
-      }
-    },
-    "Surrounding context unavailable (transcript changed or removed)." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Umgebender Kontext nicht verfügbar (Transkript geändert oder entfernt)." } }
-      }
-    },
-    "Project unavailable" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekt nicht verfügbar" } }
-      }
-    },
-    "No project" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Projekt" } }
-      }
-    },
-    "Open in New Window" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "In neuem Fenster öffnen" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ruhend %lldT"
+          }
+        }
       }
     },
     "Go" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gehe zu" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gehe zu"
+          }
+        }
+      }
+    },
+    "idle" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "inaktiv"
+          }
+        }
+      }
+    },
+    "Idle" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inaktiv"
+          }
+        }
+      }
+    },
+    "Inspector" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inspektor"
+          }
+        }
+      }
+    },
+    "Jump to…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wechseln zu…"
+          }
+        }
+      }
+    },
+    "Last Work Done" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt erledigt"
+          }
+        }
+      }
+    },
+    "List" : {
+
+    },
+    "Loose Ends" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lose Enden"
+          }
+        }
+      }
+    },
+    "Moved" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewegt"
+          }
+        }
+      }
+    },
+    "No captured activity yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine erfasste Aktivität."
+          }
+        }
+      }
+    },
+    "No captured activity." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine erfasste Aktivität."
+          }
+        }
+      }
+    },
+    "No project" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Projekt"
+          }
+        }
+      }
+    },
+    "Node" : {
+
+    },
+    "None open." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine offen."
+          }
+        }
+      }
+    },
+    "not set up" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nicht eingerichtet"
+          }
+        }
+      }
+    },
+    "Not set up" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht eingerichtet"
+          }
+        }
+      }
+    },
+    "Nothing here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts hier"
+          }
+        }
+      }
+    },
+    "Nothing queued" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts in Warteschlange"
+          }
+        }
+      }
+    },
+    "Open in New Window" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In neuem Fenster öffnen"
+          }
+        }
+      }
+    },
+    "Open Node" : {
+
+    },
+    "Open Pensieve" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve öffnen"
+          }
+        }
+      }
+    },
+    "Pensieve" : {
+
+    },
+    "Pensieve List" : {
+
+    },
+    "Pick a loose end to see its source." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein loses Ende auswählen, um die Quelle zu sehen."
+          }
+        }
+      }
+    },
+    "Project unavailable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projekt nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Projects" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projekte"
+          }
+        }
+      }
+    },
+    "PROVENANCE" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HERKUNFT"
+          }
+        }
       }
     },
     "Quick Jump…" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schnellsprung…" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schnellsprung…"
+          }
+        }
+      }
+    },
+    "Quiet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ruhig"
+          }
+        }
+      }
+    },
+    "Quit" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beenden"
+          }
+        }
+      }
+    },
+    "Recall" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rückblick"
+          }
+        }
+      }
+    },
+    "Recent Activity" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzte Aktivität"
+          }
+        }
+      }
+    },
+    "Recently Active" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kürzlich aktiv"
+          }
+        }
       }
     },
     "Refresh" : {
@@ -136,144 +525,70 @@
         }
       }
     },
-    "Inspector" : {
+    "Select a loose end" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Inspektor" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loses Ende auswählen"
+          }
+        }
       }
     },
-    "Recall" : {
+    "Select a project" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rückblick" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projekt auswählen"
+          }
+        }
       }
     },
-    "Open Pensieve" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve öffnen" } }
-      }
+    "Show List" : {
+
     },
-    "Quit" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beenden" } }
-      }
-    },
-    "Jump to…" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wechseln zu…" } }
-      }
-    },
-    "Active" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktiv" } }
-      }
-    },
-    "Idle" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Inaktiv" } }
-      }
-    },
-    "Not set up" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nicht eingerichtet" } }
-      }
-    },
-    "capturing" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "erfasst" } }
-      }
-    },
-    "idle" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "inaktiv" } }
-      }
-    },
-    "not set up" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "nicht eingerichtet" } }
-      }
-    },
-    "captured" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "erfasst" } }
-      }
+    "Show Pensieve List" : {
+
     },
     "Since %@" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Seit %@" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seit %@"
+          }
+        }
       }
     },
-    "%lld since last visit" : {
+    "Smart Lists" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld seit letztem Besuch" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intelligente Listen"
+          }
+        }
       }
     },
-    "dormant %lldd" : {
+    "Surrounding context unavailable (transcript changed or removed)." : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "ruhend %lldT" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umgebender Kontext nicht verfügbar (Transkript geändert oder entfernt)."
+          }
+        }
       }
     },
-    "%lld open" : {
+    "What's Next" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld offen" } }
-      }
-    },
-    "%lld open · %lldd dormant" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld offen · %lldT ruhend" } }
-      }
-    },
-    " · captured %@" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : " · erfasst %@" } }
-      }
-    },
-    "New Node" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neuer Knoten" } }
-      }
-    },
-    "New Child" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues Unterelement" } }
-      }
-    },
-    "Rename" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Umbenennen" } }
-      }
-    },
-    "Change Type" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Typ ändern" } }
-      }
-    },
-    "Move to…" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verschieben nach…" } }
-      }
-    },
-    "Merge into…" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zusammenführen mit…" } }
-      }
-    },
-    "Top level" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Oberste Ebene" } }
-      }
-    },
-    "Cancel" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abbrechen" } }
-      }
-    },
-    "Merge" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zusammenführen" } }
-      }
-    },
-    "Merge “%@” into “%@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "„%1$@“ mit „%2$@“ zusammenführen? Quellen, Aktivität und offene Enden werden zum Ziel verschoben und das Original gelöscht. Dies kann nicht rückgängig gemacht werden." } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Nächstes"
+          }
+        }
       }
     }
   },
