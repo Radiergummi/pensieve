@@ -27,8 +27,12 @@ user-chosen icon+color per node, a New/Edit modal, manual delete, and a GitHub-s
 - **Node icon+color storage:** two new columns on `Node` (`icon`, `colorTag`), additive **migration
   v8** (the v4–v6 additive pattern; note `v7-incremental-extraction` already exists).
 - **Icon picker:** both **emoji and SF Symbols** (Reminders-style segmented picker).
-- **Delete:** **cascade with confirmation** — node + descendants + their events/loose ends/sources,
-  behind a destructive dialog naming the counts.
+- **Delete:** **manual (source-free) nodes only**, cascade with confirmation. Delete is offered
+  only when the node **and all its descendants have no `Source` rows** — i.e. manually-created nodes
+  (the empty nodes from issue #3). Activity-born nodes (git repo / Claude Code session still on
+  disk) are NOT deletable, because `ProjectResolver.resolve` re-creates them on the next
+  `Ingester.drain()` (which the launchd daemon runs every 300s). For those, the affordance stays
+  Merge / (future) Archive. This closes the adversarial review's Critical "resurrection" gap.
 - **Timeline:** **full GitHub-style rail** (day grouping, per-event dot, source icon+color+label).
 - **Color palette:** a fixed ~12-color named set (Reminders-style); `colorTag` stores the name.
 - **Modal replaces** inline-rename + "Change Type" submenu (both subsumed by the New/Edit modal).
@@ -64,11 +68,22 @@ the app resolves strings → `Color` / `Image` / localized `Text`. Localized dis
   stored string into `.sfSymbol(String)` / `.emoji(String)` (an enum in Kit; the app renders it).
   Tests: own-value wins; empty falls back to kind default; parser round-trips both schemes; malformed
   string degrades to the kind default.
-- **`NodeCommands.delete(_ db:, nodeID:) -> (nodes: Int, events: Int)`** (new): in one transaction,
-  gather `nodeID` + all descendants (reuse `NodeForest.descendantIDs` / the cycle-safe walk), then
-  delete their loose ends, events, sources, and finally the nodes. Return the deleted node + event
-  counts for the confirmation copy. Tests: cascade removes the subtree + its events/loose ends;
-  sibling and unrelated subtrees are untouched; deleting a leaf works; return counts are correct.
+- **`NodeCommands.delete`** (new). Runtime FKs are ON (GRDB default; `openCanonicalDatabase` sets no
+  override) and the child tables (`sources`, `events`, `looseEnds`, `checkpoints`) all carry
+  `ON DELETE CASCADE` on `nodeID`; only `nodes.parentID` is `ON DELETE SET NULL`. So the command
+  need only gather `nodeID` + all descendants (reuse `NodeForest.descendantIDs`) and delete **those
+  node rows** in one transaction — SQLite cascades every child table automatically (no manual
+  per-table deletes; the earlier spec draft wrongly listed them and omitted `checkpoints`).
+  - **Guard (manual-only):** before deleting, count `Source` rows for the subtree; if **any** node in
+    the subtree has a source, delete nothing and return `.blocked`. Otherwise delete and return
+    `.deleted(nodes: Int, events: Int, looseEnds: Int)` (counts gathered pre-delete for the copy).
+    Signature e.g. `delete(_ db:, nodeID:) throws -> DeleteResult`.
+  - `sessionBranches` has no `nodeID` FK and is intentionally left alone (documented, not a bug).
+  - **`NodeCommands.subtreeHasSources(_ db:, nodeID:) -> Bool`** helper so the app can gate the
+    Delete menu item without attempting the write.
+  - Tests: source-free subtree deletes + cascades events/loose ends/checkpoints; a subtree with any
+    source returns `.blocked` and writes nothing; sibling/unrelated subtrees untouched; leaf delete;
+    return counts correct; `subtreeHasSources` matches.
 
 ### PensieveApp (thin views; human-verify visuals)
 
@@ -81,14 +96,17 @@ the app resolves strings → `Color` / `Image` / localized `Text`. Localized dis
   color grid (fixed palette swatches, selected ring), and a segmented **emoji / SF-symbol** picker.
   - Backed by an `@Published var editingNode: NodeEditRequest?` on `AppModel` (`.new(parent:)` or
     `.edit(node:)`), mounted as a `.sheet` in `RootView`.
-  - **New:** OK → `NodeCommands.add` with the chosen kind + a follow-up write of icon/colorTag (or
-    extend `add` to accept them). Cancel writes nothing. Pre-selects `defaultKind(under:)`.
+  - **New:** OK → `NodeCommands.add`, **extended to accept `icon`/`colorTag`** (with `""` defaults)
+    so the node is written fully-formed in one transaction — no create-then-update flash for the
+    liveness observer. Cancel writes nothing. Pre-selects `defaultKind(under:)`.
   - **Edit:** OK writes name, kind, icon, colorTag (one `AppModel.updateNode(...)` → refresh).
   - Replaces the current `createNode` inline-rename flow and the "Change Type" submenu. The
     `NodeNameField` inline-rename view is removed.
 - **Context menu** (`NodeContextMenu`) becomes: **New Child…**, **Edit…**, — divider —,
-  **Move to…**, **Merge into…**, — divider —, **Delete…** (destructive, confirmation naming the
-  counts from `NodeCommands.delete`).
+  **Move to…**, **Merge into…**, — divider —, **Delete…** (destructive; confirmation names the
+  `.deleted(nodes, events, looseEnds)` counts). Delete is **disabled** when
+  `NodeCommands.subtreeHasSources` is true (activity-born → would resurrect); consider a `.help`
+  tooltip explaining why.
 - **#1 footer:** `StatusFooter` gets a `.background(.bar)` so list rows scroll under it, no clash.
 - **#2 collapsible:** "Smart Lists" and "Projects" become `Section(header:, isExpanded:)` bound to
   `@AppStorage` flags (default expanded). Briefing stays a standalone row.
@@ -102,6 +120,10 @@ the app resolves strings → `Color` / `Image` / localized `Text`. Localized dis
   timeline: events grouped by day (localized day header), a leading rail line with a colored dot per
   event, a source icon+color badge, the **localized source label**, and the summary. No avatars
   (single-user). Keep it a thin view over the same `recentEvents` already loaded in `.task`.
+- **App Intents / Spotlight subtitle:** `NodeEntity.swift` currently renders `subtitle =
+  "\(facts.node.kind) · …"` — a raw kind string surfaced in Spotlight/Siri/Shortcuts. Localize it
+  via the same `NodeKind → LocalizedStringResource` map so Spotlight matches the app (else the app
+  shows "Strang" while Spotlight shows "strand"). App-target code, so it can localize.
 
 ## Localization (German)
 
@@ -115,9 +137,10 @@ literals (`%lld`/`%@`).
 ## Testing & verification
 
 - **Kit unit tests** (in `Tests/PensieveKitTests/`): migration v8 round-trip (columns present,
-  default `''`, existing rows readable); `NodeCommands.delete` cascade + counts + isolation;
-  `NodeKindStyle`/`EventSourceStyle` completeness; `NodeAppearance` fallback + `AppearanceIcon`
-  parser round-trip/malformed.
+  default `''`, existing rows readable); `NodeCommands.delete` — source-free cascade + `(nodes,
+  events, looseEnds)` counts + isolation, `.blocked` when a subtree source exists, `subtreeHasSources`
+  correctness; `add` writes icon/colorTag; `NodeKindStyle`/`EventSourceStyle` completeness;
+  `NodeAppearance` fallback + `AppearanceIcon` parser round-trip/malformed.
 - **App**: `xcodegen generate` → `xcodebuild … build` + a non-blocking smoke-launch of the inner
   binary with throwaway `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`.
 - **Human-verify carries** (need the built app + real store + `open`): footer no longer clashes;
@@ -129,10 +152,12 @@ literals (`%lld`/`%@`).
 ## Implementation plans (two)
 
 - **Plan A — Kit foundation:** `Node` columns + migration v8; `NodeKindStyle` / `EventSourceStyle` /
-  `NodeAppearance` / `AppearanceIcon`; `NodeCommands.delete`; all Kit tests.
+  `NodeAppearance` / `AppearanceIcon`; `NodeCommands.delete` (manual-only guard) + `subtreeHasSources`;
+  `add` extended with icon/colorTag; all Kit tests.
 - **Plan B — App surfaces:** `AppearanceStyle` resolver; `NodeEditor` modal + `AppModel` wiring
-  (create/edit/delete, remove inline-rename); footer material; collapsible sections; middle-list
-  badge; detail header (kind label + orb); GitHub-style timeline; localization.
+  (create/edit/delete-gated, remove inline-rename); footer material; collapsible sections; middle-list
+  badge; detail header (kind label + orb); GitHub-style timeline; localized `NodeEntity` subtitle;
+  localization catalog.
 
 ## Out of scope
 
