@@ -249,8 +249,11 @@ new Minors (stale `sidebarSelection` on merge, localized default name) fixed bef
   build`, then `open ./.build-xcode/Build/Products/Debug/Pensieve.app`.
 
 **Next up — track choice (each its own brainstorm→spec→plan):** **three-pane slice 5 (talk-to-system:
-describe→create a strand via `LLMProvider`)**, or the OS-integration track (**Focus filters `SetFocusFilterIntent`**
-⭐, then Widgets/CloudKit), or slice 6 (forks, gated on the unbuilt fork-capture backend). See
+describe→create a strand via `LLMProvider`)**; or the **Settings follow-ups** now that the scaffold exists
+(a **cloud/API `LLMProvider` + Keychain key + model selection** — the motivating case; or **organizing-writes
+error surfacing**); or **deeper Spotlight** (index loose-end text; semantic search); or slice 6 (forks, gated on
+the unbuilt fork-capture backend). **Widgets + CloudKit stay blocked** on a paid Apple Developer team (App
+Groups). Focus filters shipped 2026-07-07; the Settings surface shipped 2026-07-08. See
 `docs/superpowers/backlog.md` **Roadmap**.
 
 **three-pane slice 3b — liveness · inspector · recall windows — DONE (2026-07-06).** *(NOTE: the ⌘⌥I
@@ -337,32 +340,38 @@ unchanged — no reinstall needed.
 
 ## THE NEXT ACTION (start here)
 
-**Two live tracks — pick per appetite** (each its own brainstorm→spec→plan):
+**Three live tracks — pick per appetite** (each its own brainstorm→spec→plan). Focus filters (2026-07-07) and
+the App Settings surface (2026-07-08) are the two most recent ships; both are **DONE & on `main`**.
 
-**Track A — the three-pane app** (the product spine). Slices 3a/3b, **slice 4 (organizing writes), and the
-visual-identity & UX-polish pass all shipped. Next: slice 5 (talk-to-system** — describe→create a strand via
-`LLMProvider`), then 6 (forks, backend-gated — brainstorm the fork-capture backend first). Design:
-`specs/2026-07-05-pensieve-app-three-pane-design.md`.
+**Track A — the three-pane app** (the product spine). Slices 3a/3b, **slice 4 (organizing writes), the
+visual-identity & UX-polish pass, the IA rework, and Share-recall all shipped. Next: slice 5 (talk-to-system** —
+describe→create a strand via `LLMProvider`), then 6 (forks, backend-gated — brainstorm the fork-capture backend
+first). Design: `specs/2026-07-05-pensieve-app-three-pane-design.md`.
 
-**Track B — the next OS-integration surface.** The bundle foundation, `pensieve://`, the menu-bar item, **and
-the App Intents foundation + Spotlight** are done; the App-Intents entity/intent model is **live** as the
-foundation later surfaces build on. Recommended:
-- **Focus filters** (`SetFocusFilterIntent`) — ⭐ **user-flagged high value** (free-time side-project workflow:
-  a "Personal" Focus surfacing those strands). Builds **directly** on the App-Intents foundation; deferred out
-  of the foundation skeleton because it needs its own filtering model + app-state plumbing. **This is the
-  recommended next surface.** → then **Widgets** (WidgetKit extension — the first *second process*, so this is
-  where **App Groups / a shared container** get built) → **CloudKit** (entitlements + paid Developer membership).
-- **Deeper Spotlight (roadmap):** index loose-end text; **semantic / vector search** (evaluate `sqlite-vec`,
+**Track B — Settings follow-ups** (the scaffold now exists — `SettingsView`, `Preferences`, the shared support-dir
+prefs file, ⌘,). Two threads deferred out of the first cut:
+- **Cloud/API `LLMProvider` + Keychain-stored key + model selection** — the motivating long-term case; a net-new
+  HTTP provider conforming to the existing `LLMProvider` protocol, its key in the Keychain, surfaced as a fourth
+  provider option in the picker. Builds directly on the shipped provider-preference plumbing. **Its own spec.**
+- **Organizing-writes error surfacing** — the app still `try?`-swallows failed writes with no signal; needs an
+  app error-presentation mechanism, then wire it to move/merge/rename/retype/create. Pairs with Settings.
+
+**Track C — the next OS-integration surface.** The bundle foundation, `pensieve://`, the menu-bar item, the App
+Intents foundation + Spotlight, and Focus filters are all **live**. What remains:
+- **Widgets** and **CloudKit** are **BLOCKED** on a paid Apple Developer team (App Groups / Team-ID entitlement —
+  see the "Widgets — DEFERRED" and signing notes in `backlog.md`). Do not start these until a paid membership is
+  in hand; that same gate unblocks the whole extension family at once.
+- **Deeper Spotlight (unblocked):** index loose-end text; **semantic / vector search** (evaluate `sqlite-vec`,
   on-device embeddings `NLContextualEmbedding` / Foundation Models SDK, native Spotlight semantic indexing);
-  live/background re-indexing (folds into three-pane slice 3's `ValueObservation` liveness).
+  live/background re-indexing (rides the existing `ValueObservation` liveness).
 
-Tooling tiers: Focus-filters/Widgets/CloudKit = hard Xcode gates (already adopted). The App-Intents +
-Core-Spotlight APIs used here compiled **verbatim** against the SDK — the spec's framework claims held.
+Tooling tiers: Widgets/CloudKit = hard Xcode + paid-team gates. Everything in Tracks A/B and deeper-Spotlight is
+buildable now with the adopted Xcode toolchain + `claude -p`/Foundation Models (no API key).
 
 > **The durable index of *all* pending work** (every pillar needing brainstorm→spec→plan, plus the parked
 > depth-features and forward ideas with their revisit triggers) lives in **`docs/superpowers/backlog.md`**
 > ("Roadmap" + the deferred ledger). This CONTINUE file is the per-session handoff; the backlog is the
-> long-term list. Kept current as of 2026-07-06 (menu-bar item + `pensieve://` shipped).
+> long-term list. Kept current as of 2026-07-08 (Focus filters + App Settings surface shipped).
 
 **Also queued (three-pane app slices 3–6, per `specs/2026-07-05-pensieve-app-three-pane-design.md`):**
 - **3 — inspector + polish:** ⌘⌥I provenance inspector; **LLM "Last Work Done" narration** (via `SummaryBuilder`,
