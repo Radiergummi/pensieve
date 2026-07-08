@@ -48,4 +48,10 @@ public enum NodeForest {
     }
     return result
   }
+
+  /// Direct children of `id` within `nodes`, name-sorted. Pure and deterministic; mirrors
+  /// `descendantIDs` but one level only.
+  public static func children(of id: UUID, in nodes: [Node]) -> [Node] {
+    nodes.filter { $0.parentID == id }.sorted { $0.name < $1.name }
+  }
 }
