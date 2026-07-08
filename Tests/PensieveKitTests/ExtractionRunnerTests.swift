@@ -311,6 +311,33 @@ private let migrationQuote = "Also remember to write the migration test before m
   _ = event
 }
 
+@Test func extractionStoresWorkSummary() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("run-worksummary"))
+  let (_, event) = try seedSingleMessageSession(db: db, quote: "we should also migrate the auth tables later")
+  struct SummarizingProvider: LLMProvider {
+    func complete(prompt: String) async throws -> String { "Migrated the auth tables." }
+    func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] { [] }
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0] }
+  }
+  _ = try await ExtractionRunner(db: db, provider: SummarizingProvider()).run()
+  let ev = try await db.read { db in try Event.where { $0.id.eq(event.id) }.fetchOne(db) }
+  #expect(ev?.workSummary == "Migrated the auth tables.")
+}
+
+@Test func summarizerFailureDoesNotBlockWatermark() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("run-worksummary-fail"))
+  let (_, event) = try seedSingleMessageSession(db: db, quote: "please read the spec")
+  struct FailSummaryProvider: LLMProvider {
+    func complete(prompt: String) async throws -> String { throw LLMError.providerFailed("no summary") }
+    func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] { [] }
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0] }
+  }
+  _ = try await ExtractionRunner(db: db, provider: FailSummaryProvider()).run()
+  let ev = try await db.read { db in try Event.where { $0.id.eq(event.id) }.fetchOne(db) }
+  #expect(ev?.workSummary == nil)                 // best-effort: left unset
+  #expect(ev?.extractedTranscriptSize != -1)      // watermark still advanced
+}
+
 @Test func partialTrailingLinePicksUpAtCorrectIndexAfterCompletion() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-partial"))
   let q0 = rateLimitingQuote

@@ -80,6 +80,12 @@ public struct ExtractionRunner {
           try await LooseEndExtractor(provider: provider).extract(from: slice))
         let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
 
+        // Best-effort session recap for narration (Part B). `summarize` is non-throwing (nil on
+        // failure), computed BEFORE the synchronous db.write and NEVER inside this session's
+        // do/catch — a nil/absent summary must not skip the loose-end insert or the watermark
+        // advance. Summarize the WHOLE session (stable per-session summary), not just the slice.
+        let work = await SessionSummarizer(provider: provider).summarize(session.messages)
+
         let stamp = now()
         let inserted = try await db.write { db -> Int in
           var insertedCount = 0
@@ -107,6 +113,7 @@ public struct ExtractionRunner {
             $0.extractedAt = #bind(stamp)
             $0.extractedMessageCount = messageCount
             $0.extractedTranscriptSize = size
+            $0.workSummary = work ?? event.workSummary
           }.execute(db)
           return insertedCount
         }
