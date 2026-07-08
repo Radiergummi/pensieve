@@ -154,6 +154,17 @@
         }
       }
     },
+    "Automatic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -369,6 +380,28 @@
         }
       }
     },
+    "Foundation Models isn’t available on this Mac — using claude -p instead." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foundation Models ist auf diesem Mac nicht verfügbar – stattdessen wird claude -p verwendet."
+          }
+        }
+      }
+    },
+    "General" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allgemein"
+          }
+        }
+      }
+    },
     "Generated summary" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -419,6 +452,17 @@
         }
       }
     },
+    "Hide Dock icon (menu bar only)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock-Symbol ausblenden (nur Menüleiste)"
+          }
+        }
+      }
+    },
     "idle" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -463,6 +507,17 @@
         }
       }
     },
+    "Intelligence" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intelligenz"
+          }
+        }
+      }
+    },
     "Jump to…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -481,6 +536,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuletzt erledigt"
+          }
+        }
+      }
+    },
+    "LLM Provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM-Anbieter"
           }
         }
       }
@@ -1033,6 +1099,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Arbeit anzeigen"
+          }
+        }
+      }
+    },
+    "Show “Last Work Done” narration" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Zuletzt erledigt“-Zusammenfassung anzeigen"
           }
         }
       }
