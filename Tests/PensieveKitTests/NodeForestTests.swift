@@ -41,3 +41,18 @@ import Testing
   #expect(NodeForest.descendantIDs(of: d.id, in: nodes).isEmpty)   // childless root
   #expect(NodeForest.descendantIDs(of: UUID(), in: nodes).isEmpty) // unknown id
 }
+
+@Test func childrenReturnsDirectChildrenNameSorted() {
+  let root = Node(name: "root", kind: "project")
+  let b = Node(name: "b", parentID: root.id, kind: "strand")
+  let a = Node(name: "a", parentID: root.id, kind: "strand")
+  let grand = Node(name: "grand", parentID: a.id, kind: "strand")   // grandchild, NOT a direct child of root
+  let other = Node(name: "other", kind: "project")
+  let nodes = [grand, b, root, other, a]
+
+  #expect(NodeForest.children(of: root.id, in: nodes).map(\.name) == ["a", "b"])   // direct + name-sorted
+  #expect(NodeForest.children(of: a.id, in: nodes).map(\.name) == ["grand"])       // one level only
+  #expect(NodeForest.children(of: b.id, in: nodes).isEmpty)                        // leaf
+  #expect(NodeForest.children(of: other.id, in: nodes).isEmpty)                    // childless root
+  #expect(NodeForest.children(of: UUID(), in: nodes).isEmpty)                      // unknown id
+}
