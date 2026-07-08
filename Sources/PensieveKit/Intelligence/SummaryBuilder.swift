@@ -11,10 +11,25 @@ public struct SummaryBuilder: Sendable {
   private let provider: any LLMProvider
   public init(provider: any LLMProvider) { self.provider = provider }
 
-  /// Deterministic fact sheet the model is allowed to narrate — and nothing beyond it.
+  /// Total char budget for the narrator's fact sheet. `narrate`/`build` feed this to a single
+  /// un-chunked `complete`; replacing terse lines with real `workSummary` prose can balloon it
+  /// and overflow the window (→ narration vanishes). Bound it: include recent events until the
+  /// budget is hit.
+  public static let factSheetBudget = 1800
+
+  /// Deterministic fact sheet the model is allowed to narrate — and nothing beyond it. Prefers
+  /// each event's grounded `workSummary` (Part B); falls back to the terse `summary` when absent.
   public static func assembleFacts(project: Node, events: [Event]) -> String {
-    let lines = events.prefix(15).map { "- \($0.kind): \($0.summary)" }.joined(separator: "\n")
-    return "Project: \(project.name)\nRecent activity:\n\(lines)"
+    var lines: [String] = []
+    var used = 0
+    for e in events.prefix(15) {
+      let content = (e.workSummary.map { !$0.isEmpty } ?? false) ? e.workSummary! : e.summary
+      let line = "- \(e.kind): \(content)"
+      if used + line.count > factSheetBudget, !lines.isEmpty { break }
+      lines.append(line)
+      used += line.count
+    }
+    return "Project: \(project.name)\nRecent activity:\n\(lines.joined(separator: "\n"))"
   }
 
   /// The single constrained narration prompt — shared by `build` and `narrate` so the wording
