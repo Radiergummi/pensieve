@@ -6,4 +6,12 @@ import Foundation
 enum AppDefaults {
   static let hideDockIconKey = "app.hideDockIcon"
   static let narrationEnabledKey = "app.narrationEnabled"
+
+  /// Narration is ON by default (matching the `@AppStorage(...) = true` in the views). Non-View
+  /// readers (AppModel) must honor the same default — `UserDefaults.bool` alone reads false when
+  /// unset, which would disagree with the views before Settings is ever opened.
+  static var narrationEnabled: Bool {
+    UserDefaults.standard.object(forKey: narrationEnabledKey) == nil
+      ? true : UserDefaults.standard.bool(forKey: narrationEnabledKey)
+  }
 }

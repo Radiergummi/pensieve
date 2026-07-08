@@ -101,7 +101,7 @@ struct DetailView: View {
       recentEvents = d.status.recentEvents
       looseEnds = d.looseEnds
       shareMarkdown = RecallMarkdown.render(node: node,
-                                            narration: model.cachedNarration(for: node, events: recentEvents),
+                                            narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
       if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {

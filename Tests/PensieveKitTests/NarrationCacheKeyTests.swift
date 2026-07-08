@@ -33,3 +33,9 @@ private func ev(_ id: UUID, extracted: Date? = nil) -> Event {
   #expect(k1 == k2)   // git-only node (no extractedAt) is handled, not crashing/empty
   #expect(!k1.isEmpty)
 }
+
+@Test func keyChangesWhenProviderChanges() {
+  let e = [ev(UUID())]
+  #expect(NarrationCacheKey.make(events: e, provider: "claudeCLI")
+          != NarrationCacheKey.make(events: e, provider: "foundationModels"))
+}

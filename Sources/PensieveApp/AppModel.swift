@@ -136,11 +136,15 @@ final class AppModel: ObservableObject {
   // NOT lazy: rebuilt when the provider preference changes (SettingsView), so an in-session
   // provider switch takes effect on the next narration instead of requiring a relaunch.
   private var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
+  /// The provider kind the current `summaryBuilder` uses — folded into the narration cache key
+  /// so a provider switch invalidates prose cached under the old provider.
+  private var providerKind = defaultProviderKind()
 
   /// Rebuild the narration provider from the current persisted preference. Called by
   /// SettingsView after it writes a new ProviderPreference.
   func rebuildSummaryBuilder() {
     summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
+    providerKind = defaultProviderKind()
   }
   /// Persisted narration: prose + the invalidation key it was generated for. Keyed per DB path
   /// (NEW pattern — lastOpenedAt is a single global key today) so throwaway smoke/test stores
@@ -369,7 +373,9 @@ final class AppModel: ObservableObject {
   /// and includes the narration only if it's already cached (a share never blocks on an LLM call).
   func recallMarkdown(for node: Node) -> String {
     let d = detail(for: node)
-    return RecallMarkdown.render(node: node, narration: cachedNarration(for: node, events: d.status.recentEvents),
+    // Respect the narration display toggle: a disabled recap must not leak into a share/export.
+    let narration = AppDefaults.narrationEnabled ? cachedNarration(for: node, events: d.status.recentEvents) : nil
+    return RecallMarkdown.render(node: node, narration: narration,
                                  looseEnds: d.looseEnds, events: d.status.recentEvents, now: Date())
   }
 
@@ -478,7 +484,7 @@ final class AppModel: ObservableObject {
   /// lets the view render a valid cached recap instantly (including across launches).
   func cachedNarration(for node: Node, events: [Event]) -> String? {
     guard let entry = narrationCache[node.id],
-          entry.key == NarrationCacheKey.make(events: events) else { return nil }
+          entry.key == NarrationCacheKey.make(events: events, provider: providerKind) else { return nil }
     return entry.prose
   }
 
@@ -486,7 +492,7 @@ final class AppModel: ObservableObject {
   /// `force` is false; otherwise regenerates off-main, stores prose+key, and returns it. `force`
   /// (⌘R on the selected node) bypasses the cache so the user can always refresh a bad recap.
   func narration(for node: Node, events: [Event], force: Bool = false) async -> String? {
-    let key = NarrationCacheKey.make(events: events)
+    let key = NarrationCacheKey.make(events: events, provider: providerKind)
     if !force, let entry = narrationCache[node.id], entry.key == key { return entry.prose }
     let text = await summaryBuilder.narrate(project: node, events: events)
     if let text {
