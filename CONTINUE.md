@@ -4,7 +4,8 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `9de6d18`) and the tree is clean. Test suite: **246 tests**, run with
+Everything below is **on `main`** (App Settings landed at `9de6d18`; docs commits on top) and the tree is
+clean. Test suite: **246 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
 
