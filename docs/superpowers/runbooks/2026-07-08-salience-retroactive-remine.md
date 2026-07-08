@@ -29,10 +29,22 @@ diff /tmp/before.txt /tmp/after.txt | grep '^<'
 STOP and reconsider (raise the keep bias / escalate to claude -p) if the diff drops anything genuinely deferred/decision. Proceed only when the drops are all in-the-moment noise.
 
 ## 3. Pre-flight transcript existence (live)
+For every open loose end, confirm its source transcript still exists — if any is
+missing, deleting that loose end in step 5 would be **permanent** (it can never be
+re-mined). The path lives in `events.detailJSON` under the `transcriptPath` key,
+joined via `looseEnds.sourceEventID = events.id`.
 ```bash
-# For every open loose end, confirm its source transcript still exists; abort if any is missing
-# (deleting it would be permanent). One-liner or a short check reading looseEnds -> events.detailJSON transcriptPath.
+sqlite3 ~/Library/Application\ Support/Pensieve/pensieve.sqlite \
+  "SELECT DISTINCT json_extract(e.detailJSON, '\$.transcriptPath')
+   FROM looseEnds l JOIN events e ON e.id = l.sourceEventID
+   WHERE l.status='open';" \
+| while IFS= read -r p; do
+    if [ -n "$p" ] && [ ! -f "$p" ]; then echo "MISSING: $p"; fi
+  done
 ```
+**Proceed only if this prints nothing.** Any `MISSING:` line means an open loose end's
+transcript is gone — abort and decide per-item (keep those loose ends, or accept the
+loss) before running step 5.
 
 ## 4. Quiesce the daemon
 ```bash
