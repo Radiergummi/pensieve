@@ -4,11 +4,42 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `d2df86b`) and the tree is clean. Test suite: **205 tests**, run with
+Everything below is **on `main`** (HEAD `90348db`) and the tree is clean. Test suite: **211 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
 
-**Latest (this session): three-pane IA rework — DONE & on `main`.** Killed the sidebar→middle→detail
+**Latest (this session): Share a node's recall — DONE & on `main`.** A Share action renders a node's recall as
+an **English Markdown snapshot** and hands it to the macOS share sheet (SwiftUI `ShareLink`) + copy/paste, from
+the **detail toolbar** (and the ⌘⌥N recall window, inherited) and a **"Share Recall…" node context-menu** item.
+**Summaries only — verbatim provenance quotes never leave the device** (grounded summaries, not fabrication;
+trust gate untouched). One tested **pure** PensieveKit builder `RecallMarkdown.render` (no DB/LLM/localization;
+fixed English headers, capitalized kind/state, `yyyy-MM-dd`; a test asserts the quote never appears) + thin app
+wiring (`AppModel.recallMarkdown(for:)` reuses `detail(for:)`; toolbar `ShareLink` builds from `DetailView`
+`@State`, no DB in `body`; context-menu `ShareLink` lazy on menu-open). Narration included only if **already
+cached** (a share never blocks on an LLM call). German for the one new label (`"Share Recall…"` →
+`"Rückblick teilen…"`); the export stays English. Subagent-driven (3 tasks: Sonnet impl+task-review; **Opus**
+whole-branch READY-TO-MERGE, 0 Critical/Important). **211 tests** (+6 Kit). No entitlement/schema/capture change.
+Spec/plan: `docs/superpowers/{specs,plans}/2026-07-08-share-node-recall*`.
+- **Deferred (not foreclosed):** file export (Save panel), a "Share with provenance (quotes)" opt-in, a
+  shareable link (needs CloudKit → paid team), subtree recall. **Deferred Minors:** whitespace-only
+  narration/description → blank-looking section (upstream-gated); a one-frame ⌘R/node-switch transient where a
+  Share tap could omit a recap the screen still shows (bounded by one LLM call; best-effort in the export).
+- **Human-verify carries** (need the built app + real store + `open`): the detail-toolbar Share button opens the
+  share sheet with the recall as Markdown (title, `*Kind · State*`, Last Work Done if present, Loose Ends,
+  Recent Activity, footer); the ⌘⌥N recall window also shows Share; right-click a sidebar/middle row →
+  "Share Recall…" shares that node without opening it; a node with no loose ends/activity shares the
+  `_None open._`/`_No captured activity._` placeholders; the shared text contains **no** verbatim quote; German
+  shows "Rückblick teilen…" (`-AppleLanguages '(de)'`) while the export stays English. Build: `xcodegen generate
+  && xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -derivedDataPath ./.build-xcode
+  build`, then `open ./.build-xcode/Build/Products/Debug/Pensieve.app`.
+
+**Also this session: Widgets — investigated & DEFERRED.** A macOS widget extension is sandboxed and needs an
+**App Group** (Team-ID-provisioned entitlement) to read the store; the app is ad-hoc signed with no paid team,
+and free personal teams can't provision App Groups. Deferred with the finding recorded in
+`docs/superpowers/backlog.md` ("Widgets — DEFERRED"). Same gate blocks CloudKit + any extension; revisit on a
+paid Apple Developer membership.
+
+**Prior this session: three-pane IA rework — DONE & on `main`.** Killed the sidebar→middle→detail
 self-duplication (backlog "App UX & IA polish" item 5). The middle pane now lists a **focused node's children**
 (or, for a leaf, its **loose ends**) instead of the node-plus-children; the detail always shows the focused
 node's recall; clicking a child **drills** into it; **Smart-List/Briefing lists stay** on click (triage

@@ -285,17 +285,30 @@ Two Opus whole-branch reviews → READY-TO-MERGE. **Item 5 (three-pane IA rework
 
 ---
 
-## Sharing — export & share a node's grounded recall (its own spec)
+## Sharing — export & share a node's grounded recall — DONE (2026-07-08, merged to `main` `90348db`)
 
-**Forward feature, user-requested (2026-07-07); its own brainstorm→spec→plan due to the detail.** Share a
-node's recall — the grounded, provenance-cited summary + loose ends + recent activity — out of Pensieve. Open
-questions the spec must settle: what a share *contains* (read-only snapshot vs. live); the format(s) (rendered
-document / Markdown / a shareable link / native `NSSharingServicePicker` / `ShareLink` / exported file);
-**whether provenance quotes are included** (captured text is content — sharing it off-device is a privacy
-decision, and the trust gate must still hold: cite real text or omit, never fabricate); single-user export vs.
-sending to a person; and the surface (a Share button in the detail toolbar — ties into carry #3 above). Becomes
-richer if paired with the **CloudKit** pillar (collaborative sharing). *Trigger: after the three-pane IA rework
-+ UX-polish pass; scope as a standalone spec.*
+**Shipped.** A Share action renders a node's recall as an **English Markdown snapshot** and hands it to the
+macOS share sheet (SwiftUI `ShareLink`) + copy/paste, from the **detail column toolbar** (and the ⌘⌥N recall
+window, inherited) and a **"Share Recall…" node context-menu** item. **Summaries only — verbatim provenance
+quotes never leave the device** (a loose end's summary already passed the in-app grounding gate, so exporting it
+without its quote is a grounded summary, not a fabrication; the trust gate is untouched). One tested **pure**
+PensieveKit builder `RecallMarkdown.render(node:narration:looseEnds:events:now:)` (no DB/LLM/localization; fixed
+English headers, capitalized raw kind/state, `yyyy-MM-dd` dates; a unit test asserts the verbatim quote never
+appears) + thin app wiring (`AppModel.recallMarkdown(for:)` reuses `detail(for:)`; the toolbar `ShareLink` builds
+from `DetailView`'s loaded `@State` — no DB in `body`; the context-menu `ShareLink` builds lazily on menu-open).
+Narration is included **only if already cached** (a share never blocks on an LLM call). German l10n of the one
+new chrome label (`"Share Recall…"` → `"Rückblick teilen…"`); the exported document stays English by design.
+Subagent-driven (3 tasks: Sonnet impl+task-review each; **Opus** whole-branch = READY-TO-MERGE, 0
+Critical/Important). **211 tests** (+6 Kit). No entitlement/schema/capture changes. Spec/plan:
+`{specs,plans}/2026-07-08-share-node-recall*`.
+
+**Deferred (out of this first cut, not foreclosed):** file export (Save panel → `.md`/PDF) and a "Share with
+provenance (quotes)" opt-in variant — both build atop the same `RecallMarkdown` builder; a shareable **link** /
+collaborative sharing (needs CloudKit, itself gated on a paid team — see the App-Groups deferral above);
+recursive/subtree recall. **Deferred Minors** (non-blocking): whitespace-only narration/description would render
+a blank-looking section (upstream-gated); a one-frame transient on ⌘R/node-switch where a Share tap could omit a
+recap the screen still shows (bounded by one LLM call; narration is best-effort in the export). **Human-verify
+carries** below.
 
 ---
 
