@@ -31,18 +31,32 @@ streaming; a system-prompt split; per-request cost/telemetry; the daemon or CLI 
 4. **Storage: all UserDefaults; `preferences.json` retired.** Non-secret config *and* the provider
    selection move to UserDefaults (the canonical macOS mechanism, matching the app's existing
    `@AppStorage` toggles). The bespoke shared JSON file goes away. The API **key** is in the
-   **Keychain**. (Trade-off below.)
+   **Keychain**. **No daemon regression** — see cross-process note below.
+
+### Cross-process reads (no regression)
+
+The daemon/CLI still honor the persisted provider selection. The app is **not sandboxed** (no
+`com.apple.security.app-sandbox` entitlement — and can't get one without a paid team), so its
+UserDefaults persist to `~/Library/Preferences/me.mazetti.pensieve.plist`, served by the per-user
+`cfprefsd`. The sync LaunchAgent runs in **`gui/501` — the same user** as the app. Therefore any
+Pensieve CLI/daemon process reads the app's domain by naming it:
+
+```swift
+UserDefaults(suiteName: "me.mazetti.pensieve")   // the app's domain, read from the CLI/daemon
+```
+
+This is the standard helper-tool pattern. It only fails under **sandboxing** (prefs move into a
+container; cross-process sharing then needs an App Group + Team ID — the blocked gate). Pensieve is
+not sandboxed, so it works today. The **key** stays Keychain-only (app-reachable, not daemon), so
+cloud remains app-only regardless: the daemon reading the selection just means it honors
+Foundation-Models-vs-`claude -p` and falls back to local for a `.cloud` selection it can't key.
 
 ### Accepted trade-offs
 
-- **Daemon/CLI lose the persisted provider selection.** With `preferences.json` gone, the CLI's
-  argument-free `makeDefaultLLMProvider()` resolves to **Automatic** (Foundation Models if available,
-  else `claude -p`). The explicit Foundation-Models-vs-`claude -p` override now applies to the **app
-  only**. Automatic is the sensible default and extraction is on-device-preferred, so this is a minor,
-  intentional regression to a shipped behavior.
 - **One-time selection reset.** The orphaned `preferences.json` is not migrated; the app's persisted
   selection reads as Automatic on first launch after this change. Single-user tool — re-set in
-  Settings once. No migration code.
+  Settings once. (A ~3-line one-shot import from the old file could avoid even this; omitted as YAGNI
+  unless requested.)
 - **Cloud is best-effort, outside the trust gate.** Narration already returns `nil` on provider
   failure (never a facts-dump). A cloud outage/timeout degrades to no-recap, exactly like today.
 
@@ -56,13 +70,16 @@ streaming; a system-prompt split; per-request cost/telemetry; the daemon or CLI 
 | `CloudFlavor`, `CloudConfig` | PensieveKit | pure |
 | Request/response/model-list builders | PensieveKit | pure (unit) |
 | `CloudLLMProvider` (`complete`, `listModels`) | PensieveKit | via injected fake transport |
-| `resolveProviderKind` / `makeDefaultLLMProvider` | PensieveKit | pure / fake inputs |
+| `resolveProviderKind` / `ProviderSettings` reader | PensieveKit | pure / injected `UserDefaults` |
+| `makeDefaultLLMProvider` | PensieveKit | reads injected `UserDefaults`; resolver tested separately |
+| `PensieveDefaults` (domain + key constants + `shared()`) | PensieveKit | constants |
 | `KeychainSecretStore` (`SecItem` generic-password) | PensieveKit | untested OS boundary |
 | Settings UI, `@AppStorage`, Keychain calls, AppModel wiring | PensieveApp | build + smoke-launch |
 
-PensieveKit never touches UserDefaults or the Keychain in its decision path. The **app** reads
-UserDefaults + Keychain and **injects** the resolved inputs into the factory. This keeps the kernel
-pure and the OS boundaries thin and app-side.
+The **pure decision** (`resolveProviderKind`) never touches UserDefaults or the Keychain. The
+factory reads the *selection* from an **injected** `UserDefaults` (app → `.standard`; CLI →
+`PensieveDefaults.shared()`), and the **app** additionally injects the cloud config + Keychain key.
+The Keychain is app-only. This keeps the resolver pure/testable and the OS boundaries thin.
 
 ### 1. Types & persistence (PensieveKit)
 
@@ -88,11 +105,25 @@ pure and the OS boundaries thin and app-side.
     public var isUsable: Bool { !baseURL.isEmpty && !model.isEmpty }
   }
   ```
-- **UserDefaults keys** (app-side, in `AppDefaults`): `llmProvider` (raw), `cloudFlavor` (raw),
-  `cloudBaseURL`, `cloudModel`. Persisted via `@AppStorage` in Settings; read by `AppModel` via
-  `UserDefaults.standard`.
+- **`PensieveDefaults` (PensieveKit)** owns the shared surface so app + CLI can't drift:
+  ```swift
+  public enum PensieveDefaults {
+    public static let appDomain = "me.mazetti.pensieve"
+    public static let llmProviderKey = "llmProvider"
+    public static let cloudFlavorKey = "cloudFlavor"
+    public static let cloudBaseURLKey = "cloudBaseURL"
+    public static let cloudModelKey = "cloudModel"
+    // CLI/daemon read the app's domain; falls back to .standard if unavailable.
+    public static func shared() -> UserDefaults { UserDefaults(suiteName: appDomain) ?? .standard }
+  }
+  ```
+  Keys are raw strings (`llmProvider`/`cloudFlavor` store enum raw values; `cloudBaseURL`/`cloudModel`
+  are strings). The app writes them via `@AppStorage(PensieveDefaults.…Key)` (`.standard` domain);
+  the CLI reads via `PensieveDefaults.shared()`. The **API key is never** a default.
 - **Keychain**: `service = "com.pensieve.cloud-llm"`, `account = flavor.rawValue` so an Anthropic key
   and an OpenAI key coexist and survive a flavor switch.
+- A pure reader `ProviderSettings.selection(from: UserDefaults) -> ProviderPreference` (unknown/absent
+  → `.auto`) — testable by injecting a throwaway `UserDefaults(suiteName:)`.
 
 ### 2. `CloudLLMProvider` (PensieveKit)
 
@@ -142,11 +173,12 @@ non-2xx, and malformed-body cases. **No real network in tests.**
 
 ### 3. Factory & resolver (PensieveKit `DefaultProvider.swift`)
 
-PensieveKit no longer reads persisted preferences. Remove `resolvedPrefsURL`, the `PENSIEVE_PREFS`
-read, and the `prefsURL` params.
+The file-reading path (`resolvedPrefsURL`, the `PENSIEVE_PREFS` read, `Preferences.read`,
+`prefsURL` params, `defaultProviderKind(prefsURL:)`) is removed. The factory now reads the
+*selection* from an injected `UserDefaults` and keeps the decision itself pure.
 
 ```swift
-// Pure. cloudConfigured is computed by the caller (app) from config validity + key presence.
+// Pure. cloudConfigured is computed by the caller from config validity + key presence.
 public func resolveProviderKind(
   preference: ProviderPreference,
   foundationAvailable: Bool,
@@ -161,10 +193,11 @@ public func resolveProviderKind(
 }
 
 public func makeDefaultLLMProvider(
-  preference: ProviderPreference = .auto,
-  cloudConfig: CloudConfig? = nil,
-  apiKey: String? = nil
+  defaults: UserDefaults = .standard,       // app → .standard; CLI → PensieveDefaults.shared()
+  cloudConfig: CloudConfig? = nil,          // app-only (nil ⇒ never cloud)
+  apiKey: String? = nil                     // app-only (Keychain)
 ) -> any LLMProvider {
+  let preference = ProviderSettings.selection(from: defaults)
   let configured = (cloudConfig?.isUsable ?? false) && !(apiKey ?? "").isEmpty
   switch resolveProviderKind(preference: preference,
                              foundationAvailable: foundationModelsIsSelectable(),
@@ -176,12 +209,13 @@ public func makeDefaultLLMProvider(
 }
 ```
 
-- **CLI/daemon call sites unchanged** — `makeDefaultLLMProvider()` with defaults → `.auto` →
-  local-first. (`Ingest.swift`, `Digest.swift`, `Sync.swift` need no edits.)
+- **CLI/daemon call sites change to read the app domain**: `makeDefaultLLMProvider(defaults:
+  PensieveDefaults.shared())` in `Ingest.swift`, `Digest.swift`, `Sync.swift`. With no cloud inputs,
+  a `.cloud` selection falls back to local; every other selection is honored (**no regression**).
 - **`.cloud` selected but not configured → local-first fallback**, so the app is never stuck on a
   keyless/broken cloud provider.
-- Delete the old `defaultProviderKind(prefsURL:)`. The app computes its narration-cache kind by
-  calling `resolveProviderKind` directly with its own inputs (see §5).
+- The app computes its narration-cache kind by calling `resolveProviderKind` directly with its own
+  inputs (see §5) — no separate `defaultProviderKind`.
 
 ### 4. `KeychainSecretStore` (PensieveKit)
 
@@ -214,9 +248,10 @@ reveals a cloud subsection:
 - Non-secret fields are `@AppStorage`. Any change calls `model.rebuildSummaryBuilder()`.
 
 **AppModel:**
-- `rebuildSummaryBuilder()` reads the selection + cloud config from `UserDefaults.standard` and the
-  key from `KeychainSecretStore`, then
-  `summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider(preference:cloudConfig:apiKey:))`.
+- `rebuildSummaryBuilder()` reads the cloud config from `UserDefaults.standard` and the key from
+  `KeychainSecretStore`, then
+  `summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider(cloudConfig:apiKey:))` (defaults
+  `.standard` for the selection — the app's own domain).
 - **Narration cache key:** `providerKind` folds flavor+model in for cloud, e.g.
   `"cloud:anthropic:claude-opus-4-8"`, so switching model/flavor busts the existing provider-keyed
   narration cache (⌘R still forces re-narration). Computed via `resolveProviderKind` + a suffix.
@@ -242,6 +277,8 @@ on-device via the daemon. No schema, capture, or entitlement change.
 - `parseModelList` — both shapes → `[id]`; empty/malformed → throws.
 - `CloudLLMProvider.complete` / `.listModels` — fake transport for 2xx success, non-2xx (error
   snippet), and malformed body.
+- `ProviderSettings.selection(from:)` — inject a throwaway `UserDefaults(suiteName:)`, write each raw
+  value, assert the mapped preference (and unknown/absent → `.auto`).
 - Retire/rework `PreferencesTests` and `DefaultProviderTests`: drop the file-based `Preferences.read/
   write` cases (type deleted); keep the pure `resolveProviderKind` cases (now with `cloudConfigured`).
 
@@ -260,8 +297,11 @@ verified by hand in the built app.
 - Cloud config persists across relaunch; the key is in the Keychain (Keychain Access shows the item),
   **not** in `~/Library/Preferences/*.plist` or any JSON.
 - Deactivate/blank the key → narration falls back to local (no crash, no facts-dump).
-- The launchd daemon (`sync.log`) still extracts on-device (Automatic) regardless of the app's cloud
-  setting.
+- **Cross-process selection is honored:** set the app's provider to Foundation Models (or `claude -p`)
+  → a subsequent `pensieve digest`/`sync` uses that same provider (reads `me.mazetti.pensieve` via
+  `UserDefaults(suiteName:)`); set it to Cloud → the CLI falls back to local (no Keychain reach), the
+  app uses cloud.
+- The launchd daemon (`sync.log`) always extracts on-device for a `.cloud` selection (falls back).
 - `preferences.json` is no longer written/read; a stale one is ignored.
 - German in situ (`-AppleLanguages '(de)'`) for the new labels; vendor names stay English.
 
@@ -274,20 +314,23 @@ verified by hand in the built app.
 ## Files
 
 **PensieveKit**
-- `LLM/Preferences.swift` → keep `ProviderPreference` (+`.cloud`), delete `Preferences` type. (Consider
-  renaming to `ProviderPreference.swift`.)
+- `LLM/Preferences.swift` → keep `ProviderPreference` (+`.cloud`), delete `Preferences` type; add
+  `ProviderSettings.selection(from:)`. (Consider renaming to `ProviderPreference.swift`.)
 - `LLM/CloudProvider.swift` (new) — `CloudFlavor`, `CloudConfig`, `CloudLLMProvider` + pure builders.
-- `LLM/DefaultProvider.swift` — rework `resolveProviderKind` / `makeDefaultLLMProvider`; drop
-  `defaultProviderKind`, `resolvedPrefsURL`, `PENSIEVE_PREFS`.
+- `LLM/DefaultProvider.swift` — rework `resolveProviderKind` / `makeDefaultLLMProvider(defaults:…)`;
+  drop `defaultProviderKind`, `resolvedPrefsURL`, `PENSIEVE_PREFS`.
+- `Support/PensieveDefaults.swift` (new) — domain + key constants + `shared()`.
 - `Support/KeychainSecretStore.swift` (new).
 - `Support/PensievePaths.swift` — remove `preferencesURL()`.
 
 **PensieveApp**
-- `SettingsView.swift` — cloud subsection + `@AppStorage` + Keychain calls.
-- `AppModel.swift` — factory wiring + narration-cache kind.
+- `SettingsView.swift` — cloud subsection + `@AppStorage(PensieveDefaults.…Key)` + Keychain calls.
+- `AppModel.swift` — factory wiring (`makeDefaultLLMProvider(cloudConfig:apiKey:)`) + narration-cache kind.
 - `PensieveApp.swift` — remove `Stores.preferencesURL` + `PENSIEVE_PREFS`.
 - `Localizable.xcstrings` — new German keys.
 
-**pensieve (CLI):** no source change (defaults preserve local-first).
+**pensieve (CLI):** `Ingest.swift`, `Digest.swift`, `Sync.swift` change their `makeDefaultLLMProvider()`
+call to `makeDefaultLLMProvider(defaults: PensieveDefaults.shared())` so the CLI/daemon read the app's
+domain.
 
 **Tests:** rework `PreferencesTests` + `DefaultProviderTests`; add `CloudProviderTests`.
