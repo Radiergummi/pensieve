@@ -41,7 +41,12 @@ struct DetailView: View {
         // flag — and the section is omitted entirely when there's no genuine narration).
         if let lastWorkDone, loadedNodeID == node.id {
           section("Last Work Done") {
-            Text(lastWorkDone).prose()
+            VStack(alignment: .leading, spacing: 4) {
+              Text(lastWorkDone).prose()
+              Label("Generated summary", systemImage: "sparkles")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
           }
         } else if isNarrating, loadedNodeID == node.id {
           section("Last Work Done") {
@@ -86,17 +91,22 @@ struct DetailView: View {
     // leak `true` across a handoff), and guard `Task.isCancelled` before writing (a superseded
     // task's await still resumes — don't let a late result render under the new node).
     .task(id: DetailLoadKey(nodeID: node.id, token: model.refreshToken)) {
-      if loadedNodeID != node.id { lastWorkDone = nil }
+      // Same node + token bumped == a ⌘R refresh; a different node == navigation.
+      let isRefresh = (loadedNodeID == node.id)
+      if !isRefresh { lastWorkDone = nil }
       loadedNodeID = node.id
       isNarrating = false
       let d = model.detail(for: node)
       recentEvents = d.status.recentEvents
       looseEnds = d.looseEnds
-      shareMarkdown = RecallMarkdown.render(node: node, narration: model.cachedNarration(for: node),
+      shareMarkdown = RecallMarkdown.render(node: node,
+                                            narration: model.cachedNarration(for: node, events: recentEvents),
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
-      if let cached = model.cachedNarration(for: node) { lastWorkDone = cached; return }
+      if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {
+        lastWorkDone = cached; return
+      }
       isNarrating = true
-      let prose = await model.narration(for: node, events: recentEvents)
+      let prose = await model.narration(for: node, events: recentEvents, force: isRefresh)
       guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
       lastWorkDone = prose
       shareMarkdown = RecallMarkdown.render(node: node, narration: prose,

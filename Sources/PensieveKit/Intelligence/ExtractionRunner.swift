@@ -79,6 +79,17 @@ public struct ExtractionRunner {
         let candidates = CandidateFilter.strip(
           try await LooseEndExtractor(provider: provider).extract(from: slice))
         let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
+        // Salience gate: drop verified-but-in-the-moment requests (keeps deferred/decision work).
+        // Runs on real, already-verified quotes; the verbatim gate is untouched.
+        let salient = await SalienceClassifier(provider: provider).filter(verified, messages: session.messages)
+
+        // Best-effort session recap for narration (Part B). `summarize` is non-throwing (nil on
+        // failure), computed BEFORE the synchronous db.write. This line is lexically inside the
+        // per-session do/catch, but a summary failure can't reach the catch precisely BECAUSE
+        // `summarize` is non-throwing — a nil/absent summary must not skip the loose-end insert or
+        // the watermark advance. DO NOT add `try` here: it would let a failure abort the session
+        // and break that invariant. Summarize the WHOLE session (stable per-session summary).
+        let work = await SessionSummarizer(provider: provider).summarize(session.messages)
 
         let stamp = now()
         let inserted = try await db.write { db -> Int in
@@ -88,10 +99,10 @@ public struct ExtractionRunner {
           // transcript, and a user may restate a quote verbatim) must not resurrect a
           // RESOLVED loose end the user already dismissed. Skip the scan when there is
           // nothing to insert.
-          if !verified.isEmpty {
+          if !salient.isEmpty {
             let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
             var seen = Set(existing.map { normalizeWhitespace($0.quote) })
-            for v in verified {
+            for v in salient {
               let key = normalizeWhitespace(v.quote)
               if seen.contains(key) { continue }   // within- and cross-session dedup
               seen.insert(key)
@@ -107,6 +118,7 @@ public struct ExtractionRunner {
             $0.extractedAt = #bind(stamp)
             $0.extractedMessageCount = messageCount
             $0.extractedTranscriptSize = size
+            $0.workSummary = work ?? event.workSummary
           }.execute(db)
           return insertedCount
         }

@@ -140,5 +140,10 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
   migrator.registerMigration("v9-node-context") { db in
     try #sql(#"ALTER TABLE "nodes" ADD COLUMN "context" TEXT NOT NULL DEFAULT ''"#).execute(db)
   }
+  migrator.registerMigration("v10-event-worksummary") { db in
+    // Nullable: existing rows read NULL (un-enriched) and re-enrich on their next
+    // size-changed extraction. Never gates anything — best-effort narration input.
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "workSummary" TEXT"#).execute(db)
+  }
   try migrator.migrate(db)
 }

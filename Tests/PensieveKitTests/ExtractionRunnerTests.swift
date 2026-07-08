@@ -311,6 +311,66 @@ private let migrationQuote = "Also remember to write the migration test before m
   _ = event
 }
 
+@Test func extractionStoresWorkSummary() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("run-worksummary"))
+  let (_, event) = try seedSingleMessageSession(db: db, quote: "we should also migrate the auth tables later")
+  struct SummarizingProvider: LLMProvider {
+    func complete(prompt: String) async throws -> String { "Migrated the auth tables." }
+    func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] { [] }
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0] }
+  }
+  _ = try await ExtractionRunner(db: db, provider: SummarizingProvider()).run()
+  let ev = try await db.read { db in try Event.where { $0.id.eq(event.id) }.fetchOne(db) }
+  #expect(ev?.workSummary == "Migrated the auth tables.")
+}
+
+@Test func summarizerFailureDoesNotBlockWatermark() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("run-worksummary-fail"))
+  let (_, event) = try seedSingleMessageSession(db: db, quote: "please read the spec")
+  struct FailSummaryProvider: LLMProvider {
+    func complete(prompt: String) async throws -> String { throw LLMError.providerFailed("no summary") }
+    func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] { [] }
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0] }
+  }
+  _ = try await ExtractionRunner(db: db, provider: FailSummaryProvider()).run()
+  let ev = try await db.read { db in try Event.where { $0.id.eq(event.id) }.fetchOne(db) }
+  #expect(ev?.workSummary == nil)                 // best-effort: left unset
+  #expect(ev?.extractedTranscriptSize != -1)      // watermark still advanced
+}
+
+@Test func extractionAppliesSalienceGate() async throws {
+  // Two candidates verified; the salience gate drops the in-the-moment one. Only the
+  // deferred/salient quote is stored. Content-keyed drop (not a bare batch-local index
+  // literal) so the stub stays correct regardless of how SalienceClassifier batches.
+  let db = try openCanonicalDatabase(at: tempURL("run-salience"))
+  let transcript = try writeTranscript([
+    "we should also migrate the auth tables later",   // salient
+    "please read the spec now",                        // in-the-moment -> dropped
+  ])
+  let event = try makeSessionEvent(db: db, transcript: transcript)
+  struct TwoThenDrop: LLMProvider {
+    func complete(prompt: String) async throws -> String { "" }
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0, 1] }
+    func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] {
+      [LooseEndCandidate(text: "migrate auth", quote: "we should also migrate the auth tables later", messageIndex: 0),
+       LooseEndCandidate(text: "read spec", quote: "please read the spec now", messageIndex: 1)]
+    }
+    func classifyNonSalientIndices(prompt: String) async throws -> [Int] {
+      // Drop whichever batch-local [n] item's QUOTE line is the in-the-moment request.
+      var drop: [Int] = []
+      for line in prompt.split(separator: "\n") {
+        guard line.hasPrefix("["), let close = line.firstIndex(of: "]"),
+              let n = Int(line[line.index(after: line.startIndex)..<close]) else { continue }
+        if line.contains("QUOTE: please read the spec now") { drop.append(n) }
+      }
+      return drop
+    }
+  }
+  _ = try await ExtractionRunner(db: db, provider: TwoThenDrop()).run()
+  let stored = try await db.read { db in try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db) }
+  #expect(stored.map(\.quote) == ["we should also migrate the auth tables later"])
+}
+
 @Test func partialTrailingLinePicksUpAtCorrectIndexAfterCompletion() async throws {
   let db = try openCanonicalDatabase(at: tempURL("run-partial"))
   let q0 = rateLimitingQuote

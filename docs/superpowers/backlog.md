@@ -213,6 +213,17 @@ widget, and that the widget can read a file the app wrote there — that go/no-g
 
 ---
 
+## Narration-cache carry — 2026-07-08 (deferred, non-blocking)
+
+From the ingestion-intelligence-quality branch (Part C). The persisted narration cache
+(`AppModel.narrationCache` in `UserDefaults`, keyed per-DB-path) replaced the blanket
+`removeAll()` with key-based invalidation, so entries for **deleted / merged-away nodes are
+never pruned** and accumulate in the plist indefinitely. Low severity for a single-user store
+(bounded by node count, device-local, never surfaced — reads are key-gated on live events), but
+unbounded in principle. *Fix when convenient: prune `narrationCache` to the set of live node ids
+on refresh (intersect keys with `allNodes`). Trigger: an app-target cleanup pass, or if the plist
+ever grows noticeably.*
+
 ## Code-quality review carries — 2026-07-07 (deferred / design questions)
 
 From a full code-quality + idiomatic-Swift review of the whole tree. Most findings were fixed in

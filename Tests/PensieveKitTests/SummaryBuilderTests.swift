@@ -45,6 +45,35 @@ private struct EchoProvider: LLMProvider {
   #expect(sum == nil)
 }
 
+@Test func assembleFactsPrefersWorkSummaryOverTerseSummary() {
+  let node = Node(name: "Pensieve")
+  let e = Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
+                kind: CaptureKind.ccSession, summary: "session (9 prompts)", detailJSON: "{}",
+                workSummary: "Wired the sync daemon and fixed the watermark.")
+  let facts = SummaryBuilder.assembleFacts(project: node, events: [e])
+  #expect(facts.contains("Wired the sync daemon and fixed the watermark."))
+  #expect(!facts.contains("session (9 prompts)"))
+}
+
+@Test func assembleFactsFallsBackToTerseSummaryWhenNoWorkSummary() {
+  let node = Node(name: "Pensieve")
+  let e = Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
+                kind: CaptureKind.gitCommit, summary: "fix: watermark off-by-one", detailJSON: "{}")
+  let facts = SummaryBuilder.assembleFacts(project: node, events: [e])
+  #expect(facts.contains("fix: watermark off-by-one"))
+}
+
+@Test func assembleFactsRespectsCharBudget() {
+  let node = Node(name: "Pensieve")
+  let events = (0..<15).map { i in
+    Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
+          kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}",
+          workSummary: String(repeating: "x", count: 400))
+  }
+  let facts = SummaryBuilder.assembleFacts(project: node, events: events)
+  #expect(facts.count <= SummaryBuilder.factSheetBudget + 200)   // header + a few lines, never all 15
+}
+
 @Test func summaryBuildKeysByNodeNotAmbiguousName() async throws {
   let db = try openCanonicalDatabase(at: tempURL("sum-dup"))
   // Two DISTINCT repos share a basename (real: ~/a/calliope and ~/b/calliope).
