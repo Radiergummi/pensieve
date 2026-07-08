@@ -134,7 +134,26 @@ final class AppModel: ObservableObject {
   }
   private var started = false
   private lazy var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
-  private var narrationCache: [UUID: String] = [:]
+  /// Persisted narration: prose + the invalidation key it was generated for. Keyed per DB path
+  /// (NEW pattern — lastOpenedAt is a single global key today) so throwaway smoke/test stores
+  /// don't pollute the real cache. Device-local: narration is a derived, provider-specific
+  /// output cache and must not sync.
+  private struct CachedNarration: Codable { let prose: String; let key: String }
+  private var narrationCache: [UUID: CachedNarration] = [:]
+
+  private static func narrationCacheDefaultsKey() -> String {
+    "pensieve.narrationCache." + Stores.canonicalURL.path
+  }
+  private func loadNarrationCache() {
+    guard let data = UserDefaults.standard.data(forKey: Self.narrationCacheDefaultsKey()),
+          let decoded = try? JSONDecoder().decode([UUID: CachedNarration].self, from: data)
+    else { return }
+    narrationCache = decoded
+  }
+  private func saveNarrationCache() {
+    guard let data = try? JSONEncoder().encode(narrationCache) else { return }
+    UserDefaults.standard.set(data, forKey: Self.narrationCacheDefaultsKey())
+  }
   /// Bumped on launch + ⌘R (drainThenRefresh). Views key their reload `.task` on it so the OPEN
   /// detail re-narrates after a refresh. The watch-driven refreshDebouncer calls `refresh()` (not
   /// drainThenRefresh), so this never bumps on background liveness updates.
@@ -153,6 +172,7 @@ final class AppModel: ObservableObject {
     started = true
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
     db = try? openCanonicalDatabase(at: Stores.canonicalURL)
+    loadNarrationCache()
     spool = try? CaptureSpool(at: Stores.spoolURL)   // persistent — see the property note above
     activeFocusContext = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
     Task { await drainThenRefresh() }
@@ -193,7 +213,9 @@ final class AppModel: ObservableObject {
       _ = try? await Ingester(spool: spool, db: db).drain()   // no LLM: spool → events only
     }
     refresh()
-    narrationCache.removeAll()   // launch/⌘R: recaps may be stale — regenerate on next open
+    // launch/⌘R: do NOT blanket-clear — cachedNarration/narration are key-aware, so unchanged
+    // nodes reuse persisted prose and only changed nodes regenerate. ⌘R force-refresh of the
+    // selected node happens in DetailView (force: on same-node token bump).
     refreshToken += 1
     await SpotlightIndexer.reindex(activeContext: activeFocusContext)   // launch + ⌘R
   }
@@ -339,7 +361,7 @@ final class AppModel: ObservableObject {
   /// and includes the narration only if it's already cached (a share never blocks on an LLM call).
   func recallMarkdown(for node: Node) -> String {
     let d = detail(for: node)
-    return RecallMarkdown.render(node: node, narration: cachedNarration(for: node),
+    return RecallMarkdown.render(node: node, narration: cachedNarration(for: node, events: d.status.recentEvents),
                                  looseEnds: d.looseEnds, events: d.status.recentEvents, now: Date())
   }
 
@@ -444,18 +466,25 @@ final class AppModel: ObservableObject {
     return try? await Task.detached { try ProvenanceQueries.context(db, looseEnd: looseEnd) }.value
   }
 
-  /// Cached narration for `node`, if generated this session. Synchronous — lets the view render a
-  /// cached recap instantly, with no spinner.
-  func cachedNarration(for node: Node) -> String? { narrationCache[node.id] }
+  /// Cached narration for `node` IFF the stored key still matches the current events. Synchronous —
+  /// lets the view render a valid cached recap instantly (including across launches).
+  func cachedNarration(for node: Node, events: [Event]) -> String? {
+    guard let entry = narrationCache[node.id],
+          entry.key == NarrationCacheKey.make(events: events) else { return nil }
+    return entry.prose
+  }
 
-  /// The "Last Work Done" narration for `node`. Returns a session-cached result instantly; otherwise
-  /// generates it off the main actor via the Sendable SummaryBuilder, caches a non-nil result, and
-  /// returns it. nil when there's nothing to narrate or no provider is reachable (failures are not
-  /// cached, so a later ⌘R/open can still produce one).
-  func narration(for node: Node, events: [Event]) async -> String? {
-    if let cached = narrationCache[node.id] { return cached }
+  /// The "Last Work Done" narration for `node`. Returns the cached result when its key matches and
+  /// `force` is false; otherwise regenerates off-main, stores prose+key, and returns it. `force`
+  /// (⌘R on the selected node) bypasses the cache so the user can always refresh a bad recap.
+  func narration(for node: Node, events: [Event], force: Bool = false) async -> String? {
+    let key = NarrationCacheKey.make(events: events)
+    if !force, let entry = narrationCache[node.id], entry.key == key { return entry.prose }
     let text = await summaryBuilder.narrate(project: node, events: events)
-    if let text { narrationCache[node.id] = text }
+    if let text {
+      narrationCache[node.id] = CachedNarration(prose: text, key: key)
+      saveNarrationCache()
+    }
     return text
   }
 }
