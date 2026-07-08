@@ -57,8 +57,10 @@ trigger. Order is a recommendation, not a commitment.
    - ✅ **Slice 3a — LLM "Last Work Done" narration** (merged 2026-07-06): `DetailView` prose recap via a tested
      `SummaryBuilder.narrate → String?` (nil-honest, outside the cited gate), on-device, automatic + progressive,
      ⌘R re-narrates. Spec/plan: `{specs,plans}/2026-07-06-three-pane-slice3a-last-work-done*`.
-   - ✅ **Slice 3b — inspector + liveness + windows** (merged 2026-07-06): ⌘⌥I provenance inspector,
-     `ValueObservation` + FSEvents liveness (retired the 3 s `Timer`), secondary recall windows.
+   - ✅ **Slice 3b — inspector + liveness + windows** (merged 2026-07-06): ⌘⌥I provenance inspector
+     *(the `.inspector` panel was RETIRED 2026-07-08 → inline provenance in each loose-end row; see the
+     "App layout + inline provenance rework" entry below)*, `ValueObservation` + FSEvents liveness (retired the
+     3 s `Timer`), secondary recall windows.
    - ✅ **Slice 4 — in-app organizing writes** (merged 2026-07-07): create / `nest` / `group` / `rename` /
      `retype` via context menus + toolbar, with the unified walk-to-root cycle guard.
    - ✅ **Visual identity & UX polish** (merged 2026-07-07): per-kind/source icon+color system (migration v8),
@@ -268,9 +270,9 @@ Two Opus whole-branch reviews → READY-TO-MERGE. **Item 5 (three-pane IA rework
 5. **✅ Three-pane IA rework — DONE (2026-07-08, merged to `main` `d2df86b`).** The middle pane now lists a
    focused node's **children** (or, for a leaf, its **loose ends**) instead of the node-plus-children — killing
    the sidebar→middle→detail self-duplication. The detail always shows the focused node's recall; clicking a
-   child **drills**; Smart-List/Briefing lists **stay** on click (triage preserved); loose-end provenance stays
-   in the single **⌘⌥I inspector** (kept, not retired), reached identically from the middle worklist and the
-   detail recall's rows; the detail drops its Loose Ends section only for the focused leaf (**one-home rule**).
+   child **drills**; Smart-List/Briefing lists **stay** on click (triage preserved); loose-end provenance was
+   shown in a **⌘⌥I inspector** *(RETIRED 2026-07-08 → inline in each loose-end row; see the layout+provenance
+   rework entry below)*; the detail drops its Loose Ends section only for the focused leaf (**one-home rule**).
    App-target rewiring (`AppModel.middleKind`/`selectMiddle*`/`detailShowsLooseEnds`, `ContentListView`,
    `RootView`, a shared `LooseEndRow`, `DetailView.showsLooseEnds`) over one tested Kit helper
    (`NodeForest.children`). Subagent-driven (5 tasks, Sonnet impl+task-review each; **Opus** whole-branch =
@@ -309,6 +311,34 @@ recursive/subtree recall. **Deferred Minors** (non-blocking): whitespace-only na
 a blank-looking section (upstream-gated); a one-frame transient on ⌘R/node-switch where a Share tap could omit a
 recap the screen still shows (bounded by one LLM call; narration is best-effort in the export). **Human-verify
 carries** below.
+
+---
+
+## App layout + inline provenance rework — DONE (2026-07-08, merged to `main` `59688e4`)
+
+**Fixed recurring pane-sizing bugs and retired the ⌘⌥I provenance inspector in favor of inline provenance.**
+An interactive `systematic-debugging` session on `main` (not subagent-driven), user-verified via screenshots
+(the accessibility sandbox blocks scripting window resize/toggle here). Reached `systematic-debugging` Phase 4.5
+after 3 failed inspector patches **plus an AppKit crash** (`_updateSidebarPositionIfNeeded` →
+`_tileTitlebarAndRedisplay`, from toggling the sidebar with the inspector open) → questioned the architecture →
+user chose inline provenance.
+
+- **Layout (platform-native, Mail-like):** the sidebar toggle is the **native `NavigationSplitView` toggle** via
+  a `columnVisibility` binding (not a custom button); Refresh dropped from the toolbar (still ⌘R / Go ▸ Refresh)
+  so the toggle isn't pushed to a `»` overflow. **Column drag limits** (sidebar 200–320, content 240–420,
+  **detail min 360 floor-only → flexible**) end the divider-drag corruption + the "detail won't grow" bug.
+  **Honest window min 860.** Reading column widened to **760** and centered in a wide detail pane.
+- **Provenance (inline, unified):** deleted `InspectorView`; removed `showInspector`/`inspectedLooseEndID`/⌘⌥I.
+  A window-level `.inspector` as a 4th region on the 3-column split overflowed the window and crashed AppKit's
+  titlebar tiling. Now a loose end **expands inline** to a soft rounded box: a couple-line preview of the cited
+  line + **Show more/less** disclosure to the full surrounding transcript (cited highlighted, neighbors dimmed);
+  honest quote+note fallback when the transcript is gone. The tested `ProvenanceContext` kernel is unchanged —
+  now consumed inline by `LooseEndRow`. German for the new chrome (`Show more/less`).
+- App-target only; **PensieveKit unchanged (211 tests)**. No spec/plan (a bug-fix). **Why:** four resizable
+  regions (3-column split + `.inspector`) is more than macOS reliably fits/tiles — the inline box is bounded by
+  the detail column, so it always fits (children just get narrower), removing the whole class of clip/crash bugs.
+- **Deferred/notes:** the inline provenance box has no pixel-measured truncation (it previews the cited line and
+  discloses the rest by message count); fill tint / corner radius / preview length are easy to tune.
 
 ---
 
