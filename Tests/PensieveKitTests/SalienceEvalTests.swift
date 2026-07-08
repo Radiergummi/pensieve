@@ -13,8 +13,11 @@ private struct Labeled: Codable { let quote: String; let salient: Bool }
 /// probabilistic model). Run: PENSIEVE_SALIENCE_EVAL=1 ./scripts/test.sh --filter salienceEval
 @Test func salienceEvalReport() async throws {
   guard ProcessInfo.processInfo.environment["PENSIEVE_SALIENCE_EVAL"] == "1" else { return }
-  let url = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent().appendingPathComponent("Fixtures/salience-labels.json")
+  // Fixture path is overridable so a real go/no-go can point at a private out-of-repo file of
+  // real quotes (PENSIEVE_SALIENCE_LABELS) without committing provenance data; defaults to the
+  // synthetic starter fixture in-repo.
+  let url = ProcessInfo.processInfo.environment["PENSIEVE_SALIENCE_LABELS"].map { URL(fileURLWithPath: $0) }
+    ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/salience-labels.json")
   let labels = try JSONDecoder().decode([Labeled].self, from: Data(contentsOf: url))
   let provider = makeDefaultLLMProvider()
   let ends = labels.map { VerifiedLooseEnd(text: $0.quote, quote: $0.quote, role: "user", sourceMessageIndex: 0) }
@@ -28,4 +31,9 @@ private struct Labeled: Codable { let quote: String; let salient: Bool }
   let recall = Double(keptSalient) / Double(max(1, salientLabels.count))
   let precision = Double(keptSalient) / Double(max(1, keptTotal))
   print("SALIENCE EVAL — precision=\(precision) recall=\(recall) kept=\(keptTotal)/\(labels.count)")
+  // The DROP list is the primary go/no-go signal on unlabeled real quotes: every dropped item
+  // must be genuinely an in-the-moment request, never deferred/parked/decision work.
+  let dropped = labels.map(\.quote).filter { !kept.contains($0) }
+  print("SALIENCE EVAL — dropped \(dropped.count)/\(labels.count):")
+  for q in dropped { print("  DROP: \(q)") }
 }
