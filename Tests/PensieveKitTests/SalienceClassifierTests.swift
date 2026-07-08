@@ -61,3 +61,35 @@ private func um(_ i: Int, _ text: String) -> TranscriptMessage {
   let kept = await SalienceClassifier(provider: DropIndices(drop: [0])).filter([], messages: [])
   #expect(kept.isEmpty)
 }
+
+@Test func salienceMapsDropIndicesPerBatchNotGlobally() async {
+  // Force one-end-per-batch with a tiny budget, and drop based on quote content so the
+  // stub's [0] drop applies to the RIGHT batch-local end each time. If filter mis-mapped
+  // batch-local indices to global positions, the wrong ends would survive.
+  let ends = [
+    vle("we should migrate the auth tables later", at: 0),   // KEEP (deferred)
+    vle("please read the spec right now", at: 1),             // DROP (in-the-moment)
+    vle("let's park the canvas idea for now", at: 2),         // KEEP (parked)
+    vle("run the tests immediately", at: 3),                  // DROP (in-the-moment)
+  ]
+  let msgs = [um(0, "we should migrate the auth tables later"),
+              um(1, "please read the spec right now"),
+              um(2, "let's park the canvas idea for now"),
+              um(3, "run the tests immediately")]
+  // Per-batch stub: within each single-end batch, drop [0] iff that batch's OWN quote (the
+  // "QUOTE: " line, not a neighbor pulled into CONTEXT) is an in-the-moment request. buildPrompt
+  // tags the sole end as [0], so returning [0] drops it.
+  struct PerBatchDrop: LLMProvider {
+    func complete(prompt: String) async throws -> String { "[]" }
+    func classifyNonSalientIndices(prompt: String) async throws -> [Int] {
+      let dropIt = prompt.contains("QUOTE: please read the spec right now")
+        || prompt.contains("QUOTE: run the tests immediately")
+      return dropIt ? [0] : []
+    }
+  }
+  // batchCharBudget small enough that each end (quote + context) is its own batch.
+  let kept = await SalienceClassifier(provider: PerBatchDrop(), batchCharBudget: 1)
+    .filter(ends, messages: msgs)
+  #expect(kept.map(\.quote) == ["we should migrate the auth tables later",
+                                "let's park the canvas idea for now"])
+}
