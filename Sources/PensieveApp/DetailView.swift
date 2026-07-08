@@ -17,6 +17,7 @@ struct DetailView: View {
   @State private var lastWorkDone: String?
   @State private var isNarrating = false
   @State private var loadedNodeID: UUID?   // which node the current prose belongs to
+  @State private var shareMarkdown = ""   // rebuilt on load/refresh; fed to the toolbar ShareLink
 
   var body: some View {
     ScrollView {
@@ -78,6 +79,11 @@ struct DetailView: View {
       .frame(maxWidth: Prose.measure, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        ShareLink(item: shareMarkdown, subject: Text(node.name))
+      }
+    }
     // Re-runs on node change AND on ⌘R (refreshToken). The body order is load-bearing (two
     // independent reviews): reset prose only on a NODE change (so a same-node ⌘R keeps the old
     // recap visible until the new one lands — no flash), reset `isNarrating` on EVERY entry (never
@@ -90,11 +96,15 @@ struct DetailView: View {
       let d = model.detail(for: node)
       recentEvents = d.status.recentEvents
       looseEnds = d.looseEnds
+      shareMarkdown = RecallMarkdown.render(node: node, narration: model.cachedNarration(for: node),
+                                            looseEnds: looseEnds, events: recentEvents, now: Date())
       if let cached = model.cachedNarration(for: node) { lastWorkDone = cached; return }
       isNarrating = true
       let prose = await model.narration(for: node, events: recentEvents)
       guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
       lastWorkDone = prose
+      shareMarkdown = RecallMarkdown.render(node: node, narration: prose,
+                                            looseEnds: looseEnds, events: recentEvents, now: Date())
       isNarrating = false
     }
   }

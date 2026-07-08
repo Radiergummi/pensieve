@@ -347,6 +347,14 @@ final class AppModel: ObservableObject {
     return (status, ends)
   }
 
+  /// The node's recall rendered as shareable English Markdown. Reuses `detail(for:)` for the gather
+  /// and includes the narration only if it's already cached (a share never blocks on an LLM call).
+  func recallMarkdown(for node: Node) -> String {
+    let d = detail(for: node)
+    return RecallMarkdown.render(node: node, narration: cachedNarration(for: node),
+                                 looseEnds: d.looseEnds, events: d.status.recentEvents, now: Date())
+  }
+
   /// Open loose ends for a node — the inspector's slice of `detail(for:)` (no status query).
   /// Loaded once per selection via the inspector's `.task`, never in a view `body`.
   func looseEnds(forNode nodeID: UUID) -> [LooseEndView] {

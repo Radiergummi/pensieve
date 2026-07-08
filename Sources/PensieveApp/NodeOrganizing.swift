@@ -125,6 +125,8 @@ struct NodeContextMenu: View {
     Button("New Child…") { model.presentNewNode(under: node.id) }
     Button("Edit…") { model.presentEditNode(node) }
     Divider()
+    ShareLink("Share Recall…", item: model.recallMarkdown(for: node))
+    Divider()
     Button("Move to…") { model.movePickerNodeID = node.id }
     Button("Merge into…") { model.mergePickerNodeID = node.id }
     Divider()
