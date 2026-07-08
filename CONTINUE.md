@@ -4,9 +4,40 @@ Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (pr
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `59688e4`) and the tree is clean. Test suite: **211 tests**, run with
+Everything below is **on `main`** (HEAD `9de6d18`) and the tree is clean. Test suite: **246 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
+
+**Latest (this session): App Settings surface (first cut) — DONE & on `main` `9de6d18`.** The app's first
+`Settings` scene (**⌘,**), a near-term pillar raised the same day. Three knobs: **LLM provider** (Automatic /
+Foundation Models / claude -p), **Hide Dock icon** (menu-bar-only), **"Last Work Done" narration on/off**.
+**Kit (tested):** `ProviderPreference` + `Preferences` (JSON in the shared, non-sandboxed support dir, best-effort
+→ `.auto`) + `PensievePaths.preferencesURL()`; a pure `resolveProviderKind`; `makeDefaultLLMProvider(prefsURL:)`/
+`defaultProviderKind(prefsURL:)` read the persisted choice so **both the app AND the launchd daemon** honor it
+(explicit URL → `PENSIEVE_PREFS` → support dir). **App (thin):** `SettingsView` reads/writes `Preferences`
+directly (no `@Published` mirror) + shows FM availability; `AppModel.summaryBuilder` made rebuildable
+(`rebuildSummaryBuilder()`) so an in-app provider switch takes effect without relaunch; `AppDefaults` shared keys;
+`AppDelegate.applicationDidFinishLaunching` applies the activation policy (hide-dock via `.accessory`, closing the
+v0.2-deferred `LSUIElement` item); `DetailView` gates narration render+generation; German l10n. **Trust gate
+untouched.** Subagent-driven (6 tasks, Sonnet impl+review each; **Opus** whole-branch = READY-TO-MERGE). A
+**high-effort `/code-review` fix wave** then caught **two** real defects the whole-branch review missed and both
+were fixed: Share/Copy export leaked narration the user disabled (now gated), and the narration cache was **not
+keyed by provider** so a provider switch never regenerated cached prose (now folded into `NarrationCacheKey` +
+`providerKind` on `AppModel`). Adversarial spec review folded in up front (lazy-`summaryBuilder` no-op, injectable
+`prefsURL` to avoid a parallel-test env race, `applicationDidFinishLaunching` + `NSApp.activate` on toggle-back).
+**246 tests** (+9 Kit). Spec/plan: `docs/superpowers/{specs,plans}/2026-07-08-app-settings-surface*`.
+- **Deferred (not foreclosed):** a **cloud/API LLM provider + Keychain key + model selection** (the motivating
+  long-term case — its own subsystem, builds on this scaffold); **organizing-writes error surfacing** (still needs
+  an app error-presentation mechanism — pairs with this surface but not built); other knobs (capture/scan folders,
+  daemon interval); tabbed multi-pane.
+- **Human-verify carries** (need the built app + real store + plain `open`): **⌘,** opens the pane; each knob
+  persists across relaunch; the provider picker shows the FM-fallback note on a Mac that can't run FM; a provider
+  choice made in the app is honored by a later `pensieve sync` (both read the same `preferences.json`); Hide Dock
+  removes the tile (menu-bar item remains, window reachable via "Open Pensieve") and un-toggling re-fronts it;
+  narration off hides/doesn't-generate the recap; German in situ (`-AppleLanguages '(de)'`) with provider names
+  staying English. Build: `xcodegen generate && xcodebuild -project Pensieve.xcodeproj -scheme Pensieve
+  -configuration Debug -derivedDataPath ./.build-xcode build`, then `open
+  ./.build-xcode/Build/Products/Debug/Pensieve.app`.
 
 **Latest (this session): pane-layout fix + inline provenance — the ⌘⌥I inspector is RETIRED — DONE & on `main`
 `59688e4`.** Fixed recurring pane-sizing bugs and reworked provenance from a fragile window-level `.inspector`

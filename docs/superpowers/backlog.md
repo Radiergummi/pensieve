@@ -103,24 +103,30 @@ domain-level recursive rollups, cross-cutting soft references (`node_links`) —
 forks-as-first-class builds on, statistical theme discovery (`NLEmbedding`), proactive project
 suggestion, and native localization. These deepen existing surfaces rather than standing alone.
 
-### ⭐ App Settings surface (raised priority — 2026-07-08)
+### ⭐ App Settings surface — FIRST CUT DONE (2026-07-08, merged to `main` `9de6d18`)
 
-**Requested:** 2026-07-08. The app has **no Settings/Preferences window** today, and a growing set of
-features are blocked on one. Build a first-party SwiftUI `Settings` scene (`SettingsLink` / the standard
-⌘, Preferences window) hosting the config knobs, persisted where each belongs (UI prefs → `UserDefaults`;
-anything sync-bound → the canonical store). **This is now a near-term pillar, not a someday-item**, because
-multiple threads converge on it:
-- **LLM provider selection** — choose which provider powers intelligence (on-device Foundation Models vs
-  `claude -p` vs, eventually, **an API-connected cloud provider with a user-entered key**). The
-  provider-agnostic `LLMProvider` protocol already exists; this exposes the choice + stores credentials
-  (Keychain for API keys). Explicitly requested as the motivating case.
-- **`LSUIElement` / hide-dock toggle** (deferred from v0.2 — needs a Settings host).
-- **Organizing-writes error surfacing** (code-quality carry — needs an app error-presentation mechanism;
-  pairs with the same surface).
-- Likely more knobs as they arise (capture/scan folders, daemon interval, narration on/off, etc.).
+**Shipped** the first-party SwiftUI `Settings` scene (**⌘,**) with three knobs, each persisted where it
+belongs. **Kit (tested):** `ProviderPreference` + `Preferences` (JSON in the shared, non-sandboxed support
+dir, best-effort → `.auto`) + `PensievePaths.preferencesURL()`; pure `resolveProviderKind`;
+`makeDefaultLLMProvider(prefsURL:)`/`defaultProviderKind(prefsURL:)` read the persisted choice (explicit URL →
+`PENSIEVE_PREFS` → support dir) so **both the app AND the launchd daemon** honor it. **App (thin):** `SettingsView`
+reads/writes `Preferences` directly; rebuildable `AppModel.summaryBuilder` (in-app provider switch takes effect
+without relaunch); `AppDefaults` shared keys; `AppDelegate.applicationDidFinishLaunching` activation policy; German
+l10n. Trust gate untouched. A high-effort `/code-review` fix wave then caught + fixed two defects the whole-branch
+review missed (Share leaked disabled narration; narration cache wasn't provider-keyed). **246 tests** (+9 Kit).
+Spec/plan: `{specs,plans}/2026-07-08-app-settings-surface*`.
 
-*Trigger: near-term. The LLM-provider work (esp. cloud/API providers) forces it first; fold the deferred
-toggles in when built.* Own brainstorm→spec.
+**Delivered from the convergent threads:**
+- ✅ **LLM provider selection** — Automatic / Foundation Models / `claude -p`, whole-system (app + daemon).
+- ✅ **`LSUIElement` / hide-dock toggle** (deferred from v0.2) — runtime `NSApp.setActivationPolicy(.accessory)`.
+
+**Deferred out of the first cut (on the roadmap, not foreclosed):**
+- **Cloud/API LLM provider + Keychain-stored key + model selection** — the motivating long-term case; a meaty
+  net-new subsystem (an HTTP `LLMProvider`) that builds on the shipped provider-preference scaffold. *Its own
+  spec.*
+- **Organizing-writes error surfacing** (code-quality carry) — still needs an app error-presentation mechanism;
+  pairs with this surface but was not built. *Trigger: when an error-surface is added.*
+- More knobs as they arise (capture/scan folders, daemon interval); tabbed multi-pane Settings.
 
 ### Platform extension points (candidate surfaces) — a menu, not a sequence
 
@@ -384,9 +390,8 @@ for the registered `pensieve://` scheme; internal in-process jump-in + external 
 
 ### Deferred out of v0.2 (on the roadmap, not foreclosed)
 
-- **`LSUIElement` / hide-dock toggle** — a "menu-bar only (hide dock icon)" preference that flips
-  `NSApp.setActivationPolicy(.regular ↔ .accessory)`. Deferred because there's **no Settings surface** to host
-  it yet and it's a real behavior change. *Trigger: when a Settings/Preferences window exists (pair with it).*
+- **`LSUIElement` / hide-dock toggle** — ✅ **DONE (2026-07-08, merged `9de6d18`)** as a knob in the new App
+  Settings surface. Flips `NSApp.setActivationPolicy(.regular ↔ .accessory)` at launch + live on toggle.
 - **Menu-bar icon count badge** — a numeric open-loose-ends / what's-next count on the menu-bar glyph itself
   (kept icon-only for v0.2). *Trigger: if the glance wants an at-rest number without opening the popover.*
 - **Dormant / Recently-Active peek in the popover** — the popover shows What's Next only; the other two smart
