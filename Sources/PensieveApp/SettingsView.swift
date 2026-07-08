@@ -9,6 +9,7 @@ struct SettingsView: View {
   @ObservedObject var model: AppModel
   @State private var provider: ProviderPreference = Preferences.read(from: Stores.preferencesURL)
   @AppStorage(AppDefaults.hideDockIconKey) private var hideDockIcon = false
+  @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
 
   private var foundationAvailable: Bool { FoundationModelsProbe.isAvailable() }
 
@@ -26,6 +27,7 @@ struct SettingsView: View {
           }
       }
       Section("Intelligence") {
+        Toggle("Show “Last Work Done” narration", isOn: $narrationEnabled)
         Picker("LLM Provider", selection: $provider) {
           Text("Automatic").tag(ProviderPreference.auto)
           Text("Foundation Models").tag(ProviderPreference.foundationModels)

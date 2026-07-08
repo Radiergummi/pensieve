@@ -4,6 +4,7 @@ import PensieveKit
 
 struct DetailView: View {
   @ObservedObject var model: AppModel
+  @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
   let node: Node
   /// When false, the detail omits its Loose Ends section (the middle column is showing this same
   /// node's loose ends — the one-home rule). Recall windows / smart-list details pass true.
@@ -39,7 +40,7 @@ struct DetailView: View {
 
         // LAST WORK DONE (LLM narration; prose-first — a ready recap always wins over an in-flight
         // flag — and the section is omitted entirely when there's no genuine narration).
-        if let lastWorkDone, loadedNodeID == node.id {
+        if narrationEnabled, let lastWorkDone, loadedNodeID == node.id {
           section("Last Work Done") {
             VStack(alignment: .leading, spacing: 4) {
               Text(lastWorkDone).prose()
@@ -48,7 +49,7 @@ struct DetailView: View {
                 .foregroundStyle(.secondary)
             }
           }
-        } else if isNarrating, loadedNodeID == node.id {
+        } else if narrationEnabled, isNarrating, loadedNodeID == node.id {
           section("Last Work Done") {
             ProgressView().controlSize(.small)
           }
@@ -102,6 +103,7 @@ struct DetailView: View {
       shareMarkdown = RecallMarkdown.render(node: node,
                                             narration: model.cachedNarration(for: node, events: recentEvents),
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
+      guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
       if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {
         lastWorkDone = cached; return
       }
