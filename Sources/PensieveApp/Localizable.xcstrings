@@ -12,25 +12,31 @@
         }
       }
     },
-    "%@": {},
-    "%@ open": {},
+    "%@": {
+      "localizations": {}
+    },
+    "%@ open": {
+      "localizations": {}
+    },
     "%@ open · %@d dormant": {
       "localizations": {
         "en": {
           "stringUnit": {
-            "state": "new",
-            "value": "%1$@ open · %2$@d dormant"
+            "state": "translated",
+            "value": "%1$(items)@ open · %2$(days)@d dormant"
           }
         }
       }
     },
-    "%@ since last visit": {},
+    "%@ since last visit": {
+      "localizations": {}
+    },
     "%@ · %@ · %@d ago": {
       "localizations": {
         "en": {
           "stringUnit": {
-            "state": "new",
-            "value": "%1$@ · %2$@ · %3$@d ago"
+            "state": "translated",
+            "value": "%1$@ · %2$@ · %3$(days)@d ago"
           }
         }
       }
@@ -223,8 +229,14 @@
       "localizations": {
         "de": {
           "stringUnit": {
+            "state": "needs_review",
+            "value": "„%(node)@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
             "state": "translated",
-            "value": "„%@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+            "value": "Delete “%(node)@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone."
           }
         }
       }
@@ -1027,7 +1039,9 @@
         }
       }
     },
-    "dormant %@d": {},
+    "dormant %@d": {
+      "localizations": {}
+    },
     "dormant %lldd": {
       "extractionState": "stale",
       "localizations": {
@@ -1061,7 +1075,9 @@
         }
       }
     },
-    "·": {}
+    "·": {
+      "localizations": {}
+    }
   },
   "version": "1.0"
 }
