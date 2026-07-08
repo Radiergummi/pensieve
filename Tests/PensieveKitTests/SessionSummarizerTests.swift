@@ -48,8 +48,8 @@ private func m(_ i: Int, _ role: String, _ text: String, user: Bool) -> Transcri
   #expect(!blob.contains("tool blob"))
 }
 
-@Test func summarizerMapReducesOverBudget() async {
-  // Force > 1 chunk: input far exceeds inputBudget -> map (per-chunk) then a reduce call.
+@Test func summarizerReduceCallRunsAfterMapping() async {
+  // Count map chunks precisely, then assert the reduce call ran (calls == chunks + 1).
   actor Counter { var n = 0; func bump() { n += 1 }; func value() -> Int { n } }
   struct Counting: LLMProvider {
     let counter: Counter
@@ -58,7 +58,28 @@ private func m(_ i: Int, _ role: String, _ text: String, user: Bool) -> Transcri
   let counter = Counter()
   let big = String(repeating: "word ", count: SessionSummarizer.inputBudget)  // ~5x budget
   let msgs = [m(0, "assistant", big, user: false)]
+  let expectedChunks = SessionSummarizer.chunk(SessionSummarizer.relevantBlob(msgs), budget: SessionSummarizer.inputBudget).count
   let out = await SessionSummarizer(provider: Counting(counter: counter)).summarize(msgs)
   #expect(out != nil)
-  #expect(await counter.value() >= 2)   // at least one map + one reduce
+  #expect(expectedChunks > 1)                                   // genuinely multi-chunk
+  #expect(await counter.value() == expectedChunks + 1)          // every map chunk + exactly one reduce
+}
+
+@Test func summarizerReturnsNilWhenReduceCallFails() async {
+  // A provider that succeeds for the map calls but fails on the reduce call must yield nil,
+  // not a locally-stitched fallback (best-effort contract).
+  actor Gate { var seen = 0; func next() -> Int { seen += 1; return seen } }
+  struct MapOKReduceFails: LLMProvider {
+    let gate: Gate
+    let mapCalls: Int
+    func complete(prompt: String) async throws -> String {
+      if await gate.next() <= mapCalls { return "part" }
+      throw LLMError.providerFailed("reduce boom")
+    }
+  }
+  let big = String(repeating: "word ", count: SessionSummarizer.inputBudget)
+  let msgs = [m(0, "assistant", big, user: false)]
+  let chunks = SessionSummarizer.chunk(SessionSummarizer.relevantBlob(msgs), budget: SessionSummarizer.inputBudget).count
+  let out = await SessionSummarizer(provider: MapOKReduceFails(gate: Gate(), mapCalls: chunks)).summarize(msgs)
+  #expect(out == nil)
 }

@@ -47,9 +47,10 @@ public struct SessionSummarizer: Sendable {
     }
     guard !partials.isEmpty else { return nil }
     let joined = partials.joined(separator: "\n")
-    // One reduce level. If the partials themselves overflow, feed a truncated head; the
-    // fallback (capped joined partials) still yields grounded-if-terse prose.
-    return await completeCapped(String(joined.prefix(Self.inputBudget))) ?? String(joined.prefix(Self.outputCap))
+    // One reduce level. A reduce-call failure returns nil (best-effort contract: any provider
+    // failure yields nil, never a locally-stitched fallback). The reduce input is bounded to
+    // inputBudget so the single call stays within the window.
+    return await completeCapped(String(joined.prefix(Self.inputBudget)))
   }
 
   private func completeCapped(_ body: String) async -> String? {
