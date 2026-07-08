@@ -145,6 +145,14 @@ private struct StubProvider: LLMProvider {
   #expect(out.map(\.quote) == ["we still need to add rate limiting"])
 }
 
+@Test func buildPromptCarriesSalienceDefinition() {
+  let prompt = LooseEndExtractor.buildPrompt([PromptFragment(index: 0, text: "we should migrate later")])
+  #expect(prompt.lowercased().contains("deferred"))
+  #expect(prompt.contains("read the spec"))          // an explicit DROP example
+  #expect(prompt.contains("[0]"))                    // still tags message indices
+  #expect(prompt.contains("we should migrate later")) // still includes the body
+}
+
 @Test func chunkingBreaksOnWhitespaceNotMidWord() {
   let text = "alpha bravo charlie delta echo foxtrot golf hotel"
   let words = Set(text.split(separator: " ").map(String.init))

@@ -124,10 +124,15 @@ public struct LooseEndExtractor {
   static func buildPrompt(_ chunk: [PromptFragment]) -> String {
     let body = chunk.map { "[\($0.index)] \($0.text)" }.joined(separator: "\n\n")
     return """
-    You extract LOOSE ENDS from a developer's own messages: things they said they would \
-    do, planned, or left unfinished, but which may not be done. Only use the text below. \
-    Do not extract acknowledgements, approvals, status checks, checklist items, or agent \
-    task briefs (e.g. 'looks good', 'carry on', 'are you done') — those are not loose ends.
+    Extract LOOSE ENDS from a developer's own messages: DEFERRED, PARKED, or DECISION work they \
+    left OPEN for later — e.g. "we should also migrate the auth tables", "let's do X later", \
+    "TODO: wire up the webhook", "don't forget the rate limiter", "let's go with A instead of B". \
+    Only use the text below.
+
+    Do NOT extract in-the-moment requests the assistant simply carries out now (e.g. "read the \
+    spec", "can you help me fix this?", "run the tests", "subagent-driven, let's go"), nor \
+    acknowledgements, approvals, status checks, checklist items, or agent task briefs ("looks \
+    good", "carry on", "are you done") — those are not loose ends.
 
     Return ONLY a JSON array. Each element: {"text": <short paraphrase>, "quote": <a VERBATIM \
     substring copied exactly from one message, including its original wording and casing>, \
