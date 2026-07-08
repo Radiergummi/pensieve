@@ -55,67 +55,107 @@ blocks Widgets/CloudKit.)
 
 Machine-local, tested, small. Lives in `Sources/PensieveKit/LLM/` next to the providers.
 
-- **`ProviderPreference`** — an enum `.auto` / `.foundationModels` / `.claudeCLI`,
+- **`ProviderPreference`** — a single enum `.auto` / `.foundationModels` / `.claudeCLI`,
   raw-string-backed (stable on-disk values `"auto"` / `"foundationModels"` /
-  `"claudeCLI"`).
-- **`Preferences`** — reads/writes `preferences.json` in
-  `PensievePaths.supportDirectory()`:
+  `"claudeCLI"`). This is the *only* new type — no second `ProviderKind` enum (the
+  resolver returns the existing `String` kind, keeping `defaultProviderKind()`'s contract).
+- **`Preferences`** — reads/writes the JSON prefs file at an **explicit URL passed in**
+  (no env-reading inside PensieveKit — see below):
+  - `Preferences.read(from: URL) -> ProviderPreference` and
+    `Preferences.write(_:to: URL)`.
   - Atomic write (`Data.write(to:options:.atomic)`).
   - Missing file, unreadable, or corrupt JSON ⇒ `.auto` (today's behavior — never throws
-    into a caller; the preference read is best-effort).
-  - Honors a **`PENSIEVE_PREFS`** env override (path to the prefs file) mirroring the
-    existing `PENSIEVE_DB` / `PENSIEVE_CAPTURE_DB` pattern, so tests and throwaway
-    launches never touch the real file.
+    into a caller; the read is best-effort).
   - Shape is a single small JSON object, e.g. `{"llmProvider":"claudeCLI"}` — additive
     keys allowed later without breaking older readers (unknown keys ignored; missing keys
     default).
-- **`resolveProviderKind(preference:foundationAvailable:) -> ProviderKind`** — a **pure**
-  function holding the whole decision, fully unit-testable:
-  - `.auto` → `foundationAvailable ? .foundationModels : .claudeCLI` (today's logic).
-  - `.foundationModels` → `.foundationModels` if available, else **falls back to**
-    `.claudeCLI` (transparent — the UI notes this).
-  - `.claudeCLI` → always `.claudeCLI`.
-- **`makeDefaultLLMProvider()`** and **`defaultProviderKind()`** read the preference file
-  + run the existing `FoundationModelsProbe`, feed both into `resolveProviderKind`, and
-  construct the chosen provider. **No call-site signature changes** — all five existing
-  call sites (`Ingest`, `Digest`, `Sync`, `AppModel`) keep calling argument-free. Both the
-  app's narration and the daemon's trust-gated extraction now honor the same choice.
+- **`PensievePaths.preferencesURL()`** — new; `supportDirectory()/preferences.json`.
+- **`resolveProviderKind(preference:foundationAvailable:) -> String`** — a **pure**
+  function holding the whole decision, fully unit-testable. Returns the existing kind
+  strings (`"foundationModels"` / `"claudeCLI"`):
+  - `.auto` → `foundationAvailable ? "foundationModels" : "claudeCLI"` (today's logic).
+  - `.foundationModels` → `"foundationModels"` if available, else **falls back to**
+    `"claudeCLI"` (transparent — the UI notes this).
+  - `.claudeCLI` → always `"claudeCLI"`.
+- **`makeDefaultLLMProvider(prefsURL: URL? = nil)`** and
+  **`defaultProviderKind(prefsURL: URL? = nil)`** — read the preference (from `prefsURL`
+  when provided, else the env override `PENSIEVE_PREFS` if set, else
+  `PensievePaths.preferencesURL()`) + run the existing `FoundationModelsProbe`, feed both
+  into `resolveProviderKind`, and construct the chosen provider.
+  - **The five existing call sites (`Ingest`, `Digest`, `Sync`, `AppModel`) keep calling
+    argument-free** — the defaulted param means no call-site change; real runs resolve
+    env-or-default.
+  - **Tests always pass an explicit `prefsURL`** (a temp file, or a nonexistent path to
+    force `.auto`), so tests never read `ProcessInfo.environment` and can't race on the
+    process-global env under Swift Testing's parallel execution. This is why env
+    resolution lives in the factory behind an injectable override, not inside
+    `Preferences`, and not as a bare `getenv` in the test path.
 
 **The trust gate is untouched.** This selects *which* provider runs behind the gate; the
 grounding/citation logic is unchanged.
 
+**Existing test that must change:** `DefaultProviderTests` (`Tests/PensieveKitTests/`)
+calls `defaultProviderKind()` and string-matches the result. Once that function consults
+a prefs file it would read the **real** `~/Library/Application Support/Pensieve/preferences.json`
+on this dogfooding machine and flip if the user has picked `claudeCLI`. Update the test to
+pass an explicit nonexistent `prefsURL` (forcing `.auto`), preserving its assertion. This
+is listed in the change set — the "existing tests stay green" promise depends on it.
+
 ## Component 2 — the two app-process toggles (app target only)
 
-**Hide Dock icon (menu-bar-only mode).** `@AppStorage("app.hideDockIcon")` bool (default
-false). Applied via `NSApp.setActivationPolicy(.accessory)` when true / `.regular` when
-false, done **at launch** in the existing `AppDelegate` *and* immediately on toggle. The
-`MenuBarExtra` already keeps the app alive with no dock icon, so this is a safe real
-"menu-bar-only" mode. Closes the `LSUIElement` item deferred from v0.2 — implemented at
-runtime via activation policy, so the static `Info.plist` default stays dock-visible.
-*Verify in smoke-launch:* toggling to `.accessory` while the main window is key leaves the
-window usable (AppKit re-associates; confirm).
+**Hide Dock icon (menu-bar-only mode).** Persisted under a **shared constant key** (e.g.
+`AppDefaults.hideDockIconKey`, alongside the existing `FocusFilterDefaults`/narration-cache
+keys) so the SettingsView `@AppStorage` binding and the AppDelegate reader can't drift.
+Two application points:
+- **At launch:** `AppDelegate` currently implements only `application(_:open:)` — this cut
+  **adds an `applicationDidFinishLaunching`** that reads `UserDefaults.standard.bool(forKey:)`
+  (an `NSObject` delegate can't use `@AppStorage`) and calls `NSApp.setActivationPolicy`.
+- **On toggle:** an `@AppStorage` write has no side effect by itself, so the toggle uses an
+  explicit `.onChange` that calls `NSApp.setActivationPolicy(.accessory / .regular)` **and**,
+  when switching back to `.regular`, `NSApp.activate(ignoringOtherApps: true)` +
+  `makeKeyAndOrderFront` so the window returns to the foreground (transitioning to
+  `.accessory` orders the app out of foreground; without the explicit re-activation the
+  main window can fail to front again). This mitigation is baked into the plan, not left to
+  smoke-test.
+
+The `MenuBarExtra` keeps the app alive with no dock icon; with the dock hidden and the
+window closed, the menu-bar "Open Pensieve" path (`DeepLinkNavigation` → `openWindow(id:
+"main")` + `NSApplication.shared.activate()`) reopens it — so the app is never unreachable.
+Closes the `LSUIElement` item deferred from v0.2 — done at runtime via activation policy,
+so the static `Info.plist` default stays dock-visible.
 
 **"Last Work Done" narration on/off.** `@AppStorage("app.narrationEnabled")` bool (default
-true). `DetailView`'s auto-narrate `.task` gates on it; when off, the narration section
-does not render or generate (and ⌘R does not force it while off). No PensieveKit change —
-narration is already best-effort and outside the trust gate.
+true). When off, `DetailView` must gate **both** the auto-narrate `.task` (no generation)
+**and** the cached-prose render (no showing a previously-cached recap), and ⌘R must not
+force narration while off. Accepted behavior (state it): because the `.task(id:)` key does
+not include this bool, flipping narration back **on** while a node is already open won't
+regenerate until node-change or ⌘R — fine for a toggle. No PensieveKit change — narration
+is already best-effort and outside the trust gate.
 
 ## Data flow
 
 ```
 Settings pane (Form)
   ├─ Provider Picker ──write──▶ Preferences.write(preferences.json)   [shared support dir]
-  │                              ▲
-  │        makeDefaultLLMProvider() reads ┤ (app process: next narration/⌘R)
-  │        makeDefaultLLMProvider() reads ┘ (daemon process: next `pensieve sync` run)
-  ├─ Hide Dock toggle ──write──▶ @AppStorage ──▶ NSApp.setActivationPolicy(...)
-  └─ Narration toggle ─write──▶ @AppStorage ──▶ DetailView .task gate
+  │                             │
+  │                             ├─▶ AppModel rebuilds its summaryBuilder ─▶ app: next narration/⌘R
+  │                             └─▶ makeDefaultLLMProvider() re-read ─────▶ daemon: next `pensieve sync`
+  ├─ Hide Dock toggle ──write──▶ @AppStorage ──.onChange──▶ NSApp.setActivationPolicy(...)
+  └─ Narration toggle ─write──▶ @AppStorage ──▶ DetailView .task + render gate
 ```
 
-The provider choice takes effect on the *next* provider construction in each process
-(next narration/⌘R in the app; next 300 s launchd cycle or manual `pensieve sync` in the
-daemon) — no live signalling needed for a single-user tool. This is stated as accepted
-behavior, not a bug.
+**Daemon side is automatic:** each `pensieve sync`/`ingest` is a fresh process that calls
+`makeDefaultLLMProvider()` anew, so it reads the file on its next 300 s launchd cycle (or a
+manual run).
+
+**App side is NOT automatic and must be wired:** `AppModel.summaryBuilder` is a
+`private lazy var` constructed once with `makeDefaultLLMProvider()` and holds its provider
+in a `let`, so it never re-reads the preference within a session. The Provider Picker's
+write must therefore **rebuild `summaryBuilder`** (reset the lazy var / re-init with a
+freshly resolved provider) so the change takes effect on the next narration — otherwise
+the in-app knob is a no-op until relaunch. This rebuild is the *real* reason `AppModel` is
+touched (not a `@Published` mirror of the preference). No live cross-process signalling is
+needed for a single-user tool.
 
 ## Error handling
 
@@ -130,14 +170,21 @@ behavior, not a bug.
 ## Testing
 
 - **PensieveKit unit tests** (the unit-testable surface):
-  - `Preferences` round-trips through a temp file (via `PENSIEVE_PREFS`).
+  - `Preferences.read`/`.write` round-trip through a **temp file URL passed explicitly**
+    (matching every other Kit test — no env-var use, so no parallel-test race).
   - Missing / unreadable / corrupt-JSON file all resolve to `.auto`.
   - `resolveProviderKind` covers every (preference × foundationAvailable) combination,
     including `.foundationModels` + unavailable → `.claudeCLI` fallback.
-  - Existing 211 tests stay green (no changes to the trust gate or ingestion).
+  - **`DefaultProviderTests` updated** to pass an explicit nonexistent `prefsURL` (forcing
+    `.auto`) so it doesn't read the live prefs file — its existing assertion is preserved.
+  - Existing tests stay green (no changes to the trust gate or ingestion); net +1 test file
+    (`PreferencesTests`) plus the one-line `DefaultProviderTests` change.
 - **App target** (no unit tests, per convention): `xcodebuild` build + non-blocking
   smoke-launch of the inner binary with throwaway
-  `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`/`PENSIEVE_PREFS`.
+  `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`/`PENSIEVE_PREFS`. Add a matching **disabled
+  `PENSIEVE_PREFS`** entry to the Xcode scheme's env vars (next to the existing disabled
+  `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`) so a sandboxed dev run doesn't read/write the LIVE
+  `preferences.json`.
 
 ### Human-verify carries (interactive; can't be asserted headlessly)
 
@@ -154,34 +201,62 @@ behavior, not a bug.
 
 ## Localization
 
-German localization of **all new chrome** into the String Catalog
-(`Localizable.xcstrings`): the Settings/section titles, the three knob labels, the
-provider-option display names, and the availability/fallback note. Reconciled **by hand**
-against the Swift literals (the known xcstrings gotcha: `xcodebuild` does not
-auto-populate the source catalog). Provider *names* ("Foundation Models", "claude -p") are
-proper nouns and stay as-is. No captured content is ever localized.
+German localization of **the new chrome the app actually owns** into the String Catalog
+(`Localizable.xcstrings`): the `Form` section headers, the three knob labels, and the
+availability/fallback note. **Not** the "Settings…" menu item or the Preferences window
+title — macOS supplies and localizes those from `CFBundleName` + locale; they are not ours
+to key. Reconciled **by hand** against the Swift literals (the known xcstrings gotcha:
+`xcodebuild` does not auto-populate the source catalog). Provider *names* ("Foundation
+Models", "claude -p") are proper nouns and stay as-is. The availability note is a **locale
+string driven off `FoundationModelsProbe.isAvailable()`** — do not surface
+`availabilityDescription()`'s raw English diagnostic text in the UI. No captured content is
+ever localized.
 
 ## Files (anticipated)
 
 **PensieveKit (new/changed):**
-- `Sources/PensieveKit/LLM/Preferences.swift` — `ProviderPreference`, `Preferences`,
-  `resolveProviderKind`, `ProviderKind`.
-- `Sources/PensieveKit/LLM/DefaultProvider.swift` — `makeDefaultLLMProvider` /
-  `defaultProviderKind` read the preference + probe through the resolver.
+- `Sources/PensieveKit/LLM/Preferences.swift` — new: `ProviderPreference` (the only new
+  type), `Preferences.read(from:)/.write(_:to:)`, `resolveProviderKind(…) -> String`.
+- `Sources/PensieveKit/LLM/DefaultProvider.swift` — `makeDefaultLLMProvider(prefsURL:)` /
+  `defaultProviderKind(prefsURL:)` resolve the prefs URL (explicit → `PENSIEVE_PREFS` →
+  default), read the preference + probe through the resolver.
+- `Sources/PensieveKit/Support/PensievePaths.swift` — add `preferencesURL()`.
 - `Tests/PensieveKitTests/PreferencesTests.swift` — new.
+- `Tests/PensieveKitTests/DefaultProviderTests.swift` — pass an explicit nonexistent
+  `prefsURL` (force `.auto`).
 
 **App target (new/changed):**
-- `Sources/PensieveApp/SettingsView.swift` — the `Settings` scene General pane (new).
+- `Sources/PensieveApp/SettingsView.swift` — new: the `Settings` scene General pane.
+  Reads/writes `Preferences` **directly** and calls `FoundationModelsProbe.isAvailable()`
+  directly for the availability note (no `@Published` mirror on `AppModel`); on a provider
+  write it asks `AppModel` to rebuild its summary builder.
 - `Sources/PensieveApp/PensieveApp.swift` — add the `Settings` scene to the `App` body.
-- `Sources/PensieveApp/AppDelegate.swift` — apply `hideDockIcon` activation policy at
-  launch.
-- `Sources/PensieveApp/DetailView.swift` — gate auto-narration on `narrationEnabled`.
-- `Sources/PensieveApp/AppModel.swift` — bridge the provider picker to `Preferences`
-  read/write (and expose Foundation Models availability for the UI).
-- `Sources/PensieveApp/Localizable.xcstrings` — new German keys.
+- `Sources/PensieveApp/AppDelegate.swift` — add `applicationDidFinishLaunching` reading the
+  shared `hideDockIcon` key and applying activation policy.
+- `Sources/PensieveApp/DetailView.swift` — gate auto-narration `.task` **and** cached-prose
+  render on `narrationEnabled`.
+- `Sources/PensieveApp/AppModel.swift` — the **one** change: a method to rebuild
+  `summaryBuilder` with a freshly resolved provider (called after a provider-pref write).
+- A shared defaults-key constant (e.g. `AppDefaults`) for `hideDockIcon` /
+  `narrationEnabled` so the `@AppStorage` bindings and the `AppDelegate` reader can't drift.
+- `Sources/PensieveApp/Localizable.xcstrings` — new German keys (Form labels + note only).
+- `project.yml` — add a disabled `PENSIEVE_PREFS` scheme env var (then `xcodegen generate`).
 
 ## Process
 
-Design-first → this spec → **adversarial spec review** (1–2 Opus subagents vs. the real
-code) → `writing-plans` → subagent-driven build in an isolated worktree (Sonnet
-impl+review per task; **Opus** whole-branch review) → `finishing-a-development-branch`.
+Design-first → this spec → **adversarial spec review** (done: two independent Opus
+subagents vs. the real code; no Critical, verdict "revise then plan") → `writing-plans` →
+subagent-driven build in an isolated worktree (Sonnet impl+review per task; **Opus**
+whole-branch review) → `finishing-a-development-branch`.
+
+**Adversarial review folded in (2026-07-08):** the lazy `summaryBuilder` no-op (app knob
+needs an explicit rebuild, diagram corrected); `DefaultProviderTests` would read the live
+prefs file (now takes an explicit `prefsURL`); `PENSIEVE_PREFS` moved out of PensieveKit
+into the injectable factory param (explicit-URL injection in tests, no parallel-test env
+race); the missing `applicationDidFinishLaunching` + explicit `NSApp.activate` on
+toggle-back; shared defaults-key constant (AppDelegate can't use `@AppStorage`); narration
+gate must cover cached render, not just generation; Settings menu/window titles are
+system-localized (not ours); availability note driven off `isAvailable()`, not raw
+`availabilityDescription()`; single `ProviderPreference` enum (no second `ProviderKind`);
+provider read/write in `SettingsView` directly (no `@Published` mirror); disabled
+`PENSIEVE_PREFS` scheme env var for isolated dev runs.
