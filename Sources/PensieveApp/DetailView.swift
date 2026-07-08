@@ -41,7 +41,12 @@ struct DetailView: View {
         // flag — and the section is omitted entirely when there's no genuine narration).
         if let lastWorkDone, loadedNodeID == node.id {
           section("Last Work Done") {
-            Text(lastWorkDone).prose()
+            VStack(alignment: .leading, spacing: 4) {
+              Text(lastWorkDone).prose()
+              Label("Generated summary", systemImage: "sparkles")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
           }
         } else if isNarrating, loadedNodeID == node.id {
           section("Last Work Done") {

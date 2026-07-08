@@ -332,6 +332,23 @@
         }
       }
     },
+    "Generated summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generated summary"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch erstellt"
+          }
+        }
+      }
+    },
     "Git Checkout": {
       "extractionState": "manual",
       "localizations": {
