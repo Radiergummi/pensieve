@@ -2,7 +2,7 @@
   "sourceLanguage": "en",
   "strings": {
     " · captured %@": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -13,10 +13,19 @@
       }
     },
     "%@": {
-      "localizations": {}
+      "extractionState": "manual",
+      "shouldTranslate": false
     },
     "%@ open": {
-      "localizations": {}
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ offen"
+          }
+        }
+      }
     },
     "%@ open · %@d dormant": {
       "localizations": {
@@ -25,11 +34,26 @@
             "state": "translated",
             "value": "%1$(items)@ open · %2$(days)@d dormant"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ offen · %@T ruhend"
+          }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "%@ since last visit": {
-      "localizations": {}
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ seit letztem Besuch"
+          }
+        }
+      }
     },
     "%@ · %@ · %@d ago": {
       "localizations": {
@@ -38,10 +62,18 @@
             "state": "translated",
             "value": "%1$@ · %2$@ · %3$(days)@d ago"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · vor %@ T"
+          }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "%lld Projects": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -52,72 +84,41 @@
       }
     },
     "%lld loose ends": {
+      "extractionState": "manual",
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld loose ends"
-          }
-        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld lose Enden"
           }
-        }
-      }
-    },
-    "%lld open": {
-      "extractionState": "stale",
-      "localizations": {
-        "de": {
+        },
+        "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld offen"
-          }
-        }
-      }
-    },
-    "%lld open · %lldd dormant": {
-      "extractionState": "stale",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld offen · %lldT ruhend"
-          }
-        }
-      }
-    },
-    "%lld since last visit": {
-      "extractionState": "stale",
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld seit letztem Besuch"
+            "value": "%lld loose ends"
           }
         }
       }
     },
     "%lld strands": {
+      "extractionState": "manual",
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld strands"
-          }
-        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld Stränge"
           }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld strands"
+          }
         }
       }
     },
     "Active": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -128,7 +129,7 @@
       }
     },
     "Activity": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -139,7 +140,7 @@
       }
     },
     "Archived": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -150,7 +151,7 @@
       }
     },
     "Cancel": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -161,7 +162,7 @@
       }
     },
     "Change Type": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -172,7 +173,7 @@
       }
     },
     "Claude Code Session": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -190,10 +191,11 @@
             "value": "Farbe"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Concept": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -204,6 +206,7 @@
       }
     },
     "Context": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -214,7 +217,7 @@
       }
     },
     "Delete": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -225,12 +228,12 @@
       }
     },
     "Delete “%@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
-            "state": "needs_review",
-            "value": "„%(node)@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+            "state": "translated",
+            "value": "„%@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
           }
         },
         "en": {
@@ -242,7 +245,7 @@
       }
     },
     "Delete “%@”? Its captured activity and loose ends are removed. This can’t be undone.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -253,7 +256,7 @@
       }
     },
     "Delete…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -264,7 +267,7 @@
       }
     },
     "Domain": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -275,7 +278,7 @@
       }
     },
     "Dormant": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -286,7 +289,7 @@
       }
     },
     "Edit Node": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -297,7 +300,7 @@
       }
     },
     "Edit…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -308,6 +311,7 @@
       }
     },
     "Emoji": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -318,6 +322,7 @@
       }
     },
     "Filter Pensieve by Context": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -328,7 +333,7 @@
       }
     },
     "Git Checkout": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -339,7 +344,7 @@
       }
     },
     "Git Commit": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -350,7 +355,7 @@
       }
     },
     "Go": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -361,7 +366,7 @@
       }
     },
     "Idle": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -372,7 +377,7 @@
       }
     },
     "Initiative": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -383,7 +388,7 @@
       }
     },
     "Inspector": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -394,7 +399,7 @@
       }
     },
     "Jump to…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -405,7 +410,7 @@
       }
     },
     "Last Work Done": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -416,7 +421,7 @@
       }
     },
     "Loose Ends": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -427,7 +432,7 @@
       }
     },
     "Merge": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -438,7 +443,7 @@
       }
     },
     "Merge into…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -449,7 +454,7 @@
       }
     },
     "Merge “%@” into “%@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -460,7 +465,7 @@
       }
     },
     "Move to…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -471,7 +476,7 @@
       }
     },
     "Moved": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -482,7 +487,7 @@
       }
     },
     "Muted": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -493,7 +498,7 @@
       }
     },
     "Name": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -504,7 +509,7 @@
       }
     },
     "New Child": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -515,7 +520,7 @@
       }
     },
     "New Child…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -526,7 +531,7 @@
       }
     },
     "New Node": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -544,7 +549,8 @@
             "value": "Noch keine erfasste Aktivität."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "No captured activity.": {
       "localizations": {
@@ -554,10 +560,11 @@
             "value": "Keine erfasste Aktivität."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "No project": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -568,17 +575,18 @@
       }
     },
     "None open": {
+      "extractionState": "manual",
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "None open"
-          }
-        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Keine offen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None open"
           }
         }
       }
@@ -591,10 +599,11 @@
             "value": "Keine offen."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Not set up": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -605,7 +614,7 @@
       }
     },
     "Nothing here": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -623,10 +632,11 @@
             "value": "Nichts in Warteschlange"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Open Pensieve": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -637,7 +647,7 @@
       }
     },
     "Open in New Window": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -648,6 +658,7 @@
       }
     },
     "Pensieve Context": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -665,7 +676,8 @@
             "value": "Persönlich"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Pick a loose end to see its source.": {
       "localizations": {
@@ -675,10 +687,11 @@
             "value": "Ein loses Ende auswählen, um die Quelle zu sehen."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Project": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -689,7 +702,7 @@
       }
     },
     "Project unavailable": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -700,7 +713,7 @@
       }
     },
     "Projects": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -718,10 +731,11 @@
             "value": "Herkunft"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Quick Jump…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -732,7 +746,7 @@
       }
     },
     "Quiet": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -743,7 +757,7 @@
       }
     },
     "Quit": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -754,7 +768,7 @@
       }
     },
     "Recall": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -765,7 +779,7 @@
       }
     },
     "Recent Activity": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -776,7 +790,7 @@
       }
     },
     "Recently Active": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -787,7 +801,7 @@
       }
     },
     "Refresh": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -798,7 +812,7 @@
       }
     },
     "Rename": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -809,7 +823,7 @@
       }
     },
     "Save": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -820,6 +834,7 @@
       }
     },
     "Search": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -830,6 +845,7 @@
       }
     },
     "Search symbols": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -840,7 +856,7 @@
       }
     },
     "Select a loose end": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -851,7 +867,7 @@
       }
     },
     "Select a project": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -862,22 +878,24 @@
       }
     },
     "Share Recall…": {
+      "extractionState": "manual",
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Share Recall…"
-          }
-        },
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Rückblick teilen…"
           }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Recall…"
+          }
         }
       }
     },
     "Show All": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -888,6 +906,7 @@
       }
     },
     "Show Personal": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -898,6 +917,7 @@
       }
     },
     "Show Work": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -915,10 +935,11 @@
             "value": "Seit %@"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Smart Lists": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -929,7 +950,7 @@
       }
     },
     "Strand": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -947,7 +968,8 @@
             "value": "Umgebender Kontext nicht verfügbar (Transkript geändert oder entfernt)."
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Symbol": {
       "localizations": {
@@ -957,10 +979,11 @@
             "value": "Symbol"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Task": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -971,7 +994,7 @@
       }
     },
     "Top level": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -982,7 +1005,7 @@
       }
     },
     "Topic": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -993,7 +1016,7 @@
       }
     },
     "Type": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1011,7 +1034,8 @@
             "value": "Nicht festgelegt"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "What's Next": {
       "localizations": {
@@ -1021,7 +1045,8 @@
             "value": "Als Nächstes"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "Work": {
       "localizations": {
@@ -1031,10 +1056,11 @@
             "value": "Arbeit"
           }
         }
-      }
+      },
+      "extractionState": "manual"
     },
     "captured": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1045,7 +1071,7 @@
       }
     },
     "capturing": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1056,21 +1082,18 @@
       }
     },
     "dormant %@d": {
-      "localizations": {}
-    },
-    "dormant %lldd": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "ruhend %lldT"
+            "value": "ruhend %@T"
           }
         }
       }
     },
     "idle": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1081,7 +1104,7 @@
       }
     },
     "not set up": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1092,7 +1115,8 @@
       }
     },
     "·": {
-      "localizations": {}
+      "extractionState": "manual",
+      "shouldTranslate": false
     }
   },
   "version": "1.0"
