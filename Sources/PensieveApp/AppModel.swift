@@ -44,6 +44,13 @@ enum SidebarSelection: Hashable {
   case node(UUID)
 }
 
+/// What the middle column shows for the current sidebar selection. `.looseEndsOf` carries the node id
+/// so the view loads its loose ends off-`body` (via `.task`), never in a `body` DB query.
+enum MiddleKind: Equatable {
+  case nodes([Node])
+  case looseEndsOf(UUID)
+}
+
 /// A New/Edit modal request. Identifiable so it drives `.sheet(item:)`.
 struct NodeEditRequest: Identifiable {
   enum Mode { case new(parent: UUID?); case edit(Node) }
@@ -290,6 +297,55 @@ final class AppModel: ObservableObject {
     case nil:
       return []
     }
+  }
+
+  /// The middle column's content for the current `sidebarSelection`. Pure/in-memory (children reads
+  /// `allNodes`); the leaf case defers its loose-ends DB read to the view's `.task`.
+  func middleKind() -> MiddleKind {
+    switch sidebarSelection {
+    case .briefing:
+      return .nodes(briefingCards.map(\.node))
+    case .smartList(let kind):
+      return .nodes(lists[keyPath: kind.itemsKeyPath].map(\.project))
+    case .node(let id):
+      let kids = children(of: id)
+      return kids.isEmpty ? .looseEndsOf(id) : .nodes(kids)
+    case nil:
+      return .nodes([])
+    }
+  }
+
+  /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
+  func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
+
+  /// A middle-column node tap. In tree mode this DRILLS — the tapped node becomes the focused node, so
+  /// the middle re-populates with its contents; from a smart list / briefing it only sets the detail
+  /// node, leaving the triage list in place.
+  func selectMiddleNode(_ id: UUID) {
+    if case .node = sidebarSelection {
+      sidebarSelection = .node(id)
+    }
+    selectedNodeID = id
+  }
+
+  /// A middle-column loose-end tap: point the ⌘⌥I inspector at it. Visibility stays user-controlled
+  /// (⌘⌥I), matching the detail recall's rows.
+  func selectMiddleLooseEnd(_ id: UUID) { inspectedLooseEndID = id }
+
+  /// The middle column's title: the focused node's name in tree mode, else the app name. The app name
+  /// is a proper noun — NOT localized.
+  var middleTitle: String {
+    if case .node(let id) = sidebarSelection, let n = node(id) { return n.name }
+    return "Pensieve"
+  }
+
+  /// The detail recall shows its Loose Ends section EXCEPT when the middle is already showing this same
+  /// node's loose ends (the focused leaf) — the one-home rule (no duplication).
+  var detailShowsLooseEnds: Bool {
+    if case .node(let fid) = sidebarSelection, selectedNodeID == fid, children(of: fid).isEmpty {
+      return false
+    }
+    return true
   }
 
   /// Nodes whose name contains `query` (case-insensitive); empty query returns all. For ⌘K.
