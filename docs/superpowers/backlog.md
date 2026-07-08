@@ -103,6 +103,25 @@ domain-level recursive rollups, cross-cutting soft references (`node_links`) —
 forks-as-first-class builds on, statistical theme discovery (`NLEmbedding`), proactive project
 suggestion, and native localization. These deepen existing surfaces rather than standing alone.
 
+### ⭐ App Settings surface (raised priority — 2026-07-08)
+
+**Requested:** 2026-07-08. The app has **no Settings/Preferences window** today, and a growing set of
+features are blocked on one. Build a first-party SwiftUI `Settings` scene (`SettingsLink` / the standard
+⌘, Preferences window) hosting the config knobs, persisted where each belongs (UI prefs → `UserDefaults`;
+anything sync-bound → the canonical store). **This is now a near-term pillar, not a someday-item**, because
+multiple threads converge on it:
+- **LLM provider selection** — choose which provider powers intelligence (on-device Foundation Models vs
+  `claude -p` vs, eventually, **an API-connected cloud provider with a user-entered key**). The
+  provider-agnostic `LLMProvider` protocol already exists; this exposes the choice + stores credentials
+  (Keychain for API keys). Explicitly requested as the motivating case.
+- **`LSUIElement` / hide-dock toggle** (deferred from v0.2 — needs a Settings host).
+- **Organizing-writes error surfacing** (code-quality carry — needs an app error-presentation mechanism;
+  pairs with the same surface).
+- Likely more knobs as they arise (capture/scan folders, daemon interval, narration on/off, etc.).
+
+*Trigger: near-term. The LLM-provider work (esp. cloud/API providers) forces it first; fold the deferred
+toggles in when built.* Own brainstorm→spec.
+
 ### Platform extension points (candidate surfaces) — a menu, not a sequence
 
 The macOS / Apple-ecosystem surfaces Pensieve could hook into long-term. **A candidate menu to draw from,
