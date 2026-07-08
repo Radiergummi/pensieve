@@ -163,6 +163,35 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## Widgets — DEFERRED (2026-07-08): blocked on App Groups needing a paid Team ID
+
+Attempted to pick up Widgets (the first *second process*). Hit a hard prerequisite during brainstorming and
+deferred with the user's agreement.
+
+**The blocker.** A macOS **WidgetKit extension is always sandboxed** — it cannot read the canonical store at
+`~/Library/Application Support/Pensieve/` (`PensievePaths.supportDirectory()`), which every current writer (git
+hooks via CLI, launchd daemon, app) and reader uses. The only way to share the store with the extension is an
+**App Group container** (`~/Library/Group Containers/<TeamID>.<group>/`), which on macOS requires the app to be
+**signed with a Team ID** and the `com.apple.security.application-groups` entitlement **provisioned**.
+
+**Why blocked now.** The app is **ad-hoc signed** (`CODE_SIGN_IDENTITY: "-"`, no `DEVELOPMENT_TEAM`), which has
+no Team ID. The only signing artifacts on the machine are corporate MDM/Configurator ones (an "Apple
+Configurator: Matchory GmbH" identity; a Microsoft *Intune MDM Agent* profile, team `UBF8T346G9`) — none carry
+App Groups. The user has a **free Personal Team** available (via Apple ID), but **free personal teams do not
+support the App Groups capability** (Apple gates it as paid; Xcode blocks adding it). ~85% confident this is a
+hard block for a personal team — a spike would confirm, but the odds favor failure.
+
+**Revisit trigger.** A **paid Apple Developer membership** (personal enrollment, or an acceptable paid org team)
+is in hand. Then the first move is switching the app + a new widget target to Team-ID signing and moving the
+canonical store into an App Group container — a shared `PensievePaths.supportDirectory()` resolution that ALL
+writers (hooks/daemon/CLI/app) adopt, not just the app. **This same gate blocks CloudKit** (pillar #4) and any
+future extension; resolving the paid-membership + App-Group foundation unblocks the whole extension family at
+once. If a spike is ever run: sign with the team, add the App Group entitlement to both targets, and confirm
+`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` resolves non-nil in BOTH the app and the
+widget, and that the widget can read a file the app wrote there — that go/no-go gates everything else.
+
+---
+
 ## Code-quality review carries — 2026-07-07 (deferred / design questions)
 
 From a full code-quality + idiomatic-Swift review of the whole tree. Most findings were fixed in
