@@ -84,9 +84,11 @@ public struct ExtractionRunner {
         let salient = await SalienceClassifier(provider: provider).filter(verified, messages: session.messages)
 
         // Best-effort session recap for narration (Part B). `summarize` is non-throwing (nil on
-        // failure), computed BEFORE the synchronous db.write and NEVER inside this session's
-        // do/catch — a nil/absent summary must not skip the loose-end insert or the watermark
-        // advance. Summarize the WHOLE session (stable per-session summary), not just the slice.
+        // failure), computed BEFORE the synchronous db.write. This line is lexically inside the
+        // per-session do/catch, but a summary failure can't reach the catch precisely BECAUSE
+        // `summarize` is non-throwing — a nil/absent summary must not skip the loose-end insert or
+        // the watermark advance. DO NOT add `try` here: it would let a failure abort the session
+        // and break that invariant. Summarize the WHOLE session (stable per-session summary).
         let work = await SessionSummarizer(provider: provider).summarize(session.messages)
 
         let stamp = now()
