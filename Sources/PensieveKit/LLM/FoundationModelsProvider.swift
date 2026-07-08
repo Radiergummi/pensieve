@@ -57,6 +57,18 @@ public struct FoundationModelsProvider: LLMProvider {
     }
   }
 
+  public func classifyNonSalientIndices(prompt: String) async throws -> [Int] {
+    let session = LanguageModelSession()
+    do {
+      let content = try await session.respond(to: prompt, schema: Self.nonSalientIndicesSchema()).content
+      guard case .structure(let root, _) = content.kind,
+            case .array(let items)? = root["indices"]?.kind else { return [] }
+      return items.compactMap { if case .number(let n) = $0.kind { return Int(n) } else { return nil } }
+    } catch {
+      throw LLMError.providerFailed("FoundationModels: \(error)")
+    }
+  }
+
   /// `{ candidates: [{ text, quote, messageIndex }] }`. Built per call (cheap next to model
   /// inference) so there's no shared static and construction errors surface as thrown, not traps.
   private static func candidateListSchema() throws -> GenerationSchema {
@@ -84,6 +96,16 @@ public struct FoundationModelsProvider: LLMProvider {
     let root = DynamicGenerationSchema(name: "GenuineIndices", properties: [
       .init(name: "indices",
             description: "The [n] indices of messages that are the developer's OWN conversational intent (a request, question, decision, or note); empty when none qualify",
+            schema: DynamicGenerationSchema(arrayOf: DynamicGenerationSchema(type: Int.self))),
+    ])
+    return try GenerationSchema(root: root, dependencies: [])
+  }
+
+  /// `{ indices: [Int] }` — the DROP set for salience.
+  private static func nonSalientIndicesSchema() throws -> GenerationSchema {
+    let root = DynamicGenerationSchema(name: "NonSalientIndices", properties: [
+      .init(name: "indices",
+            description: "The [n] indices of items that are clearly in-the-moment requests the assistant simply carried out — NOT deferred/parked/decision work left open. These will be dropped. Empty when every item is a genuine loose end; when unsure about an item, do NOT include it.",
             schema: DynamicGenerationSchema(arrayOf: DynamicGenerationSchema(type: Int.self))),
     ])
     return try GenerationSchema(root: root, dependencies: [])

@@ -20,6 +20,13 @@ public protocol LLMProvider: Sendable {
   /// parseable index array (so the caller can fail open); the on-device provider overrides
   /// it with guided generation, which returns a real (possibly empty) array.
   func classifyGenuineIndices(prompt: String) async throws -> [Int]
+
+  /// The `[n]` indices judged NOT loose ends (in-the-moment requests) for the given salience
+  /// prompt — the DROP set. The default decodes JSON from `complete` and **throws** when the
+  /// response is not a parseable index array (so the caller fails open → keeps all); the
+  /// on-device provider overrides it with guided generation returning a real (possibly empty)
+  /// array. An empty array means "drop nothing" (keep all) — the safe, keep-on-low-confidence default.
+  func classifyNonSalientIndices(prompt: String) async throws -> [Int]
 }
 
 public extension LLMProvider {
@@ -30,6 +37,13 @@ public extension LLMProvider {
   func classifyGenuineIndices(prompt: String) async throws -> [Int] {
     guard let indices = IntentClassifier.decodeIndices(try await complete(prompt: prompt)) else {
       throw LLMError.providerFailed("classifier response was not a parseable index array")
+    }
+    return Array(indices)
+  }
+
+  func classifyNonSalientIndices(prompt: String) async throws -> [Int] {
+    guard let indices = IntentClassifier.decodeIndices(try await complete(prompt: prompt)) else {
+      throw LLMError.providerFailed("salience response was not a parseable index array")
     }
     return Array(indices)
   }
