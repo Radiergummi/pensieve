@@ -1,12 +1,44 @@
-# CONTINUE — session handoff (2026-07-07)
+# CONTINUE — session handoff (2026-07-08)
 
 Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (project rules), then this.
 
 ## Where things stand
 
-Everything below is **on `main`** (HEAD `171c0e6`) and the tree is clean. Test suite: **204 tests**, run with
+Everything below is **on `main`** (HEAD `d2df86b`) and the tree is clean. Test suite: **205 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
+
+**Latest (this session): three-pane IA rework — DONE & on `main`.** Killed the sidebar→middle→detail
+self-duplication (backlog "App UX & IA polish" item 5). The middle pane now lists a **focused node's children**
+(or, for a leaf, its **loose ends**) instead of the node-plus-children; the detail always shows the focused
+node's recall; clicking a child **drills** into it; **Smart-List/Briefing lists stay** on click (triage
+preserved); loose-end provenance stays in the single **⌘⌥I inspector** (kept — reached identically from the
+middle worklist and the detail recall's rows); the detail drops its Loose Ends section only for the focused
+leaf (**one-home rule**). App-target rewiring (`AppModel.middleKind`/`selectMiddleNode`/`selectMiddleLooseEnd`/
+`detailShowsLooseEnds`, `ContentListView`, `RootView`, a shared `LooseEndRow`, `DetailView.showsLooseEnds`) over
+one tested Kit helper (`NodeForest.children`); no trust-gate/capture/schema changes. Subagent-driven (5 tasks:
+Sonnet impl+task-review each; **Opus** whole-branch = READY-TO-MERGE, 0 Critical/Important). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-08-three-pane-ia-rework*`.
+- **Merge wrinkle (resolved):** a **concurrent uncommitted Xcode reformat of `Localizable.xcstrings`** appeared
+  on the `main` checkout mid-session (named format args, state flips, dropped `%lld Projects`). Preserved it via
+  a union `chore(l10n)` (`d2df86b`): the reformat is the base, the 3 new IA keys added
+  (`%lld strands`→Stränge, `%lld loose ends`→lose Enden, `None open`→Keine offen), `%lld Projects`→Projekte
+  restored (the feature's middle subtitle uses it). No German lost either side; verified in the built `de.lproj`.
+- **Deferred Minors** (from reviews, non-blocking): a shared "is-focused-leaf" predicate could replace the small
+  duplication between `middleKind` and `detailShowsLooseEnds`; the middle's empty-space click no longer deselects
+  a row (navigator model — likely fine); `ContentListView.looseEnds` has no `loadedNodeID` guard (sub-frame
+  stale possible on a fast leaf→leaf switch, self-correcting because the read is synchronous — matches
+  `DetailView`'s existing pattern).
+- **Human-verify carries** (need the built app + real store + plain `open`; can't be asserted headlessly): a
+  strand-less project no longer triple-appears (middle shows its loose ends, detail recall omits the duplicate
+  section); a project with strands lists strands in the middle, clicking one drills to its loose ends + recall;
+  What's Next/Dormant/Recently Active + Briefing cards keep the list on click; a loose-end click in the middle
+  worklist and in a smart-list detail recall drive the **same** ⌘⌥I inspector; ⌘⌥N recall window still shows a
+  node's loose ends; middle title reads the focused node name with "N strands"/"N loose ends" (Smart-List/
+  Briefing keep "Pensieve"/"N Projects"); `pensieve list` matches after organizing writes; German in situ
+  (`-AppleLanguages '(de)'`). Build: `xcodegen generate && xcodebuild -project Pensieve.xcodeproj -scheme
+  Pensieve -configuration Debug -derivedDataPath ./.build-xcode build`, then `open
+  ./.build-xcode/Build/Products/Debug/Pensieve.app`.
 
 **Latest (this session): Focus filters (Work / Personal context) — DONE & on `main`.** The first
 `SetFocusFilterIntent` surface: when a macOS Focus is active, Pensieve restricts the main window + menu-bar popover +

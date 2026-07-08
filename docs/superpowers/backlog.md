@@ -236,14 +236,23 @@ Two Opus whole-branch reviews → READY-TO-MERGE. **Item 5 (three-pane IA rework
    timeline summaries) uses a too-small font with poor line height and no measure control. A typographic pass:
    larger body size, generous line spacing, a readable max-width measure, consistent hierarchy. *Trigger: the
    polish pass.*
-5. **Three-pane IA — middle pane should show a node's children, not the node itself (own brainstorm→spec).**
-   Today a tree pick shows the node **plus** its child strands in the middle list AND the node's recall on the
-   right — so a strand-less project appears three times (sidebar → middle → detail). Rework: the **middle pane
-   lists the node's children** (strands), not the node itself; a node **without** children (e.g. a project whose
-   real content is its work) shows its **loose ends** in the middle pane instead; the **detail pane** then shows
-   the recall of whatever the middle pane selects. Net: a project's loose ends move into the middle column
-   (reads more naturally) and the self-duplication disappears. Touches `AppModel.nodesForSelection` + detail
-   routing and is a genuine information-architecture decision → **brainstorm→spec before building.**
+5. **✅ Three-pane IA rework — DONE (2026-07-08, merged to `main` `d2df86b`).** The middle pane now lists a
+   focused node's **children** (or, for a leaf, its **loose ends**) instead of the node-plus-children — killing
+   the sidebar→middle→detail self-duplication. The detail always shows the focused node's recall; clicking a
+   child **drills**; Smart-List/Briefing lists **stay** on click (triage preserved); loose-end provenance stays
+   in the single **⌘⌥I inspector** (kept, not retired), reached identically from the middle worklist and the
+   detail recall's rows; the detail drops its Loose Ends section only for the focused leaf (**one-home rule**).
+   App-target rewiring (`AppModel.middleKind`/`selectMiddle*`/`detailShowsLooseEnds`, `ContentListView`,
+   `RootView`, a shared `LooseEndRow`, `DetailView.showsLooseEnds`) over one tested Kit helper
+   (`NodeForest.children`). Subagent-driven (5 tasks, Sonnet impl+task-review each; **Opus** whole-branch =
+   READY-TO-MERGE, 0 Critical/Important; 3 non-blocking Minors). **205 tests** (+1 Kit). Spec/plan:
+   `{specs,plans}/2026-07-08-three-pane-ia-rework*`. **Deferred Minors** (non-blocking): shared "is-focused-leaf"
+   predicate (duplicated between `middleKind`/`detailShowsLooseEnds`); middle empty-space click no longer
+   deselects (navigator model); `ContentListView.looseEnds` has no `loadedNodeID` guard (sub-frame stale on fast
+   leaf-switch, self-correcting — matches `DetailView`). **Merge wrinkle (resolved):** a concurrent uncommitted
+   Xcode reformat of `Localizable.xcstrings` on `main` was preserved via a union `chore(l10n)` (`d2df86b`) — the
+   reformat is the base, the 3 new keys added, `%lld Projects` restored; no German lost. **Human-verify carries**
+   below.
 
 ---
 
