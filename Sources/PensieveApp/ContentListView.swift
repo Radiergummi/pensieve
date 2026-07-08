@@ -4,10 +4,36 @@ import PensieveKit
 
 struct ContentListView: View {
   @ObservedObject var model: AppModel
+  // A focused leaf's loose ends, loaded off-`body` via `.task` (never a DB query in `body`).
+  @State private var looseEnds: [LooseEndView] = []
 
   var body: some View {
-    let items = model.nodesForSelection()
-    List(items, selection: $model.selectedNodeID) { node in
+    let kind = model.middleKind()
+    Group {
+      switch kind {
+      case .nodes(let items):
+        nodeList(items)
+      case .looseEndsOf:
+        looseEndList()
+      }
+    }
+    .navigationTitle(model.middleTitle)
+    .navigationSubtitle(subtitle(for: kind))
+    // Load the focused leaf's loose ends. Re-runs on selection change AND ⌘R (refreshToken),
+    // mirroring DetailView/InspectorView. Non-leaf kinds clear the list.
+    .task(id: MiddleLoadKey(kind: kind, token: model.refreshToken)) {
+      if case .looseEndsOf(let id) = kind {
+        looseEnds = model.looseEnds(forNode: id)
+      } else {
+        looseEnds = []
+      }
+    }
+  }
+
+  @ViewBuilder private func nodeList(_ items: [Node]) -> some View {
+    List(items, selection: Binding(
+      get: { model.selectedNodeID },
+      set: { if let id = $0 { model.selectMiddleNode(id) } })) { node in
       HStack(spacing: 10) {
         NodeBadge(node: node, size: 26)
         VStack(alignment: .leading, spacing: 2) {
@@ -19,11 +45,42 @@ struct ContentListView: View {
       .contextMenu { NodeContextMenu(model: model, node: node) }
     }
     .overlay {
-      if items.isEmpty {
-        ContentUnavailableView("Nothing here", systemImage: "tray")
+      if items.isEmpty { ContentUnavailableView("Nothing here", systemImage: "tray") }
+    }
+  }
+
+  @ViewBuilder private func looseEndList() -> some View {
+    List {
+      ForEach(looseEnds, id: \.looseEnd.id) { view in
+        LooseEndRow(view: view) { model.selectMiddleLooseEnd(view.looseEnd.id) }
       }
     }
-    .navigationTitle("Pensieve")
-    .navigationSubtitle("\(model.projectCount) Projects")
+    .overlay {
+      if looseEnds.isEmpty { ContentUnavailableView("None open", systemImage: "checkmark.circle") }
+    }
+  }
+
+  private func subtitle(for kind: MiddleKind) -> String {
+    switch kind {
+    case .nodes(let items):
+      if case .node = model.sidebarSelection { return String(localized: "\(items.count) strands") }
+      return String(localized: "\(model.projectCount) Projects")
+    case .looseEndsOf:
+      return String(localized: "\(looseEnds.count) loose ends")
+    }
+  }
+}
+
+/// A Hashable `.task` id for the middle. Derived from `MiddleKind` WITHOUT hashing the node array —
+/// only the leaf id + refresh token matter for reloading loose ends.
+private struct MiddleLoadKey: Hashable {
+  let nodeID: UUID?
+  let token: Int
+  init(kind: MiddleKind, token: Int) {
+    switch kind {
+    case .looseEndsOf(let id): nodeID = id
+    case .nodes: nodeID = nil
+    }
+    self.token = token
   }
 }

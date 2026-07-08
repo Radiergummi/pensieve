@@ -282,23 +282,6 @@ final class AppModel: ObservableObject {
   /// Count of top-level project nodes, for the content-column header.
   var projectCount: Int { allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project }.count }
 
-  /// The middle-column list for the current sidebar selection.
-  func nodesForSelection() -> [Node] {
-    switch sidebarSelection {
-    case .briefing:
-      return briefingCards.map(\.node)
-    case .smartList(let kind):
-      return lists[keyPath: kind.itemsKeyPath].map(\.project)
-    case .node(let id):
-      // A tree pick: show that node plus its direct child strands.
-      guard let selected = node(id) else { return [] }
-      let children = allNodes.filter { $0.parentID == id }.sorted { $0.name < $1.name }
-      return [selected] + children
-    case nil:
-      return []
-    }
-  }
-
   /// The middle column's content for the current `sidebarSelection`. Pure/in-memory (children reads
   /// `allNodes`); the leaf case defers its loose-ends DB read to the view's `.task`.
   func middleKind() -> MiddleKind {
