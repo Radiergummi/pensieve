@@ -79,6 +79,9 @@ public struct ExtractionRunner {
         let candidates = CandidateFilter.strip(
           try await LooseEndExtractor(provider: provider).extract(from: slice))
         let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
+        // Salience gate: drop verified-but-in-the-moment requests (keeps deferred/decision work).
+        // Runs on real, already-verified quotes; the verbatim gate is untouched.
+        let salient = await SalienceClassifier(provider: provider).filter(verified, messages: session.messages)
 
         // Best-effort session recap for narration (Part B). `summarize` is non-throwing (nil on
         // failure), computed BEFORE the synchronous db.write and NEVER inside this session's
@@ -94,10 +97,10 @@ public struct ExtractionRunner {
           // transcript, and a user may restate a quote verbatim) must not resurrect a
           // RESOLVED loose end the user already dismissed. Skip the scan when there is
           // nothing to insert.
-          if !verified.isEmpty {
+          if !salient.isEmpty {
             let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
             var seen = Set(existing.map { normalizeWhitespace($0.quote) })
-            for v in verified {
+            for v in salient {
               let key = normalizeWhitespace(v.quote)
               if seen.contains(key) { continue }   // within- and cross-session dedup
               seen.insert(key)
