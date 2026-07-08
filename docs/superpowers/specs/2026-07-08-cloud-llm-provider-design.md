@@ -143,7 +143,7 @@ public struct CloudLLMProvider: LLMProvider {
 
   // Settings uses this to populate the picker AND validate the key.
   public static func listModels(config:apiKey:transport:) async throws -> [String] {
-    // GET {baseURL}/v1/models -> parseModelList -> [id]
+    // GET buildModelsRequest(...).url  (per-flavor path, see below) -> parseModelList -> [id]
   }
 }
 ```
@@ -152,7 +152,18 @@ Conforms to `LLMProvider` with **only** `complete` — the structured `extractCa
 `classify*` methods inherit the protocol's JSON-decode defaults (cloud is app/narration-only, so
 they're never exercised, but the conformance is free and correct).
 
-**Pure helpers (unit-tested, no I/O):**
+**Path convention (avoid double-`/v1`).** Each flavor's `baseURL` default already encodes where the
+version segment lives — Anthropic `https://api.anthropic.com` (no `/v1`), OpenAI-compatible
+`https://api.openai.com/v1` (with `/v1`). A single per-flavor **suffix** is appended to the raw
+`baseURL`; the builders **never** synthesize or strip a `/v1`, so a user-edited gateway base is passed
+through verbatim:
+
+| Flavor | completion suffix | models suffix |
+|---|---|---|
+| `.anthropic` | `/v1/messages` | `/v1/models` |
+| `.openAICompatible` | `/chat/completions` | `/models` |
+
+**Pure helpers (unit-tested, no I/O), all headers set per flavor (see auth below):**
 - `buildCompletionRequest(config:apiKey:prompt:) throws -> URLRequest`
   - Anthropic: `POST {baseURL}/v1/messages`; headers `x-api-key: <key>`,
     `anthropic-version: 2023-06-01`, `content-type: application/json`; body
@@ -164,12 +175,14 @@ they're never exercised, but the conformance is free and correct).
   - Anthropic: `content[0].text`. OpenAI: `choices[0].message.content`. Missing → `providerFailed`.
 - `parseModelList(_ data:) throws -> [String]`
   - Both shapes expose `{ "data": [ { "id": … } ] }`; return the `id`s (sorted). Missing → throw.
-- `buildModelsRequest(config:apiKey:) -> URLRequest` — `GET {baseURL}/v1/models` (or `/models`
-  under an OpenAI base already ending in `/v1`), same auth headers as the flavor.
+- `buildModelsRequest(config:apiKey:) -> URLRequest` — `GET {baseURL}{models-suffix}` per the table
+  above, carrying the **same auth headers as the flavor's completion request** (Anthropic also sends
+  `x-api-key` **and** `anthropic-version`; OpenAI sends `Authorization: Bearer`).
 
-Injected `transport` defaults to a small `URLSession.shared`-backed closure that maps to
-`(Data, HTTPURLResponse)`. Tests pass a fake returning canned `(Data, HTTPURLResponse)` for success,
-non-2xx, and malformed-body cases. **No real network in tests.**
+Injected `transport` defaults to a small `URLSession.shared.data(for:)`-backed closure that
+**guard-casts** the returned `URLResponse` to `HTTPURLResponse` (throwing `providerFailed` if not —
+never a force-cast). Tests pass a fake returning canned `(Data, HTTPURLResponse)` for success,
+non-2xx (asserting the error snippet), and malformed-body cases. **No real network in tests.**
 
 ### 3. Factory & resolver (PensieveKit `DefaultProvider.swift`)
 
@@ -244,7 +257,8 @@ reveals a cloud subsection:
   → spinner while loading → populates the picker (selection persists to `cloudModel`), or an inline
   `Label(..., systemImage: "exclamationmark.triangle")` error caption on failure (bad key / network /
   parse). If the user hasn't fetched, the picker still shows the persisted `cloudModel` (free choice
-  preserved).
+  preserved); an empty `cloudModel` ⇒ `CloudConfig.isUsable == false` ⇒ not configured ⇒ narration
+  falls back to local (no error state — the cloud option is simply inert until a model is set).
 - Non-secret fields are `@AppStorage`. Any change calls `model.rebuildSummaryBuilder()`.
 
 **AppModel:**
@@ -252,9 +266,12 @@ reveals a cloud subsection:
   `KeychainSecretStore`, then
   `summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider(cloudConfig:apiKey:))` (defaults
   `.standard` for the selection — the app's own domain).
-- **Narration cache key:** `providerKind` folds flavor+model in for cloud, e.g.
-  `"cloud:anthropic:claude-opus-4-8"`, so switching model/flavor busts the existing provider-keyed
-  narration cache (⌘R still forces re-narration). Computed via `resolveProviderKind` + a suffix.
+- **Narration cache key:** `providerKind` folds flavor+model in **only when the resolved kind is
+  `"cloud"`**, e.g. `"cloud:anthropic:claude-opus-4-8"`; a `.cloud`-but-not-configured fallback keys
+  as the plain local kind (`"claudeCLI"`/`"foundationModels"`), matching what actually runs. Switching
+  model/flavor busts the existing provider-keyed `NarrationCacheKey`. Note: this busts the *cache* — an
+  already-open recap in the main window doesn't auto-refresh on a Settings change (Settings is a
+  separate window; the `.task(id:)` doesn't re-fire); **⌘R re-narrates under the new model**.
 - Initial `summaryBuilder` / `providerKind` seed the same way at launch.
 
 **German l10n** for the new chrome: the "Cloud (API)" option, "Flavor"/"Base URL"/"API Key"/"Model"
@@ -293,9 +310,11 @@ verified by hand in the built app.
 - ⌘, → Intelligence → pick **Cloud (API)** → the cloud subsection appears; enter a real key → **Fetch**
   populates the model picker; a bad key shows the inline error.
 - With a valid cloud config, open a node → the "Last Work Done" recap generates via the cloud model
-  (compare against Automatic); ⌘R re-narrates; switching model re-narrates (cache busts).
+  (compare against Automatic); ⌘R re-narrates; after changing the model in Settings, **⌘R** on the node
+  re-narrates under the new model (the cache is busted; the open recap doesn't auto-refresh).
 - Cloud config persists across relaunch; the key is in the Keychain (Keychain Access shows the item),
-  **not** in `~/Library/Preferences/*.plist` or any JSON.
+  **not** in `~/Library/Preferences/*.plist` or any JSON. (Ad-hoc signing means macOS may re-prompt to
+  authorize the keychain item after each rebuild — expected, not a failure.)
 - Deactivate/blank the key → narration falls back to local (no crash, no facts-dump).
 - **Cross-process selection is honored:** set the app's provider to Foundation Models (or `claude -p`)
   → a subsequent `pensieve digest`/`sync` uses that same provider (reads `me.mazetti.pensieve` via
@@ -332,5 +351,11 @@ verified by hand in the built app.
 **pensieve (CLI):** `Ingest.swift`, `Digest.swift`, `Sync.swift` change their `makeDefaultLLMProvider()`
 call to `makeDefaultLLMProvider(defaults: PensieveDefaults.shared())` so the CLI/daemon read the app's
 domain.
+
+**`project.yml`:** remove the now-dead `PENSIEVE_PREFS` scheme env var.
+
+**Tests hygiene:** `ProviderSettings.selection(from:)` tests use a unique random
+`UserDefaults(suiteName:)` per test and `removePersistentDomain(forName:)` in cleanup so throwaway
+domains don't accumulate as `~/Library/Preferences/<suite>.plist`.
 
 **Tests:** rework `PreferencesTests` + `DefaultProviderTests`; add `CloudProviderTests`.
