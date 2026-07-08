@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import PensieveKit
 
 /// The app's Settings pane (⌘,). Reads/writes the machine-local Preferences directly — no
@@ -7,11 +8,23 @@ import PensieveKit
 struct SettingsView: View {
   @ObservedObject var model: AppModel
   @State private var provider: ProviderPreference = Preferences.read(from: Stores.preferencesURL)
+  @AppStorage(AppDefaults.hideDockIconKey) private var hideDockIcon = false
 
   private var foundationAvailable: Bool { FoundationModelsProbe.isAvailable() }
 
   var body: some View {
     Form {
+      Section("General") {
+        Toggle("Hide Dock icon (menu bar only)", isOn: $hideDockIcon)
+          .onChange(of: hideDockIcon) { _, hidden in
+            NSApp.setActivationPolicy(hidden ? .accessory : .regular)
+            if !hidden {
+              // Returning to .regular: re-front the app, or it can stay backgrounded with no
+              // key window.
+              NSApp.activate(ignoringOtherApps: true)
+            }
+          }
+      }
       Section("Intelligence") {
         Picker("LLM Provider", selection: $provider) {
           Text("Automatic").tag(ProviderPreference.auto)

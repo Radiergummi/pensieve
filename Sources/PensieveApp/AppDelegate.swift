@@ -21,6 +21,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    applyDockVisibility()
+  }
+
+  /// Reads the shared hide-Dock preference and sets the activation policy. `.accessory` hides
+  /// the Dock tile + ⌘-Tab entry (menu-bar-only); the MenuBarExtra keeps the app alive.
+  func applyDockVisibility() {
+    let hidden = UserDefaults.standard.bool(forKey: AppDefaults.hideDockIconKey)
+    NSApp.setActivationPolicy(hidden ? .accessory : .regular)
+  }
+
   /// Single entry point for a resolved deep link — from an external `pensieve://` open OR an App
   /// Intent's `perform()`. Forwards to the wired model, else buffers until the model is set.
   func receive(_ link: DeepLink) {
