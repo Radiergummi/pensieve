@@ -1,969 +1,1067 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    " · captured %@" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " · erfasst %@"
+  "sourceLanguage": "en",
+  "strings": {
+    " · captured %@": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · erfasst %@"
           }
         }
       }
     },
-    "·" : {
-
-    },
-    "%@" : {
-
-    },
-    "%@ · %@ · %@d ago" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ · %2$@ · %3$@d ago"
+    "%@": {},
+    "%@ open": {},
+    "%@ open · %@d dormant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ open · %2$@d dormant"
           }
         }
       }
     },
-    "%@ open" : {
-
+    "%@ since last visit": {},
+    "%@ · %@ · %@d ago": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ · %2$@ · %3$@d ago"
+          }
+        }
+      }
     },
-    "%@ open · %@d dormant" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ open · %2$@d dormant"
+    "%lld Projects": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Projekte"
           }
         }
       }
     },
-    "%@ since last visit" : {
-
+    "%lld loose ends": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld loose ends"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lose Enden"
+          }
+        }
+      }
     },
-    "%lld Projects" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld Projekte" } }
+    "%lld open": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld offen"
+          }
+        }
       }
     },
-    "%lld open" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld offen"
+    "%lld open · %lldd dormant": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld offen · %lldT ruhend"
           }
         }
       }
     },
-    "%lld open · %lldd dormant" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld offen · %lldT ruhend"
+    "%lld since last visit": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld seit letztem Besuch"
           }
         }
       }
     },
-    "%lld since last visit" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld seit letztem Besuch"
+    "%lld strands": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld strands"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Stränge"
+          }
         }
       }
     },
-    "Active" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktiv"
+    "Active": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv"
           }
         }
       }
     },
-    "Activity" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktivität"
+    "Activity": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivität"
           }
         }
       }
     },
-    "Archived" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Archiviert"
+    "Archived": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiviert"
           }
         }
       }
     },
-    "Cancel" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abbrechen"
+    "Cancel": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
           }
         }
       }
     },
-    "captured" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "erfasst"
+    "Change Type": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typ ändern"
           }
         }
       }
     },
-    "capturing" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "erfasst"
+    "Claude Code Session": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Code-Sitzung"
           }
         }
       }
     },
-    "Change Type" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Typ ändern"
+    "Color": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Farbe"
           }
         }
       }
     },
-    "Claude Code Session" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude-Code-Sitzung"
+    "Concept": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konzept"
           }
         }
       }
     },
-    "Color" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Farbe"
+    "Context": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontext"
           }
         }
       }
     },
-    "Concept" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Konzept"
+    "Delete": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen"
           }
         }
       }
     },
-    "Context" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kontext" } }
+    "Delete “%@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone.": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+          }
+        }
       }
     },
-    "Delete" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Löschen"
+    "Delete “%@”? Its captured activity and loose ends are removed. This can’t be undone.": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ löschen? Die erfasste Aktivität und offenen Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
           }
         }
       }
     },
-    "Delete “%@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+    "Delete…": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen …"
           }
         }
       }
     },
-    "Delete “%@”? Its captured activity and loose ends are removed. This can’t be undone." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ löschen? Die erfasste Aktivität und offenen Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+    "Domain": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereich"
           }
         }
       }
     },
-    "Delete…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Löschen …"
+    "Dormant": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruhend"
           }
         }
       }
     },
-    "Domain" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bereich"
+    "Edit Node": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knoten bearbeiten"
           }
         }
       }
     },
-    "Dormant" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ruhend"
+    "Edit…": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bearbeiten …"
           }
         }
       }
     },
-    "dormant %@d" : {
-
+    "Emoji": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji"
+          }
+        }
+      }
     },
-    "dormant %lldd" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ruhend %lldT"
+    "Filter Pensieve by Context": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pensieve nach Kontext filtern"
           }
         }
       }
     },
-    "Edit Node" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Knoten bearbeiten"
+    "Git Checkout": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Git-Checkout"
           }
         }
       }
     },
-    "Edit…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bearbeiten …"
+    "Git Commit": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Git-Commit"
           }
         }
       }
     },
-    "Emoji" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Emoji"
+    "Go": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gehe zu"
           }
         }
       }
     },
-    "Filter Pensieve by Context" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve nach Kontext filtern" } }
+    "Idle": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inaktiv"
+          }
+        }
       }
     },
-    "Git Checkout" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Git-Checkout"
+    "Initiative": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Initiative"
           }
         }
       }
     },
-    "Git Commit" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Git-Commit"
+    "Inspector": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspektor"
           }
         }
       }
     },
-    "Go" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gehe zu"
+    "Jump to…": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wechseln zu…"
           }
         }
       }
     },
-    "idle" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "inaktiv"
+    "Last Work Done": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt erledigt"
           }
         }
       }
     },
-    "Idle" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inaktiv"
+    "Loose Ends": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lose Enden"
           }
         }
       }
     },
-    "Initiative" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Initiative"
+    "Merge": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenführen"
           }
         }
       }
     },
-    "Inspector" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inspektor"
+    "Merge into…": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenführen mit…"
           }
         }
       }
     },
-    "Jump to…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wechseln zu…"
+    "Merge “%@” into “%@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone.": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%1$@“ mit „%2$@“ zusammenführen? Quellen, Aktivität und offene Enden werden zum Ziel verschoben und das Original gelöscht. Dies kann nicht rückgängig gemacht werden."
           }
         }
       }
     },
-    "Last Work Done" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zuletzt erledigt"
+    "Move to…": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschieben nach…"
           }
         }
       }
     },
-    "Loose Ends" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lose Enden"
+    "Moved": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewegt"
           }
         }
       }
     },
-    "Merge" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zusammenführen"
+    "Muted": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stummgeschaltet"
           }
         }
       }
     },
-    "Merge “%@” into “%@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%1$@“ mit „%2$@“ zusammenführen? Quellen, Aktivität und offene Enden werden zum Ziel verschoben und das Original gelöscht. Dies kann nicht rückgängig gemacht werden."
+    "Name": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
           }
         }
       }
     },
-    "Merge into…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zusammenführen mit…"
+    "New Child": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neues Unterelement"
           }
         }
       }
     },
-    "Move to…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verschieben nach…"
+    "New Child…": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neues Unterelement …"
           }
         }
       }
     },
-    "Moved" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bewegt"
+    "New Node": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Knoten"
           }
         }
       }
     },
-    "Muted" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stummgeschaltet"
+    "No captured activity yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine erfasste Aktivität."
           }
         }
       }
     },
-    "Name" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Name"
+    "No captured activity.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine erfasste Aktivität."
           }
         }
       }
     },
-    "New Child" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neues Unterelement"
+    "No project": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Projekt"
           }
         }
       }
     },
-    "New Child…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neues Unterelement …"
+    "None open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None open"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine offen"
+          }
         }
       }
     },
-    "New Node" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neuer Knoten"
+    "None open.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine offen."
           }
         }
       }
     },
-    "No captured activity yet." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Noch keine erfasste Aktivität."
+    "Not set up": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht eingerichtet"
           }
         }
       }
     },
-    "No captured activity." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine erfasste Aktivität."
+    "Nothing here": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts hier"
           }
         }
       }
     },
-    "No project" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kein Projekt"
+    "Nothing queued": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts in Warteschlange"
           }
         }
       }
     },
-    "None open." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine offen."
+    "Open Pensieve": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pensieve öffnen"
           }
         }
       }
     },
-    "not set up" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "nicht eingerichtet"
+    "Open in New Window": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In neuem Fenster öffnen"
           }
         }
       }
     },
-    "Not set up" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht eingerichtet"
+    "Pensieve Context": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pensieve-Kontext"
           }
         }
       }
     },
-    "Nothing here" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts hier"
+    "Personal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönlich"
           }
         }
       }
     },
-    "Nothing queued" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts in Warteschlange"
+    "Pick a loose end to see its source.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein loses Ende auswählen, um die Quelle zu sehen."
           }
         }
       }
     },
-    "Open in New Window" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In neuem Fenster öffnen"
+    "Project": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt"
           }
         }
       }
     },
-    "Open Pensieve" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pensieve öffnen"
+    "Project unavailable": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt nicht verfügbar"
           }
         }
       }
     },
-    "Pensieve Context" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve-Kontext" } }
+    "Projects": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekte"
+          }
+        }
       }
     },
-    "Personal" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönlich" } }
+    "Provenance": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herkunft"
+          }
+        }
       }
     },
-    "Pick a loose end to see its source." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ein loses Ende auswählen, um die Quelle zu sehen."
+    "Quick Jump…": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnellsprung…"
           }
         }
       }
     },
-    "Project" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Projekt"
+    "Quiet": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruhig"
           }
         }
       }
     },
-    "Project unavailable" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Projekt nicht verfügbar"
+    "Quit": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beenden"
           }
         }
       }
     },
-    "Projects" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Projekte"
+    "Recall": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückblick"
           }
         }
       }
     },
-    "Provenance" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Herkunft"
+    "Recent Activity": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte Aktivität"
           }
         }
       }
     },
-    "Quick Jump…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schnellsprung…"
+    "Recently Active": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kürzlich aktiv"
           }
         }
       }
     },
-    "Quiet" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ruhig"
+    "Refresh": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
           }
         }
       }
     },
-    "Quit" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beenden"
+    "Rename": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umbenennen"
           }
         }
       }
     },
-    "Recall" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rückblick"
+    "Save": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sichern"
           }
         }
       }
     },
-    "Recent Activity" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Letzte Aktivität"
+    "Search": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchen"
           }
         }
       }
     },
-    "Recently Active" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kürzlich aktiv"
+    "Search symbols": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbole suchen"
           }
         }
       }
     },
-    "Refresh" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktualisieren"
+    "Select a loose end": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loses Ende auswählen"
           }
         }
       }
     },
-    "Rename" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Umbenennen"
+    "Select a project": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt auswählen"
           }
         }
       }
     },
-    "Save" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sichern"
+    "Show All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle anzeigen"
           }
         }
       }
     },
-    "Search" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Suchen" } }
+    "Show Personal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönliches anzeigen"
+          }
+        }
       }
     },
-    "Search symbols" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Symbole suchen" } }
+    "Show Work": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeit anzeigen"
+          }
+        }
       }
     },
-    "Select a loose end" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loses Ende auswählen"
+    "Since %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seit %@"
           }
         }
       }
     },
-    "Select a project" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Projekt auswählen"
+    "Smart Lists": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intelligente Listen"
           }
         }
       }
     },
-    "Show All" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle anzeigen" } }
+    "Strand": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strang"
+          }
+        }
       }
     },
-    "Show Personal" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönliches anzeigen" } }
+    "Surrounding context unavailable (transcript changed or removed).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umgebender Kontext nicht verfügbar (Transkript geändert oder entfernt)."
+          }
+        }
       }
     },
-    "Show Work" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeit anzeigen" } }
+    "Symbol": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbol"
+          }
+        }
       }
     },
-    "Since %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seit %@"
+    "Task": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgabe"
           }
         }
       }
     },
-    "Smart Lists" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Intelligente Listen"
+    "Top level": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oberste Ebene"
           }
         }
       }
     },
-    "Strand" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Strang"
+    "Topic": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thema"
           }
         }
       }
     },
-    "Surrounding context unavailable (transcript changed or removed)." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Umgebender Kontext nicht verfügbar (Transkript geändert oder entfernt)."
+    "Type": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typ"
           }
         }
       }
     },
-    "Symbol" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Symbol"
+    "Unset": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht festgelegt"
           }
         }
       }
     },
-    "Task" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aufgabe"
+    "What's Next": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Nächstes"
           }
         }
       }
     },
-    "Top level" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Oberste Ebene"
+    "Work": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeit"
           }
         }
       }
     },
-    "Topic" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Thema"
+    "captured": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "erfasst"
           }
         }
       }
     },
-    "Type" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Typ"
+    "capturing": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "erfasst"
           }
         }
       }
     },
-    "Unset" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nicht festgelegt" } }
+    "dormant %@d": {},
+    "dormant %lldd": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ruhend %lldT"
+          }
+        }
       }
     },
-    "What's Next" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Als Nächstes"
+    "idle": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "inaktiv"
           }
         }
       }
     },
-    "Work" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeit" } }
+    "not set up": {
+      "extractionState": "stale",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht eingerichtet"
+          }
+        }
       }
-    }
+    },
+    "·": {}
   },
-  "version" : "1.0"
+  "version": "1.0"
 }
