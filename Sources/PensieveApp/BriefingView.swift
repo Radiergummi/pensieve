@@ -29,7 +29,7 @@ struct BriefingView: View {
       }
       .padding(24)
       .frame(maxWidth: Prose.measure, alignment: .leading)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .center)   // center the capped reading column in a wide pane
     }
   }
 

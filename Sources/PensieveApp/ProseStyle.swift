@@ -4,8 +4,10 @@ import SwiftUI
 /// Shared reading-prose treatment for the app's content text (LLM narration, node descriptions,
 /// loose-end text/quotes, activity summaries, briefing teasers). App-only styling; no Kit involvement.
 enum Prose {
-  /// Max reading-column width. Caps line length on wide windows so prose stays readable.
-  static let measure: CGFloat = 680
+  /// Max reading-column width. Caps line length on wide windows so prose stays readable; the capped
+  /// block is centered in the detail pane (see the `.frame(maxWidth: .infinity, alignment: .center)`
+  /// at each content view's root).
+  static let measure: CGFloat = 760
 }
 
 extension View {

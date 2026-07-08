@@ -86,9 +86,7 @@ final class AppModel: ObservableObject {
   @Published var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
   @Published var forest: [NodeForestNode] = []
   @Published var sidebarSelection: SidebarSelection? = .briefing
-  @Published var selectedNodeID: UUID? {
-    didSet { if selectedNodeID != oldValue { inspectedLooseEndID = nil } }
-  }
+  @Published var selectedNodeID: UUID?
   /// Drives the New/Edit node modal. nil = closed. Mounted in RootView.
   @Published var editingNode: NodeEditRequest?
   /// Non-nil while a Move/Merge picker sheet is up for that node. Mounted in RootView.
@@ -96,12 +94,6 @@ final class AppModel: ObservableObject {
   @Published var mergePickerNodeID: UUID?
   /// Non-nil while the delete confirmation is presented for that node. Mounted in RootView.
   @Published var pendingDeleteNodeID: UUID?
-  /// Drives the ⌘⌥I provenance inspector (main window only). Toggled by the Go ▸ Inspector command.
-  @Published var showInspector = false
-  /// The loose end whose surrounding transcript the inspector shows. Written ONLY by the main
-  /// window's DetailView (allowsInspector == true); cleared when the main selection changes
-  /// (see `selectedNodeID`'s didSet above).
-  @Published var inspectedLooseEndID: UUID?
   @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   @Published var briefingCards: [BriefingCard] = []
@@ -310,10 +302,6 @@ final class AppModel: ObservableObject {
     }
     selectedNodeID = id
   }
-
-  /// A middle-column loose-end tap: point the ⌘⌥I inspector at it. Visibility stays user-controlled
-  /// (⌘⌥I), matching the detail recall's rows.
-  func selectMiddleLooseEnd(_ id: UUID) { inspectedLooseEndID = id }
 
   /// The middle column's title: the focused node's name in tree mode, else the app name. The app name
   /// is a proper noun — NOT localized.

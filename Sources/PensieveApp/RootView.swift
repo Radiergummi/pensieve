@@ -5,10 +5,13 @@ import PensieveKit
 struct RootView: View {
   @ObservedObject var model: AppModel
   @Environment(\.openWindow) private var openWindow
+  // Bound column visibility so the native NavigationSplitView sidebar toggle (in the sidebar, like
+  // Mail) works. The sidebar is fully independent of the provenance panel now.
+  @State private var columns = NavigationSplitViewVisibility.all
 
   @ViewBuilder private var detailColumn: some View {
     if let id = model.selectedNodeID, let node = model.node(id) {
-      DetailView(model: model, node: node, allowsInspector: true, showsLooseEnds: model.detailShowsLooseEnds)
+      DetailView(model: model, node: node, showsLooseEnds: model.detailShowsLooseEnds)
     } else if model.sidebarSelection == .briefing {
       BriefingView(model: model)
     } else {
@@ -17,37 +20,33 @@ struct RootView: View {
   }
 
   var body: some View {
-    NavigationSplitView {
+    // Mail-like column rules: every column has a min so a divider drag can't corrupt the layout, and
+    // sidebar/content have maxes so they can't swallow the detail. The detail carries a MIN ONLY — it
+    // stays the flexible column (grows with the window) but has a floor so dragging can't collapse it
+    // into a broken state. The native toggle (driven by `columns`) lives in the sidebar, like Mail.
+    NavigationSplitView(columnVisibility: $columns) {
       SidebarView(model: model)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
     } content: {
       ContentListView(model: model)
-        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 460)
+        .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
     } detail: {
+      // Provenance is now shown inline inside each loose-end row (expand to see the surrounding
+      // transcript), so the detail is a single flexible column again — no side panel, no `.inspector`.
       detailColumn
+        .navigationSplitViewColumnWidth(min: 360, ideal: 800)   // floor only; no max → stays flexible
         .toolbar {
           ToolbarItem(placement: .navigation) {
             Button { model.presentNewNode(under: nil) } label: { Image(systemName: "plus") }
               .help("New Node")
           }
-          ToolbarItemGroup(placement: .primaryAction) {
-            Button { Task { await model.refreshNow() } } label: { Image(systemName: "arrow.clockwise") }
-              .help("Refresh")
-            Button { model.showInspector.toggle() } label: { Image(systemName: "sidebar.right") }
-              .help("Inspector")
-          }
+          // Refresh lives on ⌘R and Go ▸ Refresh — kept off the toolbar so the native sidebar toggle
+          // isn't pushed into an overflow menu.
         }
-        .navigationSplitViewColumnWidth(min: 380, ideal: 380)
     }
     // ⌘K now lives in the "Go" menu (see PensieveApp.commands); the palette state lives on AppModel.
     .sheet(isPresented: $model.showPalette) {
       PaletteView(model: model, isPresented: $model.showPalette)
-    }
-    .inspector(isPresented: $model.showInspector) {
-      // InspectorView loads its own loose ends via `.task(id: selectedNodeID)` — no DB query in
-      // this body closure, which re-evaluates on every liveness refresh.
-      InspectorView(model: model)
-        .inspectorColumnWidth(min: 260, ideal: 340, max: 500)
     }
     .onChange(of: model.openNodeRequest) { _, id in
       guard let id else { return }

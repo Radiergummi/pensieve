@@ -26,7 +26,10 @@ struct PensieveApp: App {
     // by default, so no manual activation-policy is needed; the icon comes from the bundled .icon.
     Window("Pensieve", id: "main") {
       RootView(model: model)
-        .frame(minWidth: 900, minHeight: 480)
+        // Honest minimum = content.min (240) + detail.min (360) + inspector.min (260) = 860 — the
+        // widest always-reachable config (inspector open, sidebar auto-collapsed). This floors the
+        // window so no state clips; the sidebar (200) fits on top whenever the window is wider.
+        .frame(minWidth: 860, minHeight: 480)
         .task { model.start() }   // idempotent (guarded in AppModel)
     }
     .defaultSize(width: 1040, height: 660)
@@ -46,8 +49,6 @@ struct PensieveApp: App {
         Divider()
         Button("Refresh") { Task { await model.refreshNow() } }
           .keyboardShortcut("r", modifiers: .command)
-        Button("Inspector") { model.showInspector.toggle() }
-          .keyboardShortcut("i", modifiers: [.command, .option])
       }
     }
 

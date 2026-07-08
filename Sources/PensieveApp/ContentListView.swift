@@ -20,7 +20,7 @@ struct ContentListView: View {
     .navigationTitle(model.middleTitle)
     .navigationSubtitle(subtitle(for: kind))
     // Load the focused leaf's loose ends. Re-runs on selection change AND ⌘R (refreshToken),
-    // mirroring DetailView/InspectorView. Non-leaf kinds clear the list.
+    // mirroring DetailView's off-body load. Non-leaf kinds clear the list.
     .task(id: MiddleLoadKey(kind: kind, token: model.refreshToken)) {
       if case .looseEndsOf(let id) = kind {
         looseEnds = model.looseEnds(forNode: id)
@@ -52,7 +52,7 @@ struct ContentListView: View {
   @ViewBuilder private func looseEndList() -> some View {
     List {
       ForEach(looseEnds, id: \.looseEnd.id) { view in
-        LooseEndRow(view: view) { model.selectMiddleLooseEnd(view.looseEnd.id) }
+        LooseEndRow(view: view, loadProvenance: model.provenance)
       }
     }
     .overlay {

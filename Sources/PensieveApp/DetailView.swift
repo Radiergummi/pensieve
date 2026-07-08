@@ -5,8 +5,6 @@ import PensieveKit
 struct DetailView: View {
   @ObservedObject var model: AppModel
   let node: Node
-  /// When false (recall window), tapping a loose end never writes the shared inspector selection.
-  var allowsInspector: Bool = true
   /// When false, the detail omits its Loose Ends section (the middle column is showing this same
   /// node's loose ends — the one-home rule). Recall windows / smart-list details pass true.
   var showsLooseEnds: Bool = true
@@ -58,9 +56,7 @@ struct DetailView: View {
               Text("None open.").foregroundStyle(.secondary)
             } else {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
-                LooseEndRow(view: view) {
-                  if allowsInspector { model.inspectedLooseEndID = view.looseEnd.id }
-                }
+                LooseEndRow(view: view, loadProvenance: model.provenance)
               }
             }
           }
@@ -77,7 +73,7 @@ struct DetailView: View {
       }
       .padding(24)
       .frame(maxWidth: Prose.measure, alignment: .leading)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .center)   // center the capped reading column in a wide pane
     }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
