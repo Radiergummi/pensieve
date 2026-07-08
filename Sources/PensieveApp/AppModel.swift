@@ -133,7 +133,15 @@ final class AppModel: ObservableObject {
     await self?.drainThenRefreshFromWatch()
   }
   private var started = false
-  private lazy var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
+  // NOT lazy: rebuilt when the provider preference changes (SettingsView), so an in-session
+  // provider switch takes effect on the next narration instead of requiring a relaunch.
+  private var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
+
+  /// Rebuild the narration provider from the current persisted preference. Called by
+  /// SettingsView after it writes a new ProviderPreference.
+  func rebuildSummaryBuilder() {
+    summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
+  }
   /// Persisted narration: prose + the invalidation key it was generated for. Keyed per DB path
   /// (NEW pattern — lastOpenedAt is a single global key today) so throwaway smoke/test stores
   /// don't pollute the real cache. Device-local: narration is a derived, provider-specific
