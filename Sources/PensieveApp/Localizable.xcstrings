@@ -861,6 +861,22 @@
         }
       }
     },
+    "Share Recall…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Recall…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückblick teilen…"
+          }
+        }
+      }
+    },
     "Show All": {
       "localizations": {
         "de": {
