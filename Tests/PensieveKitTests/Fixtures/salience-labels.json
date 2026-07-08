@@ -1,0 +1,12 @@
+[
+  {"quote": "we should migrate the auth tables later", "salient": true},
+  {"quote": "let's revisit the caching strategy once the migration lands", "salient": true},
+  {"quote": "TODO: wire up the webhook before shipping", "salient": true},
+  {"quote": "let's go with the queue-based approach instead of polling", "salient": true},
+  {"quote": "park the notification redesign for after the launch", "salient": true},
+  {"quote": "please read the spec now", "salient": false},
+  {"quote": "can you fix this failing test", "salient": false},
+  {"quote": "run the tests and let me know", "salient": false},
+  {"quote": "subagent-driven, let's go", "salient": false},
+  {"quote": "yes that looks right, ship it", "salient": false}
+]
