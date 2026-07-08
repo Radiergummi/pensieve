@@ -7,7 +7,9 @@ struct DetailView: View {
   let node: Node
   /// When false (recall window), tapping a loose end never writes the shared inspector selection.
   var allowsInspector: Bool = true
-  @State private var expanded: Set<UUID> = []
+  /// When false, the detail omits its Loose Ends section (the middle column is showing this same
+  /// node's loose ends — the one-home rule). Recall windows / smart-list details pass true.
+  var showsLooseEnds: Bool = true
   // Loaded once per node selection via `.task(id:)` below — NOT recomputed on every body eval
   // (calling `model.detail(for:)` in the body would hit the DB on every render).
   @State private var recentEvents: [Event] = []
@@ -48,13 +50,17 @@ struct DetailView: View {
           }
         }
 
-        // LOOSE ENDS (with inline verbatim provenance)
-        section("Loose Ends") {
-          if looseEnds.isEmpty {
-            Text("None open.").foregroundStyle(.secondary)
-          } else {
-            ForEach(looseEnds, id: \.looseEnd.id) { view in
-              looseEndRow(view)
+        // LOOSE ENDS (with inline verbatim provenance) — omitted when the middle already shows them.
+        if showsLooseEnds {
+          section("Loose Ends") {
+            if looseEnds.isEmpty {
+              Text("None open.").foregroundStyle(.secondary)
+            } else {
+              ForEach(looseEnds, id: \.looseEnd.id) { view in
+                LooseEndRow(view: view) {
+                  if allowsInspector { model.inspectedLooseEndID = view.looseEnd.id }
+                }
+              }
             }
           }
         }
@@ -91,42 +97,6 @@ struct DetailView: View {
       lastWorkDone = prose
       isNarrating = false
     }
-  }
-
-  @ViewBuilder private func looseEndRow(_ view: LooseEndView) -> some View {
-    let id = view.looseEnd.id
-    let isOpen = expanded.contains(id)
-    VStack(alignment: .leading, spacing: 6) {
-      Button {
-        if isOpen { expanded.remove(id) } else { expanded.insert(id) }
-        if allowsInspector { model.inspectedLooseEndID = id }
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: isOpen ? "chevron.down" : "chevron.right")
-            .font(.caption2).foregroundStyle(.secondary)
-          Text(view.looseEnd.text).prose()
-          Spacer()
-        }
-      }
-      .buttonStyle(.plain)
-
-      if isOpen {
-        // The provenance: verbatim quote + where it came from. North-star made visible.
-        VStack(alignment: .leading, spacing: 4) {
-          Text(view.looseEnd.quote)
-            .prose()
-            .italic()
-            .padding(.leading, 10)
-            .overlay(alignment: .leading) {
-              Rectangle().fill(.orange).frame(width: 3)
-            }
-          Text("\(view.looseEnd.role.isEmpty ? String(localized: "captured") : view.looseEnd.role) · \(view.occurredAt, format: .dateTime.year().month().day()) · \(view.ageDays)d ago")
-            .metaText()
-        }
-        .padding(.leading, 18)
-      }
-    }
-    .padding(.vertical, 2)
   }
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {
