@@ -217,11 +217,18 @@ import Testing
 import SQLiteData
 @testable import PensieveKit
 
+// `looseEnds.sourceEventID` has an FK to `events.id`, and `events.sourceID` to `sources.id`, so a
+// loose end needs the full Node -> Source -> Event chain (unique source key per call).
 private func seedLooseEnd(_ db: any DatabaseWriter, quote: String) throws -> UUID {
   let node = Node(name: "N")
-  let le = LooseEnd(nodeID: node.id, sourceEventID: UUID(), text: quote, quote: quote)
+  let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
+  let ev = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                 kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
+  let le = LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: quote, quote: quote)
   try db.write { db in
     try Node.insert { node }.execute(db)
+    try Source.insert { source }.execute(db)
+    try Event.insert { ev }.execute(db)
     try LooseEnd.insert { le }.execute(db)
   }
   return le.id
@@ -357,10 +364,13 @@ import SQLiteData
 @Test func openExcludesConfirmedNoiseButKeepsSalientUnlabeledAndSuggested() throws {
   let db = try openCanonicalDatabase(at: tempURL("open-filter"))
   let node = Node(name: "N")
-  let src = Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
+  // Full FK chain: looseEnds.sourceEventID -> events.id -> sources.id.
+  let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
+  let src = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                   kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
   try db.write { db in
     try Node.insert { node }.execute(db)
+    try Source.insert { source }.execute(db)
     try Event.insert { src }.execute(db)
   }
   func add(_ quote: String, label: String = "", suggestion: String = "") throws -> UUID {
