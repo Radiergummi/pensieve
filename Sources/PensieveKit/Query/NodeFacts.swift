@@ -37,7 +37,7 @@ public enum NodeFactsQueries {
     let dormant = latest.map {
       Calendar.current.dateComponents([.day], from: $0.occurredAt, to: now).day ?? 0
     } ?? 0
-    let open = try LooseEnd.where { $0.nodeID.eq(node.id) && $0.status.eq("open") && $0.label.neq("noise") }.fetchCount(db)
+    let open = try LooseEnd.where { $0.nodeID.eq(node.id) && LooseEnd.isOpen($0) }.fetchCount(db)
     return NodeFacts(node: node, openLooseEnds: open, daysDormant: dormant)
   }
 }

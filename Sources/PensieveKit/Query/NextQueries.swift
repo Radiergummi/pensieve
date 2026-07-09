@@ -20,7 +20,7 @@ public enum NextQueries {
         let dormant = latest.map {
           Calendar.current.dateComponents([.day], from: $0.occurredAt, to: now).day ?? 0
         } ?? 0
-        let open = try LooseEnd.where { $0.nodeID.eq(p.id) && $0.status.eq("open") && $0.label.neq("noise") }.fetchAll(db).count
+        let open = try LooseEnd.where { $0.nodeID.eq(p.id) && LooseEnd.isOpen($0) }.fetchAll(db).count
         // Long dormancy can dominate by design — it's a strong "you forgot this" signal for ADHD workflows
         let score = Double(open) * 2 + Double(dormant)
         items.append(NextItem(project: p, openLooseEnds: open, daysDormant: dormant, score: score))

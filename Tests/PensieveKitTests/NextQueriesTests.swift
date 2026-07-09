@@ -25,3 +25,28 @@ import SQLiteData
   #expect(ranked.first?.project.id == b.id)   // 0*2+30 = 30 > 2*2+~0 = 4; long dormancy dominates by design
   #expect(ranked.contains { $0.project.id == a.id })
 }
+
+@Test func nextExcludesConfirmedNoiseFromOpenLooseEndCount() throws {
+  let db = try openCanonicalDatabase(at: tempURL("next-noise"))
+  let resolver = ProjectResolver(db: db)
+  let (a, sa) = try resolver.resolve(path: "/p/noise", kind: SourceKind.claudeCode)
+  let ea = Event(nodeID: a.id, sourceID: sa.id, occurredAt: Date(), kind: CaptureKind.ccSession,
+                 summary: "s", detailJSON: "{}", fingerprint: "n1")
+  try db.write { db in
+    try Event.insert { ea }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "t1", quote: "unlabeled item")
+    }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "t2", quote: "confirmed noise",
+               label: LooseEndLabel.noise)
+    }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "t3", quote: "only suggested noise",
+               labelSuggestion: LooseEndLabel.noise)
+    }.execute(db)
+  }
+  let ranked = try NextQueries.ranked(db, now: Date())
+  let item = try #require(ranked.first { $0.project.id == a.id })
+  #expect(item.openLooseEnds == 2)   // confirmed-noise excluded; unlabeled + suggestion-only-noise kept
+}

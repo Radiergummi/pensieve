@@ -115,6 +115,34 @@ import SQLiteData
   #expect(snap.spoolPending == 2)
 }
 
+@Test func gatherExcludesConfirmedNoiseFromOpenLooseEndCount() throws {
+  let canonURL = tempURL("canon-noise")
+  let db = try openCanonicalDatabase(at: canonURL)
+  let node = Node(name: "app")
+  let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/noise/.git")
+  let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
+                 kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
+                 fingerprint: Fingerprint.commit(hash: "noise-abc"))
+  try db.write { db in
+    try Node.insert { node }.execute(db)
+    try Source.insert { src }.execute(db)
+    try Event.insert { ev }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t1", quote: "unlabeled item")
+    }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t2", quote: "confirmed noise",
+               label: LooseEndLabel.noise)
+    }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t3", quote: "only suggested noise",
+               labelSuggestion: LooseEndLabel.noise)
+    }.execute(db)
+  }
+  let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: tempURL("absent-spool-noise"), now: Date())
+  #expect(snap.looseEndCount == 2)   // confirmed-noise excluded; unlabeled + suggestion-only-noise kept
+}
+
 /// The connection-reusing overload the app uses (to avoid re-firing its store-dir watch) must
 /// produce exactly the same heartbeat as the URL overload for the same stores.
 @Test func gatherFromOpenConnectionsMatchesURLPath() throws {

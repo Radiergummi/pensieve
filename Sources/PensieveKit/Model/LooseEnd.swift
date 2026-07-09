@@ -24,3 +24,11 @@ public struct LooseEnd: Identifiable, Equatable, Sendable {
     self.label = label; self.labelSuggestion = labelSuggestion; self.createdAt = createdAt
   }
 }
+
+extension LooseEnd {
+  /// The shared "open, not user-confirmed-noise" predicate. Single source of truth so the
+  /// detail view, menu-bar count, App-Intents facts, and What's-Next ranking never diverge.
+  public static func isOpen(_ columns: TableColumns) -> some QueryExpression<Bool> {
+    columns.status.eq("open") && columns.label.neq("noise")
+  }
+}
