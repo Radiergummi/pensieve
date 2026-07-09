@@ -78,6 +78,16 @@ Plus a synthetic **Custom** entry in the picker (not in `all`; represented by `n
 
 Vendor `displayName`s are proper names → never localized (consistent with existing "Anthropic" / "OpenAI-compatible" treatment for names).
 
+**Per-vendor Keychain account (correctness fix).** Today the API key is stored under `account: flavor.rawValue`. With presets, six vendors share the `openAICompatible` flavor and would collide on one key slot — switching vendors would carry one vendor's key to another's endpoint. Fix: key the secret by **vendor identity**, still derived (no new persisted key):
+
+```swift
+/// Keychain account for the given vendor identity: the matching preset id, else a per-flavor
+/// "custom.<flavor>" slot. Both the app (write/read) and AppModel (read) compute this identically.
+public static func keychainAccount(flavor: CloudFlavor, baseURL: String) -> String
+```
+
+Existing keys migrate implicitly: Anthropic's account stays `"anthropic"` (preset id == old flavor rawValue), so no re-entry; an existing OpenAI/custom key stored under `"openAICompatible"` becomes orphaned and is re-entered once (acceptable for a single-user tool). The narration cache key (`AppModel.rebuildSummaryBuilder`) also switches from `cloud:<flavor>:<model>` to `cloud:<account>:<model>` so two vendors of the same flavor + model don't share cached prose.
+
 ## C. Keyless localhost (Ollama and local OpenAI servers)
 
 Local servers need no API key, but today `configured` requires a non-empty key — which is also the safety that makes the keyless CLI/daemon fall back to local. Relax it **only for local endpoints**.
@@ -138,6 +148,7 @@ New PensieveKit tests (app target stays untested per convention — verify via `
 
 - `CloudPresets.match` returns the right preset for each shipping (flavor, baseURL); returns `nil` (Custom) for an unknown base URL and for a matching flavor but edited URL.
 - `CloudConfig.isLocalEndpoint` — true for `http://localhost:11434/v1`, `http://127.0.0.1:...`, `http://[::1]:...`; false for remote hosts and empty.
+- `CloudPresets.keychainAccount` — returns the preset id for a matching (flavor, baseURL), and `"custom.<flavor>"` otherwise; two openAICompatible presets return distinct ids.
 - `resolvedProviderKind` — keyless **localhost** cloud with base URL + model ⇒ `"cloud"`; keyless **remote** cloud ⇒ local fallback; keyed remote cloud ⇒ `"cloud"`.
 
 ## Files touched
