@@ -30,7 +30,12 @@ struct SettingsView: View {
 
   private var foundationAvailable: Bool { FoundationModelsProbe.isAvailable() }
   private var cloudFlavor: CloudFlavor { CloudFlavor(rawValue: cloudFlavorRaw) ?? .anthropic }
-  private var keychainAccount: String { CloudPresets.keychainAccount(flavor: cloudFlavor, baseURL: cloudBaseURL) }
+  private var keychainAccount: String {
+    // Resolve an empty base URL to the flavor default before deriving the account, matching
+    // AppModel.cloudInputs() so both sides always key off the identical base URL (no slot divergence).
+    let base = cloudBaseURL.isEmpty ? cloudFlavor.defaultBaseURL : cloudBaseURL
+    return CloudPresets.keychainAccount(flavor: cloudFlavor, baseURL: base)
+  }
 
   private var provider: Binding<ProviderPreference> {
     Binding(get: { ProviderPreference(rawValue: providerRaw) ?? .auto },
