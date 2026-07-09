@@ -120,10 +120,22 @@ Spec/plan: `{specs,plans}/2026-07-08-app-settings-surface*`.
 - ✅ **LLM provider selection** — Automatic / Foundation Models / `claude -p`, whole-system (app + daemon).
 - ✅ **`LSUIElement` / hide-dock toggle** (deferred from v0.2) — runtime `NSApp.setActivationPolicy(.accessory)`.
 
+**Cloud/API LLM provider + Keychain-stored key + model selection — ✅ DONE (2026-07-09, merged to `main`
+`34a2bb9`).** The motivating long-term case, now shipped: an **app-only** cloud (HTTP) `LLMProvider`
+(Anthropic + OpenAI-compatible, one flavor-switched struct) driving the app's best-effort narration. **Kit
+(tested):** `CloudFlavor`/`CloudConfig` + pure `CloudHTTP` builders/parsers (per-flavor suffixes, no `/v1`
+double, trailing-slash-safe) + `CloudLLMProvider` (`complete` + static `listModels`) over an injected transport;
+`KeychainSecretStore` (generic-password, `account=flavor`). **Storage:** retired `preferences.json` — selection +
+non-secret config in **UserDefaults** (`me.mazetti.pensieve`), read cross-process by the CLI/daemon via
+`PensieveDefaults.shared()` (no daemon regression: a `.cloud` selection the keyless CLI reads falls back to local).
+API key is **Keychain-only**. Settings cloud subsection (flavor / base URL / key / model + Fetch = populate *and*
+validate) + German l10n; **trust gate untouched** (cloud = narration only, extraction stays on-device).
+Subagent-driven (7 tasks + fix wave; Opus whole-branch READY-TO-MERGE). **260 tests.** Spec/plan:
+`{specs,plans}/2026-07-08-cloud-llm-provider-design.md` + `2026-07-09-cloud-llm-provider.md`. **Out of scope
+(deferred, not foreclosed):** cloud extraction, streaming, per-request cost/telemetry, daemon/CLI cloud use.
+**Post-merge carry:** rebuild + reinstall the release CLI (the provider-selection read changed).
+
 **Deferred out of the first cut (on the roadmap, not foreclosed):**
-- **Cloud/API LLM provider + Keychain-stored key + model selection** — the motivating long-term case; a meaty
-  net-new subsystem (an HTTP `LLMProvider`) that builds on the shipped provider-preference scaffold. *Its own
-  spec.*
 - **Organizing-writes error surfacing** (code-quality carry) — still needs an app error-presentation mechanism;
   pairs with this surface but was not built. *Trigger: when an error-surface is added.*
 - More knobs as they arise (capture/scan folders, daemon interval); tabbed multi-pane Settings.

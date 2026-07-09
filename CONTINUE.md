@@ -1,15 +1,52 @@
-# CONTINUE — session handoff (2026-07-08)
+# CONTINUE — session handoff (2026-07-09)
 
 Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (project rules), then this.
 
 ## Where things stand
 
-Everything below is **on `main`** (App Settings landed at `9de6d18`; docs commits on top) and the tree is
-clean. Test suite: **246 tests**, run with
+Everything below is **on `main`** (the cloud/API LLM provider landed at `34a2bb9`, rebased over the parallel
+salience-gate fix `017c354`; docs commits on top) and the tree is clean. Test suite: **260 tests**, run with
 `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
 daemon).
 
-**Latest (this session): App Settings surface (first cut) — DONE & on `main` `9de6d18`.** The app's first
+**Latest (this session): Cloud/API LLM provider (Settings follow-up, Track B) — DONE & on `main` `34a2bb9`.**
+The motivating long-term case behind the shipped provider-preference scaffold: an **app-only** cloud (HTTP)
+`LLMProvider` as a fourth option for the app's best-effort "Last Work Done" narration — **Anthropic +
+OpenAI-compatible**, one struct with a flavor switch.
+- **Kit (tested):** `CloudFlavor`/`CloudConfig` + pure `CloudHTTP` request builders & response/model-list parsers
+  (per-flavor path suffixes that never synthesize/strip `/v1`; trailing-slash-safe) + `CloudLLMProvider`
+  (`complete` + static `listModels`) over an **injected transport** (default URLSession transport guard-casts to
+  `HTTPURLResponse`, never force-casts); `KeychainSecretStore` (generic-password, `service=com.pensieve.cloud-llm`,
+  `account=flavor.rawValue`).
+- **Storage reworked — `preferences.json` retired.** Provider selection + non-secret cloud config now live in
+  **UserDefaults** (`me.mazetti.pensieve`), read **cross-process** by the CLI/daemon via `PensieveDefaults.shared()`
+  (`UserDefaults(suiteName:)`; the app is not sandboxed) — **no daemon regression** (a `.cloud` selection the
+  keyless CLI reads falls back to local; every other selection honored). Pure `resolveProviderKind(…cloudConfigured:)`
+  + a shared `resolvedProviderKind(defaults:cloudConfig:apiKey:)` single-source-of-truth behind
+  `makeDefaultLLMProvider(defaults:cloudConfig:apiKey:)`. **API key is Keychain-only — never UserDefaults/plist/JSON/log.**
+- **App (thin):** a Settings cloud subsection (flavor / base URL / key `SecureField` / model picker + **Fetch** =
+  populate the model list *and* validate the key) with inline error; the key commits on submit **and on close**
+  (guarded against redundant Keychain re-writes); the model resets on flavor switch; narration cache key folds
+  `cloud:flavor:model` only when the resolved kind is `"cloud"`; German l10n (vendor names stay English).
+- **Trust gate untouched** — cloud serves only narration; extraction stays on-device. **Out of scope (by design):**
+  cloud extraction, streaming, per-request cost/telemetry, daemon/CLI cloud use.
+- **Process:** subagent-driven (7 tasks + 1 final-fix wave; Haiku/Sonnet impl + per-task review each; **Opus**
+  whole-branch review = READY-TO-MERGE, 1 Important + 4 Minor → all fixes applied + re-reviewed clean). One-time
+  provider-selection reset accepted (no `preferences.json` migration). **260 tests.** Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-08-cloud-llm-provider-design.md` + `2026-07-09-cloud-llm-provider.md`.
+- **Post-merge carries:**
+  - **Rebuild + reinstall the release CLI** (the provider-selection read changed, daemon-adjacent):
+    `swift build -c release && cp .build/release/pensieve ~/.local/bin/pensieve`. No schema/hook/launchd change.
+  - **Human-verify** (built app + real store + `open`): ⌘, → pick **Cloud (API)** → cloud subsection appears; enter a
+    real key → **Fetch** populates the model picker; a bad key shows the inline error. Type a key and **close Settings
+    without pressing Enter/Fetch → the key is persisted** (Keychain Access shows the item; **not** in any plist/JSON).
+    Open a node → the recap generates via the cloud model; ⌘R re-narrates; after changing the model in Settings, ⌘R
+    re-narrates under it. Blank the key → narration falls back to local (no crash/facts-dump). **Cross-process:** set
+    the app to Foundation Models / `claude -p` → a later `pensieve digest`/`sync` uses it; set Cloud → the CLI falls
+    back to local, the app uses cloud; the launchd daemon (`sync.log`) always extracts on-device for `.cloud`. German
+    in situ (`-AppleLanguages '(de)'`) for the new labels; vendor names stay English.
+
+**Prior session: App Settings surface (first cut) — DONE & on `main` `9de6d18`.** The app's first
 `Settings` scene (**⌘,**), a near-term pillar raised the same day. Three knobs: **LLM provider** (Automatic /
 Foundation Models / claude -p), **Hide Dock icon** (menu-bar-only), **"Last Work Done" narration on/off**.
 **Kit (tested):** `ProviderPreference` + `Preferences` (JSON in the shared, non-sandboxed support dir, best-effort
@@ -40,7 +77,7 @@ keyed by provider** so a provider switch never regenerated cached prose (now fol
   -configuration Debug -derivedDataPath ./.build-xcode build`, then `open
   ./.build-xcode/Build/Products/Debug/Pensieve.app`.
 
-**Latest (this session): pane-layout fix + inline provenance — the ⌘⌥I inspector is RETIRED — DONE & on `main`
+**Prior session: pane-layout fix + inline provenance — the ⌘⌥I inspector is RETIRED — DONE & on `main`
 `59688e4`.** Fixed recurring pane-sizing bugs and reworked provenance from a fragile window-level `.inspector`
 into an inline, in-flow surface. **This supersedes every ⌘⌥I / `.inspector` / `InspectorView` mention below** (in
 the IA-rework and slice-3b entries) — that surface no longer exists. Details:
