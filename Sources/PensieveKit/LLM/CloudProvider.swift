@@ -44,6 +44,13 @@ public struct CloudConfig: Sendable, Equatable {
     self.model = model
   }
   public var isUsable: Bool { !baseURL.isEmpty && !model.isEmpty }
+
+  /// True when the base URL host is a loopback address. Lets a keyless local server (e.g. Ollama)
+  /// count as configured without weakening the remote-vendor key requirement.
+  public var isLocalEndpoint: Bool {
+    guard let url = URL(string: baseURL), let host = url.host?.lowercased() else { return false }
+    return host == "localhost" || host == "127.0.0.1" || host == "::1"
+  }
 }
 
 /// Pure HTTP request building + response parsing for the cloud flavors. No I/O — every function

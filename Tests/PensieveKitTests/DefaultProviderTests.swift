@@ -42,3 +42,25 @@ import Testing
   let cloudKind = resolvedProviderKind(defaults: d2)
   #expect(cloudKind == "foundationModels" || cloudKind == "claudeCLI")
 }
+
+@Test func keylessLocalhostCloudResolvesToCloud() {
+  let suite = "pensieve-test-\(UUID().uuidString)"
+  let d = UserDefaults(suiteName: suite)!
+  defer { d.removePersistentDomain(forName: suite) }
+  d.set(ProviderPreference.cloud.rawValue, forKey: PensieveDefaults.llmProviderKey)
+  let cfg = CloudConfig(flavor: .openAICompatible, baseURL: "http://localhost:11434/v1", model: "llama3")
+  // Empty key + local endpoint ⇒ configured ⇒ "cloud".
+  #expect(resolvedProviderKind(defaults: d, cloudConfig: cfg, apiKey: "") == "cloud")
+  // And the factory must not crash on the nil/empty key.
+  _ = makeDefaultLLMProvider(defaults: d, cloudConfig: cfg, apiKey: nil)
+}
+
+@Test func keylessRemoteCloudFallsBackToLocal() {
+  let suite = "pensieve-test-\(UUID().uuidString)"
+  let d = UserDefaults(suiteName: suite)!
+  defer { d.removePersistentDomain(forName: suite) }
+  d.set(ProviderPreference.cloud.rawValue, forKey: PensieveDefaults.llmProviderKey)
+  let cfg = CloudConfig(flavor: .openAICompatible, baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+  let kind = resolvedProviderKind(defaults: d, cloudConfig: cfg, apiKey: "")
+  #expect(kind == "foundationModels" || kind == "claudeCLI")
+}

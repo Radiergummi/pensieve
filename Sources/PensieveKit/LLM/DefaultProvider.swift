@@ -30,7 +30,8 @@ public func resolvedProviderKind(defaults: UserDefaults = .standard,
                                  cloudConfig: CloudConfig? = nil,
                                  apiKey: String? = nil) -> String {
   let preference = ProviderSettings.selection(from: defaults)
-  let configured = (cloudConfig?.isUsable ?? false) && !(apiKey ?? "").isEmpty
+  let configured = (cloudConfig?.isUsable ?? false)
+    && (!(apiKey ?? "").isEmpty || (cloudConfig?.isLocalEndpoint ?? false))
   return resolveProviderKind(preference: preference,
                              foundationAvailable: foundationModelsIsSelectable(),
                              cloudConfigured: configured)
@@ -45,7 +46,7 @@ public func makeDefaultLLMProvider(defaults: UserDefaults = .standard,
   let kind = resolvedProviderKind(defaults: defaults, cloudConfig: cloudConfig, apiKey: apiKey)
   switch kind {
   case "cloud":
-    return CloudLLMProvider(config: cloudConfig!, apiKey: apiKey!)
+    return CloudLLMProvider(config: cloudConfig!, apiKey: apiKey ?? "")
   case "foundationModels":
     #if canImport(FoundationModels)
     if #available(macOS 26.0, *) { return FoundationModelsProvider() }

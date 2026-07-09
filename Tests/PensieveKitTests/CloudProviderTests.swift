@@ -124,3 +124,11 @@ private func httpResponse(_ status: Int) -> HTTPURLResponse {
     }
   }
 }
+
+@Test func isLocalEndpointDetectsLoopback() {
+  #expect(CloudConfig(flavor: .openAICompatible, baseURL: "http://localhost:11434/v1", model: "m").isLocalEndpoint)
+  #expect(CloudConfig(flavor: .openAICompatible, baseURL: "http://127.0.0.1:11434/v1", model: "m").isLocalEndpoint)
+  #expect(CloudConfig(flavor: .openAICompatible, baseURL: "http://[::1]:11434/v1", model: "m").isLocalEndpoint)
+  #expect(!CloudConfig(flavor: .openAICompatible, baseURL: "https://api.openai.com/v1", model: "m").isLocalEndpoint)
+  #expect(!CloudConfig(flavor: .openAICompatible, baseURL: "", model: "m").isLocalEndpoint)
+}
