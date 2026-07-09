@@ -1251,6 +1251,91 @@
           }
         }
       }
+    },
+    "Cloud (API)" : {
+      "extractionState" : "manual",
+      "shouldTranslate" : false
+    },
+    "Provider Type" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anbietertyp"
+          }
+        }
+      }
+    },
+    "OpenAI-compatible" : {
+      "extractionState" : "manual",
+      "shouldTranslate" : false
+    },
+    "Base URL" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Basis-URL"
+          }
+        }
+      }
+    },
+    "API Key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schlüssel"
+          }
+        }
+      }
+    },
+    "Model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modell"
+          }
+        }
+      }
+    },
+    "Fetch models" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelle abrufen"
+          }
+        }
+      }
+    },
+    "Fetching…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird abgerufen…"
+          }
+        }
+      }
+    },
+    "Couldn’t reach the provider. Check the key and base URL." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anbieter nicht erreichbar. Schlüssel und Basis-URL prüfen."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
