@@ -7,7 +7,7 @@ struct Digest: AsyncParsableCommand {
     abstract: "Generate a morning markdown digest across active projects.")
   func run() async throws {
     let db = try openCanonical()
-    let builder = SummaryBuilder(provider: makeDefaultLLMProvider())
+    let builder = SummaryBuilder(provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()))
     print("# Pensieve digest\n")
     // Active projects only, matching the abstract (archived/muted don't belong in a morning digest).
     for p in try ProjectQueries.all(db) where p.state == "active" {

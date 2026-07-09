@@ -2,57 +2,46 @@ import Foundation
 import Testing
 @testable import PensieveKit
 
-private func tempPrefsURL() -> URL {
-  FileManager.default.temporaryDirectory
-    .appendingPathComponent("pensieve-prefs-\(UUID().uuidString).json")
+// MARK: ProviderSettings.selection
+
+@Test func selectionAbsentAndUnknownReadAsAuto() {
+  let suite = "pensieve-test-\(UUID().uuidString)"
+  let d = UserDefaults(suiteName: suite)!
+  defer { d.removePersistentDomain(forName: suite) }
+  #expect(ProviderSettings.selection(from: d) == .auto)                 // absent
+  d.set("bogus", forKey: PensieveDefaults.llmProviderKey)
+  #expect(ProviderSettings.selection(from: d) == .auto)                 // unknown value
 }
 
-@Test func writeThenReadRoundTrips() {
-  let url = tempPrefsURL()
-  defer { try? FileManager.default.removeItem(at: url) }
-  Preferences.write(.claudeCLI, to: url)
-  #expect(Preferences.read(from: url) == .claudeCLI)
-  Preferences.write(.foundationModels, to: url)
-  #expect(Preferences.read(from: url) == .foundationModels)
+@Test func selectionReadsKnownValues() {
+  let suite = "pensieve-test-\(UUID().uuidString)"
+  let d = UserDefaults(suiteName: suite)!
+  defer { d.removePersistentDomain(forName: suite) }
+  for pref in [ProviderPreference.foundationModels, .claudeCLI, .cloud, .auto] {
+    d.set(pref.rawValue, forKey: PensieveDefaults.llmProviderKey)
+    #expect(ProviderSettings.selection(from: d) == pref)
+  }
 }
 
-@Test func missingFileReadsAsAuto() {
-  let url = tempPrefsURL()   // never written
-  #expect(Preferences.read(from: url) == .auto)
-}
-
-@Test func corruptFileReadsAsAuto() throws {
-  let url = tempPrefsURL()
-  defer { try? FileManager.default.removeItem(at: url) }
-  try Data("not json".utf8).write(to: url)
-  #expect(Preferences.read(from: url) == .auto)
-}
-
-@Test func unknownProviderValueReadsAsAuto() throws {
-  let url = tempPrefsURL()
-  defer { try? FileManager.default.removeItem(at: url) }
-  try Data(#"{"llmProvider":"gpt5"}"#.utf8).write(to: url)
-  #expect(Preferences.read(from: url) == .auto)
-}
+// MARK: resolveProviderKind
 
 @Test func resolverAutoFollowsAvailability() {
-  #expect(resolveProviderKind(preference: .auto, foundationAvailable: true) == "foundationModels")
-  #expect(resolveProviderKind(preference: .auto, foundationAvailable: false) == "claudeCLI")
+  #expect(resolveProviderKind(preference: .auto, foundationAvailable: true, cloudConfigured: false) == "foundationModels")
+  #expect(resolveProviderKind(preference: .auto, foundationAvailable: false, cloudConfigured: false) == "claudeCLI")
 }
 
 @Test func resolverForcedFoundationFallsBackWhenUnavailable() {
-  #expect(resolveProviderKind(preference: .foundationModels, foundationAvailable: true) == "foundationModels")
-  #expect(resolveProviderKind(preference: .foundationModels, foundationAvailable: false) == "claudeCLI")
+  #expect(resolveProviderKind(preference: .foundationModels, foundationAvailable: true, cloudConfigured: false) == "foundationModels")
+  #expect(resolveProviderKind(preference: .foundationModels, foundationAvailable: false, cloudConfigured: false) == "claudeCLI")
 }
 
 @Test func resolverForcedClaudeAlwaysClaude() {
-  #expect(resolveProviderKind(preference: .claudeCLI, foundationAvailable: true) == "claudeCLI")
-  #expect(resolveProviderKind(preference: .claudeCLI, foundationAvailable: false) == "claudeCLI")
+  #expect(resolveProviderKind(preference: .claudeCLI, foundationAvailable: true, cloudConfigured: false) == "claudeCLI")
+  #expect(resolveProviderKind(preference: .claudeCLI, foundationAvailable: false, cloudConfigured: false) == "claudeCLI")
 }
 
-@Test func defaultProviderKindHonorsExplicitPrefsFile() throws {
-  let url = tempPrefsURL()
-  defer { try? FileManager.default.removeItem(at: url) }
-  Preferences.write(.claudeCLI, to: url)
-  #expect(defaultProviderKind(prefsURL: url) == "claudeCLI")
+@Test func resolverCloudRequiresConfiguredElseLocal() {
+  #expect(resolveProviderKind(preference: .cloud, foundationAvailable: false, cloudConfigured: true) == "cloud")
+  #expect(resolveProviderKind(preference: .cloud, foundationAvailable: true, cloudConfigured: false) == "foundationModels")
+  #expect(resolveProviderKind(preference: .cloud, foundationAvailable: false, cloudConfigured: false) == "claudeCLI")
 }

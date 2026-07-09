@@ -11,11 +11,6 @@ public enum PensievePaths {
   public static func captureURL() -> URL {
     supportDirectory().appendingPathComponent("capture.sqlite")
   }
-  /// `~/Library/Application Support/Pensieve/preferences.json` — machine-local app/daemon
-  /// settings (currently the LLM provider choice). NOT synced.
-  public static func preferencesURL() -> URL {
-    supportDirectory().appendingPathComponent("preferences.json")
-  }
   /// The current user's home, resolved via `getpwuid` (correct even when launchd does not
   /// export HOME) rather than the HOME environment variable.
   public static func homeDirectory() -> URL {

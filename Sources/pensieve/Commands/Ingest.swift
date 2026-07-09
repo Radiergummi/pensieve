@@ -6,11 +6,11 @@ struct Ingest: AsyncParsableCommand {
     abstract: "Drain the capture spool into events, then extract loose ends.")
   func run() async throws {
     let db = try openCanonical()
-    let provider = makeDefaultLLMProvider()
+    let provider = makeDefaultLLMProvider(defaults: PensieveDefaults.shared())
     let created = try await Ingester(spool: try openSpool(), db: db, llm: provider).drain()
     print("ingested \(created) event(s)")
     do {
-      let results = try await ExtractionRunner(db: db, provider: makeDefaultLLMProvider()).run()
+      let results = try await ExtractionRunner(db: db, provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared())).run()
       let proposed = results.reduce(0) { $0 + $1.proposed }
       let verified = results.reduce(0) { $0 + $1.verified }
       let inserted = results.reduce(0) { $0 + $1.inserted }

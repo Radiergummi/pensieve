@@ -1,51 +1,49 @@
 import Foundation
 
-/// True when Foundation Models is compiled in, requires macOS 26+, and the on-device
-/// model reports itself available on this machine. Shared by the factory and the resolver
-/// so they can never disagree.
+/// True when Foundation Models is compiled in, requires macOS 26+, and the on-device model reports
+/// itself available on this machine. Shared by the factory and the resolver so they can't disagree.
 private func foundationModelsIsSelectable() -> Bool {
   FoundationModelsProbe.isAvailable()
 }
 
 /// The whole provider decision as one pure function. Returns the concrete kind string
-/// (`"foundationModels"` / `"claudeCLI"`) — never `.auto`. Forced Foundation Models falls
-/// back to `claude -p` when the model isn't available here; `.auto` picks the same way.
-public func resolveProviderKind(preference: ProviderPreference, foundationAvailable: Bool) -> String {
+/// (`"foundationModels"` / `"claudeCLI"` / `"cloud"`) — never a preference case. Forced Foundation
+/// Models and a `.cloud` selection that isn't configured both fall back to local-first the same way.
+/// `cloudConfigured` is computed by the caller from config validity + key presence.
+public func resolveProviderKind(preference: ProviderPreference,
+                                foundationAvailable: Bool,
+                                cloudConfigured: Bool) -> String {
+  let local = foundationAvailable ? "foundationModels" : "claudeCLI"
   switch preference {
+  case .cloud:
+    return cloudConfigured ? "cloud" : local
   case .auto, .foundationModels:
-    return foundationAvailable ? "foundationModels" : "claudeCLI"
+    return local
   case .claudeCLI:
     return "claudeCLI"
   }
 }
 
-/// Resolve which prefs file to read: an explicit URL (tests), else the `PENSIEVE_PREFS`
-/// env override (throwaway dev runs), else the real support-dir file. Tests always pass an
-/// explicit URL, so the env is never consulted from a test — no process-global race under
-/// Swift Testing's parallel execution.
-private func resolvedPrefsURL(_ explicit: URL?) -> URL {
-  if let explicit { return explicit }
-  if let override = ProcessInfo.processInfo.environment["PENSIEVE_PREFS"] {
-    return URL(fileURLWithPath: override)
+/// Preference-aware selection. The *selection* comes from an injected UserDefaults (app → `.standard`;
+/// CLI/daemon → `PensieveDefaults.shared()`); the app additionally injects the cloud config + Keychain
+/// key. Cloud is chosen only when selected AND fully configured, else it degrades to local-first.
+public func makeDefaultLLMProvider(defaults: UserDefaults = .standard,
+                                   cloudConfig: CloudConfig? = nil,
+                                   apiKey: String? = nil) -> any LLMProvider {
+  let preference = ProviderSettings.selection(from: defaults)
+  let configured = (cloudConfig?.isUsable ?? false) && !(apiKey ?? "").isEmpty
+  let kind = resolveProviderKind(preference: preference,
+                                 foundationAvailable: foundationModelsIsSelectable(),
+                                 cloudConfigured: configured)
+  switch kind {
+  case "cloud":
+    return CloudLLMProvider(config: cloudConfig!, apiKey: apiKey!)
+  case "foundationModels":
+    #if canImport(FoundationModels)
+    if #available(macOS 26.0, *) { return FoundationModelsProvider() }
+    #endif
+    return ClaudeCLIProvider()
+  default:
+    return ClaudeCLIProvider()
   }
-  return PensievePaths.preferencesURL()
-}
-
-/// Local-first, preference-aware selection. All existing call sites keep calling this
-/// argument-free; the defaulted param exists for test injection.
-public func makeDefaultLLMProvider(prefsURL: URL? = nil) -> any LLMProvider {
-  let kind = defaultProviderKind(prefsURL: prefsURL)
-  #if canImport(FoundationModels)
-  if #available(macOS 26.0, *), kind == "foundationModels" {
-    return FoundationModelsProvider()
-  }
-  #endif
-  return ClaudeCLIProvider()
-}
-
-/// Pure, testable readout of which provider `makeDefaultLLMProvider` would select, honoring
-/// the persisted preference + on-device availability.
-public func defaultProviderKind(prefsURL: URL? = nil) -> String {
-  let preference = Preferences.read(from: resolvedPrefsURL(prefsURL))
-  return resolveProviderKind(preference: preference, foundationAvailable: foundationModelsIsSelectable())
 }
