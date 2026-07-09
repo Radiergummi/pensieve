@@ -9,6 +9,23 @@ import Testing
 
 private struct Labeled: Codable { let quote: String; let salient: Bool }
 
+/// Runs `claude -p --model <model>` with the prompt on stdin; trimmed stdout. Salience prompts are
+/// small (~2KB) so writing stdin before draining stdout can't deadlock the OS pipe buffer here.
+private func claudeRun(_ prompt: String, model: String) throws -> String {
+  let p = Process()
+  p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+  p.arguments = ["claude", "-p", "--model", model]
+  let stdin = Pipe(), stdout = Pipe()
+  p.standardInput = stdin; p.standardOutput = stdout; p.standardError = FileHandle.nullDevice
+  try p.run()
+  try? stdin.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
+  try? stdin.fileHandleForWriting.close()
+  let out = stdout.fileHandleForReading.readDataToEndOfFile()
+  p.waitUntilExit()
+  guard p.terminationStatus == 0 else { throw LLMError.providerFailed("claude -p exit \(p.terminationStatus)") }
+  return String(decoding: out, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 /// Review-time eval against the REAL on-device model. Skipped in CI (no deterministic gate for a
 /// probabilistic model). Run: PENSIEVE_SALIENCE_EVAL=1 ./scripts/test.sh --filter salienceEval
 @Test func salienceEvalReport() async throws {
@@ -19,7 +36,16 @@ private struct Labeled: Codable { let quote: String; let salient: Bool }
   let url = ProcessInfo.processInfo.environment["PENSIEVE_SALIENCE_LABELS"].map { URL(fileURLWithPath: $0) }
     ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/salience-labels.json")
   let labels = try JSONDecoder().decode([Labeled].self, from: Data(contentsOf: url))
-  let provider = makeDefaultLLMProvider()
+  // Provider is selectable so the go/no-go can escalate from on-device to `claude -p` (plan A5
+  // step 3) without editing code: PENSIEVE_SALIENCE_EVAL_PROVIDER=claude uses the CLI provider,
+  // pinned to a cheap model via PENSIEVE_CLAUDE_MODEL (default Haiku). Default = on-device.
+  let provider: any LLMProvider
+  if ProcessInfo.processInfo.environment["PENSIEVE_SALIENCE_EVAL_PROVIDER"] == "claude" {
+    let model = ProcessInfo.processInfo.environment["PENSIEVE_CLAUDE_MODEL"] ?? "claude-haiku-4-5-20251001"
+    provider = ClaudeCLIProvider(run: { try claudeRun($0, model: model) })
+  } else {
+    provider = makeDefaultLLMProvider()
+  }
   let ends = labels.map { VerifiedLooseEnd(text: $0.quote, quote: $0.quote, role: "user", sourceMessageIndex: 0) }
   let msgs = labels.enumerated().map { TranscriptMessage(index: $0.offset, role: "user", text: $0.element.quote, timestamp: nil, isUserPrompt: true) }
   // (sourceMessageIndex is 0 for all here; give each end its own index if you want per-item context.)

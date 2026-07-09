@@ -79,9 +79,14 @@ public struct ExtractionRunner {
         let candidates = CandidateFilter.strip(
           try await LooseEndExtractor(provider: provider).extract(from: slice))
         let verified = candidates.compactMap { LooseEndVerifier.verify($0, messages: session.messages) }
-        // Salience gate: drop verified-but-in-the-moment requests (keeps deferred/decision work).
-        // Runs on real, already-verified quotes; the verbatim gate is untouched.
-        let salient = await SalienceClassifier(provider: provider).filter(verified, messages: session.messages)
+        // NOTE: the LLM salience gate (SalienceClassifier) is intentionally NOT wired in here.
+        // A hand-labeled eval over 120 real loose ends (docs/superpowers/salience-eval-2026-07-09.md)
+        // showed the on-device ~3B model at recall 0.68 — it confidently DROPS genuine loose ends
+        // ("going forward, I'd like to combine…") while removing little noise, and is
+        // non-deterministic. That is worse than lossless for a "never lose a real loose end" tool.
+        // Until the deterministic on-device Create ML classifier + in-app labeling loop lands,
+        // extraction stays lossless: every verified (verbatim-cited) loose end is surfaced.
+        // SalienceClassifier + classifyNonSalientIndices remain for the eval and future reuse.
 
         // Best-effort session recap for narration (Part B). `summarize` is non-throwing (nil on
         // failure), computed BEFORE the synchronous db.write. This line is lexically inside the
@@ -99,10 +104,10 @@ public struct ExtractionRunner {
           // transcript, and a user may restate a quote verbatim) must not resurrect a
           // RESOLVED loose end the user already dismissed. Skip the scan when there is
           // nothing to insert.
-          if !salient.isEmpty {
+          if !verified.isEmpty {
             let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
             var seen = Set(existing.map { normalizeWhitespace($0.quote) })
-            for v in salient {
+            for v in verified {
               let key = normalizeWhitespace(v.quote)
               if seen.contains(key) { continue }   // within- and cross-session dedup
               seen.insert(key)

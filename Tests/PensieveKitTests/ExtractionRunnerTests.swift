@@ -338,37 +338,34 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(ev?.extractedTranscriptSize != -1)      // watermark still advanced
 }
 
-@Test func extractionAppliesSalienceGate() async throws {
-  // Two candidates verified; the salience gate drops the in-the-moment one. Only the
-  // deferred/salient quote is stored. Content-keyed drop (not a bare batch-local index
-  // literal) so the stub stays correct regardless of how SalienceClassifier batches.
-  let db = try openCanonicalDatabase(at: tempURL("run-salience"))
+@Test func extractionIsLosslessWithoutSalienceGate() async throws {
+  // The LLM salience gate is intentionally unwired (see ExtractionRunner + the 2026-07-09 eval):
+  // the on-device model dropped genuine loose ends, so extraction stays lossless until the
+  // deterministic Create ML classifier lands. Every VERIFIED (verbatim-cited) loose end is stored
+  // — even a stub that would classify one as non-salient must not affect the result.
+  let db = try openCanonicalDatabase(at: tempURL("run-lossless"))
   let transcript = try writeTranscript([
-    "we should also migrate the auth tables later",   // salient
-    "please read the spec now",                        // in-the-moment -> dropped
+    "we should also migrate the auth tables later",
+    "please read the spec now",
   ])
   let event = try makeSessionEvent(db: db, transcript: transcript)
-  struct TwoThenDrop: LLMProvider {
+  struct WouldDropOne: LLMProvider {
     func complete(prompt: String) async throws -> String { "" }
     func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0, 1] }
     func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] {
       [LooseEndCandidate(text: "migrate auth", quote: "we should also migrate the auth tables later", messageIndex: 0),
        LooseEndCandidate(text: "read spec", quote: "please read the spec now", messageIndex: 1)]
     }
-    func classifyNonSalientIndices(prompt: String) async throws -> [Int] {
-      // Drop whichever batch-local [n] item's QUOTE line is the in-the-moment request.
-      var drop: [Int] = []
-      for line in prompt.split(separator: "\n") {
-        guard line.hasPrefix("["), let close = line.firstIndex(of: "]"),
-              let n = Int(line[line.index(after: line.startIndex)..<close]) else { continue }
-        if line.contains("QUOTE: please read the spec now") { drop.append(n) }
-      }
-      return drop
-    }
+    // Even though this would classify the second item as non-salient, the gate is unwired, so it
+    // must have NO effect — both verified loose ends are surfaced.
+    func classifyNonSalientIndices(prompt: String) async throws -> [Int] { [1] }
   }
-  _ = try await ExtractionRunner(db: db, provider: TwoThenDrop()).run()
+  _ = try await ExtractionRunner(db: db, provider: WouldDropOne()).run()
   let stored = try await db.read { db in try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db) }
-  #expect(stored.map(\.quote) == ["we should also migrate the auth tables later"])
+  #expect(Set(stored.map(\.quote)) == [
+    "we should also migrate the auth tables later",
+    "please read the spec now",
+  ])
 }
 
 @Test func partialTrailingLinePicksUpAtCorrectIndexAfterCompletion() async throws {
