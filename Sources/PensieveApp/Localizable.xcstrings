@@ -630,6 +630,28 @@
         }
       }
     },
+    "Mark as a real loose end" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als echten losen Faden markieren"
+          }
+        }
+      }
+    },
+    "Mark as not a loose end" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als keinen losen Faden markieren"
+          }
+        }
+      }
+    },
     "Merge" : {
       "extractionState" : "manual",
       "localizations" : {

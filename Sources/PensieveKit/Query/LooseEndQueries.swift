@@ -12,9 +12,9 @@ public enum LooseEndQueries {
     try db.read { db in
       let ends: [LooseEnd]
       if let nodeID {
-        ends = try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq("open") }.fetchAll(db)
+        ends = try LooseEnd.where { $0.nodeID.eq(nodeID) && LooseEnd.isOpen($0) }.fetchAll(db)
       } else {
-        ends = try LooseEnd.where { $0.status.eq("open") }.fetchAll(db)
+        ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
       }
       var views: [LooseEndView] = []
       for le in ends {

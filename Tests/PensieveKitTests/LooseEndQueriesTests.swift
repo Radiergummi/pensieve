@@ -20,3 +20,32 @@ import SQLiteData
   #expect(views.count == 1)
   #expect(views.first?.ageDays == 10)
 }
+
+@Test func openExcludesConfirmedNoiseButKeepsSalientUnlabeledAndSuggested() throws {
+  let db = try openCanonicalDatabase(at: tempURL("open-filter"))
+  let node = Node(name: "N")
+  // Full FK chain: looseEnds.sourceEventID -> events.id -> sources.id.
+  let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
+  let src = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                  kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
+  try db.write { db in
+    try Node.insert { node }.execute(db)
+    try Source.insert { source }.execute(db)
+    try Event.insert { src }.execute(db)
+  }
+  func add(_ quote: String, label: String = "", suggestion: String = "") throws -> UUID {
+    let le = LooseEnd(nodeID: node.id, sourceEventID: src.id, text: quote, quote: quote,
+                      label: label, labelSuggestion: suggestion)
+    try db.write { db in try LooseEnd.insert { le }.execute(db) }
+    return le.id
+  }
+  _ = try add("unlabeled item")
+  _ = try add("confirmed salient", label: LooseEndLabel.salient)
+  _ = try add("confirmed noise", label: LooseEndLabel.noise)               // excluded
+  _ = try add("only suggested noise", suggestion: LooseEndLabel.noise)     // kept (suggestion != decision)
+
+  let open = try LooseEndQueries.open(db, nodeID: node.id, now: Date())
+  let texts = Set(open.map { $0.looseEnd.text })
+  #expect(texts == ["unlabeled item", "confirmed salient", "only suggested noise"])
+  #expect(!texts.contains("confirmed noise"))
+}

@@ -25,6 +25,31 @@ import SQLiteData
   #expect(fa.daysDormant == 10)
 }
 
+@Test func nodeFactsExcludesConfirmedNoiseFromOpenLooseEndCount() throws {
+  let db = try openCanonicalDatabase(at: tempURL("nodefacts-noise"))
+  let resolver = ProjectResolver(db: db)
+  let (a, sa) = try resolver.resolve(path: "/p/noise", kind: SourceKind.claudeCode)
+  let ea = Event(nodeID: a.id, sourceID: sa.id, occurredAt: Date(), kind: CaptureKind.ccSession,
+                 summary: "s", detailJSON: "{}", fingerprint: "nf1")
+  try db.write { db in
+    try Event.insert { ea }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "t1", quote: "unlabeled item")
+    }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "t2", quote: "confirmed noise",
+               label: LooseEndLabel.noise)
+    }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "t3", quote: "only suggested noise",
+               labelSuggestion: LooseEndLabel.noise)
+    }.execute(db)
+  }
+  let facts = try NodeFactsQueries.all(db, now: Date())
+  let fa = try #require(facts.first { $0.node.id == a.id })
+  #expect(fa.openLooseEnds == 2)   // confirmed-noise excluded; unlabeled + suggestion-only-noise kept
+}
+
 @Test func nodeFactsExcludesArchivedFromAllButFetchesByID() throws {
   let db = try openCanonicalDatabase(at: tempURL("nodefacts-archived"))
   let archivedID = UUID()

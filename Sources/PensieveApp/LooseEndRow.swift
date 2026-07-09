@@ -12,25 +12,39 @@ struct LooseEndRow: View {
   let view: LooseEndView
   /// Resolves the surrounding-transcript context off the main actor (file I/O). Pass `model.provenance`.
   let loadProvenance: (LooseEnd) async -> ProvenanceContext?
+  /// Confirms a salience label for this loose end (👍 salient / 👎 noise / "" clears). Pass
+  /// `model.setLooseEndLabel`.
+  let onLabel: (UUID, String) -> Void
 
   @State private var expanded = false            // the loose-end row itself
   @State private var provenanceExpanded = false  // the provenance box's own show-more/less
   @State private var context: ProvenanceContext?
   @State private var loading = false
 
+  /// Optimistic override of the confirmed label so a tap reflects immediately (the injected
+  /// `LooseEndView` is an immutable snapshot). nil = show the stored value. The row is filtered out
+  /// of the open list on the next reload when confirmed noise.
+  @State private var localLabel: String?
+
+  /// The label to display: the optimistic local value if the user just tapped, else the stored one.
+  private var currentLabel: String { localLabel ?? view.looseEnd.label }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Button {
-        expanded.toggle()
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: expanded ? "chevron.down" : "chevron.right")
-            .font(.caption2).foregroundStyle(.secondary)
-          Text(view.looseEnd.text).prose()
-          Spacer()
+      HStack(spacing: 6) {
+        Button {
+          expanded.toggle()
+        } label: {
+          HStack(spacing: 6) {
+            Image(systemName: expanded ? "chevron.down" : "chevron.right")
+              .font(.caption2).foregroundStyle(.secondary)
+            Text(view.looseEnd.text).prose()
+          }
         }
+        .buttonStyle(.plain)
+        Spacer()
+        thumbs
       }
-      .buttonStyle(.plain)
 
       if expanded {
         VStack(alignment: .leading, spacing: 8) {
@@ -79,6 +93,35 @@ struct LooseEndRow: View {
         Text("Surrounding context unavailable (transcript changed or removed).").metaText()
       }
     }
+  }
+
+  @ViewBuilder private var thumbs: some View {
+    HStack(spacing: 10) {
+      thumb(systemFilled: "hand.thumbsup.fill", systemOutline: "hand.thumbsup",
+            value: LooseEndLabel.salient, help: String(localized: "Mark as a real loose end"))
+      thumb(systemFilled: "hand.thumbsdown.fill", systemOutline: "hand.thumbsdown",
+            value: LooseEndLabel.noise, help: String(localized: "Mark as not a loose end"))
+    }
+    .font(.caption)
+  }
+
+  /// One thumb. Filled when the confirmed label matches; a faint pre-highlight when only SUGGESTED
+  /// (guess awaiting confirm). Tapping toggles: tap the active label again to clear it.
+  @ViewBuilder private func thumb(systemFilled: String, systemOutline: String,
+                                  value: String, help: String) -> some View {
+    let confirmed = currentLabel == value
+    let suggested = currentLabel.isEmpty && view.looseEnd.labelSuggestion == value
+    Button {
+      let next = confirmed ? LooseEndLabel.unlabeled : value
+      localLabel = next
+      onLabel(view.looseEnd.id, next)
+    } label: {
+      Image(systemName: confirmed ? systemFilled : systemOutline)
+        .foregroundStyle(confirmed ? Color.accentColor : (suggested ? Color.accentColor.opacity(0.55) : Color.secondary))
+    }
+    .buttonStyle(.plain)
+    .help(help)
+    .accessibilityLabel(help)
   }
 
   private var disclosureButton: some View {
