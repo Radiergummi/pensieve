@@ -145,5 +145,12 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     // size-changed extraction. Never gates anything — best-effort narration input.
     try #sql(#"ALTER TABLE "events" ADD COLUMN "workSummary" TEXT"#).execute(db)
   }
+  migrator.registerMigration("v11-looseend-label") { db in
+    // Human-confirmed + machine-suggested salience labels. NOT NULL DEFAULT '' (like v9 context)
+    // so `.neq("noise")` filters correctly (a nullable column would drop NULL rows under SQL
+    // three-valued logic). Additive; nothing gates on it — Phase 1 stays lossless.
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "label" TEXT NOT NULL DEFAULT ''"#).execute(db)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "labelSuggestion" TEXT NOT NULL DEFAULT ''"#).execute(db)
+  }
   try migrator.migrate(db)
 }
