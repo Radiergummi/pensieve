@@ -47,7 +47,7 @@ public struct MonitorSnapshot: Equatable, Sendable {
        let db = try? openCanonicalDatabaseReadOnly(at: canonicalURL) {
       events = (try? db.read { db in try Event.fetchCount(db) }) ?? 0
       loose = (try? db.read { db in
-        try LooseEnd.where { $0.status.eq("open") }.fetchCount(db)
+        try LooseEnd.where { $0.status.eq("open") && $0.label.neq("noise") }.fetchCount(db)
       }) ?? 0
     }
 
@@ -74,7 +74,7 @@ public struct MonitorSnapshot: Equatable, Sendable {
     if let canonical {
       events = (try? canonical.read { db in try Event.fetchCount(db) }) ?? 0
       loose = (try? canonical.read { db in
-        try LooseEnd.where { $0.status.eq("open") }.fetchCount(db)
+        try LooseEnd.where { $0.status.eq("open") && $0.label.neq("noise") }.fetchCount(db)
       }) ?? 0
     }
     return classify(lastCapture: lastCapture, pending: pending, events: events, loose: loose,
