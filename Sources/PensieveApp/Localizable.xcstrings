@@ -37,6 +37,9 @@
         }
       }
     },
+    "%@ models available" : {
+
+    },
     "%@ open" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -89,6 +92,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld loose ends"
+          }
+        }
+      }
+    },
+    "%lld models available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Modelle verfügbar"
           }
         }
       }
@@ -234,8 +248,16 @@
         }
       }
     },
-    "claude -p" : {
-
+    "Claude CLI (subscription)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude CLI (Abonnement)"
+          }
+        }
+      }
     },
     "Claude Code Session" : {
       "extractionState" : "manual",
@@ -292,6 +314,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anbieter nicht erreichbar. Schlüssel und Basis-URL prüfen."
+          }
+        }
+      }
+    },
+    "Custom" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzerdefiniert"
           }
         }
       }
@@ -445,9 +478,6 @@
         }
       }
     },
-    "Foundation Models" : {
-
-    },
     "Foundation Models isn’t available on this Mac — using claude -p instead." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -527,6 +557,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dock-Symbol ausblenden (nur Menüleiste)"
+          }
+        }
+      }
+    },
+    "Highest quality. Sends recent activity excerpts to the chosen vendor's API." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Höchste Qualität. Sendet Auszüge der jüngsten Aktivität an die API des gewählten Anbieters."
           }
         }
       }
@@ -878,6 +919,17 @@
         }
       }
     },
+    "On-device (Foundation Models)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dem Gerät (Foundation Models)"
+          }
+        }
+      }
+    },
     "Open in New Window" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -933,6 +985,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ein loses Ende auswählen, um die Quelle zu sehen."
+          }
+        }
+      }
+    },
+    "Picks the best on-device option — Foundation Models when available, otherwise the Claude CLI." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wählt die beste Option auf dem Gerät — Foundation Models, falls verfügbar, sonst die Claude CLI."
           }
         }
       }
@@ -1076,6 +1139,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Umbenennen"
+          }
+        }
+      }
+    },
+    "Runs entirely on-device. Private and free, but noticeably lower quality than a frontier cloud model." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft vollständig auf dem Gerät. Privat und kostenlos, aber deutlich geringere Qualität als ein modernes Cloud-Modell."
           }
         }
       }
@@ -1336,6 +1410,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht festgelegt"
+          }
+        }
+      }
+    },
+    "Uses your Claude subscription via the claude command. Good quality, stays on your account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutzt das Claude-Abonnement über den Befehl „claude“. Gute Qualität, bleibt im eigenen Konto."
+          }
+        }
+      }
+    },
+    "Vendor" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anbieter"
           }
         }
       }
