@@ -37,9 +37,6 @@
         }
       }
     },
-    "%@ models available" : {
-
-    },
     "%@ open" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -247,6 +244,9 @@
           }
         }
       }
+    },
+    "claude -p" : {
+
     },
     "Claude CLI (subscription)" : {
       "extractionState" : "manual",
@@ -477,6 +477,9 @@
           }
         }
       }
+    },
+    "Foundation Models" : {
+
     },
     "Foundation Models isn’t available on this Mac — using claude -p instead." : {
       "extractionState" : "manual",
