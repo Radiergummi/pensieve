@@ -22,6 +22,7 @@ struct SettingsView: View {
   @State private var isFetching = false
   @State private var fetchError = false
   @State private var didFetch = false
+  @State private var vendorIsCustom = false
 
   @FocusState private var keyFocused: Bool
   @FocusState private var baseURLFocused: Bool
@@ -117,7 +118,7 @@ struct SettingsView: View {
 
       TextField("Base URL", text: $cloudBaseURL)
         .focused($baseURLFocused)
-        .onChange(of: cloudBaseURL) { _, _ in fetchError = false }
+        .onChange(of: cloudBaseURL) { _, _ in fetchError = false; models = []; didFetch = false }
         .onChange(of: baseURLFocused) { _, focused in
           if !focused { reloadKeyForAccount(); model.rebuildSummaryBuilder() }
         }
@@ -172,9 +173,15 @@ struct SettingsView: View {
   /// flavor + base URL; selecting "Custom" keeps the current values and reveals the free fields.
   private var vendorSelection: Binding<String> {
     Binding(
-      get: { CloudPresets.match(flavor: cloudFlavor, baseURL: cloudBaseURL)?.id ?? "custom" },
+      get: { vendorIsCustom ? "custom" : (CloudPresets.match(flavor: cloudFlavor, baseURL: cloudBaseURL)?.id ?? "custom") },
       set: { id in
+        if id == "custom" {
+          vendorIsCustom = true          // leave flavor/URL as-is; reveal the free fields
+          fetchError = false
+          return
+        }
         guard let preset = CloudPresets.all.first(where: { $0.id == id }) else { return }
+        vendorIsCustom = false
         cloudFlavorRaw = preset.flavor.rawValue
         cloudBaseURL = preset.baseURL
         resetCloudFieldsForVendorChange()
