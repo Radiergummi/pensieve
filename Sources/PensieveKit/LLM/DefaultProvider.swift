@@ -24,17 +24,25 @@ public func resolveProviderKind(preference: ProviderPreference,
   }
 }
 
+/// The resolved concrete provider kind ("foundationModels" / "claudeCLI" / "cloud") for the given
+/// selection + cloud inputs. Single source of truth shared by the factory and the app's cache key.
+public func resolvedProviderKind(defaults: UserDefaults = .standard,
+                                 cloudConfig: CloudConfig? = nil,
+                                 apiKey: String? = nil) -> String {
+  let preference = ProviderSettings.selection(from: defaults)
+  let configured = (cloudConfig?.isUsable ?? false) && !(apiKey ?? "").isEmpty
+  return resolveProviderKind(preference: preference,
+                             foundationAvailable: foundationModelsIsSelectable(),
+                             cloudConfigured: configured)
+}
+
 /// Preference-aware selection. The *selection* comes from an injected UserDefaults (app → `.standard`;
 /// CLI/daemon → `PensieveDefaults.shared()`); the app additionally injects the cloud config + Keychain
 /// key. Cloud is chosen only when selected AND fully configured, else it degrades to local-first.
 public func makeDefaultLLMProvider(defaults: UserDefaults = .standard,
                                    cloudConfig: CloudConfig? = nil,
                                    apiKey: String? = nil) -> any LLMProvider {
-  let preference = ProviderSettings.selection(from: defaults)
-  let configured = (cloudConfig?.isUsable ?? false) && !(apiKey ?? "").isEmpty
-  let kind = resolveProviderKind(preference: preference,
-                                 foundationAvailable: foundationModelsIsSelectable(),
-                                 cloudConfigured: configured)
+  let kind = resolvedProviderKind(defaults: defaults, cloudConfig: cloudConfig, apiKey: apiKey)
   switch kind {
   case "cloud":
     return CloudLLMProvider(config: cloudConfig!, apiKey: apiKey!)

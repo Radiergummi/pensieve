@@ -24,6 +24,10 @@ struct SettingsView: View {
   @AppStorage(PensieveDefaults.cloudBaseURLKey) private var cloudBaseURL = ""
   @AppStorage(PensieveDefaults.cloudModelKey) private var cloudModel = ""
   @State private var apiKeyField = ""
+  /// Mirrors the last-persisted Keychain value, so we can tell an edited-but-unsubmitted key apart
+  /// from an unchanged one (and skip a redundant Keychain write — each write can trigger a macOS
+  /// re-authorization prompt under ad-hoc signing).
+  @State private var loadedKey = ""
   @State private var models: [String] = []
   @State private var isFetching = false
   @State private var fetchError = false
@@ -67,6 +71,8 @@ struct SettingsView: View {
               cloudFlavorRaw = newFlavor.rawValue
               cloudBaseURL = newFlavor.defaultBaseURL          // reset base to the flavor default
               apiKeyField = KeychainSecretStore().read(account: newFlavor.rawValue) ?? ""
+              loadedKey = apiKeyField
+              cloudModel = ""                                  // don't carry a stale model across flavors
               models = []; fetchError = false
               model.rebuildSummaryBuilder()
             }
@@ -80,6 +86,7 @@ struct SettingsView: View {
 
           SecureField("API Key", text: $apiKeyField)
             .onSubmit { commitKey() }
+            .onDisappear { if apiKeyField != loadedKey { commitKey() } }
 
           HStack {
             if models.isEmpty {
@@ -106,11 +113,15 @@ struct SettingsView: View {
     }
     .formStyle(.grouped)
     .frame(width: 460)
-    .onAppear { apiKeyField = KeychainSecretStore().read(account: cloudFlavor.rawValue) ?? "" }
+    .onAppear {
+      apiKeyField = KeychainSecretStore().read(account: cloudFlavor.rawValue) ?? ""
+      loadedKey = apiKeyField
+    }
   }
 
   private func commitKey() {
     KeychainSecretStore().write(apiKeyField, account: cloudFlavor.rawValue)
+    loadedKey = apiKeyField
     model.rebuildSummaryBuilder()
   }
 

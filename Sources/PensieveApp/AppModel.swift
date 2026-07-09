@@ -160,10 +160,7 @@ final class AppModel: ObservableObject {
   func rebuildSummaryBuilder() {
     let (config, key) = cloudInputs()
     summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider(cloudConfig: config, apiKey: key))
-    let configured = (config?.isUsable ?? false) && !(key ?? "").isEmpty
-    let kind = resolveProviderKind(preference: ProviderSettings.selection(from: .standard),
-                                   foundationAvailable: FoundationModelsProbe.isAvailable(),
-                                   cloudConfigured: configured)
+    let kind = resolvedProviderKind(cloudConfig: config, apiKey: key)
     if kind == "cloud", let config {
       providerKind = "cloud:\(config.flavor.rawValue):\(config.model)"
     } else {
