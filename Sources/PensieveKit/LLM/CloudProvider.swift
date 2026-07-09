@@ -131,3 +131,53 @@ public enum CloudHTTP {
     return resp.data.map { $0.id }.sorted()
   }
 }
+
+/// App-only cloud provider: prompt in / text out over HTTP. Best-effort narration, outside the
+/// trust gate. Only `complete` is implemented; structured methods inherit the protocol defaults.
+public struct CloudLLMProvider: LLMProvider {
+  public typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
+
+  let config: CloudConfig
+  let apiKey: String
+  let transport: Transport
+
+  public init(config: CloudConfig, apiKey: String,
+              transport: @escaping Transport = CloudLLMProvider.urlSessionTransport) {
+    self.config = config
+    self.apiKey = apiKey
+    self.transport = transport
+  }
+
+  public func complete(prompt: String) async throws -> String {
+    let request = try CloudHTTP.buildCompletionRequest(config: config, apiKey: apiKey, prompt: prompt)
+    let (data, response) = try await transport(request)
+    try Self.ensure2xx(response, data)
+    return try CloudHTTP.parseCompletion(flavor: config.flavor, data)
+  }
+
+  public static func listModels(config: CloudConfig, apiKey: String,
+                                transport: @escaping Transport = CloudLLMProvider.urlSessionTransport)
+    async throws -> [String] {
+    let request = try CloudHTTP.buildModelsRequest(config: config, apiKey: apiKey)
+    let (data, response) = try await transport(request)
+    try ensure2xx(response, data)
+    return try CloudHTTP.parseModelList(data)
+  }
+
+  private static func ensure2xx(_ response: HTTPURLResponse, _ data: Data) throws {
+    guard (200..<300).contains(response.statusCode) else {
+      let snippet = String(decoding: data, as: UTF8.self)
+        .trimmingCharacters(in: .whitespacesAndNewlines).prefix(500)
+      throw LLMError.providerFailed("HTTP \(response.statusCode): \(snippet)")
+    }
+  }
+
+  /// Default transport. Guard-casts `URLResponse` to `HTTPURLResponse` (never a force-cast).
+  public static let urlSessionTransport: Transport = { request in
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let http = response as? HTTPURLResponse else {
+      throw LLMError.providerFailed("non-HTTP response")
+    }
+    return (data, http)
+  }
+}

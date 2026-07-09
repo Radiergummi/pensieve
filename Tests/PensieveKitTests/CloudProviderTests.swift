@@ -86,3 +86,41 @@ private func bodyJSON(_ request: URLRequest) -> [String: Any] {
 @Test func parseModelListThrowsOnMalformed() {
   #expect(throws: LLMError.self) { try CloudHTTP.parseModelList(Data("[]".utf8)) }
 }
+
+private func httpResponse(_ status: Int) -> HTTPURLResponse {
+  HTTPURLResponse(url: URL(string: "https://x")!, statusCode: status, httpVersion: nil, headerFields: nil)!
+}
+
+@Test func completeReturnsParsedText() async throws {
+  let cfg = CloudConfig(flavor: .anthropic, baseURL: "https://api.anthropic.com", model: "m")
+  let provider = CloudLLMProvider(config: cfg, apiKey: "k") { _ in
+    (Data(#"{"content":[{"text":"done"}]}"#.utf8), httpResponse(200))
+  }
+  let out = try await provider.complete(prompt: "hi")
+  #expect(out == "done")
+}
+
+@Test func completeThrowsWithSnippetOnNon2xx() async {
+  let cfg = CloudConfig(flavor: .openAICompatible, baseURL: "https://api.openai.com/v1", model: "m")
+  let provider = CloudLLMProvider(config: cfg, apiKey: "k") { _ in
+    (Data(#"{"error":"bad key"}"#.utf8), httpResponse(401))
+  }
+  await #expect(throws: LLMError.self) { try await provider.complete(prompt: "hi") }
+}
+
+@Test func listModelsReturnsSortedIDs() async throws {
+  let cfg = CloudConfig(flavor: .openAICompatible, baseURL: "https://api.openai.com/v1", model: "m")
+  let ids = try await CloudLLMProvider.listModels(config: cfg, apiKey: "k") { _ in
+    (Data(#"{"data":[{"id":"b"},{"id":"a"}]}"#.utf8), httpResponse(200))
+  }
+  #expect(ids == ["a", "b"])
+}
+
+@Test func listModelsThrowsOnNon2xx() async {
+  let cfg = CloudConfig(flavor: .anthropic, baseURL: "https://api.anthropic.com", model: "m")
+  await #expect(throws: LLMError.self) {
+    _ = try await CloudLLMProvider.listModels(config: cfg, apiKey: "k") { _ in
+      (Data("nope".utf8), httpResponse(403))
+    }
+  }
+}
