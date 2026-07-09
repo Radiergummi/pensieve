@@ -6,7 +6,20 @@ import Security
 /// the secret.
 public struct KeychainSecretStore: Sendable {
   private let service: String
-  public init(service: String = "com.pensieve.cloud-llm") { self.service = service }
+  public init(service: String = "me.mazetti.pensieve") { self.service = service }
+
+  /// One-shot migration from the old `com.pensieve.cloud-llm` service. Copies any existing items
+  /// to the new service and deletes the old ones. Call once on app launch.
+  public static func migrateFromLegacyService() {
+    let legacy = KeychainSecretStore(service: "com.pensieve.cloud-llm")
+    let current = KeychainSecretStore()
+    for flavor in ["anthropic", "openAICompatible"] {
+      if let secret = legacy.read(account: flavor), current.read(account: flavor) == nil {
+        current.write(secret, account: flavor)
+        legacy.delete(account: flavor)
+      }
+    }
+  }
 
   public func read(account: String) -> String? {
     let query: [String: Any] = [

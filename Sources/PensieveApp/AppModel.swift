@@ -3,6 +3,7 @@ import Foundation
 import SwiftUI
 import SQLiteData
 import GRDB
+import os
 import PensieveKit
 
 enum SmartListKind: String, CaseIterable, Hashable {
@@ -166,6 +167,7 @@ final class AppModel: ObservableObject {
     } else {
       providerKind = kind
     }
+    AppLog.app.info("Provider rebuilt: \(self.providerKind, privacy: .public)")
   }
   /// Persisted narration: prose + the invalidation key it was generated for. Keyed per DB path
   /// (NEW pattern — lastOpenedAt is a single global key today) so throwaway smoke/test stores
@@ -204,6 +206,7 @@ final class AppModel: ObservableObject {
   func start() {
     guard !started else { return }
     started = true
+    AppLog.app.info("App started, canonical=\(Stores.canonicalURL.path, privacy: .public) spool=\(Stores.spoolURL.path, privacy: .public)")
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
     db = try? openCanonicalDatabase(at: Stores.canonicalURL)
     loadNarrationCache()
@@ -232,6 +235,8 @@ final class AppModel: ObservableObject {
       Task { await self?.drainDebouncer.schedule() }      // new git/session activity → self-drain
     }
 
+    AppLog.app.info("Liveness watchers registered")
+
     // The SetFocusFilterIntent runs in-process and writes UserDefaults → observe on the main queue.
     NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,
                                            object: nil, queue: .main) { [weak self] _ in
@@ -243,6 +248,7 @@ final class AppModel: ObservableObject {
   func refreshNow() async { await drainThenRefresh() }
 
   private func drainThenRefresh() async {
+    AppLog.app.info("Drain+refresh triggered")
     if let db, let spool {
       _ = try? await Ingester(spool: spool, db: db).drain()   // no LLM: spool → events only
     }
@@ -258,6 +264,7 @@ final class AppModel: ObservableObject {
   /// change trips ValueObservation + the canonical watch → refreshDebouncer. Does NOT clear the
   /// narration cache or bump refreshToken (those are launch/⌘R semantics).
   private func drainThenRefreshFromWatch() async {
+    AppLog.app.debug("Spool watcher fired -> drain")
     if let db, let spool {
       _ = try? await Ingester(spool: spool, db: db).drain()
     }
@@ -268,6 +275,7 @@ final class AppModel: ObservableObject {
   /// wrapper nor a nested `Task` — the nested Task captured the weak-`self` var in concurrently
   /// executing code, which is an error under the Swift 6 language mode.
   private func refreshFromWatch() async {
+    AppLog.app.debug("Canonical watcher fired -> refresh")
     refresh()
     await reindexSpotlight()
   }
@@ -278,6 +286,7 @@ final class AppModel: ObservableObject {
   private func focusContextDidChange() {
     let new = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
     guard new != activeFocusContext else { return }
+    AppLog.app.info("Focus context changed: '\(self.activeFocusContext, privacy: .public)' -> '\(new, privacy: .public)'")
     activeFocusContext = new
     refresh()
     Task { await SpotlightIndexer.reindex(activeContext: new) }

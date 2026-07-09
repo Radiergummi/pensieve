@@ -1,0 +1,160 @@
+# Observability — guide for coding agents
+
+How to diagnose Pensieve issues autonomously. All data lives on the local machine — no cloud dashboards, no API keys needed.
+
+## Quick-start: something went wrong
+
+```bash
+# 1. Check recent errors (last 2 hours)
+log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style compact --info 2>&1 | grep -i error
+
+# 2. Check for crashes
+ls ~/Library/Logs/DiagnosticReports/Pensieve-*.ips 2>/dev/null
+
+# 3. Check for hangs (MetricKit diagnostic payloads)
+ls ~/Library/Logs/Pensieve/diagnostics/diagnostic-*.json 2>/dev/null
+
+# 4. Read the most recent crash/hang payload
+cat "$(ls -t ~/Library/Logs/Pensieve/diagnostics/diagnostic-*.json 2>/dev/null | head -1)"
+```
+
+## Structured logs (`os.Logger`)
+
+Pensieve logs to the macOS unified log with subsystem `me.mazetti.pensieve`. Messages are **not** in files — they live in the system log store and are queried with the `log` CLI.
+
+### Categories
+
+| Category | Where it fires | What to look for |
+|----------|---------------|------------------|
+| `sync` | `SyncRunner.run()` | Cycle start/end, ingested/discovered/extracted counts |
+| `ingest` | `Ingester.drain()`, `nameStrand`, `refineProjectNames` | Per-row outcome (created/deduped/failed), strand naming, project name refinement |
+| `extraction` | `ExtractionRunner.run()` | Per-session proposed/verified/inserted counts, skips (unchanged), errors |
+| `llm` | `CloudLLMProvider`, `FoundationModelsProvider`, `ClaudeCLIProvider` | Prompt dispatched (length, provider kind), completion received, HTTP errors, timeouts |
+| `discovery` | `SourceScanner`, `TranscriptDiscovery` | Candidates found, sessions spooled |
+| `app` | `AppModel` lifecycle | App start (store paths), drain/refresh triggers, watcher fires, focus context changes, provider rebuilds |
+
+### Log levels
+
+| Level | Meaning | Visible by default? |
+|-------|---------|-------------------|
+| `.debug` | Per-row/per-event detail (high volume) | No — add `--level debug` to `log stream`, `--debug` to `log show` |
+| `.info` | Cycle summaries, lifecycle transitions | No in `log show` — add `--info`; yes in `log stream --level debug` |
+| `.error` | Failures that lose data or degrade output | **Yes** — always persisted and shown |
+| `.fault` | Invariant violations (should never happen) | **Yes** |
+
+### Commands
+
+```bash
+# Stream live — all categories, all levels (best for watching a sync/extraction in real time)
+log stream --predicate 'subsystem == "me.mazetti.pensieve"' --level debug
+
+# Recent history — errors only (fastest scan)
+log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style compact
+
+# Recent history — include info (cycle summaries, lifecycle)
+log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style compact --info
+
+# Recent history — include everything
+log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style compact --info --debug
+
+# Filter to one category
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "extraction"' --last 1h --info
+
+# JSON export (machine-parseable)
+log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style ndjson --info
+```
+
+**Gotcha:** `log show` without `--info` or `--debug` shows only `.error` and `.fault`. Most operational messages are `.info`. Always add `--info` unless you only care about errors.
+
+### Privacy annotations
+
+- **`.public`** (visible in all log contexts): node names, file paths, session IDs, counts, durations, provider kinds, focus contexts — all single-user operational metadata.
+- **`.private`** (redacted unless dev-mode override): prompt and completion text — avoids leaking transcript content into the shared log stream.
+
+## MetricKit diagnostics
+
+`DiagnosticsCollector` (registered in `AppDelegate.applicationDidFinishLaunching`) subscribes to `MXMetricManager`. The system delivers payloads **on the next app launch** after a crash, hang, or daily metric collection.
+
+### File layout
+
+```
+~/Library/Logs/Pensieve/
+├── sync.log              ← launchd daemon stdout (unstructured, legacy)
+├── README.md             ← short doc with log commands
+└── diagnostics/
+    ├── diagnostic-2026-07-09T14:32:00Z.json   ← crash/hang payload
+    └── metrics-2026-07-09T14:32:00Z.json      ← daily performance metrics
+```
+
+- **Retention:** 30 files max, oldest pruned on launch and after each write.
+- **Empty is normal:** MetricKit only delivers payloads when events occur. An empty `diagnostics/` directory means no crashes or hangs have been captured.
+
+### Reading a diagnostic payload
+
+Each `.json` file is a serialized `MXDiagnosticPayload` or `MXMetricPayload`. Key fields:
+
+- `crashDiagnostics` — crash call stacks
+- `hangDiagnostics` — main-thread-blocking call trees (the only automatic source of hang stacks)
+- `cpuExceptionDiagnostics`, `diskWriteExceptionDiagnostics` — resource limit violations
+
+```bash
+# Pretty-print the most recent diagnostic
+cat ~/Library/Logs/Pensieve/diagnostics/diagnostic-*.json | python3 -m json.tool | head -100
+```
+
+## macOS crash reports
+
+Standard `.ips` files — no Pensieve code involved, the OS writes these automatically:
+
+```bash
+ls ~/Library/Logs/DiagnosticReports/Pensieve-*.ips
+```
+
+## Debugging recipes
+
+### "The spool isn't draining"
+```bash
+# Check for ingest errors
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "ingest"' --last 1h --info
+# Look for "Spool row X failed" errors — the row stays pending and retries next drain
+```
+
+### "Extraction produces no loose ends"
+```bash
+# Check extraction category — look for skip (unchanged), proposed/verified/inserted counts
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "extraction"' --last 2h --info
+# If proposed > 0 but verified = 0, the verifier is rejecting — quotes don't match the transcript
+```
+
+### "LLM narration isn't working"
+```bash
+# Check llm category — look for provider errors, timeouts
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "llm"' --last 1h --info
+# Common: "Cloud HTTP 401" (bad key), "claude -p timed out" (subprocess hung), "FoundationModels: ..." (on-device failure)
+```
+
+### "The app shows stale data"
+```bash
+# Check app category — are watchers firing? Is drain+refresh triggering?
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "app"' --last 30m --info --debug
+# Look for "Spool watcher fired -> drain" and "Canonical watcher fired -> refresh"
+# If missing, the FSEventStream watches may have stopped
+```
+
+### "The launchd daemon isn't running"
+```bash
+# Check daemon status
+launchctl list | grep pensieve
+# Check daemon log (unstructured, separate from os.Logger)
+tail -50 ~/Library/Logs/Pensieve/sync.log
+# os.Logger messages from daemon runs show up under process name "pensieve" (not "Pensieve")
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND process == "pensieve"' --last 1h --info
+```
+
+## Source code
+
+| File | Role |
+|------|------|
+| `Sources/PensieveKit/Support/Log.swift` | `enum Log` — 5 category loggers (internal to PensieveKit) |
+| `Sources/PensieveApp/AppLog.swift` | `enum AppLog` — app-target `app` category logger |
+| `Sources/PensieveApp/DiagnosticsCollector.swift` | MetricKit subscriber, JSON writer, retention pruner |

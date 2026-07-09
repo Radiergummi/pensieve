@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(FoundationModels)
 import FoundationModels
 
@@ -17,11 +18,14 @@ public struct FoundationModelsProvider: LLMProvider {
   public init() {}
 
   public func complete(prompt: String) async throws -> String {
+    Log.llm.debug("LLM prompt dispatched (len=\(prompt.count, privacy: .public), provider=foundationModels)")
     let session = LanguageModelSession()
     do {
       let response = try await session.respond(to: prompt)
+      Log.llm.debug("LLM completion received (len=\(response.content.count, privacy: .public))")
       return response.content
     } catch {
+      Log.llm.error("FoundationModels complete failed: \(error, privacy: .public)")
       throw LLMError.providerFailed("FoundationModels: \(error)")
     }
   }
@@ -41,6 +45,7 @@ public struct FoundationModelsProvider: LLMProvider {
       }
     } catch {
       // Preserve the wrapped description so the extractor's context-overflow re-split fires.
+      Log.llm.error("FoundationModels extractCandidates failed: \(error, privacy: .public)")
       throw LLMError.providerFailed("FoundationModels: \(error)")
     }
   }
@@ -53,6 +58,7 @@ public struct FoundationModelsProvider: LLMProvider {
             case .array(let items)? = root["indices"]?.kind else { return [] }
       return items.compactMap { if case .number(let n) = $0.kind { return Int(n) } else { return nil } }
     } catch {
+      Log.llm.error("FoundationModels classifyGenuineIndices failed: \(error, privacy: .public)")
       throw LLMError.providerFailed("FoundationModels: \(error)")
     }
   }
@@ -65,6 +71,7 @@ public struct FoundationModelsProvider: LLMProvider {
             case .array(let items)? = root["indices"]?.kind else { return [] }
       return items.compactMap { if case .number(let n) = $0.kind { return Int(n) } else { return nil } }
     } catch {
+      Log.llm.error("FoundationModels classifyNonSalientIndices failed: \(error, privacy: .public)")
       throw LLMError.providerFailed("FoundationModels: \(error)")
     }
   }

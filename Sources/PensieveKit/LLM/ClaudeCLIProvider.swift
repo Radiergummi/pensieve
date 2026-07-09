@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Fallback provider: shells out to `claude -p` (subscription auth, no API key).
 public struct ClaudeCLIProvider: LLMProvider {
@@ -8,6 +9,7 @@ public struct ClaudeCLIProvider: LLMProvider {
   }
 
   public func complete(prompt: String) async throws -> String {
+    Log.llm.debug("LLM prompt dispatched (len=\(prompt.count, privacy: .public), provider=claudeCLI)")
     // The subprocess is blocking, so run it on a background queue rather than parking a
     // Swift-concurrency cooperative worker for the whole call. `shellRun` bounds a hung
     // `claude -p` with its own wall-clock timeout (so the awaiting Task can't hang forever).
@@ -39,6 +41,7 @@ public struct ClaudeCLIProvider: LLMProvider {
     process.standardOutput = stdout
     process.standardError = stderr
     do { try process.run() } catch { throw LLMError.providerFailed("spawn: \(error)") }
+    Log.llm.debug("claude -p subprocess launched")
     // Drain stdin/stdout/stderr concurrently to avoid deadlock: if any one of these pipes is
     // fully written/read before the others start, the child can block writing to a full pipe
     // buffer (e.g. large stderr diagnostics) while the parent is stuck draining a different pipe.
@@ -67,14 +70,17 @@ public struct ClaudeCLIProvider: LLMProvider {
     if ioGroup.wait(timeout: .now() + timeout) == .timedOut {
       process.terminate()
       _ = ioGroup.wait(timeout: .now() + 5)
+      Log.llm.error("claude -p timed out after \(Int(timeout), privacy: .public)s")
       throw LLMError.providerFailed("claude -p timed out after \(Int(timeout))s")
     }
     process.waitUntilExit()
     guard process.terminationStatus == 0 else {
       let errText = String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
       let suffix = errText.isEmpty ? "" : ": \(errText.prefix(500))"
+      Log.llm.error("claude -p exit \(process.terminationStatus, privacy: .public)")
       throw LLMError.providerFailed("claude -p exit \(process.terminationStatus)\(suffix)")
     }
+    Log.llm.debug("LLM completion received (len=\(outData.count, privacy: .public))")
     return String(decoding: outData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

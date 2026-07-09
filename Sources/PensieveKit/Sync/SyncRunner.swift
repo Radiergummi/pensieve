@@ -1,6 +1,7 @@
 import Foundation
 import SQLiteData
 import GRDB
+import os
 
 /// One `sync` cycle: drain the spool, discover + spool new session transcripts, drain again,
 /// then run incremental extraction. Pure over injected dependencies (spool, db, provider,
@@ -25,6 +26,7 @@ public struct SyncRunner {
   }
 
   public func run() async throws -> Summary {
+    Log.sync.info("Sync cycle start")
     let ingester = Ingester(spool: spool, db: db, llm: provider)
     var ingested = try await ingester.drain()
 
@@ -40,6 +42,7 @@ public struct SyncRunner {
 
     let results = try await ExtractionRunner(db: db, provider: provider).run()
     let extracted = results.reduce(0) { $0 + $1.inserted }
+    Log.sync.info("Sync complete: ingested=\(ingested, privacy: .public) discovered=\(discovered.count, privacy: .public) extracted=\(extracted, privacy: .public)")
     return Summary(ingested: ingested, discovered: discovered.count, extracted: extracted)
   }
 }

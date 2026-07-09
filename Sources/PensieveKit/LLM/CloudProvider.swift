@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Which HTTP API dialect a cloud provider speaks. Raw values are the stable on-disk strings.
 public enum CloudFlavor: String, Sendable, Codable, CaseIterable {
@@ -149,10 +150,13 @@ public struct CloudLLMProvider: LLMProvider {
   }
 
   public func complete(prompt: String) async throws -> String {
+    Log.llm.debug("LLM prompt dispatched (len=\(prompt.count, privacy: .public), provider=cloud/\(self.config.flavor.rawValue, privacy: .public))")
     let request = try CloudHTTP.buildCompletionRequest(config: config, apiKey: apiKey, prompt: prompt)
     let (data, response) = try await transport(request)
     try Self.ensure2xx(response, data)
-    return try CloudHTTP.parseCompletion(flavor: config.flavor, data)
+    let result = try CloudHTTP.parseCompletion(flavor: config.flavor, data)
+    Log.llm.debug("LLM completion received (len=\(result.count, privacy: .public))")
+    return result
   }
 
   public static func listModels(config: CloudConfig, apiKey: String,
@@ -168,6 +172,7 @@ public struct CloudLLMProvider: LLMProvider {
     guard (200..<300).contains(response.statusCode) else {
       let snippet = String(decoding: data, as: UTF8.self)
         .trimmingCharacters(in: .whitespacesAndNewlines).prefix(500)
+      Log.llm.error("Cloud HTTP \(response.statusCode, privacy: .public): \(String(snippet), privacy: .public)")
       throw LLMError.providerFailed("HTTP \(response.statusCode): \(snippet)")
     }
   }

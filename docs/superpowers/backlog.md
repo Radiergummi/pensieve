@@ -74,11 +74,16 @@ trigger. Order is a recommendation, not a commitment.
      per-node "latest event + days-dormant + open-loose-end-count" helper (that shape now recurs in
      `NextQueries` / `MonitorSnapshot` / `BriefingQueries`).
 
-3. **Resident `pensieved` (`SMAppService`) (Phase 2)** — *medium; partially superseded.* The
-   launchd one-shot sync daemon already delivers auto-flow, so a resident agent is now a
-   *convenience upgrade* (lower latency, background digest pre-compute), **not** a prerequisite.
-   Decide during app design whether the app's launch/foreground drain + launchd cover this, or a
-   resident agent still earns its keep. May be reorderable with the app per the spec.
+3. **Retire the launchd daemon → in-app background service (Phase 2)** — *medium; partially
+   superseded.* The app already self-drains (FSEvents spool watch + `Debouncer` → `drainThenRefresh`)
+   and runs extraction while foregrounded; with `MenuBarExtra` keeping the process alive, a separate
+   `pensieved` agent is redundant while the app is running. The move: make the app's background
+   `ExtractionRunner` + periodic drain authoritative, register itself as an `SMAppService.loginItem`
+   (auto-launch on login), and drop the `com.pensieve.sync` LaunchAgent. Fallback question: what
+   happens on force-quit / pre-login? Options: keep a minimal launchd one-shot as a safety-net,
+   or accept that capture accrues and drains on next launch. Pure convenience/latency upgrade;
+   no data-integrity risk either way. *Trigger: when the app's always-running posture is confirmed
+   (hide-Dock + login-item), or on the next Settings / daemon-management pass.*
 
 4. **CloudKit sync + iOS companion** — *large; on-ramp preserved, unbuilt.* SQLiteData's opt-in
    `SyncEngine`; sync lives only in the entitled app process (hooks/CLI stay local). "Flip it on,"
@@ -269,7 +274,23 @@ too big, or a genuine design question.
   restructuring that risks the tested default landing view for no practical gain today. *Trigger: if
   the Briefing landing feels slow, or node/event volume grows materially.* (Related: the long-standing
   "shared per-node latest-event + days-dormant + open-loose-end-count helper" carry under pillar #2.)
-- **`Ingester.drain()` decode-failure poison-pill — design question, intentionally unchanged.** A
+- **`@MainActor` annotation on `AppModel`** — the model is main-actor-isolated by convention (only
+  ever accessed from views or explicitly-hopped `Task`s), but it’s a plain `class` with no
+  annotation. Adding `@MainActor final class AppModel` makes the compiler enforce the invariant,
+  simplifies closures that currently need `@MainActor in` or `Task { @MainActor in }`, and catches
+  any accidental off-main access at compile time. One-line change in declaration + removing the now-
+  redundant explicit isolation annotations in `start()`/`focusContextDidChange()`. *Trigger: next
+  touch of `AppModel`, or pair with the `@Observable` migration above.*
+- **`NodeKind` / `NodeState` / `EventKind` → real `RawRepresentable` enums** — currently string
+  namespaces (`enum NodeKind { static let project = "project" ... }`). Making them real
+  `enum NodeKind: String, Codable, Sendable, CaseIterable { case project, strand, ... }` gives
+  exhaustive `switch` (the compiler catches a forgotten case), auto-`Codable`/`Equatable`, and
+  eliminates the possibility of a typo creating a silent wrong-kind. SQLiteData column adapters
+  handle `RawRepresentable` natively (no schema change — same strings on disk). The trade-off:
+  adding a new kind becomes a migration-sized change (new enum case + update all `switch`es),
+  but at the current rate (≤0.5 new kinds/month) that’s a feature, not a cost. *Trigger: next
+  model-layer refactor, or pair with the `@Observable` pass.*
+- **`Ingester.drain()` decode-failure poison-pill — design question, intentionally unchanged.**
   permanently-undecodable `git.commit` / `git.checkout` / `cc.session.start` spool row throws every
   drain and is left unmarked, so it's re-processed every launchd cycle forever; only the `cc.session`
   branch distinguishes transient (retry) from permanent (drop-and-mark). This was **not** flipped

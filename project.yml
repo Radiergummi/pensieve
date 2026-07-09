@@ -25,6 +25,7 @@ targets:
         product: PensieveKit
       - package: MarkdownUI
         product: MarkdownUI
+      - sdk: MetricKit.framework
     info:
       path: Sources/PensieveApp/Info.plist
       properties:

@@ -1,6 +1,7 @@
 import Foundation
 import SQLiteData
 import GRDB
+import os
 
 public struct Ingester: Sendable {
   let spool: CaptureSpool
@@ -28,16 +29,20 @@ public struct Ingester: Sendable {
   @discardableResult
   public func drain() async throws -> Int {
     let rows = try spool.pending()
+    Log.ingest.info("Drain start: \(rows.count, privacy: .public) pending rows")
     var created = 0
     for row in rows {
       do {
         let n = try await ingest(row)
         try spool.markIngested([row.id])
         created += n
+        Log.ingest.debug("Ingested row \(row.id, privacy: .public) kind=\(row.kind, privacy: .public) events=\(n, privacy: .public)")
       } catch {
+        Log.ingest.error("Spool row \(row.id, privacy: .public) failed: \(error, privacy: .public)")
         continue   // leave unmarked; retry next drain
       }
     }
+    Log.ingest.info("Drain complete: \(created, privacy: .public) events created")
     return created
   }
 
@@ -246,6 +251,7 @@ public struct Ingester: Sendable {
       return out
     }) ?? []
 
+    Log.ingest.info("Refining project names: \(candidates.count, privacy: .public) candidates")
     for candidate in candidates.prefix(Self.nameRefineCap) {
       let ctx = ProjectContext.gather(commonDir: candidate.commonDir)
       let raw = try? await llm.complete(prompt: ProjectContext.namePrompt(ctx))
@@ -290,6 +296,7 @@ public struct Ingester: Sendable {
     try? writeSync { db in
       try Node.where { $0.id.eq(strandID) }.update { $0.name = name; $0.description = desc }.execute(db)
     }
+    Log.ingest.info("Strand named: \(name, privacy: .public) (id=\(strandID, privacy: .public))")
   }
 
   /// One `git show` yields subject, ISO-8601 commit date, and the changed-file list.

@@ -1,6 +1,7 @@
 import Foundation
 import SQLiteData
 import GRDB
+import os
 
 public struct ExtractionResult: Sendable {
   public let sessionID: String
@@ -26,6 +27,8 @@ public struct ExtractionRunner {
       try Event.where { $0.kind.eq(CaptureKind.ccSession) }.fetchAll(db)
     }
 
+    Log.extraction.info("Extraction start: \(events.count, privacy: .public) sessions to evaluate")
+
     var results: [ExtractionResult] = []
     for event in events {
       do {
@@ -39,7 +42,10 @@ public struct ExtractionRunner {
           continue
         }
         // Unchanged since last extraction → skip (avoids re-parsing multi-MB transcripts).
-        if size == event.extractedTranscriptSize { continue }
+        if size == event.extractedTranscriptSize {
+          Log.extraction.debug("Extraction skip (unchanged): session event \(event.id, privacy: .public)")
+          continue
+        }
 
         let session = TranscriptParser.parse(fileURL: fileURL)
         let messageCount = session.messages.count
@@ -67,8 +73,7 @@ public struct ExtractionRunner {
           // Fewer messages than the watermark: the transcript shrank/was rewritten, or the
           // parser now filters more. Re-extract from 0 — the quote-dedup makes this safe.
           start = 0
-          FileHandle.standardError.write(Data(
-            "pensieve: re-extracting \(session.sessionID) from 0: transcript boundary changed\n".utf8))
+          Log.extraction.info("Re-extracting \(session.sessionID, privacy: .public) from 0: transcript boundary changed")
         }
 
         // Extract only the new slice (start <= messages.count always → subscript is valid;
@@ -130,13 +135,16 @@ public struct ExtractionRunner {
 
         results.append(ExtractionResult(sessionID: session.sessionID,
           proposed: candidates.count, verified: verified.count, inserted: inserted))
+        let sessionID = session.sessionID
+        Log.extraction.info("Extracted session \(sessionID, privacy: .public): proposed=\(candidates.count, privacy: .public) verified=\(verified.count, privacy: .public) inserted=\(inserted, privacy: .public)")
       } catch {
         // A single bad session (provider error, etc.) must never abort the batch or
         // silently advance the watermark — leave it unset so it retries next run.
-        FileHandle.standardError.write(Data("pensieve: extraction failed for session \(event.id): \(error)\n".utf8))
+        Log.extraction.error("Extraction failed for session \(event.id, privacy: .public): \(error, privacy: .public)")
         continue
       }
     }
+    Log.extraction.info("Extraction complete: \(results.count, privacy: .public) sessions processed")
     return results
   }
 }

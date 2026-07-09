@@ -34,6 +34,21 @@ Personal (single-user) native-macOS tool that reconstructs *where each of my par
 - Run the CLI: `swift run pensieve <subcommand>` (the CLI + PensieveKit stay a SwiftPM package). Tests/CLI honor `PENSIEVE_DB` and `PENSIEVE_CAPTURE_DB` env overrides to point at temp SQLite files. The **app** is built via Xcode (above), not `swift run`.
 - If a build dies with a SwiftSyntax/macro linker error, `rm -rf .build` and retry (still recurs intermittently; disk currently has headroom — ~44 GB free).
 
+## Observability
+
+Structured logging is via `os.Logger` (subsystem `me.mazetti.pensieve`). Useful commands:
+
+- **Stream live (all categories):** `log stream --predicate 'subsystem == "me.mazetti.pensieve"' --level debug`
+- **Recent logs (last 2h):** `log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style compact`
+- **Single category:** `log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "extraction"' --last 1h`
+- **JSON export (for parsing):** `log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style ndjson`
+- **MetricKit diagnostics (crash/hang payloads):** `ls ~/Library/Logs/Pensieve/diagnostics/`
+- **macOS crash reports:** `ls ~/Library/Logs/DiagnosticReports/Pensieve-*.ips`
+
+Categories: `sync`, `extraction`, `llm`, `ingest`, `discovery`, `app`.
+
+Full guide with debugging recipes: `docs/observability.md`.
+
 ## Architecture (as built)
 
 Two SQLite databases, deliberately separate:
