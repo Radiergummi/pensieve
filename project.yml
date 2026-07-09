@@ -70,6 +70,3 @@ targets:
         - variable: PENSIEVE_CAPTURE_DB
           value: "/Users/moritz/Library/Application Support/Pensieve-Dev/capture.sqlite"
           isEnabled: false
-        - variable: PENSIEVE_PREFS
-          value: "/Users/moritz/Library/Application Support/Pensieve-Dev/preferences.json"
-          isEnabled: false

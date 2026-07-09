@@ -12,10 +12,6 @@ enum Stores {
     if let o = ProcessInfo.processInfo.environment["PENSIEVE_CAPTURE_DB"] { return URL(fileURLWithPath: o) }
     return PensievePaths.captureURL()
   }
-  static var preferencesURL: URL {
-    if let o = ProcessInfo.processInfo.environment["PENSIEVE_PREFS"] { return URL(fileURLWithPath: o) }
-    return PensievePaths.preferencesURL()
-  }
 }
 
 @main

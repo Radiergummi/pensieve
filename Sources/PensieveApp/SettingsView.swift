@@ -2,16 +2,23 @@ import SwiftUI
 import AppKit
 import PensieveKit
 
-/// The app's Settings pane (⌘,). Reads/writes the machine-local Preferences directly — no
+/// The app's Settings pane (⌘,). Reads/writes the provider preference via @AppStorage — no
 /// @Published mirror on AppModel; the only AppModel touch is rebuilding its summary builder
 /// when the provider changes.
 struct SettingsView: View {
   @ObservedObject var model: AppModel
-  @State private var provider: ProviderPreference = Preferences.read(from: Stores.preferencesURL)
+  @AppStorage(PensieveDefaults.llmProviderKey) private var providerRaw = ProviderPreference.auto.rawValue
   @AppStorage(AppDefaults.hideDockIconKey) private var hideDockIcon = false
   @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
 
   private var foundationAvailable: Bool { FoundationModelsProbe.isAvailable() }
+
+  private var provider: Binding<ProviderPreference> {
+    Binding(
+      get: { ProviderPreference(rawValue: providerRaw) ?? .auto },
+      set: { providerRaw = $0.rawValue }
+    )
+  }
 
   var body: some View {
     Form {
@@ -28,16 +35,16 @@ struct SettingsView: View {
       }
       Section("Intelligence") {
         Toggle("Show “Last Work Done” narration", isOn: $narrationEnabled)
-        Picker("LLM Provider", selection: $provider) {
+        Picker("LLM Provider", selection: provider) {
           Text("Automatic").tag(ProviderPreference.auto)
           Text("Foundation Models").tag(ProviderPreference.foundationModels)
           Text("claude -p").tag(ProviderPreference.claudeCLI)
+          Text("Cloud (API)").tag(ProviderPreference.cloud)
         }
-        .onChange(of: provider) { _, newValue in
-          Preferences.write(newValue, to: Stores.preferencesURL)
+        .onChange(of: providerRaw) { _, _ in
           model.rebuildSummaryBuilder()
         }
-        if provider == .foundationModels && !foundationAvailable {
+        if provider.wrappedValue == .foundationModels && !foundationAvailable {
           Label("Foundation Models isn’t available on this Mac — using claude -p instead.",
                 systemImage: "exclamationmark.triangle")
             .font(.caption)

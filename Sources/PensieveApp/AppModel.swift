@@ -133,18 +133,42 @@ final class AppModel: ObservableObject {
     await self?.drainThenRefreshFromWatch()
   }
   private var started = false
-  // NOT lazy: rebuilt when the provider preference changes (SettingsView), so an in-session
-  // provider switch takes effect on the next narration instead of requiring a relaunch.
-  private var summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
-  /// The provider kind the current `summaryBuilder` uses — folded into the narration cache key
-  /// so a provider switch invalidates prose cached under the old provider.
-  private var providerKind = defaultProviderKind()
+  // NOT lazy: rebuilt when the provider preference/config changes (SettingsView), so an in-session
+  // switch takes effect on the next narration instead of requiring a relaunch. Bootstrapped cheaply
+  // here; `init()` calls rebuildSummaryBuilder() to fold in any configured cloud provider.
+  private var summaryBuilder = SummaryBuilder(provider: ClaudeCLIProvider())
+  /// The provider kind the current `summaryBuilder` uses — folded into the narration cache key so a
+  /// provider/model switch invalidates prose cached under the old provider.
+  private var providerKind = "claudeCLI"
 
-  /// Rebuild the narration provider from the current persisted preference. Called by
-  /// SettingsView after it writes a new ProviderPreference.
+  /// Reads the app-side cloud inputs: config from UserDefaults, key from the Keychain. Returns
+  /// (nil, nil) when no flavor is set.
+  private func cloudInputs() -> (CloudConfig?, String?) {
+    let d = UserDefaults.standard
+    guard let raw = d.string(forKey: PensieveDefaults.cloudFlavorKey),
+          let flavor = CloudFlavor(rawValue: raw) else { return (nil, nil) }
+    let baseURL = d.string(forKey: PensieveDefaults.cloudBaseURLKey) ?? flavor.defaultBaseURL
+    let model = d.string(forKey: PensieveDefaults.cloudModelKey) ?? ""
+    let config = CloudConfig(flavor: flavor, baseURL: baseURL, model: model)
+    let key = KeychainSecretStore().read(account: flavor.rawValue)
+    return (config, key)
+  }
+
+  /// Rebuild the narration provider + its cache kind from the current UserDefaults selection + cloud
+  /// inputs. The kind folds flavor+model in ONLY when the resolved kind is actually "cloud", so a
+  /// not-configured cloud selection keys as the real local kind that runs.
   func rebuildSummaryBuilder() {
-    summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider())
-    providerKind = defaultProviderKind()
+    let (config, key) = cloudInputs()
+    summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider(cloudConfig: config, apiKey: key))
+    let configured = (config?.isUsable ?? false) && !(key ?? "").isEmpty
+    let kind = resolveProviderKind(preference: ProviderSettings.selection(from: .standard),
+                                   foundationAvailable: FoundationModelsProbe.isAvailable(),
+                                   cloudConfigured: configured)
+    if kind == "cloud", let config {
+      providerKind = "cloud:\(config.flavor.rawValue):\(config.model)"
+    } else {
+      providerKind = kind
+    }
   }
   /// Persisted narration: prose + the invalidation key it was generated for. Keyed per DB path
   /// (NEW pattern — lastOpenedAt is a single global key today) so throwaway smoke/test stores
@@ -177,6 +201,7 @@ final class AppModel: ObservableObject {
     let prev = UserDefaults.standard.object(forKey: Self.lastOpenedKey) as? Date
     briefingSince = prev ?? Calendar.current.date(byAdding: .day, value: -7, to: Date())!
     UserDefaults.standard.set(Date(), forKey: Self.lastOpenedKey)
+    rebuildSummaryBuilder()
   }
 
   func start() {
