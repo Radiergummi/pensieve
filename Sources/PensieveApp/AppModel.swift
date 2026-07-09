@@ -148,10 +148,11 @@ final class AppModel: ObservableObject {
     let d = UserDefaults.standard
     guard let raw = d.string(forKey: PensieveDefaults.cloudFlavorKey),
           let flavor = CloudFlavor(rawValue: raw) else { return (nil, nil) }
-    let baseURL = d.string(forKey: PensieveDefaults.cloudBaseURLKey) ?? flavor.defaultBaseURL
+    let stored = d.string(forKey: PensieveDefaults.cloudBaseURLKey) ?? ""
+    let baseURL = stored.isEmpty ? flavor.defaultBaseURL : stored   // empty ⇒ default, matching the UI
     let model = d.string(forKey: PensieveDefaults.cloudModelKey) ?? ""
     let config = CloudConfig(flavor: flavor, baseURL: baseURL, model: model)
-    let key = KeychainSecretStore().read(account: flavor.rawValue)
+    let key = KeychainSecretStore().read(account: CloudPresets.keychainAccount(flavor: flavor, baseURL: baseURL))
     return (config, key)
   }
 
@@ -163,7 +164,8 @@ final class AppModel: ObservableObject {
     summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider(cloudConfig: config, apiKey: key))
     let kind = resolvedProviderKind(cloudConfig: config, apiKey: key)
     if kind == "cloud", let config {
-      providerKind = "cloud:\(config.flavor.rawValue):\(config.model)"
+      let account = CloudPresets.keychainAccount(flavor: config.flavor, baseURL: config.baseURL)
+      providerKind = "cloud:\(account):\(config.model)"
     } else {
       providerKind = kind
     }
