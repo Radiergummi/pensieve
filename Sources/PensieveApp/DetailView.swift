@@ -62,7 +62,7 @@ struct DetailView: View {
               Text("None open.").foregroundStyle(.secondary)
             } else {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
-                LooseEndRow(view: view, loadProvenance: model.provenance)
+                LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel)
               }
             }
           }

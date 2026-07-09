@@ -408,6 +408,14 @@ final class AppModel: ObservableObject {
     return (try? LooseEndQueries.open(db, nodeID: nodeID, now: Date())) ?? []
   }
 
+  /// Confirm a user salience label for a loose end (👍 salient / 👎 noise / "" clears). Thin over the
+  /// tested LooseEndCommands. Best-effort like the other organizing writes (try?); the row reflects
+  /// the change optimistically and confirmed-noise drops from the open set on the next reload.
+  func setLooseEndLabel(_ looseEndID: UUID, _ label: String) {
+    guard let db else { return }
+    _ = try? LooseEndCommands.setLabel(db, id: looseEndID, label: label)
+  }
+
   // MARK: - Organizing writes (metadata only; each calls the op then refreshes explicitly, because
   // Node-only writes don't change the Event count the liveness ValueObservation tracks).
 

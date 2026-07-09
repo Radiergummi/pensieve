@@ -52,7 +52,7 @@ struct ContentListView: View {
   @ViewBuilder private func looseEndList() -> some View {
     List {
       ForEach(looseEnds, id: \.looseEnd.id) { view in
-        LooseEndRow(view: view, loadProvenance: model.provenance)
+        LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel)
       }
     }
     .overlay {
