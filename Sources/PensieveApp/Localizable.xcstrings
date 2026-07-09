@@ -209,6 +209,9 @@
         }
       }
     },
+    "claude -p" : {
+
+    },
     "Claude Code Session" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -379,6 +382,9 @@
           }
         }
       }
+    },
+    "Foundation Models" : {
+
     },
     "Foundation Models isn’t available on this Mac — using claude -p instead." : {
       "extractionState" : "manual",
@@ -1036,6 +1042,17 @@
         }
       }
     },
+    "Show “Last Work Done” narration" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Zuletzt erledigt“-Zusammenfassung anzeigen"
+          }
+        }
+      }
+    },
     "Show All" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1099,17 +1116,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Arbeit anzeigen"
-          }
-        }
-      }
-    },
-    "Show “Last Work Done” narration" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„Zuletzt erledigt“-Zusammenfassung anzeigen"
           }
         }
       }
