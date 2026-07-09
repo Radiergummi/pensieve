@@ -2,37 +2,57 @@ import SwiftUI
 import AppKit
 import PensieveKit
 
-/// The app's Settings pane (⌘,). Reads/writes the provider preference via @AppStorage — no
-/// @Published mirror on AppModel; the only AppModel touch is rebuilding its summary builder
-/// when the provider changes.
+/// The app's Settings pane (⌘,). Reads/writes provider preferences via @AppStorage — no @Published
+/// mirror on AppModel; the only AppModel touch is rebuilding its summary builder on a change.
 struct SettingsView: View {
   @ObservedObject var model: AppModel
   @AppStorage(PensieveDefaults.llmProviderKey) private var providerRaw = ProviderPreference.auto.rawValue
   @AppStorage(AppDefaults.hideDockIconKey) private var hideDockIcon = false
   @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
 
-  private var foundationAvailable: Bool { FoundationModelsProbe.isAvailable() }
-
-  private var provider: Binding<ProviderPreference> {
-    Binding(
-      get: { ProviderPreference(rawValue: providerRaw) ?? .auto },
-      set: { providerRaw = $0.rawValue }
-    )
-  }
-
   @AppStorage(PensieveDefaults.cloudFlavorKey) private var cloudFlavorRaw = CloudFlavor.anthropic.rawValue
   @AppStorage(PensieveDefaults.cloudBaseURLKey) private var cloudBaseURL = ""
   @AppStorage(PensieveDefaults.cloudModelKey) private var cloudModel = ""
+
   @State private var apiKeyField = ""
-  /// Mirrors the last-persisted Keychain value, so we can tell an edited-but-unsubmitted key apart
-  /// from an unchanged one (and skip a redundant Keychain write — each write can trigger a macOS
-  /// re-authorization prompt under ad-hoc signing).
+  /// Mirrors the last-persisted Keychain value, so an edited-but-unsubmitted key is distinguishable
+  /// from an unchanged one (skips a redundant Keychain write / re-auth prompt).
   @State private var loadedKey = ""
   @State private var models: [String] = []
   @State private var isFetching = false
   @State private var fetchError = false
+  @State private var didFetch = false
 
+  @FocusState private var keyFocused: Bool
+  @FocusState private var baseURLFocused: Bool
+  @FocusState private var modelFocused: Bool
+
+  private var foundationAvailable: Bool { FoundationModelsProbe.isAvailable() }
   private var cloudFlavor: CloudFlavor { CloudFlavor(rawValue: cloudFlavorRaw) ?? .anthropic }
+  private var keychainAccount: String { CloudPresets.keychainAccount(flavor: cloudFlavor, baseURL: cloudBaseURL) }
+
+  private var provider: Binding<ProviderPreference> {
+    Binding(get: { ProviderPreference(rawValue: providerRaw) ?? .auto },
+            set: { providerRaw = $0.rawValue })
+  }
+
+  private func label(for p: ProviderPreference) -> LocalizedStringKey {
+    switch p {
+    case .auto: return "Automatic"
+    case .foundationModels: return "On-device (Foundation Models)"
+    case .claudeCLI: return "Claude CLI (subscription)"
+    case .cloud: return "Cloud (API)"
+    }
+  }
+
+  private func help(for p: ProviderPreference) -> LocalizedStringKey {
+    switch p {
+    case .auto: return "Picks the best on-device option — Foundation Models when available, otherwise the Claude CLI."
+    case .foundationModels: return "Runs entirely on-device. Private and free, but noticeably lower quality than a frontier cloud model."
+    case .claudeCLI: return "Uses your Claude subscription via the claude command. Good quality, stays on your account."
+    case .cloud: return "Highest quality. Sends recent activity excerpts to the chosen vendor's API."
+    }
+  }
 
   var body: some View {
     Form {
@@ -40,93 +60,148 @@ struct SettingsView: View {
         Toggle("Hide Dock icon (menu bar only)", isOn: $hideDockIcon)
           .onChange(of: hideDockIcon) { _, hidden in
             NSApp.setActivationPolicy(hidden ? .accessory : .regular)
-            if !hidden {
-              // Returning to .regular: re-front the app, or it can stay backgrounded with no
-              // key window.
-              NSApp.activate(ignoringOtherApps: true)
-            }
+            if !hidden { NSApp.activate(ignoringOtherApps: true) }
           }
       }
       Section("Intelligence") {
         Toggle("Show “Last Work Done” narration", isOn: $narrationEnabled)
+
         Picker("LLM Provider", selection: provider) {
-          Text("Automatic").tag(ProviderPreference.auto)
-          Text("Foundation Models").tag(ProviderPreference.foundationModels)
-          Text("claude -p").tag(ProviderPreference.claudeCLI)
-          Text("Cloud (API)").tag(ProviderPreference.cloud)
+          ForEach([ProviderPreference.auto, .foundationModels, .claudeCLI, .cloud], id: \.self) { p in
+            Text(label(for: p)).tag(p)
+          }
         }
         .onChange(of: providerRaw) { _, _ in
+          if provider.wrappedValue == .cloud, cloudBaseURL.isEmpty { cloudBaseURL = cloudFlavor.defaultBaseURL }
           model.rebuildSummaryBuilder()
         }
+
+        Label(help(for: provider.wrappedValue), systemImage: "info.circle")
+          .font(.caption).foregroundStyle(.secondary)
+
         if provider.wrappedValue == .foundationModels && !foundationAvailable {
           Label("Foundation Models isn’t available on this Mac — using claude -p instead.",
                 systemImage: "exclamationmark.triangle")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.caption).foregroundStyle(.secondary)
         }
-        if provider.wrappedValue == .cloud {
-          Picker("Provider Type", selection: Binding(
-            get: { cloudFlavor },
-            set: { newFlavor in
-              cloudFlavorRaw = newFlavor.rawValue
-              cloudBaseURL = newFlavor.defaultBaseURL          // reset base to the flavor default
-              apiKeyField = KeychainSecretStore().read(account: newFlavor.rawValue) ?? ""
-              loadedKey = apiKeyField
-              cloudModel = ""                                  // don't carry a stale model across flavors
-              models = []; fetchError = false
-              model.rebuildSummaryBuilder()
-            }
-          )) {
-            Text("Anthropic").tag(CloudFlavor.anthropic)
-            Text("OpenAI-compatible").tag(CloudFlavor.openAICompatible)
-          }
 
-          TextField("Base URL", text: $cloudBaseURL)
-            .onChange(of: cloudBaseURL) { _, _ in model.rebuildSummaryBuilder() }
-
-          SecureField("API Key", text: $apiKeyField)
-            .onSubmit { commitKey() }
-            .onDisappear { if apiKeyField != loadedKey { commitKey() } }
-
-          HStack {
-            if models.isEmpty {
-              TextField("Model", text: $cloudModel)
-                .onChange(of: cloudModel) { _, _ in model.rebuildSummaryBuilder() }
-            } else {
-              Picker("Model", selection: $cloudModel) {
-                ForEach(models, id: \.self) { Text($0).tag($0) }
-              }
-              .onChange(of: cloudModel) { _, _ in model.rebuildSummaryBuilder() }
-            }
-            Button(isFetching ? "Fetching…" : "Fetch models") { fetchModels() }
-              .disabled(isFetching)
-          }
-
-          if fetchError {
-            Label("Couldn’t reach the provider. Check the key and base URL.",
-                  systemImage: "exclamationmark.triangle")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-        }
+        if provider.wrappedValue == .cloud { cloudSection }
       }
     }
     .formStyle(.grouped)
     .frame(width: 460)
     .onAppear {
-      apiKeyField = KeychainSecretStore().read(account: cloudFlavor.rawValue) ?? ""
+      apiKeyField = KeychainSecretStore().read(account: keychainAccount) ?? ""
       loadedKey = apiKeyField
     }
   }
 
+  @ViewBuilder private var cloudSection: some View {
+    Picker("Vendor", selection: vendorSelection) {
+      ForEach(CloudPresets.all) { Text($0.displayName).tag($0.id) }
+      Text("Custom").tag("custom")
+    }
+
+    if vendorSelection.wrappedValue == "custom" {
+      Picker("Provider Type", selection: Binding(
+        get: { cloudFlavor },
+        set: { newFlavor in
+          cloudFlavorRaw = newFlavor.rawValue
+          cloudBaseURL = newFlavor.defaultBaseURL
+          resetCloudFieldsForVendorChange()
+        }
+      )) {
+        Text("Anthropic").tag(CloudFlavor.anthropic)
+        Text("OpenAI-compatible").tag(CloudFlavor.openAICompatible)
+      }
+
+      TextField("Base URL", text: $cloudBaseURL)
+        .focused($baseURLFocused)
+        .onChange(of: cloudBaseURL) { _, _ in fetchError = false }
+        .onChange(of: baseURLFocused) { _, focused in
+          if !focused { reloadKeyForAccount(); model.rebuildSummaryBuilder() }
+        }
+    }
+
+    SecureField("API Key", text: $apiKeyField)
+      .focused($keyFocused)
+      .onChange(of: apiKeyField) { _, _ in fetchError = false }
+      .onSubmit { commitKey() }
+      .onChange(of: keyFocused) { _, focused in if !focused { commitKey() } }
+      .onDisappear { if apiKeyField != loadedKey { commitKey() } }
+
+    HStack {
+      if models.isEmpty {
+        TextField("Model", text: $cloudModel)
+          .focused($modelFocused)
+          .onSubmit { model.rebuildSummaryBuilder() }
+          .onChange(of: modelFocused) { _, focused in if !focused { model.rebuildSummaryBuilder() } }
+      } else {
+        Picker("Model", selection: $cloudModel) {
+          ForEach(modelOptions, id: \.self) { Text($0).tag($0) }
+        }
+        .onChange(of: cloudModel) { _, _ in model.rebuildSummaryBuilder() }
+      }
+      Button(isFetching ? "Fetching…" : "Fetch models") { fetchModels() }
+        .disabled(isFetching || !canFetch)
+    }
+
+    if fetchError {
+      Label("Couldn’t reach the provider. Check the key and base URL.",
+            systemImage: "exclamationmark.triangle")
+        .font(.caption).foregroundStyle(.secondary)
+    } else if didFetch && !models.isEmpty {
+      Text("\(models.count) models available")
+        .font(.caption).foregroundStyle(.secondary)
+    }
+  }
+
+  /// Fetched models plus the current value if the picker wouldn't otherwise contain it (so a custom
+  /// or stale model still shows selected instead of blank).
+  private var modelOptions: [String] {
+    (cloudModel.isEmpty || models.contains(cloudModel)) ? models : [cloudModel] + models
+  }
+
+  private var canFetch: Bool {
+    !cloudBaseURL.isEmpty
+      && (!apiKeyField.isEmpty
+          || CloudConfig(flavor: cloudFlavor, baseURL: cloudBaseURL, model: cloudModel).isLocalEndpoint)
+  }
+
+  /// The Vendor picker's value: the matching preset id, else "custom". Selecting a preset writes its
+  /// flavor + base URL; selecting "Custom" keeps the current values and reveals the free fields.
+  private var vendorSelection: Binding<String> {
+    Binding(
+      get: { CloudPresets.match(flavor: cloudFlavor, baseURL: cloudBaseURL)?.id ?? "custom" },
+      set: { id in
+        guard let preset = CloudPresets.all.first(where: { $0.id == id }) else { return }
+        cloudFlavorRaw = preset.flavor.rawValue
+        cloudBaseURL = preset.baseURL
+        resetCloudFieldsForVendorChange()
+      }
+    )
+  }
+
+  private func resetCloudFieldsForVendorChange() {
+    cloudModel = ""; models = []; fetchError = false; didFetch = false
+    reloadKeyForAccount()
+    model.rebuildSummaryBuilder()
+  }
+
+  private func reloadKeyForAccount() {
+    apiKeyField = KeychainSecretStore().read(account: keychainAccount) ?? ""
+    loadedKey = apiKeyField
+  }
+
   private func commitKey() {
-    KeychainSecretStore().write(apiKeyField, account: cloudFlavor.rawValue)
+    guard apiKeyField != loadedKey else { return }
+    KeychainSecretStore().write(apiKeyField, account: keychainAccount)
     loadedKey = apiKeyField
     model.rebuildSummaryBuilder()
   }
 
   private func fetchModels() {
-    commitKey()   // persist the just-typed key before validating it
+    commitKey()
     let config = CloudConfig(flavor: cloudFlavor, baseURL: cloudBaseURL, model: cloudModel)
     let key = apiKeyField
     isFetching = true; fetchError = false
@@ -135,6 +210,7 @@ struct SettingsView: View {
       do {
         let fetched = try await CloudLLMProvider.listModels(config: config, apiKey: key)
         models = fetched
+        didFetch = true
         if cloudModel.isEmpty, let first = fetched.first {
           cloudModel = first
           model.rebuildSummaryBuilder()
