@@ -44,3 +44,90 @@ public struct CloudConfig: Sendable, Equatable {
   }
   public var isUsable: Bool { !baseURL.isEmpty && !model.isEmpty }
 }
+
+/// Pure HTTP request building + response parsing for the cloud flavors. No I/O — every function
+/// is deterministic and unit-tested. `CloudLLMProvider` composes these with an injected transport.
+public enum CloudHTTP {
+  static let anthropicVersion = "2023-06-01"
+  static let maxTokens = 1024
+
+  private struct Message: Encodable { let role: String; let content: String }
+  private struct AnthropicBody: Encodable { let model: String; let max_tokens: Int; let messages: [Message] }
+  private struct OpenAIBody: Encodable { let model: String; let messages: [Message] }
+
+  /// Trim exactly one trailing slash so `base + suffix` never doubles the separator.
+  private static func joined(_ base: String, _ suffix: String) throws -> URL {
+    let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
+    guard let url = URL(string: trimmed + suffix) else {
+      throw LLMError.providerFailed("bad URL: \(trimmed + suffix)")
+    }
+    return url
+  }
+
+  private static func applyAuth(_ request: inout URLRequest, flavor: CloudFlavor, apiKey: String) {
+    switch flavor {
+    case .anthropic:
+      request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+      request.setValue(anthropicVersion, forHTTPHeaderField: "anthropic-version")
+    case .openAICompatible:
+      request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    }
+  }
+
+  public static func buildCompletionRequest(config: CloudConfig, apiKey: String, prompt: String) throws -> URLRequest {
+    var request = URLRequest(url: try joined(config.baseURL, config.flavor.completionSuffix))
+    request.httpMethod = "POST"
+    request.timeoutInterval = 120
+    request.setValue("application/json", forHTTPHeaderField: "content-type")
+    applyAuth(&request, flavor: config.flavor, apiKey: apiKey)
+    let message = Message(role: "user", content: prompt)
+    switch config.flavor {
+    case .anthropic:
+      request.httpBody = try JSONEncoder().encode(
+        AnthropicBody(model: config.model, max_tokens: maxTokens, messages: [message]))
+    case .openAICompatible:
+      request.httpBody = try JSONEncoder().encode(
+        OpenAIBody(model: config.model, messages: [message]))
+    }
+    return request
+  }
+
+  public static func buildModelsRequest(config: CloudConfig, apiKey: String) throws -> URLRequest {
+    var request = URLRequest(url: try joined(config.baseURL, config.flavor.modelsSuffix))
+    request.httpMethod = "GET"
+    request.timeoutInterval = 120
+    applyAuth(&request, flavor: config.flavor, apiKey: apiKey)
+    return request
+  }
+
+  private struct AnthropicResp: Decodable { struct Block: Decodable { let text: String? }; let content: [Block] }
+  private struct OpenAIResp: Decodable {
+    struct Choice: Decodable { struct Msg: Decodable { let content: String }; let message: Msg }
+    let choices: [Choice]
+  }
+  private struct ModelsResp: Decodable { struct M: Decodable { let id: String }; let data: [M] }
+
+  public static func parseCompletion(flavor: CloudFlavor, _ data: Data) throws -> String {
+    switch flavor {
+    case .anthropic:
+      guard let text = (try? JSONDecoder().decode(AnthropicResp.self, from: data))?
+        .content.compactMap({ $0.text }).first else {
+        throw LLMError.providerFailed("no text in Anthropic response")
+      }
+      return text
+    case .openAICompatible:
+      guard let text = (try? JSONDecoder().decode(OpenAIResp.self, from: data))?
+        .choices.first?.message.content else {
+        throw LLMError.providerFailed("no content in OpenAI response")
+      }
+      return text
+    }
+  }
+
+  public static func parseModelList(_ data: Data) throws -> [String] {
+    guard let resp = try? JSONDecoder().decode(ModelsResp.self, from: data) else {
+      throw LLMError.providerFailed("model list not parseable")
+    }
+    return resp.data.map { $0.id }.sorted()
+  }
+}
