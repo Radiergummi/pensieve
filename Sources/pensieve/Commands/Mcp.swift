@@ -2,7 +2,6 @@ import ArgumentParser
 import Foundation
 import MCP
 import PensieveKit
-import SQLiteData
 
 struct Mcp: AsyncParsableCommand {
   static let configuration = CommandConfiguration(commandName: "mcp",

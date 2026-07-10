@@ -1,7 +1,6 @@
 import ArgumentParser
 import Foundation
 import PensieveKit
-import SQLiteData
 
 struct Prime: AsyncParsableCommand {
   static let configuration = CommandConfiguration(commandName: "prime",
