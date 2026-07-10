@@ -416,6 +416,7 @@ final class AppModel: ObservableObject {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= SearchQueries.minQueryLength, let db else {
       searchResults = SearchResults()
+      expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
       return
     }
     let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
