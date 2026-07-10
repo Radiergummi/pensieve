@@ -246,9 +246,7 @@ public struct Ingester: Sendable {
       var out: [Candidate] = []
       for node in projects {
         if Self.nameInferred(inMetadata: node.metadataJSON) { continue }
-        let gitSources = try Source
-          .where { $0.nodeID.eq(node.id) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
-        guard gitSources.count == 1, let key = gitSources.first?.key else { continue }
+        guard let key = try NodeDescriber.soleGitRepoKey(db, nodeID: node.id) else { continue }
         guard node.name == ProjectResolver.displayName(forKey: key) else { continue }
         out.append(Candidate(id: node.id, commonDir: key, metadataJSON: node.metadataJSON))
       }
@@ -288,9 +286,7 @@ public struct Ingester: Sendable {
       let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db)
       var out: [UUID] = []
       for node in projects where node.description.isEmpty {
-        let git = try Source
-          .where { $0.nodeID.eq(node.id) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
-        if git.count == 1 { out.append(node.id) }
+        if try NodeDescriber.soleGitRepoKey(db, nodeID: node.id) != nil { out.append(node.id) }
       }
       return out
     }) ?? []

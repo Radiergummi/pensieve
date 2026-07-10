@@ -147,11 +147,11 @@ struct DetailView: View {
         .buttonStyle(.borderless).controlSize(.small)
         .disabled(isDescribing)
       }
-      if isDescribing, loadedNodeID == node.id {
-        ProgressView().controlSize(.small)
-      }
-      if let describeNote, loadedNodeID == node.id {
-        Text(describeNote).font(.caption).foregroundStyle(.secondary)
+      if loadedNodeID == node.id {
+        if isDescribing { ProgressView().controlSize(.small) }
+        if let describeNote {
+          Text(describeNote).font(.caption).foregroundStyle(.secondary)
+        }
       }
     }
     .padding(.top, 2)
@@ -165,9 +165,8 @@ struct DetailView: View {
       guard loadedNodeID == node.id else { return }   // navigated away: drop the result
       isDescribing = false
       switch outcome {
-      case .wrote: describeNote = nil
       case .noSignal, .attemptedEmpty: describeNote = String(localized: "Nothing to summarize")
-      case .ineligible: describeNote = nil
+      case .wrote, .ineligible: break   // describeNote already cleared at entry
       }
     }
   }

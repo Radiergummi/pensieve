@@ -553,10 +553,8 @@ final class AppModel: ObservableObject {
   /// it. Gates the DetailView's describe/refresh button so it never appears where it would no-op.
   func isDescribable(_ node: Node) -> Bool {
     guard node.kind == NodeKind.project, let db else { return false }
-    let count = (try? db.read { db in
-      try Source.where { $0.nodeID.eq(node.id) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db).count
-    }) ?? 0
-    return count == 1
+    let key = try? db.read { db in try NodeDescriber.soleGitRepoKey(db, nodeID: node.id) }
+    return (key ?? nil) != nil
   }
 
   /// Manual "describe this node" action: force-derive `node`'s description off-main via the retained

@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import SQLiteData
 
 /// Best-effort derivation of a git-backed project node's `description` ("what it is") from local
@@ -9,6 +10,14 @@ public enum NodeDescriber {
   /// `.attemptedEmpty` and `.noSignal` leave the description empty (retried on a later pass);
   /// `.ineligible` = not a single-git-source project, or already-described without `force`.
   public enum Outcome: Equatable, Sendable { case wrote, attemptedEmpty, noSignal, ineligible }
+
+  /// The lone `gitRepo` source key for `nodeID`, or nil unless it has exactly one. Describe
+  /// eligibility pairs this with a `project`-kind check on the node; shared so the daemon pass,
+  /// the manual action, and the DetailView button gate resolve the git source identically.
+  public static func soleGitRepoKey(_ db: Database, nodeID: UUID) throws -> String? {
+    let git = try Source.where { $0.nodeID.eq(nodeID) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
+    return git.count == 1 ? git.first?.key : nil
+  }
 
   /// Normalizes a model's free-text description: trims; strips surrounding code fences; strips a
   /// leading list/heading marker; strips surrounding quotes. Returns nil when nothing is left.
@@ -34,9 +43,8 @@ public enum NodeDescriber {
                               provider: any LLMProvider, force: Bool) async -> Outcome {
     let resolved: (node: Node, key: String)? = (try? await db.read { db -> (Node, String)? in
       guard let node = try Node.where({ $0.id.eq(nodeID) }).fetchOne(db),
-            node.kind == NodeKind.project else { return nil }
-      let git = try Source.where { $0.nodeID.eq(nodeID) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
-      guard git.count == 1, let key = git.first?.key else { return nil }
+            node.kind == NodeKind.project,
+            let key = try soleGitRepoKey(db, nodeID: nodeID) else { return nil }
       return (node, key)
     }) ?? nil
     guard let resolved else { return .ineligible }
