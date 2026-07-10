@@ -558,6 +558,17 @@
         }
       }
     },
+    "Find" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suchen"
+          }
+        }
+      }
+    },
     "Foundation Models" : {
       "localizations" : {
         "de" : {
@@ -740,6 +751,17 @@
       }
     },
     "Loose Ends" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lose Enden"
+          }
+        }
+      }
+    },
+    "Loose ends" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
