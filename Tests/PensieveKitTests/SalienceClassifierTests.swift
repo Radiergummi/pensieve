@@ -62,6 +62,13 @@ private func um(_ i: Int, _ text: String) -> TranscriptMessage {
   #expect(kept.isEmpty)
 }
 
+@Test func buildPromptPairsOverloadEmitsQuoteAndContext() {
+  let p = SalienceClassifier.buildPrompt([(quote: "migrate the auth tables later", context: "user: migrate the auth tables later")])
+  #expect(p.contains("[0] QUOTE: migrate the auth tables later"))
+  #expect(p.contains("CONTEXT:\nuser: migrate the auth tables later"))
+  #expect(p.contains("Return ONLY a JSON array"))
+}
+
 @Test func salienceMapsDropIndicesPerBatchNotGlobally() async {
   // Force one-end-per-batch with a tiny budget, and drop based on quote content so the
   // stub's [0] drop applies to the RIGHT batch-local end each time. If filter mis-mapped

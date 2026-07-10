@@ -61,8 +61,14 @@ public struct SalienceClassifier {
   }
 
   static func buildPrompt(_ batch: [VerifiedLooseEnd], messages: [TranscriptMessage]) -> String {
-    let body = batch.enumerated().map { (n, e) in
-      "[\(n)] QUOTE: \(e.quote)\nCONTEXT:\n\(contextWindow(for: e, messages: messages))"
+    buildPrompt(batch.map { (quote: $0.quote, context: contextWindow(for: $0, messages: messages)) })
+  }
+
+  /// The salience prompt over pre-rendered (quote, context) pairs. Kept as ONE definition so the
+  /// live `filter` path and the offline `SalienceSuggester` never drift.
+  static func buildPrompt(_ items: [(quote: String, context: String)]) -> String {
+    let body = items.enumerated().map { (n, it) in
+      "[\(n)] QUOTE: \(it.quote)\nCONTEXT:\n\(it.context)"
     }.joined(separator: "\n\n")
     return """
     Each item below is a candidate LOOSE END quoted from a developer's message, with surrounding \
