@@ -44,10 +44,6 @@ struct RootView: View {
           // isn't pushed into an overflow menu.
         }
     }
-    // ⌘K now lives in the "Go" menu (see PensieveApp.commands); the palette state lives on AppModel.
-    .sheet(isPresented: $model.showPalette) {
-      PaletteView(model: model, isPresented: $model.showPalette)
-    }
     .onChange(of: model.openNodeRequest) { _, id in
       guard let id else { return }
       openWindow(id: "recall", value: id)

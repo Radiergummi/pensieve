@@ -44,9 +44,6 @@ struct PensieveApp: App {
           .disabled(model.selectedNodeID == nil)
       }
       CommandMenu("Go") {
-        Button("Quick Jump…") { model.showPalette = true }
-          .keyboardShortcut("k", modifiers: .command)
-        Divider()
         Button("Refresh") { Task { await model.refreshNow() } }
           .keyboardShortcut("r", modifiers: .command)
       }

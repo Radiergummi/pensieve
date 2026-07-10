@@ -717,17 +717,6 @@
         }
       }
     },
-    "Jump to…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wechseln zu …"
-          }
-        }
-      }
-    },
     "Last Work Done" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1171,17 +1160,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anbietertyp"
-          }
-        }
-      }
-    },
-    "Quick Jump…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schnellsprung …"
           }
         }
       }

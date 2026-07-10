@@ -102,9 +102,6 @@ final class AppModel: ObservableObject {
   @Published var briefingCards: [BriefingCard] = []
   /// Count of open, unlabeled, machine-suggested loose ends — the "Review Suggestions" badge.
   @Published var reviewCount = 0
-  /// Drives the ⌘K Quick Jump palette. Hoisted here (from RootView @State) so the "Go" menu command
-  /// can open it.
-  @Published var showPalette = false
   /// Set by the AppDelegate when an external `pensieve://` URL is opened; observed by the
   /// always-mounted menu-bar label, which applies it and clears it back to nil.
   @Published var pendingDeepLink: DeepLink?
@@ -397,13 +394,6 @@ final class AppModel: ObservableObject {
       return false
     }
     return true
-  }
-
-  /// Nodes whose name contains `query` (case-insensitive); empty query returns all. For ⌘K.
-  func matchingNodes(_ query: String) -> [Node] {
-    let q = query.trimmingCharacters(in: .whitespaces)
-    guard !q.isEmpty else { return allNodes }
-    return allNodes.filter { $0.name.range(of: q, options: .caseInsensitive) != nil }
   }
 
   func detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView]) {
