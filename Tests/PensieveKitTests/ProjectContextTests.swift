@@ -81,3 +81,43 @@ private func write(_ text: String, to url: URL) throws {
   #expect(p.contains("acme/laravel-rls — RLS package"))
   #expect(!p.contains("README excerpt"))     // nil signal omitted
 }
+
+// MARK: describePrompt
+
+@Test func describePromptIncludesOnlyPresentSignals() {
+  let ctx = ProjectContext(dirName: "laravel-rls", gitRemote: "https://x/laravel-rls.git",
+                           readmeHead: nil, claudeMdHead: nil, manifest: "acme/laravel-rls — RLS package")
+  let p = ProjectContext.describePrompt(ctx)
+  #expect(p.contains("Directory name: laravel-rls"))
+  #expect(p.contains("Git remote: https://x/laravel-rls.git"))
+  #expect(p.contains("acme/laravel-rls — RLS package"))
+  #expect(!p.contains("README excerpt"))                 // nil signal omitted
+  #expect(p.contains("Summarize what this software project"))   // description instruction, not naming
+}
+
+// MARK: hasMeaningfulSignal (substance gate)
+
+@Test func meaningfulSignalTrueForSubstantiveReadme() {
+  let ctx = ProjectContext(dirName: "app", gitRemote: nil,
+                           readmeHead: "# App\nRow-level security for Eloquent models.",
+                           claudeMdHead: nil, manifest: nil)
+  #expect(ProjectContext.hasMeaningfulSignal(ctx) == true)
+}
+
+@Test func meaningfulSignalFalseForTitleOnlyReadme() {
+  let ctx = ProjectContext(dirName: "foo", gitRemote: "https://x/foo.git",
+                           readmeHead: "# foo", claudeMdHead: nil, manifest: nil)
+  #expect(ProjectContext.hasMeaningfulSignal(ctx) == false)   // `# foo` alone is not enough
+}
+
+@Test func meaningfulSignalFalseForBareNameManifestAndRemoteOnly() {
+  let ctx = ProjectContext(dirName: "foo", gitRemote: "https://x/foo.git",
+                           readmeHead: nil, claudeMdHead: nil, manifest: "MyPackage")  // name only, no " — desc"
+  #expect(ProjectContext.hasMeaningfulSignal(ctx) == false)
+}
+
+@Test func meaningfulSignalTrueForManifestWithDescription() {
+  let ctx = ProjectContext(dirName: "foo", gitRemote: nil,
+                           readmeHead: nil, claudeMdHead: nil, manifest: "acme/foo — does a real thing")
+  #expect(ProjectContext.hasMeaningfulSignal(ctx) == true)
+}
