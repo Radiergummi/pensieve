@@ -27,9 +27,12 @@ public extension Git {
 
   /// Best-effort default branch: origin/HEAD → init.defaultBranch → probe main/master → "main".
   static func defaultBranch(in repo: String) -> String {
-    if let ref = run(["symbolic-ref", "refs/remotes/origin/HEAD"], in: repo),
-       let name = ref.split(separator: "/").last, !name.isEmpty {
-      return String(name)
+    if let ref = run(["symbolic-ref", "refs/remotes/origin/HEAD"], in: repo) {
+      // e.g. "refs/remotes/origin/release/prod" → "release/prod". Strip the known prefix rather than
+      // splitting on "/", which would truncate a slash-containing default branch to its last segment.
+      let prefix = "refs/remotes/origin/"
+      let name = ref.hasPrefix(prefix) ? String(ref.dropFirst(prefix.count)) : ref
+      if !name.isEmpty { return name }
     }
     if let cfg = run(["config", "init.defaultBranch"], in: repo), !cfg.isEmpty { return cfg }
     if run(["rev-parse", "--verify", "--quiet", "refs/heads/main"], in: repo) != nil { return "main" }
