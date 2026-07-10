@@ -42,4 +42,26 @@ public enum LooseEndCommands {
       try LooseEnd.where { $0.label.neq("") }.fetchAll(db).map { ($0.quote, $0.label) }
     }
   }
+
+  /// Fold externally hand-adjudicated labels into the human `label` by verbatim (whitespace-
+  /// normalized) quote match. Skips entries matching no stored loose end. Idempotent. This writes
+  /// the CORPUS `label` (not a suggestion) because the entries are prior human adjudication.
+  public static func importLabels(_ db: any DatabaseWriter,
+                                  _ entries: [(quote: String, label: String)]) throws -> (matched: Int, skipped: Int) {
+    // Build a normalized-quote -> [id] index once (a quote may recur across nodes; label them all).
+    let index: [String: [UUID]] = try db.read { db in
+      var map: [String: [UUID]] = [:]
+      for le in try LooseEnd.all.fetchAll(db) {
+        map[normalizeWhitespace(le.quote), default: []].append(le.id)
+      }
+      return map
+    }
+    var matched = 0, skipped = 0
+    for entry in entries {
+      guard let ids = index[normalizeWhitespace(entry.quote)], !ids.isEmpty else { skipped += 1; continue }
+      for id in ids { _ = try setLabel(db, id: id, label: entry.label) }
+      matched += 1
+    }
+    return (matched, skipped)
+  }
 }

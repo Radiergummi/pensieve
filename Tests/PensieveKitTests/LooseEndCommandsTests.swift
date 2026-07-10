@@ -56,3 +56,28 @@ private func seedLooseEnd(_ db: any DatabaseWriter, quote: String) throws -> UUI
   #expect(Set(corpus.map { $0.quote }) == ["migrate the auth tables later", "read the spec now"])
   #expect(corpus.first { $0.quote == "migrate the auth tables later" }?.label == "salient")
 }
+
+@Test func importLabelsMatchesByNormalizedQuoteAndSkipsUnmatched() throws {
+  let db = try openCanonicalDatabase(at: tempURL("cmd-import"))
+  let a = try seedLooseEnd(db, quote: "we should migrate the auth tables later")
+  let b = try seedLooseEnd(db, quote: "read the spec now")
+  // Entry quote differs only by whitespace; entry 3 matches nothing.
+  let result = try LooseEndCommands.importLabels(db, [
+    (quote: "we should migrate   the auth tables later", label: LooseEndLabel.salient),
+    (quote: "read the spec now", label: LooseEndLabel.noise),
+    (quote: "this quote is not in the store at all", label: LooseEndLabel.salient),
+  ])
+  #expect(result.matched == 2)
+  #expect(result.skipped == 1)
+  #expect(try db.read { db in try LooseEnd.where { $0.id.eq(a) }.fetchOne(db) }?.label == "salient")
+  #expect(try db.read { db in try LooseEnd.where { $0.id.eq(b) }.fetchOne(db) }?.label == "noise")
+}
+
+@Test func importLabelsIsIdempotent() throws {
+  let db = try openCanonicalDatabase(at: tempURL("cmd-import-idem"))
+  let a = try seedLooseEnd(db, quote: "park the canvas idea for now")
+  _ = try LooseEndCommands.importLabels(db, [(quote: "park the canvas idea for now", label: LooseEndLabel.salient)])
+  let second = try LooseEndCommands.importLabels(db, [(quote: "park the canvas idea for now", label: LooseEndLabel.salient)])
+  #expect(second.matched == 1)   // matches again; a no-op write
+  #expect(try db.read { db in try LooseEnd.where { $0.id.eq(a) }.fetchOne(db) }?.label == "salient")
+}
