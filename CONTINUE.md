@@ -1,4 +1,4 @@
-# CONTINUE — session handoff (2026-07-10)
+# CONTINUE — session handoff (2026-07-11)
 
 Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (project rules), then this.
 
@@ -9,7 +9,46 @@ Everything below is **on `main`** and the tree is clean. The **MCP context serve
 run with `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended
 (sync daemon).
 
-**Latest (this session): MCP context server merged & taken LIVE — DONE & on `main` `d44a65e`.** The
+**Latest (this session): in-app find (search captured content) — DONE & on `main` `02bb0a1` (backlog note
+`5a5ae05`).** Track C **sub-project 1a**: a native `.searchable` in-app search over the grounded core corpus
+(node name/description + open loose-end text/quote), grouped results in the content column, **land on the
+cited row** (auto-expand + scroll), Focus-scoped, trust-gate-clean. The **⌘K palette is retired** (native
+`.searchable` + **⌘F** replace it) — the `PaletteDestination`/`applyDeepLink`/`DeepLinkNavigation` nav core is
+retained untouched (deep links, App Intents, menu bar). **Kit (tested):** `SnippetMaker` (a `(leading, match,
+trailing)` highlight triple, unicode-safe) + `SearchQueries` (`any DatabaseReader` + `db.read`; grounded corpus;
+`LooseEnd.isOpen` reused; Focus scoping by an injected `visibleNodeIDs` set; deterministic ranking with an
+`id.uuidString` tiebreaker; `prefix(50)` cap after sort + pre-cap totals) — **17 new tests, suite 341/341**.
+**App (thin):** `AppModel` search state + a race-safe off-main `runSearch()` funnel (monotonic token **and**
+`Task.isCancelled` — the latter is load-bearing for the below-min/clear paths, do **not** remove); a search-result
+tap sets `selectedNodeID` only (briefing-card pattern, user-approved deviation); grouped `ContentListView` results
+(per-row `.plain` Button taps, `SnippetText`, `NodeBadge`, `ContentUnavailableView.search`); loose-end landing
+(`LooseEndRow` `.onAppear`+`.onChange` open-only; `DetailView` `ScrollViewReader` with a **dual** scroll trigger —
+`.onChange` for same-node + inside the `.task` after the async `looseEnds` reload for cross-node; a `showsLooseEnds
+|| expandedLooseEndID != nil` one-home override); German chrome l10n (`Find`/`Loose ends` added, `Search`/`Projects`
+pre-existed). **Process:** subagent-driven (8 tasks, Sonnet impl+task-review each; **Opus** whole-branch =
+**READY TO MERGE**, 0 Critical/0 Important, 4 Minor all accepted). One review-caught **Important** fixed mid-flight
+(cross-node `scrollTo` fired before the async reload → no-op; second in-`.task` trigger added). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-10-in-app-find*`.
+- **Accepted follow-up (in `backlog.md`):** a node matched **only on its description** shows the description
+  snippet as the row's primary line, not the node name (name-matches show the name). Polish = `hit.name` primary,
+  snippet secondary.
+- **Sequenced siblings (deferred):** **1b** — index loose-end text into Spotlight (own spec); **#2** —
+  semantic/vector recall (`sqlite-vec` / on-device embeddings; reuses this corpus; grounding caveat).
+- **Human-verify carries** (need the built app + real store + plain `open`): **⌘F** focuses the field; typing a
+  loose-end phrase → it appears under **Loose ends** → selecting opens the node with that row **expanded + scrolled
+  into view** (incl. a 2nd hit in the same node and a hit on a childless-leaf node); a node-name phrase appears
+  under **Projects**; the **Focus filter** hides muted-context hits; clearing the field / selecting a sidebar row
+  **exits search**; a `pensieve://node/<id>` deep link / menu-bar jump / Siri "Open Node" still navigates (retained
+  `PaletteDestination`); German in situ (`-AppleLanguages '(de)'`) with content un-translated. Build: `xcodegen
+  generate && xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -derivedDataPath
+  ./.build-xcode build`, then `open ./.build-xcode/Build/Products/Debug/Pensieve.app`.
+- **Process note (this session):** a background SDD controller left over from the prior interrupted session ran the
+  **same** plan in parallel in the shared worktree; both runs converged on identical, correct commits (the ghost
+  authored several, incl. a genuinely useful final-review fix `02bb0a1`). No divergence, HEAD stable, all commits
+  individually verified. Harmless here, but a reminder to confirm no stray `claude` process before subagent-driven
+  runs in a shared worktree.
+
+**Prior session: MCP context server merged & taken LIVE — DONE & on `main` `d44a65e`.** The
 `feat/mcp-context-server` branch (14 commits, Opus whole-branch review = READY TO MERGE, 0 Critical/0 Important,
 320/320 tests) was fast-forward merged to `main` and the branch deleted. Then the three post-merge carries were
 executed to make it live:
@@ -24,8 +63,9 @@ executed to make it live:
 - **One human-verify carry** (needs live Claude Code v2.1.203+): the zero-arg `roots`-SUCCESS auto-scoping path in
   `project_context` — confirm a real editor session where the MCP client advertises roots scopes context to the
   cwd's node.
-- **Observation / possible fast-follow:** `pensieve prime` output is uncapped on loose ends (this project emits
-  ~100), which can flood a SessionStart context window. Consider a loose-end cap in the compact `prime` bundle.
+- **Resolved (was listed here as a fast-follow):** the `pensieve prime` loose-end flood is **already capped** —
+  `SessionContextRender.compact(_:maxLooseEnds:)` defaults to 8 with a "+N more" tail (tested in
+  `ProjectContextRenderTests`), landed in `c7c568b` *after* this handoff was first written. No action.
 - Spec/plan: `docs/superpowers/{specs,plans}/2026-07-08-mcp-context-server-design.md` +
   `2026-07-10-mcp-context-server.md`. SDD ledger + reviews under `.superpowers/sdd/`.
 
@@ -414,14 +454,18 @@ prefs file, ⌘,). Two threads deferred out of the first cut:
 - **Organizing-writes error surfacing** — the app still `try?`-swallows failed writes with no signal; needs an
   app error-presentation mechanism, then wire it to move/merge/rename/retype/create. Pairs with Settings.
 
-**Track C — the next OS-integration surface.** The bundle foundation, `pensieve://`, the menu-bar item, the App
-Intents foundation + Spotlight, and Focus filters are all **live**. What remains:
+**Track C — findability / OS-integration.** The bundle foundation, `pensieve://`, the menu-bar item, the App
+Intents foundation + Spotlight, and Focus filters are all **live**. **In-app find (1a) shipped 2026-07-11** (see the
+Latest entry). What remains:
+- **In-app find follow-ons (unblocked, sequenced):** **1b** — index loose-end text into Spotlight (own spec;
+  extend `NodeEntity`/`SpotlightIndexer` or add a loose-end searchable entity); **#2** — **semantic / vector
+  recall** so find doesn't need exact words (evaluate `sqlite-vec`, on-device embeddings `NLContextualEmbedding` /
+  Foundation Models SDK, native Spotlight semantic indexing; **reuses the 1a corpus**; the grounding caveat — opaque
+  clusters are hard to cite — must be solved, prefer embeddings as a retrieval aid feeding grounded output). Plus
+  the accepted 1a polish (node description-only hit shows snippet, not name — see `backlog.md`).
 - **Widgets** and **CloudKit** are **BLOCKED** on a paid Apple Developer team (App Groups / Team-ID entitlement —
   see the "Widgets — DEFERRED" and signing notes in `backlog.md`). Do not start these until a paid membership is
   in hand; that same gate unblocks the whole extension family at once.
-- **Deeper Spotlight (unblocked):** index loose-end text; **semantic / vector search** (evaluate `sqlite-vec`,
-  on-device embeddings `NLContextualEmbedding` / Foundation Models SDK, native Spotlight semantic indexing);
-  live/background re-indexing (rides the existing `ValueObservation` liveness).
 
 Tooling tiers: Widgets/CloudKit = hard Xcode + paid-team gates. Everything in Tracks A/B and deeper-Spotlight is
 buildable now with the adopted Xcode toolchain + `claude -p`/Foundation Models (no API key).
