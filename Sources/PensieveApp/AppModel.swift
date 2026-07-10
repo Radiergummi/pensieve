@@ -138,6 +138,10 @@ final class AppModel: ObservableObject {
   // switch takes effect on the next narration instead of requiring a relaunch. Bootstrapped cheaply
   // here; `init()` calls rebuildSummaryBuilder() to fold in any configured cloud provider.
   private var summaryBuilder = SummaryBuilder(provider: ClaudeCLIProvider())
+  /// The raw narration provider, retained so the manual "describe this node" action can call
+  /// `NodeDescriber.describe` directly (SummaryBuilder's provider is private). Rebuilt alongside
+  /// `summaryBuilder` on a provider/config change.
+  private var descriptionProvider: any LLMProvider = ClaudeCLIProvider()
   /// The provider kind the current `summaryBuilder` uses — folded into the narration cache key so a
   /// provider/model switch invalidates prose cached under the old provider.
   private var providerKind = "claudeCLI"
@@ -161,7 +165,9 @@ final class AppModel: ObservableObject {
   /// not-configured cloud selection keys as the real local kind that runs.
   func rebuildSummaryBuilder() {
     let (config, key) = cloudInputs()
-    summaryBuilder = SummaryBuilder(provider: makeDefaultLLMProvider(cloudConfig: config, apiKey: key))
+    let provider = makeDefaultLLMProvider(cloudConfig: config, apiKey: key)
+    summaryBuilder = SummaryBuilder(provider: provider)
+    descriptionProvider = provider
     let kind = resolvedProviderKind(cloudConfig: config, apiKey: key)
     if kind == "cloud", let config {
       let account = CloudPresets.keychainAccount(flavor: config.flavor, baseURL: config.baseURL)
@@ -541,5 +547,25 @@ final class AppModel: ObservableObject {
       saveNarrationCache()
     }
     return text
+  }
+
+  /// True when `node` is a project with exactly one git source — i.e. `NodeDescriber` can act on
+  /// it. Gates the DetailView's describe/refresh button so it never appears where it would no-op.
+  func isDescribable(_ node: Node) -> Bool {
+    guard node.kind == NodeKind.project, let db else { return false }
+    let count = (try? db.read { db in
+      try Source.where { $0.nodeID.eq(node.id) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db).count
+    }) ?? 0
+    return count == 1
+  }
+
+  /// Manual "describe this node" action: force-derive `node`'s description off-main via the retained
+  /// provider, then refresh so the new text renders. Best-effort — a failure/empty leaves the
+  /// existing description untouched. Returns the outcome so the view can show an inline note.
+  func describeNode(_ node: Node) async -> NodeDescriber.Outcome {
+    guard let db else { return .ineligible }
+    let outcome = await NodeDescriber.describe(db, nodeID: node.id, provider: descriptionProvider, force: true)
+    refresh()
+    return outcome
   }
 }
