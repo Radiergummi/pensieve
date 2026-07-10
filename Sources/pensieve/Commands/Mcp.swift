@@ -35,8 +35,14 @@ struct Mcp: AsyncParsableCommand {
     await server.withMethodHandler(CallTool.self) { params in
       switch params.name {
       case "project_context":
-        let path = params.arguments?["path"]?.stringValue
+        var path = params.arguments?["path"]?.stringValue
         let nodeID = (params.arguments?["node_id"]?.stringValue).flatMap { UUID(uuidString: $0) }
+        if path == nil, nodeID == nil {
+          // Zero-arg "reload wherever I am": ask the client for its workspace roots.
+          if let roots = try? await server.listRoots(), let first = roots.first {
+            path = URL(string: first.uri)?.path   // file:// → filesystem path
+          }
+        }
         let json = try await PensieveMCP.projectContextJSON(path: path, nodeID: nodeID)
         return PensieveMCP.result(json)
       case "whats_next":
