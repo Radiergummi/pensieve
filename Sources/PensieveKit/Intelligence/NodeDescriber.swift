@@ -25,4 +25,32 @@ public enum NodeDescriber {
     s = s.trimmingCharacters(in: .whitespacesAndNewlines)
     return s.isEmpty ? nil : s
   }
+
+  /// Derive and write `nodeID`'s description. Eligible only for a `project` node with exactly one
+  /// `gitRepo` source; `force` allows overwriting a non-empty description (the manual refresh) but
+  /// never bypasses the single-git-source or meaningful-signal guards. Never throws — a provider
+  /// failure or empty output is `.attemptedEmpty` (nothing written).
+  public static func describe(_ db: any DatabaseWriter, nodeID: UUID,
+                              provider: any LLMProvider, force: Bool) async -> Outcome {
+    let resolved: (node: Node, key: String)? = (try? await db.read { db -> (Node, String)? in
+      guard let node = try Node.where({ $0.id.eq(nodeID) }).fetchOne(db),
+            node.kind == NodeKind.project else { return nil }
+      let git = try Source.where { $0.nodeID.eq(nodeID) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
+      guard git.count == 1, let key = git.first?.key else { return nil }
+      return (node, key)
+    }) ?? nil
+    guard let resolved else { return .ineligible }
+    if !force, !resolved.node.description.isEmpty { return .ineligible }
+
+    let ctx = ProjectContext.gather(commonDir: resolved.key)
+    guard ProjectContext.hasMeaningfulSignal(ctx) else { return .noSignal }
+
+    guard let raw = try? await provider.complete(prompt: ProjectContext.describePrompt(ctx)),
+          let desc = sanitize(raw) else { return .attemptedEmpty }
+
+    try? await db.write { db in
+      try Node.where { $0.id.eq(nodeID) }.update { $0.description = desc }.execute(db)
+    }
+    return .wrote
+  }
 }

@@ -29,3 +29,129 @@ import SQLiteData
   #expect(NodeDescriber.sanitize("   \n  ") == nil)
   #expect(NodeDescriber.sanitize("```\n\n```") == nil)
 }
+
+// MARK: describe (IO)
+
+private struct StubLLM: LLMProvider {
+  let text: String
+  func complete(prompt: String) async throws -> String { text }
+}
+
+/// Records whether the provider was actually invoked (for the no-signal / no-LLM assertion).
+private actor InvocationFlag { var invoked = false; func mark() { invoked = true } }
+private struct SpyLLM: LLMProvider {
+  let text: String
+  let flag: InvocationFlag
+  func complete(prompt: String) async throws -> String { await flag.mark(); return text }
+}
+
+/// Writes a file into a directory (creating intermediate dirs).
+private func writeFile(_ text: String, to url: URL) throws {
+  try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+  try text.write(to: url, atomically: true, encoding: .utf8)
+}
+
+/// A committed repo with a substantive README + a project node whose single git source points at it.
+private func describableProjectNode(db: any DatabaseWriter) async throws -> (node: Node, repo: URL) {
+  let (repo, _) = try makeCommittedRepo()
+  try writeFile("# App\nRow-level security for Eloquent models, enforced at the database layer.",
+                to: repo.appendingPathComponent("README.md"))
+  let commonDir = Git.commonDir(in: repo.path)!
+  let node = Node(name: "app", kind: NodeKind.project)
+  try await db.write { db in
+    try Node.insert { node }.execute(db)
+    try Source.insert { Source(nodeID: node.id, kind: SourceKind.gitRepo, key: commonDir) }.execute(db)
+  }
+  return (node, repo)
+}
+
+@Test func describeWritesDescriptionForSubstantiveRepo() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let (node, _) = try await describableProjectNode(db: db)
+
+  let outcome = await NodeDescriber.describe(db, nodeID: node.id,
+                                             provider: StubLLM(text: "A row-level-security package for Laravel."),
+                                             force: false)
+
+  #expect(outcome == .wrote)
+  let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(after.description == "A row-level-security package for Laravel.")
+}
+
+@Test func describeReturnsNoSignalWithoutInvokingLLM() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let (repo, _) = try makeCommittedRepo()   // no README/manifest → no meaningful signal
+  let commonDir = Git.commonDir(in: repo.path)!
+  let node = Node(name: "bare", kind: NodeKind.project)
+  try await db.write { db in
+    try Node.insert { node }.execute(db)
+    try Source.insert { Source(nodeID: node.id, kind: SourceKind.gitRepo, key: commonDir) }.execute(db)
+  }
+  let flag = InvocationFlag()
+
+  let outcome = await NodeDescriber.describe(db, nodeID: node.id,
+                                             provider: SpyLLM(text: "should not run", flag: flag), force: false)
+
+  #expect(outcome == .noSignal)
+  #expect(await flag.invoked == false)       // gated before any LLM call
+  let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(after.description == "")
+}
+
+@Test func describeReturnsAttemptedEmptyWhenModelSaysNothing() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let (node, _) = try await describableProjectNode(db: db)
+
+  let outcome = await NodeDescriber.describe(db, nodeID: node.id,
+                                             provider: StubLLM(text: "   "), force: false)
+
+  #expect(outcome == .attemptedEmpty)
+  let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(after.description == "")           // nothing written → still eligible next pass
+}
+
+@Test func describeIsIneligibleForNonProjectNode() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let node = Node(name: "s", kind: NodeKind.strand)
+  try await db.write { db in try Node.insert { node }.execute(db) }
+
+  let outcome = await NodeDescriber.describe(db, nodeID: node.id,
+                                             provider: StubLLM(text: "x"), force: false)
+  #expect(outcome == .ineligible)
+}
+
+@Test func describeIsIneligibleWithZeroOrTwoGitSources() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  // Zero git sources.
+  let a = Node(name: "a", kind: NodeKind.project)
+  try await db.write { db in try Node.insert { a }.execute(db) }
+  #expect(await NodeDescriber.describe(db, nodeID: a.id, provider: StubLLM(text: "x"), force: false) == .ineligible)
+  // Two git sources (merged node).
+  let b = Node(name: "b", kind: NodeKind.project)
+  try await db.write { db in
+    try Node.insert { b }.execute(db)
+    try Source.insert { Source(nodeID: b.id, kind: SourceKind.gitRepo, key: "/x/.git") }.execute(db)
+    try Source.insert { Source(nodeID: b.id, kind: SourceKind.gitRepo, key: "/y/.git") }.execute(db)
+  }
+  #expect(await NodeDescriber.describe(db, nodeID: b.id, provider: StubLLM(text: "x"), force: false) == .ineligible)
+}
+
+@Test func describeSkipsAlreadyDescribedUnlessForced() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let (node, _) = try await describableProjectNode(db: db)
+  try await db.write { db in
+    try Node.where { $0.id.eq(node.id) }.update { $0.description = "Existing." }.execute(db)
+  }
+
+  // Without force: refuse to clobber.
+  #expect(await NodeDescriber.describe(db, nodeID: node.id,
+                                       provider: StubLLM(text: "New one."), force: false) == .ineligible)
+  let mid = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(mid.description == "Existing.")
+
+  // With force: overwrite.
+  #expect(await NodeDescriber.describe(db, nodeID: node.id,
+                                       provider: StubLLM(text: "New one."), force: true) == .wrote)
+  let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(after.description == "New one.")
+}
