@@ -107,9 +107,10 @@ Steps:
 the auto pass never selects it (see below), but the manual button passes `force: true` to re-derive
 and overwrite it. (`force` never bypasses the exactly-one-git-source or meaningful-signal guards.)
 
-**Sanitizer** — a pure, tested helper (paralleling `sanitizeStrandName`): trim; strip a leading
-list marker / surrounding quotes / code fences; collapse to at most ~2 sentences; return nil for
-empty. Keeps the output from reading like a bulleted list or echoing the prompt.
+**Sanitizer** — a pure, tested helper (paralleling `sanitizeStrandName`): trim; strip surrounding
+code fences; strip a leading list/heading marker; strip surrounding quotes; return nil for empty.
+Keeps the output from reading like a bulleted list or echoing the prompt. Brevity (1–2 sentences)
+is left to the prompt — no sentence-count truncation (YAGNI; `narrate` likewise only trims).
 
 **3. `Ingester.describeProjectNodes()`** — a best-effort pass parallel to `refineProjectNames()`,
 **wired into `SyncRunner.run()` alongside `refineProjectNames()`** (after `drain()`), *not* into
