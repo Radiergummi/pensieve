@@ -15,6 +15,8 @@ struct DetailView: View {
   @State private var looseEnds: [LooseEndView] = []
   @State private var lastWorkDone: String?
   @State private var isNarrating = false
+  @State private var isDescribing = false
+  @State private var describeNote: String?   // brief inline note when a refresh yields nothing
   @State private var loadedNodeID: UUID?   // which node the current prose belongs to
   @State private var shareMarkdown = ""   // rebuilt on load/refresh; fed to the toolbar ShareLink
 
@@ -32,9 +34,7 @@ struct DetailView: View {
               Circle().fill(AppearanceStyle.stateColor(node.state)).frame(width: 8, height: 8)
               Text(AppearanceStyle.stateLabel(node.state)).foregroundStyle(.secondary)
             }
-            if !node.description.isEmpty {
-              Text(node.description).prose().padding(.top, 2)
-            }
+            descriptionBlock
           }
         }
 
@@ -97,6 +97,8 @@ struct DetailView: View {
       if !isRefresh { lastWorkDone = nil }
       loadedNodeID = node.id
       isNarrating = false
+      isDescribing = false
+      describeNote = nil
       let d = model.detail(for: node)
       recentEvents = d.status.recentEvents
       looseEnds = d.looseEnds
@@ -121,6 +123,51 @@ struct DetailView: View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title).sectionHeader()
       content()
+    }
+  }
+
+  @ViewBuilder private var descriptionBlock: some View {
+    let describable = model.isDescribable(node)
+    VStack(alignment: .leading, spacing: 4) {
+      if !node.description.isEmpty {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+          Text(node.description).prose()
+          if describable {
+            Button { runDescribe() } label: { Image(systemName: "arrow.clockwise") }
+              .buttonStyle(.borderless).controlSize(.small)
+              .help("Regenerate description")
+              .disabled(isDescribing)
+          }
+        }
+      } else if describable {
+        Button { runDescribe() } label: {
+          Label("Generate description", systemImage: "sparkles")
+        }
+        .buttonStyle(.borderless).controlSize(.small)
+        .disabled(isDescribing)
+      }
+      if isDescribing, loadedNodeID == node.id {
+        ProgressView().controlSize(.small)
+      }
+      if let describeNote, loadedNodeID == node.id {
+        Text(describeNote).font(.caption).foregroundStyle(.secondary)
+      }
+    }
+    .padding(.top, 2)
+  }
+
+  private func runDescribe() {
+    describeNote = nil
+    isDescribing = true
+    Task {
+      let outcome = await model.describeNode(node)
+      guard loadedNodeID == node.id else { return }   // navigated away: drop the result
+      isDescribing = false
+      switch outcome {
+      case .wrote: describeNote = nil
+      case .noSignal, .attemptedEmpty: describeNote = String(localized: "Nothing to summarize")
+      case .ineligible: describeNote = nil
+      }
     }
   }
 }

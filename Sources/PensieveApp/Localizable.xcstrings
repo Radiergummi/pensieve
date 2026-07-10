@@ -1549,6 +1549,39 @@
           }
         }
       }
+    },
+    "Generate description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschreibung erstellen"
+          }
+        }
+      }
+    },
+    "Regenerate description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschreibung neu erstellen"
+          }
+        }
+      }
+    },
+    "Nothing to summarize" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts zusammenzufassen"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
