@@ -10,7 +10,7 @@ public struct NextItem: Sendable {
 
 public enum NextQueries {
   /// Deterministic ranking on grounded signals only. No model, no invented scores.
-  public static func ranked(_ db: any DatabaseWriter, now: Date) throws -> [NextItem] {
+  public static func ranked(_ db: any DatabaseReader, now: Date) throws -> [NextItem] {
     try db.read { db in
       let projects = try Node.where { $0.state.eq("active") }.fetchAll(db)
       var items: [NextItem] = []
