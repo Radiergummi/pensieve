@@ -203,6 +203,14 @@ final class AppModel: ObservableObject {
   /// drainThenRefresh), so this never bumps on background liveness updates.
   @Published private(set) var refreshToken = 0
 
+  // MARK: - In-app find
+  @Published var searchText: String = ""
+  @Published private(set) var searchResults: SearchResults = SearchResults()
+  /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
+  @Published var expandedLooseEndID: UUID?
+  private var searchTask: Task<Void, Never>?
+  private var searchToken = 0
+
   private static let lastOpenedKey = "pensieve.lastOpenedAt"
 
   init() {
@@ -342,6 +350,7 @@ final class AppModel: ObservableObject {
       lastForestContext = activeFocusContext
     }
     reviewCount = (try? SalienceReviewQueries.pendingCount(db)) ?? 0
+    if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { runSearch() }
   }
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
@@ -374,6 +383,7 @@ final class AppModel: ObservableObject {
   /// the middle re-populates with its contents; from a smart list / briefing it only sets the detail
   /// node, leaving the triage list in place.
   func selectMiddleNode(_ id: UUID) {
+    expandedLooseEndID = nil
     if case .node = sidebarSelection {
       sidebarSelection = .node(id)
     }
@@ -394,6 +404,49 @@ final class AppModel: ObservableObject {
       return false
     }
     return true
+  }
+
+  /// The one entry point for every search trigger (keystroke change AND the liveness refresh).
+  /// Cancels the prior task; runs the read off-main; assigns results under a monotonic token so a
+  /// stale keystroke can't overwrite a newer result. Below the min length → clears results.
+  func runSearch() {
+    searchTask?.cancel()
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard query.count >= SearchQueries.minQueryLength, let db else {
+      searchResults = SearchResults()
+      return
+    }
+    let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
+    searchToken += 1
+    let token = searchToken
+    searchTask = Task { [weak self] in
+      let results = try? await Task.detached {
+        try SearchQueries.search(query: query, visibleNodeIDs: visible, db)
+      }.value
+      guard let self, self.searchToken == token, !Task.isCancelled else { return }
+      self.searchResults = results ?? SearchResults()
+    }
+  }
+
+  /// A node search hit: drive the detail only (the briefing-card pattern), leaving sidebarSelection
+  /// so clearing the field restores a coherent middle list. Clears any pending loose-end expand.
+  func selectSearchNode(_ id: UUID) {
+    expandedLooseEndID = nil
+    selectedNodeID = id
+  }
+
+  /// A loose-end search hit: select its node and mark the row to auto-expand + scroll to.
+  func selectSearchLooseEnd(_ hit: LooseEndHit) {
+    selectedNodeID = hit.nodeID
+    expandedLooseEndID = hit.id
+  }
+
+  /// Exit search mode (e.g. on sidebar navigation): clear the field, results, and pending expand.
+  func clearSearch() {
+    searchText = ""
+    searchResults = SearchResults()
+    expandedLooseEndID = nil
+    searchTask?.cancel()
   }
 
   func detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView]) {
