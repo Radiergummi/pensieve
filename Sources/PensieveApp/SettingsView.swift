@@ -21,7 +21,6 @@ struct SettingsView: View {
   @State private var models: [String] = []
   @State private var isFetching = false
   @State private var fetchError = false
-  @State private var didFetch = false
   @State private var vendorIsCustom = false
 
   @FocusState private var keyFocused: Bool
@@ -31,10 +30,9 @@ struct SettingsView: View {
   private var foundationAvailable: Bool { FoundationModelsProbe.isAvailable() }
   private var cloudFlavor: CloudFlavor { CloudFlavor(rawValue: cloudFlavorRaw) ?? .anthropic }
   private var keychainAccount: String {
-    // Resolve an empty base URL to the flavor default before deriving the account, matching
-    // AppModel.cloudInputs() so both sides always key off the identical base URL (no slot divergence).
-    let base = cloudBaseURL.isEmpty ? cloudFlavor.defaultBaseURL : cloudBaseURL
-    return CloudPresets.keychainAccount(flavor: cloudFlavor, baseURL: base)
+    // keychainAccount normalizes an empty base URL to the flavor default itself, so both the app and
+    // AppModel key off the identical URL without each re-implementing the normalization.
+    CloudPresets.keychainAccount(flavor: cloudFlavor, baseURL: cloudBaseURL)
   }
 
   private var provider: Binding<ProviderPreference> {
@@ -123,7 +121,7 @@ struct SettingsView: View {
 
       TextField("Base URL", text: $cloudBaseURL)
         .focused($baseURLFocused)
-        .onChange(of: cloudBaseURL) { _, _ in fetchError = false; models = []; didFetch = false }
+        .onChange(of: cloudBaseURL) { _, _ in fetchError = false; models = [] }
         .onChange(of: baseURLFocused) { _, focused in
           if !focused { reloadKeyForAccount(); model.rebuildSummaryBuilder() }
         }
@@ -134,7 +132,7 @@ struct SettingsView: View {
       .onChange(of: apiKeyField) { _, _ in fetchError = false }
       .onSubmit { commitKey() }
       .onChange(of: keyFocused) { _, focused in if !focused { commitKey() } }
-      .onDisappear { if apiKeyField != loadedKey { commitKey() } }
+      .onDisappear { commitKey() }
 
     HStack {
       if models.isEmpty {
@@ -156,7 +154,7 @@ struct SettingsView: View {
       Label("Couldn’t reach the provider. Check the key and base URL.",
             systemImage: "exclamationmark.triangle")
         .font(.caption).foregroundStyle(.secondary)
-    } else if didFetch && !models.isEmpty {
+    } else if !models.isEmpty {
       Text("\(models.count) models available")
         .font(.caption).foregroundStyle(.secondary)
     }
@@ -195,7 +193,7 @@ struct SettingsView: View {
   }
 
   private func resetCloudFieldsForVendorChange() {
-    cloudModel = ""; models = []; fetchError = false; didFetch = false
+    cloudModel = ""; models = []; fetchError = false
     reloadKeyForAccount()
     model.rebuildSummaryBuilder()
   }
@@ -222,7 +220,6 @@ struct SettingsView: View {
       do {
         let fetched = try await CloudLLMProvider.listModels(config: config, apiKey: key)
         models = fetched
-        didFetch = true
         if cloudModel.isEmpty, let first = fetched.first {
           cloudModel = first
           model.rebuildSummaryBuilder()

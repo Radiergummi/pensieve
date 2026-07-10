@@ -13,11 +13,16 @@ public struct KeychainSecretStore: Sendable {
   public static func migrateFromLegacyService() {
     let legacy = KeychainSecretStore(service: "com.pensieve.cloud-llm")
     let current = KeychainSecretStore()
-    for flavor in ["anthropic", "openAICompatible"] {
-      if let secret = legacy.read(account: flavor), current.read(account: flavor) == nil {
-        current.write(secret, account: flavor)
-        legacy.delete(account: flavor)
-      }
+    // The legacy scheme keyed accounts by `CloudFlavor.rawValue`; the current scheme keys per-vendor
+    // via `CloudPresets.keychainAccount`. A verbatim copy would strand the "openAICompatible" key in
+    // a slot no reader ever queries. Re-slot each legacy key into the account today's readers derive
+    // from the persisted (flavor, baseURL).
+    let storedBaseURL = PensieveDefaults.shared().string(forKey: PensieveDefaults.cloudBaseURLKey) ?? ""
+    for flavor in CloudFlavor.allCases {
+      guard let secret = legacy.read(account: flavor.rawValue) else { continue }
+      let account = CloudPresets.keychainAccount(flavor: flavor, baseURL: storedBaseURL)
+      if current.read(account: account) == nil { current.write(secret, account: account) }
+      legacy.delete(account: flavor.rawValue)
     }
   }
 

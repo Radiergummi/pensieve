@@ -31,8 +31,10 @@ public enum CloudPresets {
 
   /// Keychain account for this vendor identity: the matching preset id, else a per-flavor custom
   /// slot. Computed identically by the app (write/read) and AppModel (read) so keys never collide
-  /// across vendors that share a flavor.
+  /// across vendors that share a flavor. An empty base URL resolves to the flavor default here — so
+  /// every caller keys off the identical URL without each having to remember to normalize first.
   public static func keychainAccount(flavor: CloudFlavor, baseURL: String) -> String {
-    match(flavor: flavor, baseURL: baseURL)?.id ?? "custom.\(flavor.rawValue)"
+    let resolved = baseURL.isEmpty ? flavor.defaultBaseURL : baseURL
+    return match(flavor: flavor, baseURL: resolved)?.id ?? "custom.\(flavor.rawValue)"
   }
 }
