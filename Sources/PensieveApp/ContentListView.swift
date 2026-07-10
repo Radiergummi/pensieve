@@ -8,16 +8,28 @@ struct ContentListView: View {
   @State private var looseEnds: [LooseEndView] = []
   @State private var reviewItems: [LooseEndView] = []
 
+  private var isSearching: Bool {
+    !model.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
   var body: some View {
+    Group {
+      if isSearching {
+        searchResultsList()
+          .navigationTitle(Text("Search"))
+      } else {
+        normalContent
+      }
+    }
+  }
+
+  @ViewBuilder private var normalContent: some View {
     let kind = model.middleKind()
     Group {
       switch kind {
-      case .nodes(let items):
-        nodeList(items)
-      case .looseEndsOf:
-        looseEndList()
-      case .reviewSuggestions:
-        reviewList()
+      case .nodes(let items): nodeList(items)
+      case .looseEndsOf: looseEndList()
+      case .reviewSuggestions: reviewList()
       }
     }
     .navigationTitle(model.middleTitle)
@@ -30,6 +42,44 @@ struct ContentListView: View {
       case .reviewSuggestions: reviewItems = model.reviewItems()
       case .nodes: looseEnds = []; reviewItems = []
       }
+    }
+  }
+
+  @ViewBuilder private func searchResultsList() -> some View {
+    let r = model.searchResults
+    List {
+      if !r.nodes.isEmpty {
+        Section(header: Text("Projects")) {
+          ForEach(r.nodes) { hit in
+            Button { model.selectSearchNode(hit.id) } label: {
+              HStack(spacing: 10) {
+                if let n = model.node(hit.id) { NodeBadge(node: n, size: 22) }
+                VStack(alignment: .leading, spacing: 2) {
+                  SnippetText(snippet: hit.snippet)
+                  Text(AppearanceStyle.kindLabel(hit.kind)).font(.caption).foregroundStyle(.secondary)
+                }
+              }
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+      if !r.looseEnds.isEmpty {
+        Section(header: Text("Loose ends")) {
+          ForEach(r.looseEnds) { hit in
+            Button { model.selectSearchLooseEnd(hit) } label: {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+                SnippetText(snippet: hit.snippet)
+              }
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+    }
+    .overlay {
+      if r.isEmpty { ContentUnavailableView.search(text: model.searchText) }
     }
   }
 
@@ -91,6 +141,17 @@ struct ContentListView: View {
     case .reviewSuggestions:
       return String(localized: "\(reviewItems.count) to review")
     }
+  }
+}
+
+/// Renders a grounded snippet with the matched run highlighted — three Text runs, zero index math.
+struct SnippetText: View {
+  let snippet: Snippet
+  var body: some View {
+    (Text(snippet.leading)
+      + Text(snippet.match).bold().foregroundColor(.accentColor)
+      + Text(snippet.trailing))
+      .lineLimit(2)
   }
 }
 
