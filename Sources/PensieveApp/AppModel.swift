@@ -41,6 +41,7 @@ enum SmartListKind: String, CaseIterable, Hashable {
 
 enum SidebarSelection: Hashable {
   case briefing
+  case reviewSuggestions
   case smartList(SmartListKind)
   case node(UUID)
 }
@@ -50,6 +51,7 @@ enum SidebarSelection: Hashable {
 enum MiddleKind: Equatable {
   case nodes([Node])
   case looseEndsOf(UUID)
+  case reviewSuggestions
 }
 
 /// A New/Edit modal request. Identifiable so it drives `.sheet(item:)`.
@@ -98,6 +100,8 @@ final class AppModel: ObservableObject {
   @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   @Published var briefingCards: [BriefingCard] = []
+  /// Count of open, unlabeled, machine-suggested loose ends — the "Review Suggestions" badge.
+  @Published var reviewCount = 0
   /// Drives the ⌘K Quick Jump palette. Hoisted here (from RootView @State) so the "Go" menu command
   /// can open it.
   @Published var showPalette = false
@@ -340,6 +344,7 @@ final class AppModel: ObservableObject {
       forest = NodeForest.build(source)
       lastForestContext = activeFocusContext
     }
+    reviewCount = (try? SalienceReviewQueries.pendingCount(db)) ?? 0
   }
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
@@ -353,6 +358,8 @@ final class AppModel: ObservableObject {
     switch sidebarSelection {
     case .briefing:
       return .nodes(briefingCards.map(\.node))
+    case .reviewSuggestions:
+      return .reviewSuggestions
     case .smartList(let kind):
       return .nodes(lists[keyPath: kind.itemsKeyPath].map(\.project))
     case .node(let id):
@@ -423,6 +430,12 @@ final class AppModel: ObservableObject {
   func looseEnds(forNode nodeID: UUID) -> [LooseEndView] {
     guard let db else { return [] }
     return (try? LooseEndQueries.open(db, nodeID: nodeID, now: Date())) ?? []
+  }
+
+  /// The cross-node audit queue for the Review Suggestions surface. Loaded off-`body` via `.task`.
+  func reviewItems() -> [LooseEndView] {
+    guard let db else { return [] }
+    return (try? SalienceReviewQueries.pending(db, now: Date())) ?? []
   }
 
   /// Confirm a user salience label for a loose end (👍 salient / 👎 noise / "" clears). Thin over the

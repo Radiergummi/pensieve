@@ -19,6 +19,18 @@ struct SidebarView: View {
       })) {
       Label("Briefing", systemImage: "sun.max")
         .tag(SidebarSelection.briefing)
+      Label {
+        HStack {
+          Text("Review Suggestions")
+          Spacer()
+          if model.reviewCount > 0 {
+            Text("\(model.reviewCount)").foregroundStyle(.secondary).monospacedDigit()
+          }
+        }
+      } icon: {
+        Image(systemName: "checklist").foregroundStyle(.orange)
+      }
+      .tag(SidebarSelection.reviewSuggestions)
       Section("Smart Lists", isExpanded: $smartExpanded) {
         smartRow(.whatsNext, count: model.lists.whatsNext.count)
         smartRow(.dormant, count: model.lists.dormant.count)

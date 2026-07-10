@@ -162,6 +162,23 @@
         }
       }
     },
+    "%lld to review" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld zu prüfen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld to review"
+          }
+        }
+      }
+    },
     "Active" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -926,6 +943,23 @@
         }
       }
     },
+    "No suggestions to review" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Vorschläge zu prüfen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No suggestions to review"
+          }
+        }
+      }
+    },
     "None open" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1225,6 +1259,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Umbenennen"
+          }
+        }
+      }
+    },
+    "Review Suggestions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschläge prüfen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review Suggestions"
           }
         }
       }

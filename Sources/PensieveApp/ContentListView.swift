@@ -6,6 +6,7 @@ struct ContentListView: View {
   @ObservedObject var model: AppModel
   // A focused leaf's loose ends, loaded off-`body` via `.task` (never a DB query in `body`).
   @State private var looseEnds: [LooseEndView] = []
+  @State private var reviewItems: [LooseEndView] = []
 
   var body: some View {
     let kind = model.middleKind()
@@ -15,6 +16,8 @@ struct ContentListView: View {
         nodeList(items)
       case .looseEndsOf:
         looseEndList()
+      case .reviewSuggestions:
+        reviewList()
       }
     }
     .navigationTitle(model.middleTitle)
@@ -22,10 +25,10 @@ struct ContentListView: View {
     // Load the focused leaf's loose ends. Re-runs on selection change AND ⌘R (refreshToken),
     // mirroring DetailView's off-body load. Non-leaf kinds clear the list.
     .task(id: MiddleLoadKey(kind: kind, token: model.refreshToken)) {
-      if case .looseEndsOf(let id) = kind {
-        looseEnds = model.looseEnds(forNode: id)
-      } else {
-        looseEnds = []
+      switch kind {
+      case .looseEndsOf(let id): looseEnds = model.looseEnds(forNode: id)
+      case .reviewSuggestions: reviewItems = model.reviewItems()
+      case .nodes: looseEnds = []; reviewItems = []
       }
     }
   }
@@ -60,6 +63,24 @@ struct ContentListView: View {
     }
   }
 
+  @ViewBuilder private func reviewList() -> some View {
+    List {
+      ForEach(reviewItems, id: \.looseEnd.id) { view in
+        VStack(alignment: .leading, spacing: 2) {
+          if let name = model.node(view.looseEnd.nodeID)?.name {
+            Text(name).font(.caption).foregroundStyle(.secondary)
+          }
+          LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel)
+        }
+      }
+    }
+    .overlay {
+      if reviewItems.isEmpty {
+        ContentUnavailableView("No suggestions to review", systemImage: "checklist")
+      }
+    }
+  }
+
   private func subtitle(for kind: MiddleKind) -> String {
     switch kind {
     case .nodes(let items):
@@ -67,6 +88,8 @@ struct ContentListView: View {
       return String(localized: "\(model.projectCount) Projects")
     case .looseEndsOf:
       return String(localized: "\(looseEnds.count) loose ends")
+    case .reviewSuggestions:
+      return String(localized: "\(reviewItems.count) to review")
     }
   }
 }
@@ -74,12 +97,14 @@ struct ContentListView: View {
 /// A Hashable `.task` id for the middle. Derived from `MiddleKind` WITHOUT hashing the node array —
 /// only the leaf id + refresh token matter for reloading loose ends.
 private struct MiddleLoadKey: Hashable {
-  let nodeID: UUID?
+  enum Tag: Hashable { case nodes, looseEnds(UUID), review }
+  let tag: Tag
   let token: Int
   init(kind: MiddleKind, token: Int) {
     switch kind {
-    case .looseEndsOf(let id): nodeID = id
-    case .nodes: nodeID = nil
+    case .looseEndsOf(let id): tag = .looseEnds(id)
+    case .reviewSuggestions: tag = .review
+    case .nodes: tag = .nodes
     }
     self.token = token
   }
