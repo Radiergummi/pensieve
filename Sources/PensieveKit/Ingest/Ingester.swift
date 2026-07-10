@@ -213,6 +213,10 @@ public struct Ingester: Sendable {
   /// sequential model calls. The `nameInferred` marker makes the remainder monotonic across passes.
   static let nameRefineCap = 20
 
+  /// Per-pass cap on actual LLM description calls (a `.noSignal` candidate is free and does NOT
+  /// consume a slot), so a batch of signal-less repos can't stall the sync cycle.
+  static let descriptionRefineCap = 20
+
   /// True when `metadataJSON` already carries the "naming attempted" marker.
   static func nameInferred(inMetadata json: String) -> Bool {
     let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
@@ -268,6 +272,35 @@ public struct Ingester: Sendable {
             .update { $0.metadataJSON = newMeta }.execute(db)
         }
       }
+    }
+  }
+
+  /// Best-effort description pass for git project nodes. Selects `project` nodes with exactly one
+  /// `gitRepo` source and an EMPTY description (the empty field is the retry condition — no marker),
+  /// and fills them via `NodeDescriber`. The cap bounds real LLM calls, not candidates: a
+  /// `.noSignal` result (thin/absent README) is free and leaves the node to retry once real content
+  /// appears. No-op when no provider is configured (e.g. the app's LLM-less drain). Runs from
+  /// `SyncRunner`, outside the trust gate — like `refineProjectNames`.
+  func describeProjectNodes() async {
+    guard let llm else { return }
+
+    let candidates: [UUID] = (try? readSync { db -> [UUID] in
+      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db)
+      var out: [UUID] = []
+      for node in projects where node.description.isEmpty {
+        let git = try Source
+          .where { $0.nodeID.eq(node.id) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
+        if git.count == 1 { out.append(node.id) }
+      }
+      return out
+    }) ?? []
+
+    Log.ingest.info("Describing project nodes: \(candidates.count, privacy: .public) candidates")
+    var invocations = 0
+    for id in candidates {
+      if invocations >= Self.descriptionRefineCap { break }
+      let outcome = await NodeDescriber.describe(db, nodeID: id, provider: llm, force: false)
+      if outcome == .wrote || outcome == .attemptedEmpty { invocations += 1 }
     }
   }
 

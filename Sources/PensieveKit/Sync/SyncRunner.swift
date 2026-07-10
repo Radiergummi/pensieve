@@ -39,6 +39,7 @@ public struct SyncRunner {
     }
     ingested += try await ingester.drain()
     await ingester.refineProjectNames()
+    await ingester.describeProjectNodes()
 
     let results = try await ExtractionRunner(db: db, provider: provider).run()
     let extracted = results.reduce(0) { $0 + $1.inserted }

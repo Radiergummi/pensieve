@@ -155,3 +155,42 @@ private func describableProjectNode(db: any DatabaseWriter) async throws -> (nod
   let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
   #expect(after.description == "New one.")
 }
+
+// MARK: describeProjectNodes (daemon pass)
+
+@Test func passDescribesEligibleGitProjectNode() async throws {
+  let spool = try CaptureSpool(at: tempURL("spool"))
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let (node, _) = try await describableProjectNode(db: db)
+
+  await Ingester(spool: spool, db: db, llm: StubLLM(text: "A capture-and-recall tool."))
+    .describeProjectNodes()
+
+  let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(after.description == "A capture-and-recall tool.")
+}
+
+@Test func passIsNoOpWithoutProvider() async throws {
+  let spool = try CaptureSpool(at: tempURL("spool"))
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let (node, _) = try await describableProjectNode(db: db)
+
+  await Ingester(spool: spool, db: db, llm: nil).describeProjectNodes()
+
+  let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(after.description == "")           // no provider → nothing attempted
+}
+
+@Test func passSkipsAlreadyDescribedNode() async throws {
+  let spool = try CaptureSpool(at: tempURL("spool"))
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let (node, _) = try await describableProjectNode(db: db)
+  try await db.write { db in
+    try Node.where { $0.id.eq(node.id) }.update { $0.description = "Kept." }.execute(db)
+  }
+
+  await Ingester(spool: spool, db: db, llm: StubLLM(text: "Should not apply.")).describeProjectNodes()
+
+  let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
+  #expect(after.description == "Kept.")      // non-empty description ⇒ not a candidate
+}
