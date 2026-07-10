@@ -8,6 +8,7 @@ struct RootView: View {
   // Bound column visibility so the native NavigationSplitView sidebar toggle (in the sidebar, like
   // Mail) works. The sidebar is fully independent of the provenance panel now.
   @State private var columns = NavigationSplitViewVisibility.all
+  @FocusState private var isSearchFocused: Bool
 
   @ViewBuilder private var detailColumn: some View {
     if let id = model.selectedNodeID, let node = model.node(id) {
@@ -30,6 +31,8 @@ struct RootView: View {
     } content: {
       ContentListView(model: model)
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
+        .searchable(text: $model.searchText, placement: .sidebar, prompt: Text("Search"))
+        .searchFocused($isSearchFocused)
     } detail: {
       // Provenance is now shown inline inside each loose-end row (expand to see the surrounding
       // transcript), so the detail is a single flexible column again — no side panel, no `.inspector`.
@@ -48,6 +51,13 @@ struct RootView: View {
       guard let id else { return }
       openWindow(id: "recall", value: id)
       model.openNodeRequest = nil
+    }
+    .onChange(of: model.searchText) { _, _ in model.runSearch() }
+    .onChange(of: model.sidebarSelection) { _, _ in
+      if !model.searchText.isEmpty { model.clearSearch() }
+    }
+    .onChange(of: model.focusSearchRequested) { _, requested in
+      if requested { isSearchFocused = true; model.focusSearchRequested = false }
     }
     .sheet(isPresented: Binding(get: { model.movePickerNodeID != nil },
                                 set: { if !$0 { model.movePickerNodeID = nil } })) {

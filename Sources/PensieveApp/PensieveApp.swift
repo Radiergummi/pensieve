@@ -44,6 +44,9 @@ struct PensieveApp: App {
           .disabled(model.selectedNodeID == nil)
       }
       CommandMenu("Go") {
+        Button("Find") { model.focusSearchRequested = true }
+          .keyboardShortcut("f", modifiers: .command)
+        Divider()
         Button("Refresh") { Task { await model.refreshNow() } }
           .keyboardShortcut("r", modifiers: .command)
       }

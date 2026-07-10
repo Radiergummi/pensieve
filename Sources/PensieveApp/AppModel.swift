@@ -208,6 +208,8 @@ final class AppModel: ObservableObject {
   @Published private(set) var searchResults: SearchResults = SearchResults()
   /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
   @Published var expandedLooseEndID: UUID?
+  /// Set by the Find command; RootView observes it to move focus into the .searchable field.
+  @Published var focusSearchRequested = false
   private var searchTask: Task<Void, Never>?
   private var searchToken = 0
 
