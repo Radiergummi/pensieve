@@ -11,6 +11,11 @@ public enum PensievePaths {
   public static func captureURL() -> URL {
     supportDirectory().appendingPathComponent("capture.sqlite")
   }
+  /// The disposable narration cache (shared across app / CLI / MCP). Not the canonical store,
+  /// not the spool — losing it costs only a re-narrate.
+  public static func narrationCacheURL() -> URL {
+    supportDirectory().appendingPathComponent("narration-cache.sqlite")
+  }
   /// The current user's home, resolved via `getpwuid` (correct even when launchd does not
   /// export HOME) rather than the HOME environment variable.
   public static func homeDirectory() -> URL {
