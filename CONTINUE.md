@@ -1,15 +1,35 @@
-# CONTINUE — session handoff (2026-07-09)
+# CONTINUE — session handoff (2026-07-10)
 
 Self-contained pickup instructions for a fresh agent. Read `CLAUDE.md` first (project rules), then this.
 
 ## Where things stand
 
-Everything below is **on `main`** (the cloud/API LLM provider landed at `34a2bb9`, rebased over the parallel
-salience-gate fix `017c354`; docs commits on top) and the tree is clean. Test suite: **260 tests**, run with
-`./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended (sync
-daemon).
+Everything below is **on `main`** and the tree is clean. The **MCP context server** (`pensieve mcp` +
+`pensieve prime`) landed most recently — fast-forward merged to `main` at `d44a65e`. Test suite: **320 tests**,
+run with `./scripts/test.sh` (thin `swift test` passthrough). Capture → ingest → **auto-extract** runs unattended
+(sync daemon).
 
-**Latest (this session): Cloud/API LLM provider (Settings follow-up, Track B) — DONE & on `main` `34a2bb9`.**
+**Latest (this session): MCP context server merged & taken LIVE — DONE & on `main` `d44a65e`.** The
+`feat/mcp-context-server` branch (14 commits, Opus whole-branch review = READY TO MERGE, 0 Critical/0 Important,
+320/320 tests) was fast-forward merged to `main` and the branch deleted. Then the three post-merge carries were
+executed to make it live:
+- **Release CLI rebuilt + reinstalled** to `~/.local/bin/pensieve` (`swift build -c release` → `cp`); the new
+  `mcp` and `prime` subcommands are present.
+- **MCP server registered at user scope** — `claude mcp add pensieve -s user -- /Users/moritz/.local/bin/pensieve mcp`
+  (in `~/.claude.json`); `claude mcp get pensieve` shows **✔ Connected** (available in all projects; the server
+  derives context from cwd/roots).
+- **`pensieve prime` SessionStart hook added** to `~/.claude/settings.json` (matcher `startup|resume|clear|compact`,
+  running `/Users/moritz/.local/bin/pensieve prime`); smoke-tested against the live store → grounded cited context,
+  exit 0. (Backup at `~/.claude/settings.json.bak`.)
+- **One human-verify carry** (needs live Claude Code v2.1.203+): the zero-arg `roots`-SUCCESS auto-scoping path in
+  `project_context` — confirm a real editor session where the MCP client advertises roots scopes context to the
+  cwd's node.
+- **Observation / possible fast-follow:** `pensieve prime` output is uncapped on loose ends (this project emits
+  ~100), which can flood a SessionStart context window. Consider a loose-end cap in the compact `prime` bundle.
+- Spec/plan: `docs/superpowers/{specs,plans}/2026-07-08-mcp-context-server-design.md` +
+  `2026-07-10-mcp-context-server.md`. SDD ledger + reviews under `.superpowers/sdd/`.
+
+**Prior session: Cloud/API LLM provider (Settings follow-up, Track B) — DONE & on `main` `34a2bb9`.**
 The motivating long-term case behind the shipped provider-preference scaffold: an **app-only** cloud (HTTP)
 `LLMProvider` as a fourth option for the app's best-effort "Last Work Done" narration — **Anthropic +
 OpenAI-compatible**, one struct with a flavor switch.
