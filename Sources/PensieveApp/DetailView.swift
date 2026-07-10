@@ -108,6 +108,7 @@ struct DetailView: View {
       describable = model.isDescribable(node)
       recentEvents = d.status.recentEvents
       looseEnds = d.looseEnds
+      if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       shareMarkdown = RecallMarkdown.render(node: node,
                                             narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
