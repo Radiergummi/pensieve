@@ -194,3 +194,28 @@ private func describableProjectNode(db: any DatabaseWriter) async throws -> (nod
   let after = try await db.read { db in try Node.where { $0.id.eq(node.id) }.fetchOne(db) }!
   #expect(after.description == "Kept.")      // non-empty description ⇒ not a candidate
 }
+
+@Test func passCapBoundsInvocationsNotCandidatesSoSignalLessNodesDontStarve() async throws {
+  let spool = try CaptureSpool(at: tempURL("spool"))
+  let db = try openCanonicalDatabase(at: tempURL("canon"))
+
+  // 21 signal-less project nodes (bogus git-source keys → gather finds no worktree → .noSignal,
+  // free, no LLM call). This exceeds descriptionRefineCap (20). If the cap counted CANDIDATES
+  // instead of invocations, these 21 would exhaust it before the describable node below is reached.
+  for i in 0..<21 {
+    let n = Node(name: "empty-\(i)", kind: NodeKind.project)
+    try await db.write { db in
+      try Node.insert { n }.execute(db)
+      try Source.insert { Source(nodeID: n.id, kind: SourceKind.gitRepo, key: "/nonexistent/repo-\(i)/.git") }.execute(db)
+    }
+  }
+  // One describable node with a substantive README, inserted last (worst case for starvation).
+  let (describable, _) = try await describableProjectNode(db: db)
+
+  await Ingester(spool: spool, db: db, llm: StubLLM(text: "A real described project."))
+    .describeProjectNodes()
+
+  // Reached and described despite 21 signal-less candidates ahead of it — .noSignal consumes no cap slot.
+  let after = try await db.read { db in try Node.where { $0.id.eq(describable.id) }.fetchOne(db) }!
+  #expect(after.description == "A real described project.")
+}
