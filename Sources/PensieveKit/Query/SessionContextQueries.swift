@@ -105,6 +105,30 @@ public enum SessionContextQueries {
       prose: prose)
   }
 
+  /// Ranked "what's next" across all active nodes, optionally restricted to a work/personal
+  /// context (unset nodes always show; the opposite explicit context is muted), sliced to
+  /// `limit`, each carrying its oldest open loose end's verbatim quote.
+  public static func rankedContext(limit: Int, context: String?,
+                                   _ db: any DatabaseReader, now: Date) throws -> [WhatsNextItem] {
+    let items = try NextQueries.ranked(db, now: now)
+    var filtered = items
+    if let context, !context.isEmpty {
+      let all = try ProjectQueries.all(db)
+      let visible = NodeContextResolver.visibleNodeIDs(for: context, in: all)
+      filtered = items.filter { visible.contains($0.project.id) }
+    }
+    return try db.read { db in
+      try filtered.prefix(limit).map { item in
+        let ends = try LooseEnd.where { $0.nodeID.eq(item.project.id) && LooseEnd.isOpen($0) }
+          .order { $0.createdAt }.fetchAll(db)
+        return WhatsNextItem(
+          nodeID: item.project.id, name: item.project.name, kind: item.project.kind,
+          openLooseEnds: item.openLooseEnds, daysDormant: item.daysDormant, score: item.score,
+          topLooseEnd: ends.first?.quote)
+      }
+    }
+  }
+
   /// Races `narrate` against a timeout; returns nil if the model doesn't answer in time (FM
   /// cold-start can be ≫ a couple seconds and the caller is blocking on the result).
   private static func narrateWithin(_ seconds: Double, builder: SummaryBuilder,

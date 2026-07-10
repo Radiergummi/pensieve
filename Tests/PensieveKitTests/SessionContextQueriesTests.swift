@@ -96,3 +96,33 @@ private func seedOneNode(_ db: any DatabaseWriter) throws -> (node: Node, event:
   let events = try ProjectQueries.status(db, node: node, limit: 8).recentEvents
   #expect(cache.get(NarrationCacheKey.make(events: events, provider: "fm")) == "fresh recap")
 }
+
+@Test func rankedContextFiltersSlicesAndCites() throws {
+  let db = try openCanonicalDatabase(at: tempURL("sc"))
+  let resolver = ProjectResolver(db: db)
+  let (work, ws) = try resolver.resolve(path: "/p/work", kind: SourceKind.claudeCode)
+  let (personal, ps) = try resolver.resolve(path: "/p/personal", kind: SourceKind.claudeCode)
+  let old = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
+  try db.write { db in
+    try Node.where { $0.id.eq(work.id) }.update { $0.context = #bind(NodeContext.work) }.execute(db)
+    try Node.where { $0.id.eq(personal.id) }.update { $0.context = #bind(NodeContext.personal) }.execute(db)
+    let ew = Event(nodeID: work.id, sourceID: ws.id, occurredAt: old, kind: CaptureKind.ccSession,
+                   summary: "s", detailJSON: "{}", fingerprint: "w1")
+    let ep = Event(nodeID: personal.id, sourceID: ps.id, occurredAt: old, kind: CaptureKind.ccSession,
+                   summary: "s", detailJSON: "{}", fingerprint: "p1")
+    try Event.insert { ew }.execute(db); try Event.insert { ep }.execute(db)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: work.id, sourceEventID: ew.id, text: "t",
+               quote: "ship the work thing", role: "user", sourceMessageIndex: 0)
+    }.execute(db)
+  }
+  // Unfiltered: both nodes present.
+  #expect(try SessionContextQueries.rankedContext(limit: 5, context: nil, db, now: Date()).count == 2)
+  // Work focus: personal is muted; the work node's top loose end is cited.
+  let work_only = try SessionContextQueries.rankedContext(limit: 5, context: NodeContext.work, db, now: Date())
+  #expect(work_only.count == 1)
+  #expect(work_only.first?.nodeID == work.id)
+  #expect(work_only.first?.topLooseEnd == "ship the work thing")
+  // Limit is honored.
+  #expect(try SessionContextQueries.rankedContext(limit: 1, context: nil, db, now: Date()).count == 1)
+}
