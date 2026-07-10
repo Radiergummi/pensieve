@@ -42,9 +42,14 @@ public enum ProvenanceQueries {
     else { return unavailable() }
 
     // Two-part guard so "never a wrong highlight" holds: the cited message must be a user prompt
-    // AND still contain the stored quote. Either fails → honest fallback.
+    // AND still contain the stored quote. Either fails → honest fallback. Normalize both sides the
+    // same way LooseEndVerifier did when it accepted the quote (it stores the raw model quote but
+    // verifies against whitespace-normalized text) — else a quote whose whitespace the model
+    // collapsed fails a raw `contains` and the inspector falsely reports the transcript as gone.
     let citedMessage = session.messages[citedPos]
-    guard citedMessage.isUserPrompt, citedMessage.text.contains(looseEnd.quote) else { return unavailable() }
+    guard citedMessage.isUserPrompt,
+          normalizeWhitespace(citedMessage.text).contains(normalizeWhitespace(looseEnd.quote))
+    else { return unavailable() }
 
     let lo = max(0, citedPos - radius)
     let hi = min(session.messages.count - 1, citedPos + radius)

@@ -17,10 +17,9 @@ public enum NextQueries {
       for p in projects {
         let latest = try Event.where { $0.nodeID.eq(p.id) }
           .order { $0.occurredAt.desc() }.limit(1).fetchOne(db)
-        let dormant = latest.map {
-          Calendar.current.dateComponents([.day], from: $0.occurredAt, to: now).day ?? 0
-        } ?? 0
-        let open = try LooseEnd.where { $0.nodeID.eq(p.id) && LooseEnd.isOpen($0) }.fetchAll(db).count
+        guard let latest else { continue }   // no captured activity → nothing grounded (matches BriefingQueries)
+        let dormant = Calendar.current.dateComponents([.day], from: latest.occurredAt, to: now).day ?? 0
+        let open = try LooseEnd.where { $0.nodeID.eq(p.id) && LooseEnd.isOpen($0) }.fetchCount(db)
         // Long dormancy can dominate by design — it's a strong "you forgot this" signal for ADHD workflows
         let score = Double(open) * 2 + Double(dormant)
         items.append(NextItem(project: p, openLooseEnds: open, daysDormant: dormant, score: score))
