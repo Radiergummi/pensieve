@@ -2,6 +2,7 @@ import ArgumentParser
 import Foundation
 import MCP
 import PensieveKit
+import SQLiteData   // for `any DatabaseReader` (the shared read handle passed to resolveBundle)
 
 struct Mcp: AsyncParsableCommand {
   static let configuration = CommandConfiguration(commandName: "mcp",
@@ -77,7 +78,7 @@ struct Mcp: AsyncParsableCommand {
          let md = try await PensieveMCP.nodeMarkdown(id: id) {
         return .init(contents: [.text(md, uri: uri, mimeType: "text/markdown")])
       }
-      return .init(contents: [.text("not found", uri: uri, mimeType: "text/plain")])
+      throw MCPError.invalidParams("unknown resource: \(uri)")
     }
 
     try await server.start(transport: StdioTransport())
@@ -85,8 +86,9 @@ struct Mcp: AsyncParsableCommand {
   }
 }
 
-/// Bridges the tested Kit kernel to MCP results. Opens the store read-only per call (fresh read
-/// transaction sees the latest committed drain). The prose builder is on-device by default.
+/// Bridges the tested Kit kernel to MCP results. Opens the store read-only per call so the server
+/// binds lazily once the canonical store exists (a single pool's per-read transactions would already
+/// see the latest committed drain). The prose builder is on-device by default.
 enum PensieveMCP {
   static let maxResultSizeMeta = "anthropic/maxResultSizeChars"
 
@@ -97,52 +99,49 @@ enum PensieveMCP {
     return (SummaryBuilder(provider: provider), kind)
   }
 
-  static func projectContextJSON(path: String?, nodeID: UUID?) async throws -> Data {
-    guard let db = try? openCanonicalReadOnly() else {
-      let empty: ProjectContextBundle? = nil
-      let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
-      return try encoder.encode(empty)   // "null"
-    }
+  private static func makeEncoder() -> JSONEncoder {
+    let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+    return encoder
+  }
+
+  /// Resolve one node's grounded bundle against an already-open read handle (on-device narration,
+  /// write-through cache). Shared by the `project_context` tool and the `pensieve://node/{id}` resource.
+  private static func resolveBundle(path: String?, nodeID: UUID?,
+                                    _ db: any DatabaseReader) async throws -> ProjectContextBundle? {
     let (builder, kind) = makeBuilderAndKind()
     let cache = NarrationCache(url: PensievePaths.narrationCacheURL())
-    let effectivePath = path ?? FileManager.default.currentDirectoryPath
-    let bundle = try await SessionContextQueries.bundle(
-      forPath: effectivePath, nodeID: nodeID, db, now: Date(),
+    return try await SessionContextQueries.bundle(
+      forPath: path, nodeID: nodeID, db, now: Date(),
       summaryBuilder: builder, providerKind: kind, cache: cache)
-    let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
-    return try encoder.encode(bundle)   // encodes `null` for an unbound path
+  }
+
+  static func projectContextJSON(path: String?, nodeID: UUID?) async throws -> Data {
+    guard let db = try? openCanonicalReadOnly() else {
+      return try makeEncoder().encode(Optional<ProjectContextBundle>.none)   // "null"
+    }
+    let effectivePath = path ?? FileManager.default.currentDirectoryPath
+    let bundle = try await resolveBundle(path: effectivePath, nodeID: nodeID, db)
+    return try makeEncoder().encode(bundle)   // encodes `null` for an unbound path
   }
 
   static func nodeMarkdown(id: UUID) async throws -> String? {
     guard let db = try? openCanonicalReadOnly() else { return nil }
-    let (builder, kind) = makeBuilderAndKind()
-    let cache = NarrationCache(url: PensievePaths.narrationCacheURL())
-    guard let bundle = try await SessionContextQueries.bundle(
-      forPath: nil, nodeID: id, db, now: Date(),
-      summaryBuilder: builder, providerKind: kind, cache: cache) else { return nil }
+    guard let bundle = try await resolveBundle(path: nil, nodeID: id, db) else { return nil }
     return SessionContextRender.markdown(bundle)
   }
 
   static func whatsNextMarkdown() throws -> String {
-    guard let db = try? openCanonicalReadOnly() else { return "# What's Next\n\n" }
+    guard let db = try? openCanonicalReadOnly() else { return SessionContextRender.whatsNext([]) }
     let items = try SessionContextQueries.rankedContext(limit: 10, context: nil, db, now: Date())
-    var out = "# What's Next\n\n"
-    for i in items {
-      out += "- **\(i.name)** — \(i.openLooseEnds) open, \(i.daysDormant)d dormant"
-      if let q = i.topLooseEnd { out += "\n  > \(q)" }
-      out += "\n"
-    }
-    return out
+    return SessionContextRender.whatsNext(items)
   }
 
   static func whatsNextJSON(limit: Int, context: String?) throws -> Data {
     guard let db = try? openCanonicalReadOnly() else {
-      let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
-      return try encoder.encode([WhatsNextItem]())   // "[]"
+      return try makeEncoder().encode([WhatsNextItem]())   // "[]"
     }
     let items = try SessionContextQueries.rankedContext(limit: limit, context: context, db, now: Date())
-    let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
-    return try encoder.encode(items)
+    return try makeEncoder().encode(items)
   }
 
   /// A text tool result carrying the JSON payload + the result-size hint Claude Code honors.

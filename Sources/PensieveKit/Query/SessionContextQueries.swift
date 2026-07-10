@@ -85,7 +85,7 @@ public enum SessionContextQueries {
     // 2. Grounded pieces (pure queries).
     let ends = try LooseEndQueries.open(db, nodeID: id, now: now)
     let status = try ProjectQueries.status(db, node: node, limit: recentLimit)
-    let score = Double(facts.openLooseEnds) * 2 + Double(facts.daysDormant)   // matches NextQueries
+    let score = groundedScore(openLooseEnds: facts.openLooseEnds, daysDormant: facts.daysDormant)
 
     // 3. Prose: cache-first → bounded narrate → nil.
     let key = NarrationCacheKey.make(events: status.recentEvents, provider: providerKind)
@@ -119,12 +119,12 @@ public enum SessionContextQueries {
     }
     return try db.read { db in
       try filtered.prefix(limit).map { item in
-        let ends = try LooseEnd.where { $0.nodeID.eq(item.project.id) && LooseEnd.isOpen($0) }
-          .order { $0.createdAt }.fetchAll(db)
+        let top = try LooseEnd.where { $0.nodeID.eq(item.project.id) && LooseEnd.isOpen($0) }
+          .order { $0.createdAt }.limit(1).fetchOne(db)
         return WhatsNextItem(
           nodeID: item.project.id, name: item.project.name, kind: item.project.kind,
           openLooseEnds: item.openLooseEnds, daysDormant: item.daysDormant, score: item.score,
-          topLooseEnd: ends.first?.quote)
+          topLooseEnd: top?.quote)
       }
     }
   }

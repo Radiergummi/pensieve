@@ -31,3 +31,43 @@ private func sampleBundle(prose: String?) -> ProjectContextBundle {
   #expect(text.contains("Pensieve"))
   #expect(text.contains("we must finish the auth flow"))
 }
+
+private func bundleWithLooseEnds(_ count: Int) -> ProjectContextBundle {
+  ProjectContextBundle(
+    nodeID: UUID(), name: "Pensieve", kind: NodeKind.project, description: "", context: "",
+    daysDormant: 0, openLooseEndCount: count, score: 0,
+    looseEnds: (0..<count).map { BundleLooseEnd(text: "end \($0)", quote: "q\($0)", role: "user", ageDays: 0) },
+    recentEvents: [], prose: nil)
+}
+
+@Test func compactCapsLooseEndsWithATail() {
+  let text = SessionContextRender.compact(bundleWithLooseEnds(20), maxLooseEnds: 8)
+  #expect(text.contains("end 0"))
+  #expect(text.contains("end 7"))
+  #expect(!text.contains("end 8"))        // capped
+  #expect(text.contains("… and 12 more"))
+}
+
+@Test func compactNoTailWhenUnderCap() {
+  let text = SessionContextRender.compact(bundleWithLooseEnds(3), maxLooseEnds: 8)
+  #expect(text.contains("end 2"))
+  #expect(!text.contains("more"))
+}
+
+@Test func whatsNextRendersRankedRowsWithCitations() {
+  let items = [
+    WhatsNextItem(nodeID: UUID(), name: "Alpha", kind: NodeKind.project,
+                  openLooseEnds: 3, daysDormant: 5, score: 11, topLooseEnd: "ship the thing"),
+    WhatsNextItem(nodeID: UUID(), name: "Beta", kind: NodeKind.strand,
+                  openLooseEnds: 0, daysDormant: 2, score: 2, topLooseEnd: nil),
+  ]
+  let md = SessionContextRender.whatsNext(items)
+  #expect(md.contains("# What's Next"))
+  #expect(md.contains("**Alpha** — 3 open, 5d dormant"))
+  #expect(md.contains("> ship the thing"))
+  #expect(md.contains("**Beta** — 0 open, 2d dormant"))
+}
+
+@Test func whatsNextEmptyIsJustTheHeader() {
+  #expect(SessionContextRender.whatsNext([]) == "# What's Next\n\n")
+}
