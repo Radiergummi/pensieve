@@ -17,6 +17,7 @@ struct DetailView: View {
   @State private var isNarrating = false
   @State private var isDescribing = false
   @State private var describeNote: String?   // brief inline note when a refresh yields nothing
+  @State private var describable = false
   @State private var loadedNodeID: UUID?   // which node the current prose belongs to
   @State private var shareMarkdown = ""   // rebuilt on load/refresh; fed to the toolbar ShareLink
 
@@ -100,6 +101,7 @@ struct DetailView: View {
       isDescribing = false
       describeNote = nil
       let d = model.detail(for: node)
+      describable = model.isDescribable(node)
       recentEvents = d.status.recentEvents
       looseEnds = d.looseEnds
       shareMarkdown = RecallMarkdown.render(node: node,
@@ -127,7 +129,6 @@ struct DetailView: View {
   }
 
   @ViewBuilder private var descriptionBlock: some View {
-    let describable = model.isDescribable(node)
     VStack(alignment: .leading, spacing: 4) {
       if !node.description.isEmpty {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
