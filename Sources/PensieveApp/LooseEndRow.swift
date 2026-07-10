@@ -15,6 +15,8 @@ struct LooseEndRow: View {
   /// Confirms a salience label for this loose end (👍 salient / 👎 noise / "" clears). Pass
   /// `model.setLooseEndLabel`.
   let onLabel: (UUID, String) -> Void
+  /// When this equals the row's loose end, the row starts/auto-expands (a search hit landing here).
+  var expandedLooseEndID: UUID? = nil
 
   @State private var expanded = false            // the loose-end row itself
   @State private var provenanceExpanded = false  // the provenance box's own show-more/less
@@ -66,6 +68,10 @@ struct LooseEndRow: View {
       loading = true
       context = await loadProvenance(view.looseEnd)
       loading = false
+    }
+    .onAppear { if expandedLooseEndID == view.looseEnd.id { expanded = true } }
+    .onChange(of: expandedLooseEndID) { _, newValue in
+      if newValue == view.looseEnd.id { expanded = true }
     }
   }
 

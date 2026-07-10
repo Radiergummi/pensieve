@@ -12,7 +12,8 @@ struct RootView: View {
 
   @ViewBuilder private var detailColumn: some View {
     if let id = model.selectedNodeID, let node = model.node(id) {
-      DetailView(model: model, node: node, showsLooseEnds: model.detailShowsLooseEnds)
+      DetailView(model: model, node: node,
+                 showsLooseEnds: model.detailShowsLooseEnds || model.expandedLooseEndID != nil)
     } else if model.sidebarSelection == .briefing {
       BriefingView(model: model)
     } else {

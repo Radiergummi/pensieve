@@ -22,7 +22,8 @@ struct DetailView: View {
   @State private var shareMarkdown = ""   // rebuilt on load/refresh; fed to the toolbar ShareLink
 
   var body: some View {
-    ScrollView {
+    ScrollViewReader { proxy in
+      ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         // WHAT IT IS
         HStack(alignment: .top, spacing: 12) {
@@ -63,7 +64,10 @@ struct DetailView: View {
               Text("None open.").foregroundStyle(.secondary)
             } else {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
-                LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel)
+                LooseEndRow(view: view, loadProvenance: model.provenance,
+                            onLabel: model.setLooseEndLabel,
+                            expandedLooseEndID: model.expandedLooseEndID)
+                  .id(view.looseEnd.id)
               }
             }
           }
@@ -118,6 +122,11 @@ struct DetailView: View {
       shareMarkdown = RecallMarkdown.render(node: node, narration: prose,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       isNarrating = false
+    }
+    .onChange(of: model.expandedLooseEndID) { _, id in
+      guard let id else { return }
+      withAnimation { proxy.scrollTo(id, anchor: .center) }
+    }
     }
   }
 
