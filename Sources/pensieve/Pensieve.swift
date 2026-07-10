@@ -14,7 +14,7 @@ struct Pensieve: AsyncParsableCommand {
       InstallHooks.self, LooseEnds.self, CheckpointCommand.self, Next.self, Digest.self,
       CaptureSessionStart.self, CaptureSessionEnd.self, InstallSessionHook.self,
       AddNode.self, Nest.self, RenameNode.self, RetypeNode.self, Scan.self,
-      InstallDaemon.self, Sync.self, LabelSuggest.self,
+      InstallDaemon.self, Sync.self, LabelSuggest.self, Prime.self,
     ]
   )
 }
@@ -33,4 +33,13 @@ func openCanonical() throws -> any DatabaseWriter {
     return try openCanonicalDatabase(at: URL(fileURLWithPath: override))
   }
   return try openCanonicalDatabase(at: PensievePaths.canonicalURL())
+}
+
+/// Opens the canonical store strictly read-only (no migrator, cannot create the file).
+/// Override for tests via PENSIEVE_DB. For read-only surfaces: `prime`, `mcp`.
+func openCanonicalReadOnly() throws -> any DatabaseReader {
+  if let override = ProcessInfo.processInfo.environment["PENSIEVE_DB"] {
+    return try openCanonicalDatabaseReadOnly(at: URL(fileURLWithPath: override))
+  }
+  return try openCanonicalDatabaseReadOnly(at: PensievePaths.canonicalURL())
 }
