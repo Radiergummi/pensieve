@@ -93,7 +93,11 @@ enum PensieveMCP {
   }
 
   static func projectContextJSON(path: String?, nodeID: UUID?) async throws -> Data {
-    let db = try openCanonicalReadOnly()
+    guard let db = try? openCanonicalReadOnly() else {
+      let empty: ProjectContextBundle? = nil
+      let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+      return try encoder.encode(empty)   // "null"
+    }
     let (builder, kind) = makeBuilderAndKind()
     let cache = NarrationCache(url: PensievePaths.narrationCacheURL())
     let effectivePath = path ?? FileManager.default.currentDirectoryPath
@@ -105,7 +109,7 @@ enum PensieveMCP {
   }
 
   static func nodeMarkdown(id: UUID) async throws -> String? {
-    let db = try openCanonicalReadOnly()
+    guard let db = try? openCanonicalReadOnly() else { return nil }
     let (builder, kind) = makeBuilderAndKind()
     let cache = NarrationCache(url: PensievePaths.narrationCacheURL())
     guard let bundle = try await SessionContextQueries.bundle(
@@ -115,7 +119,7 @@ enum PensieveMCP {
   }
 
   static func whatsNextMarkdown() throws -> String {
-    let db = try openCanonicalReadOnly()
+    guard let db = try? openCanonicalReadOnly() else { return "# What's Next\n\n" }
     let items = try SessionContextQueries.rankedContext(limit: 10, context: nil, db, now: Date())
     var out = "# What's Next\n\n"
     for i in items {
@@ -127,7 +131,10 @@ enum PensieveMCP {
   }
 
   static func whatsNextJSON(limit: Int, context: String?) throws -> Data {
-    let db = try openCanonicalReadOnly()
+    guard let db = try? openCanonicalReadOnly() else {
+      let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+      return try encoder.encode([WhatsNextItem]())   // "[]"
+    }
     let items = try SessionContextQueries.rankedContext(limit: limit, context: context, db, now: Date())
     let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
     return try encoder.encode(items)
