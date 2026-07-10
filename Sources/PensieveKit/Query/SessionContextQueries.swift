@@ -60,4 +60,64 @@ public enum SessionContextQueries {
       return nil
     }
   }
+
+  /// The grounded bundle for a node identified by `nodeID` (preferred) or `path`. Read-only.
+  /// Prose is cache-first → bounded narrate → nil:
+  ///   • `summaryBuilder == nil`  → cache-read-only (the `prime` hook: never narrates).
+  ///   • `summaryBuilder != nil`  → on a cache miss, narrate under `narrateTimeout`s and write
+  ///     through on success; `nil` on no-events/failure/timeout (never a facts-dump).
+  public static func bundle(
+    forPath path: String?, nodeID explicitID: UUID?,
+    _ db: any DatabaseReader, now: Date,
+    recentLimit: Int = 8,
+    summaryBuilder: SummaryBuilder?, providerKind: String,
+    cache: NarrationCache?, narrateTimeout: Double = 3.0
+  ) async throws -> ProjectContextBundle? {
+    // 1. Resolve the node.
+    let resolvedID: UUID?
+    if let explicitID { resolvedID = explicitID }
+    else if let path { resolvedID = try nodeID(forPath: path, db) }
+    else { resolvedID = nil }
+    guard let id = resolvedID else { return nil }
+    guard let facts = try NodeFactsQueries.facts(for: [id], db, now: now).first else { return nil }
+    let node = facts.node
+
+    // 2. Grounded pieces (pure queries).
+    let ends = try LooseEndQueries.open(db, nodeID: id, now: now)
+    let status = try ProjectQueries.status(db, node: node, limit: recentLimit)
+    let score = Double(facts.openLooseEnds) * 2 + Double(facts.daysDormant)   // matches NextQueries
+
+    // 3. Prose: cache-first → bounded narrate → nil.
+    let key = NarrationCacheKey.make(events: status.recentEvents, provider: providerKind)
+    var prose = cache?.get(key)
+    if prose == nil, let builder = summaryBuilder {
+      prose = await narrateWithin(narrateTimeout, builder: builder, project: node, events: status.recentEvents)
+      if let prose { cache?.put(key, prose: prose) }
+    }
+
+    return ProjectContextBundle(
+      nodeID: id, name: node.name, kind: node.kind, description: node.description, context: node.context,
+      daysDormant: facts.daysDormant, openLooseEndCount: facts.openLooseEnds, score: score,
+      looseEnds: ends.map { BundleLooseEnd(text: $0.looseEnd.text, quote: $0.looseEnd.quote,
+                                           role: $0.looseEnd.role, ageDays: $0.ageDays) },
+      recentEvents: status.recentEvents.map { BundleEvent(summary: $0.summary, kind: $0.kind,
+                                                          occurredAt: $0.occurredAt) },
+      prose: prose)
+  }
+
+  /// Races `narrate` against a timeout; returns nil if the model doesn't answer in time (FM
+  /// cold-start can be ≫ a couple seconds and the caller is blocking on the result).
+  private static func narrateWithin(_ seconds: Double, builder: SummaryBuilder,
+                                    project: Node, events: [Event]) async -> String? {
+    await withTaskGroup(of: String?.self) { group in
+      group.addTask { await builder.narrate(project: project, events: events) }
+      group.addTask {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        return nil
+      }
+      let first = await group.next() ?? nil
+      group.cancelAll()
+      return first
+    }
+  }
 }
