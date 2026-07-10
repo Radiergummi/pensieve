@@ -36,7 +36,7 @@ struct LabelSuggest: AsyncParsableCommand {
     let s = try await SalienceSuggester(provider: provider).run(db, limit: limit, force: force)
     print("""
     Suggested \(s.suggested)/\(s.candidates) candidates: \(s.salient) salient / \(s.noise) noise \
-    (\(s.quoteOnly) quote-only, \(s.skippedBatches) skipped on provider error).
+    (\(s.quoteOnly) quote-only, \(s.skipped) skipped on provider error).
     """)
   }
 
@@ -49,6 +49,10 @@ struct LabelSuggest: AsyncParsableCommand {
     }
   }
 
+  /// Wall-clock cap on a single `claude -p` invocation, mirroring `ClaudeCLIProvider.shellRun`: a
+  /// hung child is terminated and the call throws rather than stalling the sequential batch run.
+  static let timeout: TimeInterval = 120
+
   /// Runs `claude -p --model <model>` with the prompt on stdin; trimmed stdout. Mirrors the eval
   /// harness's helper (salience prompts are small, so writing stdin before draining can't deadlock).
   static func claudeRun(_ prompt: String, model: String) throws -> String {
@@ -58,11 +62,23 @@ struct LabelSuggest: AsyncParsableCommand {
     let stdin = Pipe(), stdout = Pipe()
     p.standardInput = stdin; p.standardOutput = stdout; p.standardError = FileHandle.nullDevice
     try p.run()
-    try? stdin.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
-    try? stdin.fileHandleForWriting.close()
-    let out = stdout.fileHandleForReading.readDataToEndOfFile()
+    DispatchQueue.global().async {
+      try? stdin.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
+      try? stdin.fileHandleForWriting.close()
+    }
+    nonisolated(unsafe) var outData = Data()
+    let ioGroup = DispatchGroup()
+    ioGroup.enter()
+    DispatchQueue.global().async {
+      outData = stdout.fileHandleForReading.readDataToEndOfFile(); ioGroup.leave()
+    }
+    if ioGroup.wait(timeout: .now() + timeout) == .timedOut {
+      p.terminate()
+      _ = ioGroup.wait(timeout: .now() + 5)
+      throw LLMError.providerFailed("claude -p timed out after \(Int(timeout))s")
+    }
     p.waitUntilExit()
     guard p.terminationStatus == 0 else { throw LLMError.providerFailed("claude -p exit \(p.terminationStatus)") }
-    return String(decoding: out, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    return String(decoding: outData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

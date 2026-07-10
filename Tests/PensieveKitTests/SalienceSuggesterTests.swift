@@ -70,7 +70,7 @@ private let noMessages: @Sendable (URL) -> ParsedSession = { _ in
     .run(db, limit: nil, force: false)
   #expect(try labelOf(db, id).suggestion == "")   // untouched → a re-run retries
   #expect(summary.suggested == 0)
-  #expect(summary.skippedBatches >= 1)
+  #expect(summary.skipped >= 1)
 }
 
 @Test func suggesterSkipsLabeledAndAlreadySuggested() async throws {

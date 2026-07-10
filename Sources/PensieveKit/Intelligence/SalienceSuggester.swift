@@ -9,7 +9,7 @@ import GRDB
 public struct SalienceSuggester {
   public struct Summary: Sendable, Equatable {
     public let candidates: Int, suggested: Int, salient: Int, noise: Int
-    public let quoteOnly: Int, skippedBatches: Int
+    public let quoteOnly: Int, skipped: Int
   }
 
   private let provider: any LLMProvider
@@ -29,7 +29,7 @@ public struct SalienceSuggester {
     // 1. Candidates: open + unlabeled; skip already-suggested unless `force`. Deterministic order
     //    (createdAt) so `--limit` is reproducible.
     let candidates: [LooseEnd] = try await db.read { db in
-      let rows = try LooseEnd.where { $0.status.eq("open") && $0.label.eq("") }.fetchAll(db)
+      let rows = try LooseEnd.where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) }.fetchAll(db)
       return rows.filter { force || $0.labelSuggestion.isEmpty }
                  .sorted { $0.createdAt < $1.createdAt }
     }
@@ -68,7 +68,7 @@ public struct SalienceSuggester {
       }
     }
     return Summary(candidates: capped.count, suggested: suggested, salient: salient,
-                   noise: noise, quoteOnly: quoteOnly, skippedBatches: skipped)
+                   noise: noise, quoteOnly: quoteOnly, skipped: skipped)
   }
 
   /// Parse the event's transcript (best-effort). Returns [] on missing event / no path / empty parse.
