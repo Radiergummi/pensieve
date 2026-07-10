@@ -4,10 +4,16 @@
     " · captured %@" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · captured %1$(age)@"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : " · erfasst %@"
+            "value" : " · erfasst %1$(age)@"
           }
         }
       }
@@ -23,16 +29,16 @@
     "%@ · %@ · %@d ago" : {
       "extractionState" : "manual",
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ · %@ · vor %@ T"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ · %2$@ · %3$(days)@d ago"
+            "value" : "%1$(role)@ · %2$(date)@ · %3$(days)@d ago"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(role)@ · %2$(date)@ · vor %3$(days)@ T"
           }
         }
       }
@@ -40,10 +46,16 @@
     "%@ open" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)@ open"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ offen"
+            "value" : "%1$(count)@ offen"
           }
         }
       }
@@ -51,16 +63,16 @@
     "%@ open · %@d dormant" : {
       "extractionState" : "manual",
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ offen · %@T ruhend"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$(items)@ open · %2$(days)@d dormant"
+            "value" : "%1$(count)@ open · %2$(days)@d dormant"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)@ offen · %2$(days)@T ruhend"
           }
         }
       }
@@ -68,10 +80,16 @@
     "%@ since last visit" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(summary)@ since last visit"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ seit letztem Besuch"
+            "value" : "%1$(summary)@ seit letztem Besuch"
           }
         }
       }
@@ -79,16 +97,16 @@
     "%lld loose ends" : {
       "extractionState" : "manual",
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld lose Enden"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld loose ends"
+            "value" : "%1$(count)lld loose ends"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld lose Enden"
           }
         }
       }
@@ -96,10 +114,16 @@
     "%lld models available" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld models available"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld Modelle verfügbar"
+            "value" : "%1$(count)lld Modelle verfügbar"
           }
         }
       }
@@ -107,10 +131,16 @@
     "%lld Projects" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld Projects"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld Projekte"
+            "value" : "%1$(count)lld Projekte"
           }
         }
       }
@@ -118,16 +148,16 @@
     "%lld strands" : {
       "extractionState" : "manual",
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Stränge"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld strands"
+            "value" : "%1$(count)lld strands"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld Stränge"
           }
         }
       }
@@ -272,7 +302,14 @@
     },
     "Cloud (API)" : {
       "extractionState" : "manual",
-      "shouldTranslate" : false
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud (API)"
+          }
+        }
+      }
     },
     "Color" : {
       "extractionState" : "manual",
@@ -343,16 +380,16 @@
     "Delete “%@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone." : {
       "extractionState" : "manual",
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete “%(node)@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone."
+            "value" : "Delete “%1$(node)@” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%1$(node)@“ und alles darin Verschachtelte löschen? Erfasste Aktivität und offene Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
           }
         }
       }
@@ -360,10 +397,16 @@
     "Delete “%@”? Its captured activity and loose ends are removed. This can’t be undone." : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete “%1$(node)@”? Its captured activity and loose ends are removed. This can’t be undone."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„%@“ löschen? Die erfasste Aktivität und offenen Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
+            "value" : "„%1$(node)@“ löschen? Die erfasste Aktivität und offenen Enden werden entfernt. Dies kann nicht rückgängig gemacht werden."
           }
         }
       }
@@ -404,10 +447,16 @@
     "dormant %@d" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dormant %1$(days)@d"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ruhend %@T"
+            "value" : "ruhend %1$(days)@T"
           }
         }
       }
@@ -462,7 +511,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wird abgerufen…"
+            "value" : "Wird abgerufen …"
           }
         }
       }
@@ -636,7 +685,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wechseln zu…"
+            "value" : "Wechseln zu …"
           }
         }
       }
@@ -680,7 +729,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Als echten losen Faden markieren"
+            "value" : "Als echtes loses Ende markieren"
           }
         }
       }
@@ -691,7 +740,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Als keinen losen Faden markieren"
+            "value" : "Als kein loses Ende markieren"
           }
         }
       }
@@ -710,10 +759,16 @@
     "Merge “%@” into “%@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone." : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merge “%1$(source)@” into “%2$(target)@”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„%1$@“ mit „%2$@“ zusammenführen? Quellen, Aktivität und offene Enden werden zum Ziel verschoben und das Original gelöscht. Dies kann nicht rückgängig gemacht werden."
+            "value" : "„%1$(source)@“ mit „%2$(target)@“ zusammenführen? Quellen, Aktivität und offene Enden werden zum Ziel verschoben und das Original gelöscht. Dies kann nicht rückgängig gemacht werden."
           }
         }
       }
@@ -724,7 +779,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zusammenführen mit…"
+            "value" : "Zusammenführen mit …"
           }
         }
       }
@@ -746,7 +801,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verschieben nach…"
+            "value" : "Verschieben nach …"
           }
         }
       }
@@ -957,7 +1012,14 @@
     },
     "OpenAI-compatible" : {
       "extractionState" : "manual",
-      "shouldTranslate" : false
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI-kompatibel"
+          }
+        }
+      }
     },
     "Pensieve Context" : {
       "extractionState" : "manual",
@@ -998,7 +1060,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wählt die beste Option auf dem Gerät — Foundation Models, falls verfügbar, sonst die Claude CLI."
+            "value" : "Wählt die beste Option auf dem Gerät – Foundation Models, falls verfügbar, sonst die Claude CLI."
           }
         }
       }
@@ -1064,7 +1126,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schnellsprung…"
+            "value" : "Schnellsprung …"
           }
         }
       }
@@ -1218,7 +1280,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rückblick teilen…"
+            "value" : "Rückblick teilen …"
           }
         },
         "en" : {
@@ -1310,10 +1372,16 @@
     "Since %@" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Since %1$(date)@"
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Seit %@"
+            "value" : "Seit %1$(date)@"
           }
         }
       }
