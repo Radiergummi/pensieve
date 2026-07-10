@@ -49,6 +49,32 @@ struct Mcp: AsyncParsableCommand {
       }
     }
 
+    await server.withMethodHandler(ListResources.self) { _ in
+      .init(resources: [
+        Resource(name: "What's Next", uri: "pensieve://smartlist/whats-next",
+                 description: "Ranked queue across all projects", mimeType: "text/markdown"),
+      ])
+    }
+    await server.withMethodHandler(ListResourceTemplates.self) { _ in
+      .init(templates: [
+        Resource.Template(uriTemplate: "pensieve://node/{id}", name: "Project context",
+                          description: "One project's grounded context", mimeType: "text/markdown"),
+      ])
+    }
+    await server.withMethodHandler(ReadResource.self) { params in
+      let uri = params.uri
+      if uri == "pensieve://smartlist/whats-next" {
+        let md = try PensieveMCP.whatsNextMarkdown()
+        return .init(contents: [.text(md, uri: uri, mimeType: "text/markdown")])
+      }
+      if uri.hasPrefix("pensieve://node/"),
+         let id = UUID(uuidString: String(uri.dropFirst("pensieve://node/".count))),
+         let md = try await PensieveMCP.nodeMarkdown(id: id) {
+        return .init(contents: [.text(md, uri: uri, mimeType: "text/markdown")])
+      }
+      return .init(contents: [.text("not found", uri: uri, mimeType: "text/plain")])
+    }
+
     try await server.start(transport: StdioTransport())
     await server.waitUntilCompleted()
   }
@@ -76,6 +102,28 @@ enum PensieveMCP {
       summaryBuilder: builder, providerKind: kind, cache: cache)
     let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
     return try encoder.encode(bundle)   // encodes `null` for an unbound path
+  }
+
+  static func nodeMarkdown(id: UUID) async throws -> String? {
+    let db = try openCanonicalReadOnly()
+    let (builder, kind) = makeBuilderAndKind()
+    let cache = NarrationCache(url: PensievePaths.narrationCacheURL())
+    guard let bundle = try await SessionContextQueries.bundle(
+      forPath: nil, nodeID: id, db, now: Date(),
+      summaryBuilder: builder, providerKind: kind, cache: cache) else { return nil }
+    return SessionContextRender.markdown(bundle)
+  }
+
+  static func whatsNextMarkdown() throws -> String {
+    let db = try openCanonicalReadOnly()
+    let items = try SessionContextQueries.rankedContext(limit: 10, context: nil, db, now: Date())
+    var out = "# What's Next\n\n"
+    for i in items {
+      out += "- **\(i.name)** — \(i.openLooseEnds) open, \(i.daysDormant)d dormant"
+      if let q = i.topLooseEnd { out += "\n  > \(q)" }
+      out += "\n"
+    }
+    return out
   }
 
   static func whatsNextJSON(limit: Int, context: String?) throws -> Data {
