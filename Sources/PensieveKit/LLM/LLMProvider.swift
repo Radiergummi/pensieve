@@ -7,6 +7,9 @@ public enum LLMError: Error, Sendable { case providerFailed(String) }
 /// provider that can guarantee structure (Foundation Models via guided generation) does so
 /// natively; every other provider inherits a default that prompts for JSON and decodes it,
 /// so any provider (local or HTTP) satisfies the protocol with only `complete`.
+/// Any new task that calls a model through this seam should be evaluated by the harness —
+/// register an `EvalTask` and let `pensieve eval` choose its default (on-device-first),
+/// don't hand-pick a model. See `Sources/PensieveKit/Eval/README.md`.
 public protocol LLMProvider: Sendable {
   func complete(prompt: String) async throws -> String
 
