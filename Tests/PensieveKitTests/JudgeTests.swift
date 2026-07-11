@@ -26,3 +26,25 @@ private struct JSONProvider: LLMProvider {
   let v = await Judge(provider: JSONProvider(json: "not json at all")).scoreRubric(output: "x", dimensions: ["a"], sourceContext: "c")
   #expect(v == nil)
 }
+
+@Test func judgeDecodeHandlesBracesInsideStrings() async {
+  // A quote value containing { } [ ] must not desync the balanced scanner.
+  let json = #"{"candidateLabels":[{"quote":"fix the { retry } loop [v2]","grounded":true}]}"#
+  let p = JSONProvider(json: json)
+  let le = [VerifiedLooseEnd(text: "t", quote: "fix the { retry } loop [v2]", role: "user", sourceMessageIndex: 0)]
+  let labels = await Judge(provider: p).labelGrounding(looseEnds: le, source: "…")
+  #expect(labels?.count == 1)
+  #expect(labels?.first?.quote == "fix the { retry } loop [v2]")
+  #expect(labels?.first?.grounded == true)
+}
+
+@Test func judgeDecodeHandlesEscapedQuoteInsideString() async {
+  // An escaped double-quote inside a string value must not prematurely end the string.
+  let json = #"{"candidateLabels":[{"quote":"he said \"stop\" then left","grounded":false}]}"#
+  let p = JSONProvider(json: json)
+  let le = [VerifiedLooseEnd(text: "t", quote: "he said \"stop\" then left", role: "user", sourceMessageIndex: 0)]
+  let labels = await Judge(provider: p).labelGrounding(looseEnds: le, source: "…")
+  #expect(labels?.count == 1)
+  #expect(labels?.first?.quote == "he said \"stop\" then left")
+  #expect(labels?.first?.grounded == false)
+}

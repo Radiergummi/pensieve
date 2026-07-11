@@ -13,13 +13,24 @@ public struct JudgeVerdict: Codable, Sendable, Equatable {
 
 public enum JudgeDecode {
   /// Extract the first balanced JSON object/array substring and decode it (tolerates ``` fences + prose).
+  /// String-aware: braces/brackets inside JSON string values (and escaped quotes) don't affect the depth count.
   public static func object<T: Decodable>(_ raw: String, as type: T.Type) -> T? {
     guard let start = raw.firstIndex(where: { $0 == "{" || $0 == "[" }) else { return nil }
     let open = raw[start], close: Character = (open == "{") ? "}" : "]"
     var depth = 0, end: String.Index? = nil
+    var inString = false, escaped = false
     var i = start
     while i < raw.endIndex {
-      if raw[i] == open { depth += 1 } else if raw[i] == close { depth -= 1; if depth == 0 { end = i; break } }
+      let c = raw[i]
+      if inString {
+        if escaped { escaped = false } else if c == "\\" { escaped = true } else if c == "\"" { inString = false }
+      } else if c == "\"" {
+        inString = true
+      } else if c == open {
+        depth += 1
+      } else if c == close {
+        depth -= 1; if depth == 0 { end = i; break }
+      }
       i = raw.index(after: i)
     }
     guard let e = end else { return nil }
