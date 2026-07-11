@@ -7,7 +7,7 @@ private func sampleBundle(prose: String?) -> ProjectContextBundle {
     nodeID: UUID(), name: "Pensieve", kind: NodeKind.project,
     description: "context reconstruction tool", context: NodeContext.work,
     daysDormant: 3, openLooseEndCount: 1, score: 5,
-    looseEnds: [BundleLooseEnd(text: "finish auth", quote: "we must finish the auth flow",
+    looseEnds: [BundleLooseEnd(id: UUID(), text: "finish auth", quote: "we must finish the auth flow",
                                role: "user", ageDays: 3)],
     recentEvents: [BundleEvent(summary: "did the thing", kind: "cc.session", occurredAt: Date())],
     prose: prose)
@@ -36,7 +36,7 @@ private func bundleWithLooseEnds(_ count: Int) -> ProjectContextBundle {
   ProjectContextBundle(
     nodeID: UUID(), name: "Pensieve", kind: NodeKind.project, description: "", context: "",
     daysDormant: 0, openLooseEndCount: count, score: 0,
-    looseEnds: (0..<count).map { BundleLooseEnd(text: "end \($0)", quote: "q\($0)", role: "user", ageDays: 0) },
+    looseEnds: (0..<count).map { BundleLooseEnd(id: UUID(), text: "end \($0)", quote: "q\($0)", role: "user", ageDays: 0) },
     recentEvents: [], prose: nil)
 }
 

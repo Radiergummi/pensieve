@@ -4,6 +4,7 @@ import SQLiteData
 // MARK: - JSON-shaped payloads (the stable MCP / prime contract)
 
 public struct BundleLooseEnd: Codable, Sendable {
+  public let id: UUID
   public let text: String
   public let quote: String
   public let role: String
@@ -98,8 +99,9 @@ public enum SessionContextQueries {
     return ProjectContextBundle(
       nodeID: id, name: node.name, kind: node.kind, description: node.description, context: node.context,
       daysDormant: facts.daysDormant, openLooseEndCount: facts.openLooseEnds, score: score,
-      looseEnds: ends.map { BundleLooseEnd(text: $0.looseEnd.text, quote: $0.looseEnd.quote,
-                                           role: $0.looseEnd.role, ageDays: $0.ageDays) },
+      looseEnds: ends.map { BundleLooseEnd(id: $0.looseEnd.id, text: $0.looseEnd.text,
+                                           quote: $0.looseEnd.quote, role: $0.looseEnd.role,
+                                           ageDays: $0.ageDays) },
       recentEvents: status.recentEvents.map { BundleEvent(summary: $0.summary, kind: $0.kind,
                                                           occurredAt: $0.occurredAt) },
       prose: prose)

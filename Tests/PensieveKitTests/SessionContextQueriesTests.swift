@@ -97,6 +97,20 @@ private func seedOneNode(_ db: any DatabaseWriter) throws -> (node: Node, event:
   #expect(cache.get(NarrationCacheKey.make(events: events, provider: "fm")) == "fresh recap")
 }
 
+@Test func bundleLooseEndCarriesItsID() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("sc"))
+  let (node, event) = try seedOneNode(db)
+  // The one loose end seeded by seedOneNode — read its id back for the assertion.
+  let seededID = try #require(try await db.read { db in
+    try LooseEnd.where { $0.nodeID.eq(node.id) }.fetchOne(db)?.id
+  })
+  _ = event
+  let bundle = try #require(try await SessionContextQueries.bundle(
+    forPath: "/p/one", nodeID: nil, db, now: Date(),
+    summaryBuilder: nil, providerKind: "fm", cache: nil))
+  #expect(bundle.looseEnds.first?.id == seededID)
+}
+
 @Test func rankedContextFiltersSlicesAndCites() throws {
   let db = try openCanonicalDatabase(at: tempURL("sc"))
   let resolver = ProjectResolver(db: db)
