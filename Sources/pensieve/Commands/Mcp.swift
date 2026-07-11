@@ -29,6 +29,13 @@ struct Mcp: AsyncParsableCommand {
                "context": .object(["type": .string("string"), "description": .string("filter: work | personal")]),
              ])]),
              annotations: .init(readOnlyHint: true, openWorldHint: false)),
+        Tool(name: "recall",
+             description: "Recall the surrounding transcript conversation around a loose end — reconstruct how a discussion went and how it resolved. Pass a loose_end_id from project_context.",
+             inputSchema: .object(["type": .string("object"), "properties": .object([
+               "loose_end_id": .object(["type": .string("string"), "description": .string("UUID of a loose end from project_context")]),
+               "radius": .object(["type": .string("number"), "description": .string("messages of context each side (default 8)")]),
+             ]), "required": .array([.string("loose_end_id")])]),
+             annotations: .init(readOnlyHint: true, openWorldHint: false)),
       ])
     }
 
@@ -49,6 +56,14 @@ struct Mcp: AsyncParsableCommand {
         let limit = params.arguments?["limit"]?.intValue ?? 5
         let context = params.arguments?["context"]?.stringValue
         let json = try PensieveMCP.whatsNextJSON(limit: limit, context: context)
+        return PensieveMCP.result(json)
+      case "recall":
+        guard let idStr = params.arguments?["loose_end_id"]?.stringValue,
+              let id = UUID(uuidString: idStr) else {
+          return .init(content: [.text(text: "recall requires a valid loose_end_id (UUID)", annotations: nil, _meta: nil)], isError: true)
+        }
+        let radius = params.arguments?["radius"]?.intValue ?? 8
+        let json = try PensieveMCP.recallJSON(looseEndID: id, radius: radius)
         return PensieveMCP.result(json)
       default:
         return .init(content: [.text(text: "unknown tool", annotations: nil, _meta: nil)], isError: true)
@@ -142,6 +157,14 @@ enum PensieveMCP {
     }
     let items = try SessionContextQueries.rankedContext(limit: limit, context: context, db, now: Date())
     return try makeEncoder().encode(items)
+  }
+
+  static func recallJSON(looseEndID: UUID, radius: Int) throws -> Data {
+    guard let db = try? openCanonicalReadOnly() else {
+      return try makeEncoder().encode(Optional<RecallBundle>.none)   // "null"
+    }
+    let bundle = try SessionContextQueries.recall(looseEndID: looseEndID, radius: radius, db)
+    return try makeEncoder().encode(bundle)   // encodes `null` for an unknown id
   }
 
   /// A text tool result carrying the JSON payload + the result-size hint Claude Code honors.
