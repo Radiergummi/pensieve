@@ -41,12 +41,25 @@ private func score(_ label: String, onDevice: Bool, q: Double, cost: Double, lat
 }
 
 @Test func fabricationHardFailsExtractionRegardlessOfQuality() {
-  let scores = [score("apple/fm", onDevice: true, q: 0, cost: 0, lat: 900, prec: 1.0, rec: 0.8),
-                score("grok/fast", onDevice: false, q: 0, cost: 0.001, lat: 200, fab: true, prec: 0.99, rec: 0.95)]
+  // grok clears the ORDINARY bar (precision 1.0, recall 0.9 > 0.8+margin) and would otherwise
+  // land in clearedBar — it is excluded ONLY because it reproduced a fabrication. apple/fm clears
+  // cleanly. Deleting the fabrication hard-gate would put grok in clearedBar and fail this test.
+  let scores = [score("apple/fm", onDevice: true, q: 0, cost: 0, lat: 900, prec: 1.0, rec: 0.9),
+                score("grok/fast", onDevice: false, q: 0, cost: 0.001, lat: 200, fab: true, prec: 1.0, rec: 0.9)]
   let bar = EffectiveBar(precision: 1.0, recall: 0.8, quality: nil)
   let rec = DecisionEngine.recommend(task: "extraction", scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
-  #expect(rec.clearedBar.contains("grok/fast") == false) // reproduced fabrication → excluded
+  #expect(rec.clearedBar.contains("grok/fast") == false) // reproduced fabrication → excluded despite clearing the ordinary bar
+  #expect(rec.clearedBar.contains("apple/fm") == true)   // apple/fm clears cleanly
   #expect(rec.winner == "apple/fm")
+}
+
+@Test func qualityWithinNoiseMarginDoesNotClear() {
+  // quality 0.72 is above the bar (0.70) but NOT above bar+noiseMargin (0.73) → must NOT clear.
+  let scores = [score("openai/nano", onDevice: false, q: 0.72, cost: 0.001, lat: 300)]
+  let bar = EffectiveBar(precision: nil, recall: nil, quality: 0.70)
+  let rec = DecisionEngine.recommend(task: "narration", scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  #expect(rec.clearedBar.isEmpty)      // 0.72 < 0.70+0.03 → does not robustly clear
+  #expect(rec.winner == "apple/fm")    // nobody cleared → incumbent fallback
 }
 
 @Test func localityBreaksTiesAmongClearingChallengers() {
