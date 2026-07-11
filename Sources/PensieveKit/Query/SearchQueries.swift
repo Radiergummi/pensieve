@@ -3,9 +3,13 @@ import Foundation
 import SQLiteData
 
 public struct NodeHit: Identifiable, Equatable, Sendable {
+  /// Which field produced the match — drives the row layout (name-match shows the name as the
+  /// primary line; description-only match shows the node name primary + the description snippet).
+  public enum MatchedField: Sendable, Equatable { case name, description }
   public let id: UUID
   public var name: String
   public var kind: String
+  public var matchedField: MatchedField
   public var snippet: Snippet
 }
 
@@ -60,6 +64,7 @@ public enum SearchQueries {
       let nodeHits = sortedNodes.prefix(cap).map { e -> NodeHit in
         let src = e.rank == 0 ? e.node.name : e.node.description
         return NodeHit(id: e.node.id, name: e.node.name, kind: e.node.kind,
+                       matchedField: e.rank == 0 ? .name : .description,
                        snippet: SnippetMaker.make(from: src, matching: query))
       }
 

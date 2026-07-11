@@ -51,8 +51,17 @@ struct ContentListView: View {
               HStack(spacing: 10) {
                 if let n = model.node(hit.id) { NodeBadge(node: n, size: 22) }
                 VStack(alignment: .leading, spacing: 2) {
-                  SnippetText(snippet: hit.snippet)
-                  Text(AppearanceStyle.kindLabel(hit.kind)).font(.caption).foregroundStyle(.secondary)
+                  switch hit.matchedField {
+                  case .name:
+                    // The match is in the name — the snippet IS the highlighted name.
+                    SnippetText(snippet: hit.snippet)
+                    Text(AppearanceStyle.kindLabel(hit.kind)).font(.caption).foregroundStyle(.secondary)
+                  case .description:
+                    // Matched only in the description — lead with the node name so the hit is
+                    // identifiable, and show the description snippet (why it matched) below.
+                    Text(hit.name)
+                    SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
+                  }
                 }
               }
             }

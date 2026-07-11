@@ -45,6 +45,10 @@ private func allVisible(_ db: any DatabaseReader) throws -> Set<UUID> {
   #expect(r.nodes.count == 2)
   // name-match ("Authentication") ranks before description-only ("Sync daemon")
   #expect(r.nodes.first?.name == "Authentication")
+  // matchedField drives the row layout: name hit first, description-only hit second.
+  #expect(r.nodes.first?.matchedField == .name)
+  #expect(r.nodes.last?.name == "Sync daemon")
+  #expect(r.nodes.last?.matchedField == .description)
 }
 
 @Test func searchMatchesLooseEndTextAndQuote() throws {
