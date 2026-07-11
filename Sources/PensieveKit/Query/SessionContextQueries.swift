@@ -17,6 +17,23 @@ public struct BundleEvent: Codable, Sendable {
   public let occurredAt: Date
 }
 
+public struct RecallMessage: Codable, Sendable {
+  public let index: Int
+  public let role: String
+  public let text: String
+  public let isCited: Bool
+  public let isUserPrompt: Bool
+}
+
+/// A loose end's surrounding transcript window — the MCP `recall` contract. Verbatim only.
+public struct RecallBundle: Codable, Sendable {
+  public let looseEndText: String
+  public let quote: String
+  public let transcriptAvailable: Bool
+  public let sessionOccurredAt: Date
+  public let messages: [RecallMessage]   // empty when transcriptAvailable == false
+}
+
 /// One node's grounded state — "reload where this project stands." Loose ends carry verbatim
 /// quotes (inside the trust gate); `prose` is best-effort (`nil` on no-events/failure/timeout).
 public struct ProjectContextBundle: Codable, Sendable {
@@ -129,6 +146,24 @@ public enum SessionContextQueries {
           topLooseEnd: top?.quote)
       }
     }
+  }
+
+  /// Recall the transcript conversation around a loose end. Fetches the LooseEnd by UUID and
+  /// delegates to the tested `ProvenanceQueries.context(radius:)` — no LLM, verbatim only, inside
+  /// the trust gate. Returns nil if the id resolves to no loose end; a bundle with
+  /// `transcriptAvailable == false` (+ the stored quote) if the transcript is gone.
+  public static func recall(looseEndID: UUID, radius: Int,
+                            _ db: any DatabaseReader) throws -> RecallBundle? {
+    guard let le = try db.read({ db in
+      try LooseEnd.where { $0.id.eq(looseEndID) }.fetchOne(db)
+    }) else { return nil }
+    let ctx = try ProvenanceQueries.context(db, looseEnd: le, radius: radius)
+    return RecallBundle(
+      looseEndText: le.text, quote: le.quote,
+      transcriptAvailable: ctx.transcriptAvailable,
+      sessionOccurredAt: ctx.sourceEvent.occurredAt,
+      messages: ctx.messages.map { RecallMessage(index: $0.index, role: $0.role, text: $0.text,
+                                                 isCited: $0.isCited, isUserPrompt: $0.isUserPrompt) })
   }
 
   /// Races `narrate` against a timeout; returns nil if the model doesn't answer in time (FM

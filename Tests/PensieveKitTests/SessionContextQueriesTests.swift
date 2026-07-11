@@ -140,3 +140,79 @@ private func seedOneNode(_ db: any DatabaseWriter) throws -> (node: Node, event:
   // Limit is honored.
   #expect(try SessionContextQueries.rankedContext(limit: 1, context: nil, db, now: Date()).count == 1)
 }
+
+// MARK: - Recall tests
+
+/// Local copy of the transcript writer (mirrors ProvenanceQueriesTests): one JSONL line per
+/// (type, text); "user" prose → isUserPrompt true.
+private func writeRecallTranscript(_ prefix: String, _ lines: [(type: String, text: String)]) throws -> URL {
+  let url = tempURL(prefix, ext: "jsonl")
+  let jsonl = lines.map { line in
+    #"{"type":"\#(line.type)","cwd":"/p/app","timestamp":"2026-06-29T13:03:43.382Z","message":{"role":"\#(line.type)","content":"\#(line.text)"}}"#
+  }.joined(separator: "\n")
+  try jsonl.write(to: url, atomically: true, encoding: .utf8)
+  return url
+}
+
+/// Inserts an event pointing at `transcriptURL` + a loose end citing `citedIndex` with `quote`.
+private func seedRecallLooseEnd(_ db: any DatabaseWriter, transcriptURL: URL,
+                                citedIndex: Int, quote: String) throws -> LooseEnd {
+  let (node, source) = try ProjectResolver(db: db).resolve(path: "/p/recall", kind: SourceKind.claudeCode)
+  let detail = try encodeJSON(["transcriptPath": transcriptURL.path, "sessionID": "s", "prompts": "2"])
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                    kind: CaptureKind.ccSession, summary: "session", detailJSON: detail, fingerprint: "fpr")
+  let le = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "finish the migration",
+                    quote: quote, role: "user", sourceMessageIndex: citedIndex)
+  try db.write { db in
+    try Event.insert { event }.execute(db)
+    try LooseEnd.insert { le }.execute(db)
+  }
+  return le
+}
+
+@Test func recallReturnsWindowAroundCitedUserPrompt() throws {
+  let db = try openCanonicalDatabase(at: tempURL("recall-happy"))
+  let url = try writeRecallTranscript("recall-happy", [
+    (type: "user", text: "hello there"),                            // index 0
+    (type: "assistant", text: "sure working on it"),                // index 1
+    (type: "user", text: "we still need to finish the migration"),  // index 2 (cited)
+    (type: "assistant", text: "got it"),                            // index 3
+    (type: "user", text: "thanks"),                                 // index 4
+  ])
+  let le = try seedRecallLooseEnd(db, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
+  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 1, db))
+  #expect(bundle.transcriptAvailable)
+  #expect(bundle.quote == "finish the migration")
+  #expect(bundle.looseEndText == "finish the migration")
+  #expect(bundle.messages.map(\.index) == [1, 2, 3])   // radius 1 around index 2
+  let cited = bundle.messages.first { $0.isCited }
+  #expect(cited?.index == 2)
+  #expect(cited?.isUserPrompt == true)
+}
+
+@Test func recallRespectsRadius() throws {
+  let db = try openCanonicalDatabase(at: tempURL("recall-radius"))
+  let url = try writeRecallTranscript("recall-radius", [
+    (type: "user", text: "aaa"), (type: "assistant", text: "bbb"),
+    (type: "user", text: "we still need to finish the migration"),  // index 2 (cited)
+    (type: "assistant", text: "ccc"), (type: "user", text: "ddd"),
+  ])
+  let le = try seedRecallLooseEnd(db, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
+  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 4, db))
+  #expect(bundle.messages.map(\.index) == [0, 1, 2, 3, 4])   // wider radius → whole clamped window
+}
+
+@Test func recallReturnsNilForUnknownID() throws {
+  let db = try openCanonicalDatabase(at: tempURL("recall-unknown"))
+  #expect(try SessionContextQueries.recall(looseEndID: UUID(), radius: 8, db) == nil)
+}
+
+@Test func recallDegradesHonestlyWhenTranscriptGone() throws {
+  let db = try openCanonicalDatabase(at: tempURL("recall-gone"))
+  let gone = tempURL("recall-gone-file", ext: "jsonl")   // never written to disk
+  let le = try seedRecallLooseEnd(db, transcriptURL: gone, citedIndex: 0, quote: "anything")
+  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 8, db))
+  #expect(bundle.transcriptAvailable == false)
+  #expect(bundle.messages.isEmpty)
+  #expect(bundle.quote == "anything")   // stored quote preserved for honest fallback
+}
