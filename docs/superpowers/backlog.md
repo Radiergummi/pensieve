@@ -208,6 +208,36 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## MCP `recall` tool + deferred recall siblings — 2026-07-11
+
+First real dogfooding win of `pensieve mcp` also exposed its ceiling: asked to *recall a past
+conversation and its outcome*, the model **found** the topic via a cited loose end instantly,
+then made ~5 shell calls to grep the `.jsonl` transcript for the actual passage. The MCP server
+returns **pointers, not passages** — and Pensieve already computes the passage
+(`ProvenanceQueries.context`, the app's ⌘⌥I inspector) but never exposed it over MCP.
+
+- **`recall` tool — SPECCED, being built** (`specs/2026-07-11-mcp-recall-tool-design.md`).
+  Loose-end-keyed read-only MCP tool → the surrounding transcript window via the existing tested
+  `ProvenanceQueries` kernel; adds an additive `id` to `project_context` loose ends as the handle;
+  model-controlled `radius` (default 8). No LLM, verbatim, inside the trust gate.
+
+**Deferred siblings (with reasoning — not foreclosed):**
+- **Keyword search tool over MCP** — jump straight to the relevant loose end/event across
+  projects instead of scanning all of a node's loose ends (104 in the incident). *A `find` problem,
+  orthogonal to `expand`; needs its own ranking/query design.* **Substrate already exists:** the
+  tested `SearchQueries` Kit kernel from in-app find (2026-07-11) over the grounded corpus.
+- **Semantic / vector recall over MCP** (`sqlite-vec` + on-device embeddings) — recall without
+  exact words. *Large project (embedding pipeline, migration, index maintenance); already a
+  standing loose end.* Shares the embedding substrate with the Spotlight semantic-search extension
+  and the theme-discovery spike.
+- **`whats_next` → recall handle** — `whats_next` returns a quote string, not an id. *Minor extra
+  hop today (`project_context` on the node to get handles); additively add `topLooseEndID` if the
+  hop proves annoying.*
+- **Event-centric recall** — `ProvenanceQueries` is loose-end-centric (needs a `sourceMessageIndex`
+  to center on); `cc.session` events have no single center message.
+
+---
+
 ## Widgets — DEFERRED (2026-07-08): blocked on App Groups needing a paid Team ID
 
 Attempted to pick up Widgets (the first *second process*). Hit a hard prerequisite during brainstorming and
