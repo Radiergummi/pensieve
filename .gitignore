@@ -7,3 +7,6 @@ Pensieve.xcodeproj/
 .build-xcode/
 Sources/PensieveApp/Info.plist
 .swiftpm/
+
+# Eval harness — private work text + run outputs, never committed
+.eval/
