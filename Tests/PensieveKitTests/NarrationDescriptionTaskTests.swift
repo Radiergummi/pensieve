@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import PensieveKit
 
@@ -10,6 +11,15 @@ private struct EchoProvider: LLMProvider {
   let item = CorpusItem.narration(NarrationCorpusItem(id: "n1", nodeName: "colibri", events: []))
   // narrate returns nil on no events → task yields empty text, not a crash
   let out = try await NarrationTask().run(item: item, model: EchoProvider(text: "worked on auth"), reference: EchoProvider(text: ""))
+  #expect(out.looseEnds == nil)
+}
+
+@Test func narrationTaskPassesThroughModelProseWithEvents() async throws {
+  let event = Event(nodeID: UUID(), sourceID: UUID(), occurredAt: Date(), kind: "cc.session",
+                     summary: "shipped auth", detailJSON: "{}")
+  let item = CorpusItem.narration(NarrationCorpusItem(id: "n2", nodeName: "colibri", events: [EventDTO(event)]))
+  let out = try await NarrationTask().run(item: item, model: EchoProvider(text: "worked on auth"), reference: EchoProvider(text: ""))
+  #expect(out.text == "worked on auth")
   #expect(out.looseEnds == nil)
 }
 
