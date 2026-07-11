@@ -88,6 +88,7 @@ enum PaletteDestination: Hashable {
 final class AppModel: ObservableObject {
   @Published var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
   @Published var forest: [NodeForestNode] = []
+  @Published var archivedForest: [NodeForestNode] = []
   @Published var sidebarSelection: SidebarSelection? = .briefing
   @Published var selectedNodeID: UUID?
   /// Drives the New/Edit node modal. nil = closed. Mounted in RootView.
@@ -358,7 +359,8 @@ final class AppModel: ObservableObject {
     }
     if nodesChanged || activeFocusContext != lastForestContext {
       let source = activeFocusContext.isEmpty ? allNodes : allNodes.filter { visible.contains($0.id) }
-      forest = NodeForest.build(source)
+      forest = NodeForest.build(source.filter { $0.state == "active" })
+      archivedForest = NodeForest.build(source.filter { $0.state == "archived" })
       lastForestContext = activeFocusContext
     }
     reviewCount = (try? SalienceReviewQueries.pendingCount(db)) ?? 0
@@ -368,7 +370,9 @@ final class AppModel: ObservableObject {
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
 
   /// Count of top-level project nodes, for the content-column header.
-  var projectCount: Int { allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project }.count }
+  var projectCount: Int {
+    allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project && $0.state == "active" }.count
+  }
 
   /// The middle column's content for the current `sidebarSelection`. Pure/in-memory (children reads
   /// `allNodes`); the leaf case defers its loose-ends DB read to the view's `.task`.
@@ -381,7 +385,10 @@ final class AppModel: ObservableObject {
     case .smartList(let kind):
       return .nodes(lists[keyPath: kind.itemsKeyPath].map(\.project))
     case .node(let id):
-      let kids = children(of: id)
+      // Show archived children under an archived node, active children under an active one, so
+      // the two "worlds" don't bleed into each other.
+      let showArchived = node(id)?.state == "archived"
+      let kids = children(of: id).filter { ($0.state == "archived") == showArchived }
       return kids.isEmpty ? .looseEndsOf(id) : .nodes(kids)
     case nil:
       return .nodes([])

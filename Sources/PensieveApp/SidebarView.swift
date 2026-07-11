@@ -6,6 +6,7 @@ struct SidebarView: View {
   @ObservedObject var model: AppModel
   @AppStorage("sidebar.smartLists.expanded") private var smartExpanded = true
   @AppStorage("sidebar.projects.expanded") private var projectsExpanded = true
+  @AppStorage("sidebar.archived.expanded") private var archivedExpanded = false
 
   var body: some View {
     List(selection: Binding(
@@ -39,6 +40,13 @@ struct SidebarView: View {
       Section("Projects", isExpanded: $projectsExpanded) {
         OutlineGroup(model.forest, children: \.childrenIfAny) { item in
           nodeRow(item)
+        }
+      }
+      if !model.archivedForest.isEmpty {
+        Section("Archived", isExpanded: $archivedExpanded) {
+          OutlineGroup(model.archivedForest, children: \.childrenIfAny) { item in
+            nodeRow(item)
+          }
         }
       }
     }
