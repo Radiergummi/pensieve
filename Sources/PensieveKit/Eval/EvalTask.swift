@@ -15,8 +15,7 @@ public protocol EvalTask: Sendable {
 }
 
 public enum TaskRegistry {
-  // TODO(Task 8): populate with [ExtractionTask(), NarrationTask(), DescriptionTask()] once those types exist.
-  public static var all: [any EvalTask] { [] }
+  public static var all: [any EvalTask] { [ExtractionTask(), NarrationTask(), DescriptionTask()] }
   public static func task(id: String) -> (any EvalTask)? { all.first { $0.id == id } }
 
   /// Registry ↔ config consistency: every task needs a bar; every bar needs a task.

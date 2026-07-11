@@ -14,3 +14,12 @@ private struct StubTask: EvalTask {
   let problems = TaskRegistry.consistency(tasks: [StubTask(id: "extraction"), StubTask(id: "narration")], config: cfg)
   #expect(problems.contains { $0.contains("extraction") }) // no bar for extraction
 }
+
+@Test func consistencyFlagsBarWithoutTask() {
+  let cfg = EvalConfig(roster: [], referenceProvider: "r",
+                       judge: ModelSpec(label:"j",kind:"cloud",flavor:.anthropic,baseURL:"b",model:"m",inputPricePerM:1,outputPricePerM:1),
+                       bars: [TaskBar(task: "ghost-task", inheritFromIncumbent: true, precision: nil, recall: nil, quality: nil)],
+                       corpusSize: 10, corpusSeed: 1, noiseMargin: 0.03)
+  let problems = TaskRegistry.consistency(tasks: [StubTask(id: "narration")], config: cfg)
+  #expect(problems.contains { $0.contains("ghost-task") }) // no task registered for the bar
+}
