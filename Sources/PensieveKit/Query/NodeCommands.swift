@@ -101,6 +101,32 @@ public enum NodeCommands {
     }
   }
 
+  /// Archive `nodeID` and all its descendants (whole-subtree, state = "archived"). Unlike
+  /// `delete`, archive is always allowed — it's the escape hatch for source-bearing nodes that
+  /// `delete` refuses. Returns false — writing nothing — for an unknown id.
+  @discardableResult
+  public static func archive(_ db: any DatabaseWriter, nodeID: UUID) throws -> Bool {
+    try setSubtreeState(db, nodeID: nodeID, to: "archived")
+  }
+
+  /// Restore `nodeID` and all its descendants to state = "active".
+  @discardableResult
+  public static func unarchive(_ db: any DatabaseWriter, nodeID: UUID) throws -> Bool {
+    try setSubtreeState(db, nodeID: nodeID, to: "active")
+  }
+
+  private static func setSubtreeState(_ db: any DatabaseWriter, nodeID: UUID, to state: String) throws -> Bool {
+    try db.write { db in
+      guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
+      let all = try Node.all.fetchAll(db)
+      let ids = NodeForest.descendantIDs(of: nodeID, in: all).union([nodeID])
+      for id in ids {
+        try Node.where { $0.id.eq(id) }.update { $0.state = state }.execute(db)
+      }
+      return true
+    }
+  }
+
   /// The outcome of a delete attempt. `.blocked` = the subtree still has a live source, which
   /// `ProjectResolver` would re-create on the next drain — so delete is refused.
   public enum DeleteResult: Equatable, Sendable {

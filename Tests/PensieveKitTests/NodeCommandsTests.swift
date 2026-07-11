@@ -188,3 +188,28 @@ import SQLiteData
   let reloaded = try db.read { db in try Node.where { $0.id.eq(proj.id) }.fetchOne(db) }
   #expect(reloaded?.context == "work")
 }
+
+@Test func archiveAndUnarchiveWholeSubtree() throws {
+  let db = try openCanonicalDatabase(at: tempURL("archive"))
+  let proj = try #require(try NodeCommands.add(db, name: "Colibri", kind: "project", parent: nil, description: ""))
+  let strandA = try #require(try NodeCommands.add(db, name: "auth", kind: "strand", parent: "Colibri", description: ""))
+  let strandB = try #require(try NodeCommands.add(db, name: "ui", kind: "strand", parent: "Colibri", description: ""))
+
+  // Archive the project → whole subtree archived.
+  #expect(try NodeCommands.archive(db, nodeID: proj.id))
+  func state(_ id: UUID) throws -> String? {
+    try db.read { db in try Node.where { $0.id.eq(id) }.fetchOne(db)?.state }
+  }
+  #expect(try state(proj.id) == "archived")
+  #expect(try state(strandA.id) == "archived")
+  #expect(try state(strandB.id) == "archived")
+
+  // Unarchive → whole subtree active again.
+  #expect(try NodeCommands.unarchive(db, nodeID: proj.id))
+  #expect(try state(proj.id) == "active")
+  #expect(try state(strandA.id) == "active")
+  #expect(try state(strandB.id) == "active")
+
+  // Unknown id → false, writes nothing.
+  #expect(try NodeCommands.archive(db, nodeID: UUID()) == false)
+}
