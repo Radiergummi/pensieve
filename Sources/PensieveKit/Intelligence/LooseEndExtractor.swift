@@ -13,10 +13,14 @@ struct PromptFragment: Sendable {
 /// the LooseEndVerifier disposes — so this stage optimizes for recall, not trust.
 public struct LooseEndExtractor {
   private let provider: any LLMProvider
+  private let classifierProvider: any LLMProvider
   private let chunkCharBudget: Int
 
-  public init(provider: any LLMProvider, chunkCharBudget: Int = 2500) {
+  public init(provider: any LLMProvider,
+              classifierProvider: (any LLMProvider)? = nil,
+              chunkCharBudget: Int = 2500) {
     self.provider = provider
+    self.classifierProvider = classifierProvider ?? provider
     self.chunkCharBudget = chunkCharBudget
   }
 
@@ -39,7 +43,7 @@ public struct LooseEndExtractor {
     guard !prompts.isEmpty else { return [] }
     // Keep only the developer's genuine conversational intent — drop pasted briefs, plans,
     // code, and tool output that the transcript records as `user` turns but aren't intent.
-    let genuine = await IntentClassifier(provider: provider).filterGenuine(prompts)
+    let genuine = await IntentClassifier(provider: classifierProvider).filterGenuine(prompts)
     guard !genuine.isEmpty else { return [] }
     var candidates: [LooseEndCandidate] = []
     for chunk in Self.chunkFragments(genuine, budget: chunkCharBudget) {
