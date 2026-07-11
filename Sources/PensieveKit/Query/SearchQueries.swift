@@ -54,10 +54,8 @@ public enum SearchQueries {
         if nameHit { nodeScored.append((0, n)) }
         else if hit(n.description) { nodeScored.append((1, n)) }
       }
-      let sortedNodes = nodeScored.sorted { a, b in
-        if a.rank != b.rank { return a.rank < b.rank }
-        if a.node.name != b.node.name { return a.node.name < b.node.name }
-        return a.node.id.uuidString < b.node.id.uuidString
+      let sortedNodes = nodeScored.sorted {
+        ($0.rank, $0.node.name, $0.node.id.uuidString) < ($1.rank, $1.node.name, $1.node.id.uuidString)
       }
       let nodeHits = sortedNodes.prefix(cap).map { e -> NodeHit in
         let src = e.rank == 0 ? e.node.name : e.node.description

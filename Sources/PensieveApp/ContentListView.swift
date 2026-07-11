@@ -8,13 +8,9 @@ struct ContentListView: View {
   @State private var looseEnds: [LooseEndView] = []
   @State private var reviewItems: [LooseEndView] = []
 
-  private var isSearching: Bool {
-    !model.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
-
   var body: some View {
     Group {
-      if isSearching {
+      if model.isSearching {
         searchResultsList()
           .navigationTitle(Text("Search"))
       } else {
@@ -65,7 +61,7 @@ struct ContentListView: View {
         }
       }
       if !r.looseEnds.isEmpty {
-        Section(header: Text("Loose ends")) {
+        Section(header: Text("Loose Ends")) {
           ForEach(r.looseEnds) { hit in
             Button { model.selectSearchLooseEnd(hit) } label: {
               VStack(alignment: .leading, spacing: 2) {

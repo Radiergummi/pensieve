@@ -134,6 +134,11 @@ final class AppModel: ObservableObject {
   private lazy var drainDebouncer = Debouncer(interval: 0.15) { [weak self] in
     await self?.drainThenRefreshFromWatch()
   }
+  /// Coalesces rapid typing in the .searchable field into one DB read (runSearch), instead of a
+  /// full node+loose-end scan per keystroke.
+  private lazy var searchDebouncer = Debouncer(interval: 0.2) { [weak self] in
+    await self?.runSearch()
+  }
   private var started = false
   // NOT lazy: rebuilt when the provider preference/config changes (SettingsView), so an in-session
   // switch takes effect on the next narration instead of requiring a relaunch. Bootstrapped cheaply
@@ -212,6 +217,11 @@ final class AppModel: ObservableObject {
   @Published var focusSearchRequested = false
   private var searchTask: Task<Void, Never>?
   private var searchToken = 0
+
+  /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
+  /// site that branches on search (the middle content, the refresh re-run, the detail one-home
+  /// override, clear-on-navigation) reads this, so the trimming rule can't drift.
+  var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
   private static let lastOpenedKey = "pensieve.lastOpenedAt"
 
@@ -352,7 +362,7 @@ final class AppModel: ObservableObject {
       lastForestContext = activeFocusContext
     }
     reviewCount = (try? SalienceReviewQueries.pendingCount(db)) ?? 0
-    if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { runSearch() }
+    if isSearching { runSearch() }
   }
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
@@ -400,17 +410,27 @@ final class AppModel: ObservableObject {
   }
 
   /// The detail recall shows its Loose Ends section EXCEPT when the middle is already showing this same
-  /// node's loose ends (the focused leaf) — the one-home rule (no duplication).
+  /// node's loose ends (the focused leaf) — the one-home rule (no duplication). While searching, the
+  /// middle shows results (never a leaf's loose ends), so the one-home premise is void and the detail
+  /// always shows its loose ends — including the row a search hit auto-expands into.
   var detailShowsLooseEnds: Bool {
+    if isSearching { return true }
     if case .node(let fid) = sidebarSelection, selectedNodeID == fid, children(of: fid).isEmpty {
       return false
     }
     return true
   }
 
-  /// The one entry point for every search trigger (keystroke change AND the liveness refresh).
-  /// Cancels the prior task; runs the read off-main; assigns results under a monotonic token so a
-  /// stale keystroke can't overwrite a newer result. Below the min length → clears results.
+  /// The keystroke entry point (from the .searchable field). Coalesces rapid typing into one
+  /// debounced DB read; an empty/whitespace field clears immediately so exiting search stays crisp.
+  func searchTextChanged() {
+    guard isSearching else { runSearch(); return }   // empty → synchronous clear via runSearch's guard
+    Task { await searchDebouncer.schedule() }
+  }
+
+  /// The one entry point for the actual search read (the debounced keystroke path AND the liveness
+  /// refresh). Cancels the prior task; runs the read off-main; assigns results under a monotonic token
+  /// so a stale keystroke can't overwrite a newer result. Below the min length → clears results.
   func runSearch() {
     searchTask?.cancel()
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)

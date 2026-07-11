@@ -761,17 +761,6 @@
         }
       }
     },
-    "Loose ends" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lose Enden"
-          }
-        }
-      }
-    },
     "Mark as a real loose end" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -12,8 +12,7 @@ struct RootView: View {
 
   @ViewBuilder private var detailColumn: some View {
     if let id = model.selectedNodeID, let node = model.node(id) {
-      DetailView(model: model, node: node,
-                 showsLooseEnds: model.detailShowsLooseEnds || model.expandedLooseEndID != nil)
+      DetailView(model: model, node: node, showsLooseEnds: model.detailShowsLooseEnds)
     } else if model.sidebarSelection == .briefing {
       BriefingView(model: model)
     } else {
@@ -53,9 +52,9 @@ struct RootView: View {
       openWindow(id: "recall", value: id)
       model.openNodeRequest = nil
     }
-    .onChange(of: model.searchText) { _, _ in model.runSearch() }
+    .onChange(of: model.searchText) { _, _ in model.searchTextChanged() }
     .onChange(of: model.sidebarSelection) { _, _ in
-      if !model.searchText.isEmpty { model.clearSearch() }
+      if model.isSearching { model.clearSearch() }
     }
     .onChange(of: model.focusSearchRequested) { _, requested in
       if requested { isSearchFocused = true; model.focusSearchRequested = false }
