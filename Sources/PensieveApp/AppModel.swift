@@ -569,6 +569,23 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
+  func archive(_ nodeID: UUID) {
+    guard let db else { return }
+    // Selection moves off the whole archived subtree so we don't strand the detail pane on a
+    // node that just left the active tree.
+    let subtree = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
+    _ = try? NodeCommands.archive(db, nodeID: nodeID)
+    if let sel = selectedNodeID, subtree.contains(sel) { selectedNodeID = nil }
+    if case .node(let id) = sidebarSelection, subtree.contains(id) { sidebarSelection = .briefing }
+    refresh()
+  }
+
+  func unarchive(_ nodeID: UUID) {
+    guard let db else { return }
+    _ = try? NodeCommands.unarchive(db, nodeID: nodeID)
+    refresh()
+  }
+
   func merge(_ sourceID: UUID, into targetID: UUID) {
     guard let db, sourceID != targetID else { return }
     try? ProjectResolver(db: db).group(targetID, into: [sourceID])

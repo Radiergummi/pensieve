@@ -222,6 +222,17 @@
         }
       }
     },
+    "Archive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivieren"
+          }
+        }
+      }
+    },
     "Archived" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1531,6 +1542,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Typ"
+          }
+        }
+      }
+    },
+    "Unarchive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellen"
           }
         }
       }

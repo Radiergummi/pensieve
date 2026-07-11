@@ -130,6 +130,11 @@ struct NodeContextMenu: View {
     Button("Move to…") { model.movePickerNodeID = node.id }
     Button("Merge into…") { model.mergePickerNodeID = node.id }
     Divider()
+    if node.state == "archived" {
+      Button("Unarchive") { model.unarchive(node.id) }
+    } else {
+      Button("Archive") { model.archive(node.id) }
+    }
     Button("Delete…", role: .destructive) { model.pendingDeleteNodeID = node.id }
       .disabled(!model.canDelete(node.id))
   }
