@@ -17,72 +17,6 @@ private func loadEvalConfig() -> EvalConfig {
   return try! JSONDecoder().decode(EvalConfig.self, from: Data(fallback.utf8))
 }
 
-private func taskID(for item: CorpusItem) -> String {
-  switch item {
-  case .extraction: return "extraction"
-  case .narration: return "narration"
-  case .description: return "description"
-  }
-}
-
-/// The text a judge grades a rubric-scored task's output against. Extraction doesn't use this
-/// (it's scored via `GoldSet`, not the rubric judge).
-private func sourceContext(for item: CorpusItem) -> String {
-  switch item {
-  case .narration(let n):
-    return n.events.map { "\($0.kind): \($0.summary)" }.joined(separator: "\n")
-  case .description(let d):
-    return [d.context.dirName, d.context.gitRemote, d.context.manifest, d.context.readmeHead, d.context.claudeMdHead]
-      .compactMap { $0 }.joined(separator: "\n")
-  case .extraction:
-    return ""
-  }
-}
-
-/// Reduces one model's raw run samples into a `CellScore`. Assumes `samples.count == items.count`
-/// in the same order (true whenever `runCell` didn't fail-closed to `[]` for every item, which the
-/// caller already filters for) so `items[idx]` is each rubric sample's source.
-private func score(task: any EvalTask, items: [CorpusItem], samples: [CellSample],
-                   spec: ModelSpec, gold: GoldSet, judge: Judge) async -> CellScore {
-  let costs = samples.map { TokenEstimate.costUSD(inputText: "", outputText: $0.outputText, spec: spec) }
-  let costUSD = costs.isEmpty ? 0 : costs.reduce(0, +) / Double(costs.count)
-  let latencyP50 = Aggregate.median(samples.map { $0.latencyMS }) ?? 0
-
-  switch task.scorer {
-  case .extraction:
-    var recalls: [Double] = []
-    var precisions: [Double] = []
-    var fabFlags: [Bool] = []
-    for sample in samples {
-      let surfaced = sample.looseEndQuotes ?? []
-      if let r = gold.recallScore(itemID: sample.itemID, surfaced: surfaced) { recalls.append(r) }
-      if let labels = gold.grounding[sample.itemID], !labels.isEmpty {
-        let groundedSet = Set(labels.filter { $0.grounded }.map { $0.quote })
-        let fabricatedSet = Set(labels.filter { !$0.grounded }.map { $0.quote })
-        let known = surfaced.filter { groundedSet.contains($0) || fabricatedSet.contains($0) }
-        if !known.isEmpty {
-          precisions.append(Double(known.filter { groundedSet.contains($0) }.count) / Double(known.count))
-        }
-        fabFlags.append(surfaced.contains { fabricatedSet.contains($0) })
-      }
-    }
-    return CellScore(modelLabel: spec.label, isOnDevice: spec.isOnDevice, quality: nil,
-                     precision: Aggregate.median(precisions), recall: Aggregate.median(recalls),
-                     costUSD: costUSD, latencyP50: latencyP50,
-                     reproducedFabrication: Aggregate.majorityFabrication(fabFlags))
-  case .rubric(let dims):
-    var qualities: [Double] = []
-    for (idx, sample) in samples.enumerated() where idx < items.count {
-      let verdict = await judge.scoreRubric(output: sample.outputText, dimensions: dims,
-                                            sourceContext: sourceContext(for: items[idx]))
-      if let q = verdict?.quality { qualities.append(q) }
-    }
-    return CellScore(modelLabel: spec.label, isOnDevice: spec.isOnDevice, quality: Aggregate.median(qualities),
-                     precision: nil, recall: nil, costUSD: costUSD, latencyP50: latencyP50,
-                     reproducedFabrication: false)
-  }
-}
-
 struct Eval: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "eval",
@@ -144,7 +78,7 @@ struct Eval: AsyncParsableCommand {
 
       var taskScorecards: [TaskScorecard] = []
       for evalTask in TaskRegistry.all where task == nil || evalTask.id == task {
-        let taskItems = items.filter { taskID(for: $0) == evalTask.id }
+        let taskItems = items.filter { CellScoring.taskID(for: $0) == evalTask.id }
         guard !taskItems.isEmpty else { continue }
 
         // Reference first (it doubles as the incumbent bar's basis), then the rest of the roster.
@@ -157,7 +91,7 @@ struct Eval: AsyncParsableCommand {
           var samples: [CellSample] = []
           for item in taskItems { samples += await runner.runCell(task: evalTask, item: item, spec: spec, repeats: 1) }
           guard !samples.isEmpty else { continue }   // model unavailable for this spec — skip, don't fake a score
-          let cellScore = await score(task: evalTask, items: taskItems, samples: samples, spec: spec, gold: gold, judge: judge)
+          let cellScore = await CellScoring.score(task: evalTask, items: taskItems, samples: samples, spec: spec, gold: gold, judge: judge)
           if spec.label == refSpec.label { incumbent = cellScore }
           scores.append(cellScore)
         }
