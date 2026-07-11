@@ -88,6 +88,26 @@ Results aggregate into a **`Scorecard`**.
 ### Hybrids are first-class competitors
 A hybrid FM→online routing strategy is, to the harness, just another `ModelUnderTest` in the same sweep, scored on the same axes. We author a hybrid for a task **only after** the data shows FM breaking somewhere in it — no speculative decomposition (measure-first).
 
+## Extensibility & discoverability
+
+A first-class goal: **adding a new task must be small, and any agent adding a new LLM-backed feature should naturally reach for the harness.** A new capable feature isn't "done" until its default model is justified here.
+
+### Small by construction
+Adding a task is a **single-file, ~one-`EvalTask`-value addition** plus a config line — no runner/judge/report changes:
+1. Implement an `EvalTask` value: `id`; the real component + the **isolated stage** it swaps + the fixed reference for the rest; a corpus selector + `Codable` DTO; and a scorer (reuse the objective extraction scorer or the rubric judge — a new task usually just supplies **rubric dimensions**, not new scoring code).
+2. Register it in the task registry (one line).
+3. Add its acceptance bar to `eval-config.json` (or let it inherit from the measured incumbent on first run).
+
+The `EvalTask` protocol is designed to make (1) mostly declarative — the runner, judge, scorecard, cost/latency capture, k=3-near-bar logic, and reporting are all task-agnostic and inherited.
+
+### Discoverability (three pointers, where agents already look)
+- **CLAUDE.md convention** (always in context): a short rule — *"Any new `LLMProvider`-backed task must register an `EvalTask` and get a default chosen by `pensieve eval`, not hand-picked. See `Sources/PensieveKit/Eval/README.md`."* This is the primary lever, because CLAUDE.md loads every session.
+- **Doc-comment on `LLMProvider`** (the seam you can't skip): a one-line pointer to the harness + the README, so an agent wiring a new model call sees it inline.
+- **`Sources/PensieveKit/Eval/README.md`**: a copy-paste "Add a task in 3 steps" recipe with a worked example (narration), the stage-isolation rule, and the incumbent-anchored-bar convention.
+
+### Guardrail
+A unit test asserts **registry ↔ config consistency**: every registered `EvalTask` has a bar entry (or an explicit inherit-from-incumbent flag) and vice-versa — so a task added without an eval story fails the suite rather than silently shipping a hand-picked default.
+
 ## Scoring & calibration
 
 Tasks under test run at **temperature 0** (extraction/narration/description are not creative; determinism removes most output variance and matches how we'd want them in production). For any model landing **within the noise margin** of a bar, the runner re-runs **k=3** and takes the median; a fabrication must **reproduce** before it fails the hard gate.
@@ -125,7 +145,8 @@ Repo rule: **logic is tested PensieveKit; real model calls are not** (they cost 
 - cost math (judge cost excluded; FM `$0`),
 - deterministic/stratified sampling + stress-item injection,
 - outcome classification (parse-fail vs provider-error vs success),
-- config parsing, missing-key skip, label-keyed Keychain resolution.
+- config parsing, missing-key skip, label-keyed Keychain resolution,
+- **registry ↔ config consistency** (every registered `EvalTask` has a bar entry or an explicit inherit-from-incumbent flag, and vice-versa).
 
 The actual matrix run is a **manual/integration step** you invoke, gated behind keys — never in CI.
 
@@ -139,11 +160,14 @@ The actual matrix run is a **manual/integration step** you invoke, gated behind 
 ## Files (anticipated)
 
 - `Sources/PensieveKit/Eval/` — `ModelUnderTest`, `EvalTask` (+ per-task definitions with stage-isolation), `EvalCorpus` (+ per-task `Codable` DTOs), `Runner`, `Judge` (+ verdict decoder), `Scorecard`, `EvalConfig`.
+- `Sources/PensieveKit/Eval/README.md` — the "Add a task in 3 steps" recipe (discoverability).
 - `Sources/pensieve/` — `eval` subcommand group (thin over the Kit).
 - Possibly a small refactor exposing `NodeDescriber`'s `ProjectContext → prompt → complete → sanitize` slice for read-only, snapshot-driven evaluation.
+- `Sources/PensieveKit/LLM/LLMProvider.swift` — a one-line doc-comment pointer to the harness/README (discoverability at the seam).
+- `CLAUDE.md` — a convention line: new `LLMProvider`-backed tasks register an `EvalTask` and get their default from `pensieve eval`.
 - `eval-config.json` — committed roster/bars/margins/pricing/reference-provider.
 - `.gitignore` — add `.eval/` (before the first `eval sample`).
-- `Tests/PensieveKitTests/` — harness-logic suites with fakes.
+- `Tests/PensieveKitTests/` — harness-logic suites with fakes (incl. registry ↔ config consistency).
 
 ## Open items for the plan
 
