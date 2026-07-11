@@ -15,4 +15,7 @@ public enum EvalPaths {
   public static func configURL() -> URL {
     URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("eval-config.json")
   }
+  public static func ensureDir(_ url: URL) throws {
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+  }
 }
