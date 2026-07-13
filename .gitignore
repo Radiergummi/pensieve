@@ -10,3 +10,5 @@ Sources/PensieveApp/Info.plist
 
 # Eval harness — private work text + run outputs, never committed
 .eval/
+
+.worktrees/
