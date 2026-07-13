@@ -102,6 +102,15 @@ struct AppError: Identifiable {
     AppError(title: String(localized: "Couldn’t \(verb) “\(name)”"),
              message: error.localizedDescription)
   }
+
+  /// The new node's parent vanished under the menu. This case does NOT compose a verb into the shared
+  /// refusal title: German needs a past participle in that passive frame, and "add a node under" is an
+  /// infinitive with a trailing preposition — composing it produces an ungrammatical sentence. Its own
+  /// complete key lets each language phrase the whole thing naturally.
+  static func cannotAddUnder(_ parent: String) -> AppError {
+    AppError(title: String(localized: "Couldn’t add a node under “\(parent)”"),
+             message: String(localized: "It may have changed since this menu opened. The view has been refreshed — try again."))
+  }
 }
 
 @MainActor
@@ -594,7 +603,8 @@ final class AppModel: ObservableObject {
                                            parent: parentID?.uuidString, description: "",
                                            icon: icon, colorTag: colorTag, context: context) else {
         let parentName = parentID.map { displayName($0) } ?? String(localized: "the top level")
-        refuse(String(localized: "add a node under"), parentName)
+        refresh()
+        presentedError = .cannotAddUnder(parentName)
         return
       }
       refresh()

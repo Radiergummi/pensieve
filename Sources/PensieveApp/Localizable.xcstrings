@@ -235,23 +235,6 @@
         }
       }
     },
-    "add a node under" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "hinzufügen unter"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "add a node under"
-          }
-        }
-      }
-    },
     "Advanced" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -535,6 +518,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn’t %@ “%@”"
+          }
+        }
+      }
+    },
+    "Couldn’t add a node under “%@”" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter „%@“ konnte kein Knoten hinzugefügt werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t add a node under “%@”"
           }
         }
       }
