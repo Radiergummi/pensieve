@@ -69,17 +69,26 @@ public enum SystemStatusGatherer {
   public static func gather(db: (any DatabaseReader)?,
                             defaults: UserDefaults,
                             cloudConfig: CloudConfig?,
-                            apiKeyPresent: Bool,
-                            launchAgentURL: URL,   // PensievePaths.launchAgentURL()
-                            syncLogURL: URL,        // PensievePaths.syncLogURL()
-                            now: Date) -> SystemStatus
+                            apiKey: String?,        // NOT a Bool — see below
+                            launchAgentURL: URL,    // PensievePaths.launchAgentURL()
+                            syncLogURL: URL)        // PensievePaths.syncLogURL()
+                            -> SystemStatus
 }
 ```
 
 - `providerKind` reuses the existing shared `resolvedProviderKind(defaults:cloudConfig:apiKey:)`.
+  The `apiKey` parameter is deliberately `String?` (not an `apiKeyPresent: Bool`) so `gather` can call
+  that resolver **directly** rather than reimplementing the "is cloud configured" test — keeping the
+  single source of truth the cloud-provider work established. No second resolution path.
+- There is **no `now:` parameter**: every field is present-or-absent, none is relative to now.
+  Relative-date formatting (`"2 minutes ago"`) is the view's job.
 - `foundationModelsAvailable` reuses `FoundationModelsProbe.isAvailable()`.
 - `daemonInstalled` = `FileManager.fileExists` at the LaunchAgent plist URL.
-- `lastSyncAt` = mtime of `syncLogURL` via `resourceValues(.contentModificationDateKey)`.
+- `lastSyncAt` = mtime of `syncLogURL` via `resourceValues(.contentModificationDateKey)`. This proxy is
+  honest: `Sources/pensieve/Commands/Sync.swift:16` prints a summary line **unconditionally** on every
+  run and the LaunchAgent redirects `StandardOutPath`/`StandardErrorPath` to `sync.log`, so the mtime
+  tracks every daemon run — a quiet no-op sync still bumps it, and "Last sync" never reads stale while
+  the daemon is healthy.
 - `lastEventAt` = a read-only `max(Event.at)` query (best-effort; `nil` on empty/error).
 
 Paths and `defaults`/URLs are **injected** so the kernel is deterministically testable against a temp
@@ -92,7 +101,13 @@ FM-availability note; "Sync daemon: Installed/Not installed"; "Last sync: <relat
 **Store & Logs** group: rows for canonical / spool / support / logs paths, each with a **Reveal in
 Finder** button (`NSWorkspace.shared.activateFileViewerSelecting([url])`), plus an **Open Logs Folder**
 button (`NSWorkspace.shared.open(logsDirectory)`). Paths come from `Stores.canonicalURL` /
-`Stores.spoolURL` / `PensievePaths.supportDirectory()` / `PensievePaths.logsDirectory()`.
+`Stores.spoolURL` (the app-target `Stores` enum, which honors the `PENSIEVE_DB` /
+`PENSIEVE_CAPTURE_DB` env overrides) / `PensievePaths.supportDirectory()` /
+`PensievePaths.logsDirectory()`.
+
+A full store path does **not** fit the 460 pt tab width. Render each path with `.lineLimit(1)` +
+`.truncationMode(.middle)` and the full path in a `.help(…)` tooltip, so the row never blows out the
+window.
 
 The Advanced tab reads status once on appear (and could refresh on `.onAppear`); no live observation is
 required — it's an informational glance, consistent with the read-only settings surface.
@@ -115,11 +130,17 @@ struct AppError: Identifiable { let id = UUID(); let title: String; let message:
 @Published var presentedError: AppError?
 ```
 
-Mounted once in `RootView`:
+Mounted once in `RootView`, using the **current** alert API (the `Alert(title:message:dismissButton:)`
+value type is deprecated since macOS 12; deployment target is 15):
 
 ```
-.alert(item: $model.presentedError) { err in
-  Alert(title: Text(err.title), message: Text(err.message), dismissButton: .default(Text("OK")))
+.alert(model.presentedError?.title ?? "", 
+       isPresented: Binding(get: { model.presentedError != nil },
+                            set: { if !$0 { model.presentedError = nil } }),
+       presenting: model.presentedError) { _ in
+  Button("OK", role: .cancel) { }
+} message: { err in
+  Text(err.message)
 }
 ```
 
@@ -130,7 +151,7 @@ Mounted once in `RootView`:
 | `commitNewNode`   | `Node`  | `nil` (unknown parent) | error |
 | `updateNode`      | `true`  | `false` (unknown node) | error |
 | `move`            | `true`  | `false` (cycle/unknown/stale) | error |
-| `merge`           | (void via `group`) | — (no bool; catch throw only) | error |
+| `merge`           | (void via `group`) | **pre-check** both ids exist (see below) | error |
 | `deleteNode`      | `.deleted` | `.blocked` / `.notFound` | error |
 | `setLooseEndLabel`| `true`  | `false` | error |
 
@@ -138,13 +159,28 @@ Mounted once in `RootView`:
   again."* `delete` `.blocked` gets its own copy: *"Can't delete "\<name\>" — it still has captured
   sources or activity that would return on the next sync."* (mirrors the existing gating rationale).
 - **Error copy**: *"Couldn't move "\<name\>": \<error localizedDescription\>."*
-- On refusal/error, the write does **not** proceed with post-write state changes (selection moves,
-  refresh happens only on success — matching current behavior, which only refreshed after the op).
+
+**Refusal must still refresh.** Every refusal in the table is *by definition* a stale-view problem —
+the node was deleted or re-parented out from under the menu between open and click. So on a refusal the
+write **does** call `refresh()` (that is the actual remedy: it makes the phantom node disappear and
+makes the "try again" copy true), while **skipping** the post-write *state* changes (selection moves,
+rename-field focus). Only the **throw** path leaves the tree untouched — a DB error tells us nothing
+about staleness. (This supersedes a "refresh only on success" reading: refreshing only on success would
+leave the user staring at the same stale tree, re-triggering the identical failure forever.)
+
+**`merge` needs an explicit existence pre-check.** `ProjectResolver.group` (`Sources/PensieveKit/Ingest/
+ProjectResolver.swift:52`) never validates that `primaryID` exists. There is **no data-loss hazard** —
+the `projectID` columns carry `REFERENCES … ON DELETE CASCADE` FKs, GRDB's default `Configuration()`
+enforces them, and `group` runs inside a single `db.write`, so merging into a concurrently-deleted
+target aborts the whole transaction rather than orphaning events onto a dead id. But it aborts by
+*throwing an FK violation*, whose `localizedDescription` is `"FOREIGN KEY constraint failed"` — piping
+that into the alert would give the one **destructive** op the worst copy in the app. So `AppModel.merge`
+fetches both nodes first and, if either is gone, emits the same honest refusal copy as the other five
+(no Kit change; `group` stays as-is). The existing `sourceID != targetID` guard covers self-merge, which
+is a different failure mode.
 
 `AppError` is a plain struct; the refusal/throw classification lives inline in the thin `AppModel`
-writes (no new Kit surface — the Kit commands already return the distinguishing values). `merge` has no
-boolean return from `ProjectResolver.group`, so only its throw is surfaced (a self-merge is already
-guarded by `sourceID != targetID`).
+writes (no new Kit surface — the Kit commands already return the distinguishing values).
 
 ### 4. About menu (native)
 
@@ -179,7 +215,11 @@ a product."* No Settings tab for About.
 - Advanced shows the resolved provider, FM-availability note, daemon Installed/Not, last-sync and
   last-activity times; Reveal-in-Finder opens each store path; Open Logs Folder works.
 - Force a refused write (e.g. delete an activity-born node via a stale menu, or trigger a stale move)
-  → the alert appears with honest copy and the op does nothing; a normal op still succeeds silently.
+  → the alert appears with honest copy, the op does nothing, **and dismissing the alert leaves a
+  refreshed tree** (the phantom node is gone — retrying is not an infinite loop). A normal op still
+  succeeds silently.
+- Force a stale **merge** (delete the target node in a second window, then merge into it from a stale
+  context menu) → the honest refusal copy appears, **never** a raw `"FOREIGN KEY constraint failed"`.
 - "About Pensieve" (app menu) shows version/build + the credit line.
 - German in situ (`-AppleLanguages '(de)'`) for all new chrome; paths/versions/vendor names stay
   English.
