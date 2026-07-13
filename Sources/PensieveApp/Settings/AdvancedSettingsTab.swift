@@ -7,9 +7,6 @@ import PensieveKit
 /// it never mutates the daemon (installing/editing it is a separate, later spec).
 struct AdvancedSettingsTab: View {
   @ObservedObject var model: AppModel
-  @AppStorage(PensieveDefaults.cloudFlavorKey) private var cloudFlavorRaw = CloudFlavor.anthropic.rawValue
-  @AppStorage(PensieveDefaults.cloudBaseURLKey) private var cloudBaseURL = ""
-  @AppStorage(PensieveDefaults.cloudModelKey) private var cloudModel = ""
 
   @State private var status: SystemStatus?
 
@@ -64,10 +61,7 @@ struct AdvancedSettingsTab: View {
   }
 
   private func load() {
-    let config = CloudConfig(flavor: CloudFlavor(rawValue: cloudFlavorRaw) ?? .anthropic,
-                             baseURL: cloudBaseURL, model: cloudModel)
-    let key = KeychainSecretStore().read(
-      account: CloudPresets.keychainAccount(flavor: config.flavor, baseURL: cloudBaseURL))
+    let (config, key) = model.cloudInputs()
     status = SystemStatusGatherer.gather(db: model.db,
                                          defaults: .standard,
                                          cloudConfig: config,

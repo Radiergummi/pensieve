@@ -186,7 +186,7 @@ final class AppModel: ObservableObject {
 
   /// Reads the app-side cloud inputs: config from UserDefaults, key from the Keychain. Returns
   /// (nil, nil) when no flavor is set.
-  private func cloudInputs() -> (CloudConfig?, String?) {
+  func cloudInputs() -> (CloudConfig?, String?) {
     let d = UserDefaults.standard
     guard let raw = d.string(forKey: PensieveDefaults.cloudFlavorKey),
           let flavor = CloudFlavor(rawValue: raw) else { return (nil, nil) }
