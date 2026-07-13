@@ -136,7 +136,7 @@ final class AppModel: ObservableObject {
   /// first run). Fixed for the session so cards don't shift under you while the window is open.
   let briefingSince: Date
 
-  private var db: (any DatabaseWriter)?
+  var db: (any DatabaseWriter)?
   /// Persistent spool connection, reused for BOTH drains and the heartbeat. Opening a fresh
   /// connection per refresh/drain touches the store dir's `-shm`/`-wal` sidecars, which re-fires
   /// the FSEvents watch below into a busy-loop; a long-lived connection reads without that churn.
