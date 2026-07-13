@@ -80,5 +80,15 @@ struct RootView: View {
       Button("Delete", role: .destructive) { model.deleteNode(id) }
       Button("Cancel", role: .cancel) {}
     }
+    .alert(
+      model.presentedError?.title ?? "",
+      isPresented: Binding(get: { model.presentedError != nil },
+                           set: { if !$0 { model.presentedError = nil } }),
+      presenting: model.presentedError
+    ) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { err in
+      Text(err.message)
+    }
   }
 }

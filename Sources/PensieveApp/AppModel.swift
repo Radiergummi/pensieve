@@ -84,6 +84,26 @@ enum PaletteDestination: Hashable {
   }
 }
 
+/// A user-facing failure from an organizing write. Two flavors, both surfaced the same way:
+/// a REFUSAL (the command returned a non-success value — stale/guarded state) and a THROW (a real
+/// DB error). Refusals get honest, non-alarming copy; throws append the underlying description.
+struct AppError: Identifiable {
+  let id = UUID()
+  let title: String
+  let message: String
+
+  /// The node changed under the menu (deleted or re-parented between open and click).
+  static func refusal(_ verb: String, _ name: String) -> AppError {
+    AppError(title: String(localized: "Couldn’t \(verb) “\(name)”"),
+             message: String(localized: "It may have changed since this menu opened. The view has been refreshed — try again."))
+  }
+
+  static func failure(_ verb: String, _ name: String, _ error: Error) -> AppError {
+    AppError(title: String(localized: "Couldn’t \(verb) “\(name)”"),
+             message: error.localizedDescription)
+  }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   @Published var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
@@ -98,6 +118,8 @@ final class AppModel: ObservableObject {
   @Published var mergePickerNodeID: UUID?
   /// Non-nil while the delete confirmation is presented for that node. Mounted in RootView.
   @Published var pendingDeleteNodeID: UUID?
+  /// The one surfaced organizing-write failure. Mounted as a single `.alert` in RootView.
+  @Published var presentedError: AppError?
   @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   @Published var briefingCards: [BriefingCard] = []
@@ -517,16 +539,36 @@ final class AppModel: ObservableObject {
     return (try? SalienceReviewQueries.pending(db, now: Date())) ?? []
   }
 
-  /// Confirm a user salience label for a loose end (👍 salient / 👎 noise / "" clears). Thin over the
-  /// tested LooseEndCommands. Best-effort like the other organizing writes (try?); the row reflects
-  /// the change optimistically and confirmed-noise drops from the open set on the next reload.
+  /// Confirm a user salience label for a loose end (👍 salient / 👎 noise / "" clears).
   func setLooseEndLabel(_ looseEndID: UUID, _ label: String) {
     guard let db else { return }
-    _ = try? LooseEndCommands.setLabel(db, id: looseEndID, label: label)
+    do {
+      let ok = try LooseEndCommands.setLabel(db, id: looseEndID, label: label)
+      if !ok { refuse(String(localized: "update"), String(localized: "this loose end")) }
+    } catch {
+      fail(String(localized: "update"), String(localized: "this loose end"), error)
+    }
   }
 
   // MARK: - Organizing writes (metadata only; each calls the op then refreshes explicitly, because
   // Node-only writes don't change the Event count the liveness ValueObservation tracks).
+
+  /// A refusal: the view was stale, so REFRESH (that's the remedy — the phantom node disappears and
+  /// the "try again" copy becomes true), then surface the alert. Post-write state changes are skipped.
+  private func refuse(_ verb: String, _ name: String) {
+    refresh()
+    presentedError = .refusal(verb, name)
+  }
+
+  /// A throw: a real DB error. Do NOT refresh — an error tells us nothing about staleness.
+  private func fail(_ verb: String, _ name: String, _ error: Error) {
+    presentedError = .failure(verb, name, error)
+  }
+
+  /// The display name for a node id, falling back to a neutral word when it's already gone.
+  private func displayName(_ id: UUID) -> String {
+    node(id)?.name ?? String(localized: "this item")
+  }
 
   /// Default kind for a new node: a child of a project/domain is a strand; everything else a project.
   func defaultKind(under parentID: UUID?) -> String {
@@ -544,12 +586,22 @@ final class AppModel: ObservableObject {
                      icon: String, colorTag: String, context: String) {
     guard let db else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty,
-          let new = try? NodeCommands.add(db, name: trimmed, kind: kind,
-                                          parent: parentID?.uuidString, description: "",
-                                          icon: icon, colorTag: colorTag, context: context) else { return }
-    refresh()
-    sidebarSelection = .node(new.id); selectedNodeID = new.id
+    guard !trimmed.isEmpty else { return }
+    do {
+      // nil ⇒ the parent id didn't resolve (deleted under the menu). Name the PARENT: the new node
+      // doesn't exist yet, so its own name would be meaningless in the copy.
+      guard let new = try NodeCommands.add(db, name: trimmed, kind: kind,
+                                           parent: parentID?.uuidString, description: "",
+                                           icon: icon, colorTag: colorTag, context: context) else {
+        let parentName = parentID.map { displayName($0) } ?? String(localized: "the top level")
+        refuse(String(localized: "add a node under"), parentName)
+        return
+      }
+      refresh()
+      sidebarSelection = .node(new.id); selectedNodeID = new.id
+    } catch {
+      fail(String(localized: "create"), trimmed, error)
+    }
   }
 
   /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
@@ -558,9 +610,14 @@ final class AppModel: ObservableObject {
     guard let db else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
-    _ = try? NodeCommands.update(db, nodeID: nodeID, name: trimmed, kind: kind,
-                                 icon: icon, colorTag: colorTag, context: context)
-    refresh()
+    let label = displayName(nodeID)
+    do {
+      let ok = try NodeCommands.update(db, nodeID: nodeID, name: trimmed, kind: kind,
+                                       icon: icon, colorTag: colorTag, context: context)
+      if ok { refresh() } else { refuse(String(localized: "rename"), label) }
+    } catch {
+      fail(String(localized: "rename"), label, error)
+    }
   }
 
   /// Whether `nodeID` may be deleted (no live source or auto-birthed strand in its subtree → won't resurrect on sync).
@@ -571,8 +628,14 @@ final class AppModel: ObservableObject {
 
   func move(_ nodeID: UUID, under newParentID: UUID?) {
     guard let db else { return }
-    _ = try? NodeCommands.reparent(db, nodeID: nodeID, newParentID: newParentID)
-    refresh()
+    let label = displayName(nodeID)
+    do {
+      // false ⇒ cycle guard, unknown node, or unknown parent — all stale-state rejections.
+      let ok = try NodeCommands.reparent(db, nodeID: nodeID, newParentID: newParentID)
+      if ok { refresh() } else { refuse(String(localized: "move"), label) }
+    } catch {
+      fail(String(localized: "move"), label, error)
+    }
   }
 
   func archive(_ nodeID: UUID) {
@@ -592,13 +655,29 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
+  /// Merge `sourceID` into `targetID`. `ProjectResolver.group` returns Void and never validates that
+  /// the TARGET still exists: a concurrently-deleted target aborts the whole transaction on an FK
+  /// violation (no data loss — but "FOREIGN KEY constraint failed" is not copy we show a human). So
+  /// pre-check both nodes and emit the normal refusal instead. `group` itself stays untouched.
   func merge(_ sourceID: UUID, into targetID: UUID) {
     guard let db, sourceID != targetID else { return }
-    try? ProjectResolver(db: db).group(targetID, into: [sourceID])
-    // The source node is gone: move any state that referenced it onto the survivor / clear it.
-    if selectedNodeID == sourceID { selectedNodeID = targetID }
-    if sidebarSelection == .node(sourceID) { sidebarSelection = .node(targetID) }
-    refresh()
+    let label = displayName(sourceID)
+
+    let bothExist = (try? db.read { db in
+      try Node.where { $0.id.eq(sourceID) }.fetchOne(db) != nil
+        && Node.where { $0.id.eq(targetID) }.fetchOne(db) != nil
+    }) ?? false
+    guard bothExist else { refuse(String(localized: "merge"), label); return }
+
+    do {
+      try ProjectResolver(db: db).group(targetID, into: [sourceID])
+      // The source node is gone: move any state that referenced it onto the survivor.
+      if selectedNodeID == sourceID { selectedNodeID = targetID }
+      if sidebarSelection == .node(sourceID) { sidebarSelection = .node(targetID) }
+      refresh()
+    } catch {
+      fail(String(localized: "merge"), label, error)
+    }
   }
 
   /// Legal Move/Merge targets for `nodeID`: every node except itself, its descendants, and any
@@ -612,10 +691,26 @@ final class AppModel: ObservableObject {
   /// Delete a (source-free) node and its subtree via the Kit cascade. Moves selection off it.
   func deleteNode(_ nodeID: UUID) {
     guard let db else { return }
-    _ = try? NodeCommands.delete(db, nodeID: nodeID)
-    if selectedNodeID == nodeID { selectedNodeID = nil }
-    if sidebarSelection == .node(nodeID) { sidebarSelection = .briefing }
-    refresh()
+    let label = displayName(nodeID)
+    do {
+      switch try NodeCommands.delete(db, nodeID: nodeID) {
+      case .deleted:
+        if selectedNodeID == nodeID { selectedNodeID = nil }
+        if sidebarSelection == .node(nodeID) { sidebarSelection = .briefing }
+        refresh()
+      case .blocked:
+        // The subtree is activity-born — it would resurrect on the next sync. `canDelete` already
+        // gates the menu, so this only fires on a stale menu; the copy names the real reason.
+        refresh()
+        presentedError = AppError(
+          title: String(localized: "Can’t delete “\(label)”"),
+          message: String(localized: "It still has captured sources or activity that would return on the next sync."))
+      case .notFound:
+        refuse(String(localized: "delete"), label)
+      }
+    } catch {
+      fail(String(localized: "delete"), label, error)
+    }
   }
 
   /// Destructive-confirmation copy for the currently-pending delete. Names the node; warns about
