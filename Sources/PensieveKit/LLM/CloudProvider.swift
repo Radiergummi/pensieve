@@ -51,6 +51,20 @@ public struct CloudConfig: Sendable, Equatable {
     guard let url = URL(string: baseURL), let host = url.host?.lowercased() else { return false }
     return host == "localhost" || host == "127.0.0.1" || host == "::1"
   }
+
+  /// The persisted cloud config. Every field falls back to what the Settings UI *displays* when the
+  /// user hasn't touched it: an unset flavor is `.anthropic` (the picker's default) and an empty base
+  /// URL is that flavor's default. This is load-bearing — `@AppStorage` never writes its own default,
+  /// so a user who selects "Cloud (API)" and keeps the default vendor leaves `cloudFlavor` unset;
+  /// treating that as "no config" degraded cloud to local while Settings still said "Cloud (API)".
+  /// Not usable on its own: `isUsable` still requires a model, and the caller still requires a key.
+  public static func fromDefaults(_ d: UserDefaults) -> CloudConfig {
+    let flavor = (d.string(forKey: PensieveDefaults.cloudFlavorKey)).flatMap(CloudFlavor.init(rawValue:)) ?? .anthropic
+    let stored = d.string(forKey: PensieveDefaults.cloudBaseURLKey) ?? ""
+    return CloudConfig(flavor: flavor,
+                       baseURL: stored.isEmpty ? flavor.defaultBaseURL : stored,
+                       model: d.string(forKey: PensieveDefaults.cloudModelKey) ?? "")
+  }
 }
 
 /// Pure HTTP request building + response parsing for the cloud flavors. No I/O — every function

@@ -184,17 +184,13 @@ final class AppModel: ObservableObject {
   /// provider/model switch invalidates prose cached under the old provider.
   private var providerKind = "claudeCLI"
 
-  /// Reads the app-side cloud inputs: config from UserDefaults, key from the Keychain. Returns
-  /// (nil, nil) when no flavor is set.
+  /// Reads the app-side cloud inputs: config from UserDefaults (via the tested Kit derivation, which
+  /// defaults an unset flavor to the one the picker shows), key from the Keychain. The config is
+  /// always non-nil — "not configured" is expressed by `isUsable` / a missing key, not by nil.
   func cloudInputs() -> (CloudConfig?, String?) {
-    let d = UserDefaults.standard
-    guard let raw = d.string(forKey: PensieveDefaults.cloudFlavorKey),
-          let flavor = CloudFlavor(rawValue: raw) else { return (nil, nil) }
-    let stored = d.string(forKey: PensieveDefaults.cloudBaseURLKey) ?? ""
-    let baseURL = stored.isEmpty ? flavor.defaultBaseURL : stored   // empty ⇒ default, matching the UI
-    let model = d.string(forKey: PensieveDefaults.cloudModelKey) ?? ""
-    let config = CloudConfig(flavor: flavor, baseURL: baseURL, model: model)
-    let key = KeychainSecretStore().read(account: CloudPresets.keychainAccount(flavor: flavor, baseURL: baseURL))
+    let config = CloudConfig.fromDefaults(.standard)
+    let key = KeychainSecretStore().read(
+      account: CloudPresets.keychainAccount(flavor: config.flavor, baseURL: config.baseURL))
     return (config, key)
   }
 

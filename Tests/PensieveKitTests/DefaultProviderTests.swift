@@ -64,3 +64,39 @@ import Testing
   let kind = resolvedProviderKind(defaults: d, cloudConfig: cfg, apiKey: "")
   #expect(kind == "foundationModels" || kind == "claudeCLI")
 }
+
+// MARK: - CloudConfig.fromDefaults
+
+@Test func cloudConfigDefaultsToAnthropicWhenTheFlavorWasNeverPersisted() {
+  // The bug this guards: @AppStorage never writes its own default, so a user who selects
+  // "Cloud (API)" and keeps the default Anthropic vendor leaves `cloudFlavor` UNSET. Reading it
+  // with a bare `guard let` yielded no config at all → cloud silently degraded to local while
+  // Settings still displayed "Cloud (API)". An unset flavor must mean anthropic — what the UI shows.
+  let suite = "pensieve-test-\(UUID().uuidString)"
+  let d = UserDefaults(suiteName: suite)!
+  defer { d.removePersistentDomain(forName: suite) }
+  d.set("claude-sonnet-5", forKey: PensieveDefaults.cloudModelKey)   // model chosen, vendor untouched
+
+  let config = CloudConfig.fromDefaults(d)
+  #expect(config.flavor == .anthropic)
+  #expect(config.baseURL == CloudFlavor.anthropic.defaultBaseURL)   // empty stored ⇒ flavor default
+  #expect(config.model == "claude-sonnet-5")
+  #expect(config.isUsable)   // ⇒ with a key present, resolvedProviderKind now returns "cloud"
+
+  d.set(ProviderPreference.cloud.rawValue, forKey: PensieveDefaults.llmProviderKey)
+  #expect(resolvedProviderKind(defaults: d, cloudConfig: config, apiKey: "sk-test") == "cloud")
+}
+
+@Test func cloudConfigHonorsAPersistedFlavorAndBaseURL() {
+  let suite = "pensieve-test-\(UUID().uuidString)"
+  let d = UserDefaults(suiteName: suite)!
+  defer { d.removePersistentDomain(forName: suite) }
+  d.set(CloudFlavor.openAICompatible.rawValue, forKey: PensieveDefaults.cloudFlavorKey)
+  d.set("https://api.groq.com/openai/v1", forKey: PensieveDefaults.cloudBaseURLKey)
+
+  let config = CloudConfig.fromDefaults(d)
+  #expect(config.flavor == .openAICompatible)
+  #expect(config.baseURL == "https://api.groq.com/openai/v1")
+  #expect(config.model.isEmpty)
+  #expect(!config.isUsable)   // no model ⇒ not configured ⇒ still degrades to local
+}
