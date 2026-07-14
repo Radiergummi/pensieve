@@ -208,6 +208,64 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## ⚠️ Cloud narration is silently dead on the default setup path — OPEN BUG (found 2026-07-14)
+
+**Pre-existing on `main`, not introduced by any recent branch** (surfaced by the Settings v2 Opus
+review, which confirmed `AppModel.cloudInputs()` is byte-identical to base). `cloudInputs()` returns
+`(nil, nil)` unless `cloudFlavor` is **persisted** in UserDefaults — but `@AppStorage` never writes
+its default. Nothing persists `cloudFlavor` unless the user actually *changes* the Vendor picker. So
+a user who selects **Cloud (API)** and keeps the default **Anthropic** vendor never gets the cloud
+provider at all: narration silently falls back to local, while Settings happily shows "Cloud (API)".
+
+**Fix (own commit):** default the unset flavor to `.anthropic` in `cloudInputs()`. Small, and it
+makes the most likely cloud-setup path actually work. **Worth doing next.**
+
+---
+
+## App Settings v2 + organizing-writes error surfacing — DONE (2026-07-14, merged to `main` `d1fab6f`)
+
+Spec 1 of 2 of the Settings follow-ups track. **Kit (tested):** `SystemStatus` gather kernel (+4
+tests). **App:** the six organizing writes (create/rename/move/merge/delete + loose-end label) no
+longer `try?`-swallow — each classifies its real return into a **refusal** (a non-success return =
+stale state → refresh, then a non-alarming alert) or a **failure** (a real throw → alert, no refresh,
+since an error says nothing about staleness), surfaced through one `.alert` on `RootView`. Settings
+became a native tabbed shell (**General · Intelligence · Advanced**), the Advanced tab adds status
+readouts + store paths, and About Pensieve is now the first-party `orderFrontStandardAboutPanel`.
+Full German l10n. Spec/plan: `{specs,plans}/2026-07-12-app-settings-v2-error-surfacing-design.md` +
+`2026-07-13-app-settings-v2-error-surfacing.md`.
+
+**Process note:** implemented subagent-driven in a prior session (6 tasks, each review-clean; Opus
+whole-branch review found **1 Important** — the Advanced tab re-derived the cloud config independently
+of `AppModel.cloudInputs()` and the two were *not* equivalent, so a fresh Cloud install could narrate
+**local** while the tab displayed "Cloud (API)"; fixed by making `cloudInputs()` the single resolution
+path). That session was then lost. This session rebased it onto the archive-nodes main, resolved the
+`AppModel` conflict, and did the **semantic integration** the rebase exposed: main's `archive`/
+`unarchive` had arrived using the very `try?`-swallow pattern this branch removes, so both now route
+through `refuse`/`fail` (+ German verb keys *archiviert* / *wiederhergestellt*). Opus reviewed the
+integration delta → READY TO MERGE, 0 Critical/Important. **400 tests.**
+
+**Deferred (Spec 2, its own brainstorm):** source-management GUI (wrapping `pensieve scan`) and
+sync-daemon interval editing. The Advanced tab only *reads* daemon status; it never mutates it.
+
+**Accepted carries (user's call, not fixed):**
+- The single `.alert` is mounted only in `RootView`. `RecallWindowView` reuses `DetailView`, whose
+  loose-end 👍/👎 can now refuse — a refusal raised from a recall window would surface on the **main**
+  window, or sit unpresented if that window is closed. Rare (needs the row to vanish under
+  re-extraction) and fails safe.
+- 4 of the 6 writes raise their alert from **inside a sheet** (write-then-`dismiss()`). AppKit queues
+  sheets so it should appear after the picker closes, but only the non-sheet delete path was manually
+  tested. **Human-verify.**
+- `AppModel.db` was widened `private` → `internal` so the Advanced tab can hand it to
+  `SystemStatusGatherer`. Only a *reader* is needed; a `DatabaseReader` accessor would keep "views
+  never write" type-enforced. Cosmetic.
+
+**Human-verify:** ⌘, opens the tabbed pane; each tab persists its knobs; Advanced shows honest
+status/paths (Never/— when absent); About shows version+build from the bundle; a stale context-menu
+op (delete the node in another window first) raises the refusal alert; the sheet-raised alerts
+(new/edit, move, merge) actually appear after the sheet dismisses; German in situ.
+
+---
+
 ## Archive nodes — DONE (2026-07-14, merged to `main` `829c20e`)
 
 The escape hatch for stale work `delete` refuses (any node with a live git/session source, which
