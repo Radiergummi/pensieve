@@ -35,6 +35,9 @@ struct PensieveApp: App {
     .defaultSize(width: 1040, height: 660)
     .windowResizability(.contentMinSize)
     .commands {
+      CommandGroup(replacing: .appInfo) {
+        Button("About Pensieve") { AppInfo.showAboutPanel() }
+      }
       SidebarCommands()   // standard Show/Hide Sidebar (⌃⌘S) in the View menu
       CommandGroup(after: .newItem) {
         Button("New Node") { model.presentNewNode(under: nil) }

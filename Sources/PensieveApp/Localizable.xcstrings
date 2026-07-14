@@ -179,6 +179,40 @@
         }
       }
     },
+    "A personal tool for reloading context across parallel projects. Not a product." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein persönliches Werkzeug, um den Kontext paralleler Projekte wiederherzustellen. Kein Produkt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A personal tool for reloading context across parallel projects. Not a product."
+          }
+        }
+      }
+    },
+    "About Pensieve" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über Pensieve"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About Pensieve"
+          }
+        }
+      }
+    },
     "Active" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -197,6 +231,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktivität"
+          }
+        }
+      }
+    },
+    "Advanced" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erweitert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Advanced"
           }
         }
       }
@@ -277,6 +328,57 @@
         }
       }
     },
+    "Canonical store" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanonischer Speicher"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Canonical store"
+          }
+        }
+      }
+    },
+    "Can’t delete “%@”" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ kann nicht gelöscht werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can’t delete “%@”"
+          }
+        }
+      }
+    },
+    "Capture spool" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erfassungs-Spool"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capture spool"
+          }
+        }
+      }
+    },
     "captured" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -353,6 +455,23 @@
         }
       }
     },
+    "Cloud provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud-Anbieter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud provider"
+          }
+        }
+      }
+    },
     "Color" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -386,6 +505,40 @@
         }
       }
     },
+    "Couldn’t %@ “%@”" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%2$@“ konnte nicht %1$@ werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t %@ “%@”"
+          }
+        }
+      }
+    },
+    "Couldn’t add a node under “%@”" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter „%@“ konnte kein Knoten hinzugefügt werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t add a node under “%@”"
+          }
+        }
+      }
+    },
     "Couldn’t reach the provider. Check the key and base URL." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -397,6 +550,40 @@
         }
       }
     },
+    "archive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archiviert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archive"
+          }
+        }
+      }
+    },
+    "create" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "erstellt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "create"
+          }
+        }
+      }
+    },
     "Custom" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -404,6 +591,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Benutzerdefiniert"
+          }
+        }
+      }
+    },
+    "delete" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "gelöscht"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "delete"
           }
         }
       }
@@ -601,6 +805,23 @@
         }
       }
     },
+    "Foundation Models isn’t available on this Mac." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foundation Models ist auf diesem Mac nicht verfügbar."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foundation Models isn’t available on this Mac."
+          }
+        }
+      }
+    },
     "General" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -728,6 +949,23 @@
         }
       }
     },
+    "Installed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installiert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installed"
+          }
+        }
+      }
+    },
     "Intelligence" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -735,6 +973,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Intelligenz"
+          }
+        }
+      }
+    },
+    "It may have changed since this menu opened. The view has been refreshed — try again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es hat sich möglicherweise geändert, seit dieses Menü geöffnet wurde. Die Ansicht wurde aktualisiert — bitte erneut versuchen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It may have changed since this menu opened. The view has been refreshed — try again."
+          }
+        }
+      }
+    },
+    "It still has captured sources or activity that would return on the next sync." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es hat noch erfasste Quellen oder Aktivität, die bei der nächsten Synchronisierung zurückkehren würden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It still has captured sources or activity that would return on the next sync."
+          }
+        }
+      }
+    },
+    "Last captured activity" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt erfasste Aktivität"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last captured activity"
+          }
+        }
+      }
+    },
+    "Last sync" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzte Synchronisierung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last sync"
           }
         }
       }
@@ -750,6 +1056,23 @@
         }
       }
     },
+    "LLM provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM-Anbieter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM provider"
+          }
+        }
+      }
+    },
     "LLM Provider" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -757,6 +1080,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "LLM-Anbieter"
+          }
+        }
+      }
+    },
+    "Logs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protokolle"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs"
           }
         }
       }
@@ -790,6 +1130,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als kein loses Ende markieren"
+          }
+        }
+      }
+    },
+    "merge" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "zusammengeführt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "merge"
           }
         }
       }
@@ -844,6 +1201,23 @@
         }
       }
     },
+    "move" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "verschoben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "move"
+          }
+        }
+      }
+    },
     "Move to…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -884,6 +1258,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Name"
+          }
+        }
+      }
+    },
+    "Never" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Never"
           }
         }
       }
@@ -999,6 +1390,23 @@
         }
       }
     },
+    "Not installed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht installiert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not installed"
+          }
+        }
+      }
+    },
     "not set up" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1043,6 +1451,23 @@
         }
       }
     },
+    "OK" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
     "On-device (Foundation Models)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1061,6 +1486,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "In neuem Fenster öffnen"
+          }
+        }
+      }
+    },
+    "Open Logs Folder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protokollordner öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Logs Folder"
           }
         }
       }
@@ -1252,6 +1694,23 @@
         }
       }
     },
+    "rename" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "umbenannt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rename"
+          }
+        }
+      }
+    },
     "Rename" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1259,6 +1718,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Umbenennen"
+          }
+        }
+      }
+    },
+    "Reveal in Finder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Finder anzeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reveal in Finder"
           }
         }
       }
@@ -1469,6 +1945,40 @@
         }
       }
     },
+    "Status" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        }
+      }
+    },
+    "Store & Logs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speicher & Protokolle"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Store & Logs"
+          }
+        }
+      }
+    },
     "Strand" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1476,6 +1986,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Strang"
+          }
+        }
+      }
+    },
+    "Support folder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Support-Ordner"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Support folder"
           }
         }
       }
@@ -1502,6 +2029,23 @@
         }
       }
     },
+    "Sync daemon" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync-Dienst"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync daemon"
+          }
+        }
+      }
+    },
     "Task" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1509,6 +2053,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufgabe"
+          }
+        }
+      }
+    },
+    "the top level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "die oberste Ebene"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "the top level"
+          }
+        }
+      }
+    },
+    "this item" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dieses Element"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "this item"
+          }
+        }
+      }
+    },
+    "this loose end" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dieser offene Punkt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "this loose end"
           }
         }
       }
@@ -1564,6 +2159,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht festgelegt"
+          }
+        }
+      }
+    },
+    "unarchive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "wiederhergestellt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unarchive"
+          }
+        }
+      }
+    },
+    "update" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "aktualisiert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "update"
           }
         }
       }
