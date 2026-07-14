@@ -20,12 +20,23 @@ targets:
     sources:
       - Sources/PensieveApp
       - icons/Pensieve.icon
+      - path: SyncAgent/me.mazetti.pensieve.sync.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
     dependencies:
       - package: PensieveKit
         product: PensieveKit
       - package: MarkdownUI
         product: MarkdownUI
       - sdk: MetricKit.framework
+      - target: PensieveSyncAgent
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/Helpers
     info:
       path: Sources/PensieveApp/Info.plist
       properties:
@@ -71,3 +82,18 @@ targets:
         - variable: PENSIEVE_CAPTURE_DB
           value: "/Users/moritz/Library/Application Support/Pensieve-Dev/capture.sqlite"
           isEnabled: false
+  PensieveSyncAgent:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/PensieveSyncAgent
+    dependencies:
+      - package: PensieveKit
+        product: PensieveKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.sync
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGNING_REQUIRED: "NO"
+        SWIFT_VERSION: "6.0"
