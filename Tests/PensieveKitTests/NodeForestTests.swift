@@ -56,3 +56,13 @@ import Testing
   #expect(NodeForest.children(of: other.id, in: nodes).isEmpty)                    // childless root
   #expect(NodeForest.children(of: UUID(), in: nodes).isEmpty)                      // unknown id
 }
+
+@Test func archivedOnlySubsetReRootsUnderAbsentParent() {
+  // Active parent P, archived child C: an archived-only forest promotes C to a root.
+  let p = Node(name: "P", kind: "project", description: "")   // active
+  let c = Node(name: "C", state: "archived", parentID: p.id, kind: "strand", description: "")
+  let archived = [p, c].filter { $0.state == "archived" }
+  let forest = NodeForest.build(archived)
+  #expect(forest.count == 1)
+  #expect(forest.first?.node.id == c.id)   // C is a root, not dropped
+}

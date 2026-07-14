@@ -101,6 +101,52 @@ public enum NodeCommands {
     }
   }
 
+  /// Archive `nodeID` and all its descendants (whole-subtree, state = "archived"). Unlike
+  /// `delete`, archive is always allowed — it's the escape hatch for source-bearing nodes that
+  /// `delete` refuses. Returns false — writing nothing — for an unknown id.
+  @discardableResult
+  public static func archive(_ db: any DatabaseWriter, nodeID: UUID) throws -> Bool {
+    try setSubtreeState(db, nodeID: nodeID, to: "archived")
+  }
+
+  /// Restore `nodeID` and all its descendants to state = "active", AND walk `nodeID`'s ancestor
+  /// chain flipping "archived" ancestors to "active" too — symmetric with
+  /// `Ingester.resurfaceIfArchived`, so unarchiving a NESTED node never leaves it detached under a
+  /// still-archived parent (which would otherwise render as a phantom top-level root). A "muted"
+  /// ancestor is sticky and left untouched — there is no write path to mute.
+  @discardableResult
+  public static func unarchive(_ db: any DatabaseWriter, nodeID: UUID) throws -> Bool {
+    try db.write { db in
+      guard try setSubtreeState(db, nodeID: nodeID, to: "active") else { return false }
+      try resurface(db, ids: ancestorIDs(db, of: nodeID))
+      return true
+    }
+  }
+
+  private static func setSubtreeState(_ db: any DatabaseWriter, nodeID: UUID, to state: String) throws -> Bool {
+    try db.write { db in try setSubtreeState(db, nodeID: nodeID, to: state) }
+  }
+
+  /// In-transaction core, so `unarchive` can set the subtree AND walk the ancestor chain within one write.
+  private static func setSubtreeState(_ db: Database, nodeID: UUID, to state: String) throws -> Bool {
+    guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
+    let all = try Node.all.fetchAll(db)
+    let ids = NodeForest.descendantIDs(of: nodeID, in: all).union([nodeID])
+    for id in ids {
+      try Node.where { $0.id.eq(id) }.update { $0.state = state }.execute(db)
+    }
+    return true
+  }
+
+  /// Flips every "archived" node among `ids` to "active", leaving any other state (e.g. "muted")
+  /// untouched. In-transaction; shared by `unarchive` and `Ingester.resurfaceIfArchived`.
+  static func resurface(_ db: Database, ids: [UUID]) throws {
+    for id in ids {
+      guard let n = try Node.where({ $0.id.eq(id) }).fetchOne(db), n.state == "archived" else { continue }
+      try Node.where { $0.id.eq(id) }.update { $0.state = "active" }.execute(db)
+    }
+  }
+
   /// The outcome of a delete attempt. `.blocked` = the subtree still has a live source, which
   /// `ProjectResolver` would re-create on the next drain — so delete is refused.
   public enum DeleteResult: Equatable, Sendable {

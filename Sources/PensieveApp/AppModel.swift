@@ -88,6 +88,7 @@ enum PaletteDestination: Hashable {
 final class AppModel: ObservableObject {
   @Published var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
   @Published var forest: [NodeForestNode] = []
+  @Published var archivedForest: [NodeForestNode] = []
   @Published var sidebarSelection: SidebarSelection? = .briefing
   @Published var selectedNodeID: UUID?
   /// Drives the New/Edit node modal. nil = closed. Mounted in RootView.
@@ -358,7 +359,8 @@ final class AppModel: ObservableObject {
     }
     if nodesChanged || activeFocusContext != lastForestContext {
       let source = activeFocusContext.isEmpty ? allNodes : allNodes.filter { visible.contains($0.id) }
-      forest = NodeForest.build(source)
+      forest = NodeForest.build(source.filter { $0.state == "active" })
+      archivedForest = NodeForest.build(source.filter { $0.state == "archived" })
       lastForestContext = activeFocusContext
     }
     reviewCount = (try? SalienceReviewQueries.pendingCount(db)) ?? 0
@@ -368,7 +370,9 @@ final class AppModel: ObservableObject {
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
 
   /// Count of top-level project nodes, for the content-column header.
-  var projectCount: Int { allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project }.count }
+  var projectCount: Int {
+    allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project && $0.state == "active" }.count
+  }
 
   /// The middle column's content for the current `sidebarSelection`. Pure/in-memory (children reads
   /// `allNodes`); the leaf case defers its loose-ends DB read to the view's `.task`.
@@ -381,7 +385,7 @@ final class AppModel: ObservableObject {
     case .smartList(let kind):
       return .nodes(lists[keyPath: kind.itemsKeyPath].map(\.project))
     case .node(let id):
-      let kids = children(of: id)
+      let kids = visibleChildren(of: id)
       return kids.isEmpty ? .looseEndsOf(id) : .nodes(kids)
     case nil:
       return .nodes([])
@@ -390,6 +394,15 @@ final class AppModel: ObservableObject {
 
   /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
   func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
+
+  /// Children of `id` restricted to the same "world" as `id` itself — archived children under an
+  /// archived node, active children under an active one — so the two "worlds" don't bleed into
+  /// each other. The ONE state-scoped children filter: `middleKind()` and `detailShowsLooseEnds`
+  /// both call this so they can never disagree about whether `id` has visible children.
+  func visibleChildren(of id: UUID) -> [Node] {
+    let showArchived = node(id)?.state == "archived"
+    return children(of: id).filter { ($0.state == "archived") == showArchived }
+  }
 
   /// A middle-column node tap. In tree mode this DRILLS — the tapped node becomes the focused node, so
   /// the middle re-populates with its contents; from a smart list / briefing it only sets the detail
@@ -415,7 +428,7 @@ final class AppModel: ObservableObject {
   /// always shows its loose ends — including the row a search hit auto-expands into.
   var detailShowsLooseEnds: Bool {
     if isSearching { return true }
-    if case .node(let fid) = sidebarSelection, selectedNodeID == fid, children(of: fid).isEmpty {
+    if case .node(let fid) = sidebarSelection, selectedNodeID == fid, visibleChildren(of: fid).isEmpty {
       return false
     }
     return true
@@ -562,6 +575,23 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
+  func archive(_ nodeID: UUID) {
+    guard let db else { return }
+    // Selection moves off the whole archived subtree so we don't strand the detail pane on a
+    // node that just left the active tree.
+    let subtree = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
+    _ = try? NodeCommands.archive(db, nodeID: nodeID)
+    if let sel = selectedNodeID, subtree.contains(sel) { selectedNodeID = nil }
+    if case .node(let id) = sidebarSelection, subtree.contains(id) { sidebarSelection = .briefing }
+    refresh()
+  }
+
+  func unarchive(_ nodeID: UUID) {
+    guard let db else { return }
+    _ = try? NodeCommands.unarchive(db, nodeID: nodeID)
+    refresh()
+  }
+
   func merge(_ sourceID: UUID, into targetID: UUID) {
     guard let db, sourceID != targetID else { return }
     try? ProjectResolver(db: db).group(targetID, into: [sourceID])
@@ -571,10 +601,12 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
-  /// Legal Move/Merge targets for `nodeID`: every node except itself and its descendants.
+  /// Legal Move/Merge targets for `nodeID`: every node except itself, its descendants, and any
+  /// archived node (an active node moved/merged under an archived parent would immediately become
+  /// a phantom top-level root — see Finding 3 of the archive-nodes whole-branch review).
   func moveTargets(for nodeID: UUID) -> [Node] {
     let banned = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
-    return allNodes.filter { !banned.contains($0.id) }.sorted { $0.name < $1.name }
+    return allNodes.filter { !banned.contains($0.id) && $0.state != "archived" }.sorted { $0.name < $1.name }
   }
 
   /// Delete a (source-free) node and its subtree via the Kit cascade. Moves selection off it.

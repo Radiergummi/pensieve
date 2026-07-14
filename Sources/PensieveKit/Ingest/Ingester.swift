@@ -66,6 +66,7 @@ public struct Ingester: Sendable {
                 kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
                 fingerprint: Fingerprint.commit(hash: p.hash), branchKey: branchKey)
         }.execute(db)
+        try resurfaceIfArchived(db, nodeID: attr.nodeID)
         return (true, attr.bornStrand)
       }
       if let born = outcome.born { await nameStrand(born, branchKey: branchKey ?? "") }
@@ -119,6 +120,7 @@ public struct Ingester: Sendable {
                 detailJSON: detail, fingerprint: Fingerprint.session(sessionID: session.sessionID),
                 branchKey: branchKey)
         }.execute(db)
+        try resurfaceIfArchived(db, nodeID: attr.nodeID)
         return (true, attr.bornStrand, branchKey)
       }
       if let born = outcome.born { await nameStrand(born, branchKey: outcome.branch ?? "") }
@@ -191,6 +193,14 @@ public struct Ingester: Sendable {
         .update { $0.nodeID = strand.id }.execute(db)
     }
     return (strand.id, strand.id)
+  }
+
+  /// After attributing an event, bring an archived node (and its ancestor chain) back to
+  /// "active" so it reappears in place. Muted nodes are sticky and left untouched. Runs inside
+  /// the write transaction that inserted the event.
+  private func resurfaceIfArchived(_ db: Database, nodeID: UUID) throws {
+    let chain = try [nodeID] + NodeCommands.ancestorIDs(db, of: nodeID)
+    try NodeCommands.resurface(db, ids: chain)
   }
 
   /// Cleans an on-device-proposed strand name into a terse organizational label: strips a

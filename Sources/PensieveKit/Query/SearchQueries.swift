@@ -35,8 +35,10 @@ public struct SearchResults: Equatable, Sendable {
 
 /// Read-only find over the grounded core corpus (node name/description, open loose-end text/quote),
 /// scoped to `visibleNodeIDs` (the caller passes the Focus-visible set → Focus filtering is correct
-/// by construction). Case-insensitive substring match in Swift (correct for non-ASCII; the corpus is
-/// small and single-user). Deterministic ranking with an `id.uuidString` final tiebreaker.
+/// by construction) AND to active-state nodes only (archived/muted nodes and their loose ends never
+/// surface in search, matching every other normal-view surface). Case-insensitive substring match in
+/// Swift (correct for non-ASCII; the corpus is small and single-user). Deterministic ranking with an
+/// `id.uuidString` final tiebreaker.
 public enum SearchQueries {
   public static let minQueryLength = 2
   private static let cap = 50
@@ -49,7 +51,9 @@ public enum SearchQueries {
     func hit(_ s: String) -> Bool { s.range(of: query, options: .caseInsensitive) != nil }
 
     return try db.read { db in
-      let nodes = try Node.order { $0.name }.fetchAll(db).filter { visibleNodeIDs.contains($0.id) }
+      let nodes = try Node.order { $0.name }.fetchAll(db)
+        .filter { visibleNodeIDs.contains($0.id) && $0.state == "active" }
+      let activeVisibleIDs = Set(nodes.map { $0.id })
 
       // NODES — rank 0 = name match, rank 1 = description-only match.
       var nodeScored: [(rank: Int, node: Node)] = []
@@ -71,7 +75,7 @@ public enum SearchQueries {
       // LOOSE ENDS — open + not-noise, visible nodes only. rank 0 = text match, 1 = quote-only.
       let nameByID = Dictionary(nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
-        .filter { visibleNodeIDs.contains($0.nodeID) }
+        .filter { activeVisibleIDs.contains($0.nodeID) }
       var leScored: [(rank: Int, le: LooseEnd)] = []
       for le in ends {
         let textHit = hit(le.text)

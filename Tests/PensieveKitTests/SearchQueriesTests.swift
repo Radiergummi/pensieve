@@ -108,3 +108,17 @@ private func allVisible(_ db: any DatabaseReader) throws -> Set<UUID> {
   let db = try openCanonicalDatabase(at: tempURL("search-empty"))
   #expect(try SearchQueries.search(query: "deploy", visibleNodeIDs: [], db).isEmpty)
 }
+
+@Test func searchExcludesArchivedNodesAndLooseEnds() throws {
+  let db = try openCanonicalDatabase(at: tempURL("search-archived"))
+  let active = try seed(db, name: "Deploy pipeline", ends: [("deploy the release", "ship it", "todo")])
+  let archived = try seed(db, name: "Deploy legacy", ends: [("deploy old thing", "legacy", "todo")])
+  #expect(try NodeCommands.archive(db, nodeID: archived.id))
+  // allVisible includes the archived node (ProjectQueries.all is unfiltered), proving the
+  // exclusion is by state, not by the visible set.
+  let r = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(db), db)
+  #expect(r.nodes.count == 1)
+  #expect(r.nodes.first?.id == active.id)
+  #expect(r.looseEnds.count == 1)
+  #expect(r.looseEnds.first?.nodeID == active.id)
+}
