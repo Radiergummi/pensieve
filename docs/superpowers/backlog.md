@@ -208,6 +208,54 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## Archive nodes — DONE (2026-07-14, merged to `main` `829c20e`)
+
+The escape hatch for stale work `delete` refuses (any node with a live git/session source, which
+would resurrect on the next drain). Archiving a node archives its **whole subtree**; archived nodes
+leave every normal view (tree, middle list, project count, Smart Lists, Briefing, Spotlight,
+**in-app search**) and render in a **collapsed-by-default "Archived" sidebar section**.
+**Snooze semantics:** a new git commit / Claude session attributed to an archived node flips it
+**and its ancestor chain** back to `active` (ingest path only — a `git.checkout` is not "work done"
+and does not resurrect). **No migration** — reuses the long-latent `Node.state`; `muted` stays a
+deferred, sticky, write-path-less state. Spec/plan: `{specs,plans}/2026-07-11-archive-nodes*`.
+
+**Process note:** the 4 plan tasks were implemented in an earlier session whose SDD ledger was lost
+with its worktree, leaving **no record of review**. This session treated the branch as unreviewed —
+rebased it onto main, re-verified (396/396, `BUILD SUCCEEDED`, smoke launch), and ran the Opus
+whole-branch review, which found **2 Important** (both fixed + re-reviewed → READY TO MERGE):
+- **Manual unarchive walked only DOWN.** Unarchiving a *nested* strand left it `active` under a
+  still-`archived` parent → `NodeForest.build` re-rooted it as a **phantom top-level root**.
+  `NodeCommands.unarchive` now walks the ancestor chain too, sharing one `NodeCommands.resurface`
+  helper with `Ingester.resurfaceIfArchived`. Invariant restored: **every active node's ancestors
+  are active-or-muted.**
+- **One-home rule broken:** `detailShowsLooseEnds` used unfiltered `children(of:)` while
+  `middleKind()` filtered by state class → a project whose only strand was archived rendered its
+  loose ends in *both* panes. One shared `visibleChildren(of:)` now backs both.
+- Coupled Minor, also closed: "New Child…" is hidden on archived rows and archived nodes are gone
+  from `moveTargets` (Move **and** Merge pickers) → active-under-archived is now unreachable in-app.
+
+**Deferred / carries:**
+- **`NodeState` constants enum** — bare `"active"`/`"archived"` literals are now spread across Kit
+  and app (several pre-date this branch). Cleanup, not a regression; a mistyped literal silently
+  no-ops.
+- **An archived node is unfindable by name in search** — the collapsed Archived section is the only
+  route back. Consistent with "drops out of every normal view"; an "include archived" search toggle
+  is the natural follow-up.
+- **Archived-tree housekeeping is impossible in-app** — you can't move/merge an archived node into
+  another archived node (`moveTargets` excludes archived). Deliberate; revisit if it ever matters.
+- **Known snooze limit (by design):** an in-progress `cc.session` already ingested dedups on its
+  fingerprint and returns *before* resurrection, so continued work in a session archived mid-flight
+  won't resurface the node until a commit or a new session.
+- **When `muted` is built:** `resurface` skips a muted node mid-chain, so an active node under a
+  muted parent would re-root as a phantom top-level entry. Unreachable today (no write path to
+  mute); whoever builds `muted` must handle it.
+- **Human-verify:** archive/unarchive from both context menus; nested-unarchive pulls its ancestors
+  back in place; Archived section collapsed by default; a real commit in an archived project's repo
+  resurfaces it after a daemon drain; German in situ (`Archivieren` / `Archiviert` /
+  `Wiederherstellen` — a native pass may prefer `Aus dem Archiv holen`).
+
+---
+
 ## MCP `recall` tool + deferred recall siblings — 2026-07-11
 
 First real dogfooding win of `pensieve mcp` also exposed its ceiling: asked to *recall a past
