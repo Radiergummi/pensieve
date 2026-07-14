@@ -550,6 +550,23 @@
         }
       }
     },
+    "archive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archiviert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archive"
+          }
+        }
+      }
+    },
     "create" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2142,6 +2159,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht festgelegt"
+          }
+        }
+      }
+    },
+    "unarchive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "wiederhergestellt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unarchive"
           }
         }
       }

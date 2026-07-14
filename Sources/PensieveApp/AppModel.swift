@@ -650,19 +650,32 @@ final class AppModel: ObservableObject {
 
   func archive(_ nodeID: UUID) {
     guard let db else { return }
-    // Selection moves off the whole archived subtree so we don't strand the detail pane on a
-    // node that just left the active tree.
+    let label = displayName(nodeID)
+    // Captured BEFORE the write: after it, the subtree has left the active tree.
     let subtree = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
-    _ = try? NodeCommands.archive(db, nodeID: nodeID)
-    if let sel = selectedNodeID, subtree.contains(sel) { selectedNodeID = nil }
-    if case .node(let id) = sidebarSelection, subtree.contains(id) { sidebarSelection = .briefing }
-    refresh()
+    do {
+      // false ⇒ the node vanished between menu-open and click — a stale-state rejection.
+      let ok = try NodeCommands.archive(db, nodeID: nodeID)
+      guard ok else { refuse(String(localized: "archive"), label); return }
+      // Selection moves off the whole archived subtree so we don't strand the detail pane on a
+      // node that just left the active tree.
+      if let sel = selectedNodeID, subtree.contains(sel) { selectedNodeID = nil }
+      if case .node(let id) = sidebarSelection, subtree.contains(id) { sidebarSelection = .briefing }
+      refresh()
+    } catch {
+      fail(String(localized: "archive"), label, error)
+    }
   }
 
   func unarchive(_ nodeID: UUID) {
     guard let db else { return }
-    _ = try? NodeCommands.unarchive(db, nodeID: nodeID)
-    refresh()
+    let label = displayName(nodeID)
+    do {
+      let ok = try NodeCommands.unarchive(db, nodeID: nodeID)
+      if ok { refresh() } else { refuse(String(localized: "unarchive"), label) }
+    } catch {
+      fail(String(localized: "unarchive"), label, error)
+    }
   }
 
   /// Merge `sourceID` into `targetID`. `ProjectResolver.group` returns Void and never validates that
