@@ -6,6 +6,7 @@ import Foundation
 enum AppDefaults {
   static let hideDockIconKey = "app.hideDockIcon"
   static let narrationEnabledKey = "app.narrationEnabled"
+  static let backgroundSyncEnabledKey = "app.backgroundSyncEnabled"
 
   /// Narration is ON by default (matching the `@AppStorage(...) = true` in the views). Non-View
   /// readers (AppModel) must honor the same default — `UserDefaults.bool` alone reads false when
@@ -13,5 +14,12 @@ enum AppDefaults {
   static var narrationEnabled: Bool {
     UserDefaults.standard.object(forKey: narrationEnabledKey) == nil
       ? true : UserDefaults.standard.bool(forKey: narrationEnabledKey)
+  }
+
+  /// Background sync is ON by default (preserving the always-syncing daemon behavior). Non-View
+  /// readers (AppDelegate) must honor the same default as the Settings toggle.
+  static var backgroundSyncEnabled: Bool {
+    UserDefaults.standard.object(forKey: backgroundSyncEnabledKey) == nil
+      ? true : UserDefaults.standard.bool(forKey: backgroundSyncEnabledKey)
   }
 }

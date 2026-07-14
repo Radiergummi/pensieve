@@ -25,6 +25,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     KeychainSecretStore.migrateFromLegacyService()
     DiagnosticsCollector.shared.start()
     applyDockVisibility()
+    configureBackgroundSync()
+  }
+
+  /// Retire the legacy hand-installed agent, then (if enabled and safe) register the bundled one.
+  /// Guarded off `.build` paths so a throwaway smoke-launch never touches real Login Items.
+  private func configureBackgroundSync() {
+    guard BackgroundSyncGuard.shouldManage(bundlePath: Bundle.main.bundlePath) else { return }
+    // Legacy boot-out runs launchctl synchronously → keep it off the main thread.
+    Task.detached {
+      DaemonInstaller.unload(plistURL: PensievePaths.launchAgentURL(), uid: String(getuid()))
+    }
+    if AppDefaults.backgroundSyncEnabled {
+      BackgroundSyncService.registerIfNeeded()
+    }
   }
 
   /// Reads the shared hide-Dock preference and sets the activation policy. `.accessory` hides
