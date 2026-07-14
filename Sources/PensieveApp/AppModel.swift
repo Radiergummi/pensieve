@@ -385,10 +385,7 @@ final class AppModel: ObservableObject {
     case .smartList(let kind):
       return .nodes(lists[keyPath: kind.itemsKeyPath].map(\.project))
     case .node(let id):
-      // Show archived children under an archived node, active children under an active one, so
-      // the two "worlds" don't bleed into each other.
-      let showArchived = node(id)?.state == "archived"
-      let kids = children(of: id).filter { ($0.state == "archived") == showArchived }
+      let kids = visibleChildren(of: id)
       return kids.isEmpty ? .looseEndsOf(id) : .nodes(kids)
     case nil:
       return .nodes([])
@@ -397,6 +394,15 @@ final class AppModel: ObservableObject {
 
   /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
   func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
+
+  /// Children of `id` restricted to the same "world" as `id` itself — archived children under an
+  /// archived node, active children under an active one — so the two "worlds" don't bleed into
+  /// each other. The ONE state-scoped children filter: `middleKind()` and `detailShowsLooseEnds`
+  /// both call this so they can never disagree about whether `id` has visible children.
+  func visibleChildren(of id: UUID) -> [Node] {
+    let showArchived = node(id)?.state == "archived"
+    return children(of: id).filter { ($0.state == "archived") == showArchived }
+  }
 
   /// A middle-column node tap. In tree mode this DRILLS — the tapped node becomes the focused node, so
   /// the middle re-populates with its contents; from a smart list / briefing it only sets the detail
@@ -422,7 +428,7 @@ final class AppModel: ObservableObject {
   /// always shows its loose ends — including the row a search hit auto-expands into.
   var detailShowsLooseEnds: Bool {
     if isSearching { return true }
-    if case .node(let fid) = sidebarSelection, selectedNodeID == fid, children(of: fid).isEmpty {
+    if case .node(let fid) = sidebarSelection, selectedNodeID == fid, visibleChildren(of: fid).isEmpty {
       return false
     }
     return true
@@ -595,10 +601,12 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
-  /// Legal Move/Merge targets for `nodeID`: every node except itself and its descendants.
+  /// Legal Move/Merge targets for `nodeID`: every node except itself, its descendants, and any
+  /// archived node (an active node moved/merged under an archived parent would immediately become
+  /// a phantom top-level root — see Finding 3 of the archive-nodes whole-branch review).
   func moveTargets(for nodeID: UUID) -> [Node] {
     let banned = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
-    return allNodes.filter { !banned.contains($0.id) }.sorted { $0.name < $1.name }
+    return allNodes.filter { !banned.contains($0.id) && $0.state != "archived" }.sorted { $0.name < $1.name }
   }
 
   /// Delete a (source-free) node and its subtree via the Kit cascade. Moves selection off it.

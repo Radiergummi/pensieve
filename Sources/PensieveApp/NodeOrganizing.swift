@@ -122,7 +122,11 @@ struct NodeContextMenu: View {
   let node: Node
 
   var body: some View {
-    Button("New Child…") { model.presentNewNode(under: node.id) }
+    // Not offered on an archived row: a new child is created "active" (the Node default), which
+    // would immediately become a phantom top-level root under a still-archived parent.
+    if node.state != "archived" {
+      Button("New Child…") { model.presentNewNode(under: node.id) }
+    }
     Button("Edit…") { model.presentEditNode(node) }
     Divider()
     ShareLink("Share Recall…", item: model.recallMarkdown(for: node))
