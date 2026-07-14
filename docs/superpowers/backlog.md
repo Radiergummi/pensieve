@@ -208,17 +208,24 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
-## ⚠️ Cloud narration is silently dead on the default setup path — OPEN BUG (found 2026-07-14)
+## Cloud narration silently dead on the default setup path — FIXED (2026-07-14, `f35a9fd`)
 
-**Pre-existing on `main`, not introduced by any recent branch** (surfaced by the Settings v2 Opus
-review, which confirmed `AppModel.cloudInputs()` is byte-identical to base). `cloudInputs()` returns
-`(nil, nil)` unless `cloudFlavor` is **persisted** in UserDefaults — but `@AppStorage` never writes
-its default. Nothing persists `cloudFlavor` unless the user actually *changes* the Vendor picker. So
-a user who selects **Cloud (API)** and keeps the default **Anthropic** vendor never gets the cloud
-provider at all: narration silently falls back to local, while Settings happily shows "Cloud (API)".
+**Was pre-existing on `main`**, not introduced by any recent branch (surfaced by the Settings v2 Opus
+review, which confirmed `AppModel.cloudInputs()` was byte-identical to base). `@AppStorage` never
+writes its own default, so a user who selected **Cloud (API)** and kept the default **Anthropic**
+vendor left `cloudFlavor` unset; `cloudInputs()` read it with a bare `guard let`, returned
+`(nil, nil)` ⇒ not configured ⇒ narration silently degraded to **local** while Settings still
+displayed "Cloud (API)". Only *changing* the Vendor picker (which persists the key) made cloud run.
 
-**Fix (own commit):** default the unset flavor to `.anthropic` in `cloudInputs()`. Small, and it
-makes the most likely cloud-setup path actually work. **Worth doing next.**
+**Fix:** the derivation moved into a tested Kit `CloudConfig.fromDefaults(_:)` that falls back to
+exactly what the UI displays for an untouched field (unset flavor ⇒ `.anthropic`, empty base URL ⇒
+that flavor's default). "Not configured" is now expressed the way the resolver already checks it —
+`isUsable` (needs a model) + a key — never by a nil config. `cloudInputs()` is a thin call into it,
+so app and Kit can't drift. +2 Kit tests (402).
+
+**Human-verify:** fresh defaults → ⌘, → pick **Cloud (API)**, leave the vendor on Anthropic, enter a
+key + Fetch a model → open a node → the recap actually generates via the cloud model (previously it
+silently ran local).
 
 ---
 
