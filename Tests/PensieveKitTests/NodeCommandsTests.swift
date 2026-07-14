@@ -213,3 +213,30 @@ import SQLiteData
   // Unknown id → false, writes nothing.
   #expect(try NodeCommands.archive(db, nodeID: UUID()) == false)
 }
+
+@Test func unarchiveNestedChildRestoresSubtreeAndArchivedAncestorsButNotMuted() throws {
+  let db = try openCanonicalDatabase(at: tempURL("unarchive-nested"))
+  let root = try #require(try NodeCommands.add(db, name: "Root", kind: "domain", parent: nil, description: ""))
+  let proj = try #require(try NodeCommands.add(db, name: "Colibri", kind: "project", parent: "Root", description: ""))
+  let strand = try #require(try NodeCommands.add(db, name: "auth", kind: "strand", parent: "Colibri", description: ""))
+  let leaf = try #require(try NodeCommands.add(db, name: "auth-detail", kind: "strand", parent: "auth", description: ""))
+
+  func state(_ id: UUID) throws -> String? {
+    try db.read { db in try Node.where { $0.id.eq(id) }.fetchOne(db)?.state }
+  }
+  func setState(_ id: UUID, _ s: String) throws {
+    try db.write { db in try Node.where { $0.id.eq(id) }.update { $0.state = s }.execute(db) }
+  }
+
+  // Archive the whole tree, then mute the root (simulating the sticky, write-path-less "muted" state).
+  #expect(try NodeCommands.archive(db, nodeID: root.id))
+  try setState(root.id, "muted")
+
+  // Unarchive the NESTED strand: its own subtree restores, and its archived ancestor (proj)
+  // restores too — but the muted root is left untouched.
+  #expect(try NodeCommands.unarchive(db, nodeID: strand.id))
+  #expect(try state(strand.id) == "active")
+  #expect(try state(leaf.id) == "active")
+  #expect(try state(proj.id) == "active")
+  #expect(try state(root.id) == "muted")
+}

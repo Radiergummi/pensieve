@@ -200,10 +200,7 @@ public struct Ingester: Sendable {
   /// the write transaction that inserted the event.
   private func resurfaceIfArchived(_ db: Database, nodeID: UUID) throws {
     let chain = try [nodeID] + NodeCommands.ancestorIDs(db, of: nodeID)
-    for id in chain {
-      guard let n = try Node.where({ $0.id.eq(id) }).fetchOne(db), n.state == "archived" else { continue }
-      try Node.where { $0.id.eq(id) }.update { $0.state = "active" }.execute(db)
-    }
+    try NodeCommands.resurface(db, ids: chain)
   }
 
   /// Cleans an on-device-proposed strand name into a terse organizational label: strips a
