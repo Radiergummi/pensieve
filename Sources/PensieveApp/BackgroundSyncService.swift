@@ -15,15 +15,22 @@ enum BackgroundSyncService {
   /// signed and rebuilt often. Each rebuild mints a new helper cdhash, and SMAppService pins the
   /// launchd registration to path + cdhash via a LightWeight Code Requirement (LWCR). The spike
   /// confirmed that a bare `register()` on an already-`.enabled` item is a silent no-op that does
-  /// NOT refresh a stale LWCR, so a registration from a previous build keeps spawn-failing with
-  /// `EX_CONFIG` ("needs LWCR update") on every interval. `unregister()` + `register()` rebuilds the
-  /// LWCR against the current binary. Approval PERSISTS across this cycle for an already-approved
-  /// bundle id (spike-verified: the job went straight back to `running` with no re-prompt), so this
-  /// costs nothing on a normal launch — it only heals the cdhash after a rebuild.
+  /// NOT refresh a stale LWCR, so a registration from a previous build keeps spawn-failing
+  /// (`EX_CONFIG` / "Launch Constraint Violation" kills) on every interval. `unregister()` +
+  /// `register()` rebuilds the LWCR against the current binary. Approval PERSISTS across this cycle
+  /// for an already-approved bundle id (spike-verified: no re-prompt), so this costs nothing on a
+  /// normal launch — it only heals the cdhash after a rebuild.
+  ///
+  /// The unregister MUST be awaited (the async API): BTM drops the record asynchronously, and a
+  /// synchronous unregister immediately followed by `register()` races — the re-register can land
+  /// before the old record is gone, silently keeping the stale LWCR (observed live: the helper
+  /// kept dying with "Launch Constraint Violation" across relaunches until the await was added).
   static func registerIfNeeded() {
-    unregister()
-    do { try agent.register() }
-    catch { AppLog.app.error("SMAppService register failed: \(error, privacy: .public)") }
+    Task.detached {
+      try? await agent.unregister()   // throws when nothing is registered — fine, ignore
+      do { try agent.register() }
+      catch { AppLog.app.error("SMAppService register failed: \(error, privacy: .public)") }
+    }
   }
 
   static func unregister() {
