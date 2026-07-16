@@ -40,8 +40,8 @@ public enum CLIToolInstaller {
     case .create, .repoint:
       try fileManager.createDirectory(
         at: linkPath.deletingLastPathComponent(), withIntermediateDirectories: true)
-      if fileManager.fileExists(atPath: linkPath.path) || (try? fileManager.attributesOfItem(atPath: linkPath.path)) != nil {
-        try? fileManager.removeItem(at: linkPath)   // remove a stale symlink (never its target)
+      if (try? fileManager.attributesOfItem(atPath: linkPath.path)) != nil {
+        try fileManager.removeItem(at: linkPath)   // remove the stale symlink (never its target)
       }
       try fileManager.createSymbolicLink(at: linkPath, withDestinationURL: desiredTarget)
     case .upToDate, .blockedRealFile:
