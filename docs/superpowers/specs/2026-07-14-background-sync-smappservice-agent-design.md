@@ -300,3 +300,15 @@ Verified on the live machine with the bundled helper installed to `/Applications
    .build-xcode`, wait one interval, confirm the job still fires. Low risk (the job runs from
    `/Applications`, independent of DerivedData) but not yet exercised end-to-end; deferred to the
    post-merge human runbook along with the one-time Login-Items approval.
+
+**Live-install follow-up (same day).** Installing the *finalized* build to `/Applications` and
+launching it reproduced the cdhash mismatch (`EX_CONFIG` / `OS_REASON_CODESIGNING`) on the **first**
+launch — the back-to-back `unregister()`+`register()` did not align the LWCR in one shot (the earlier
+manual `launchctl bootout` during debugging had left the BTM registration in a mismatched state). A
+**second** clean launch settled it: the agent went to `state = running`, the helper completed with
+`last exit code = 0`, extracted a loose end, and appended a fresh timestamped line to `sync.log` — no
+re-approval prompt. Takeaway: the `registerIfNeeded()` self-heal is **eventually** consistent (worst
+case one extra launch right after a fresh reinstall), not always single-shot; acceptable for a
+single-user tool launched frequently. The helper's binary/signature themselves are valid
+(`codesign --verify --strict` passes; direct execution works) — the only failure mode is a stale
+launchd LWCR, which relaunching clears.
