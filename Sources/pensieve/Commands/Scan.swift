@@ -12,7 +12,7 @@ struct Scan: ParsableCommand {
 
   func run() throws {
     let db = try openCanonical()
-    let pensievePath = Bundle.main.executablePath ?? "pensieve"
+    let pensievePath = PensievePaths.installedBinaryURL().path
     let scanner = SourceScanner(types: [GitSource(pensievePath: pensievePath)])
     let root = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath).resolvingSymlinksInPath()
 

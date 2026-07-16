@@ -8,7 +8,7 @@ struct InstallHooks: ParsableCommand {
   @Argument var repo: String
   func run() throws {
     let url = URL(fileURLWithPath: repo).standardizedFileURL
-    let pensievePath = Bundle.main.executablePath ?? "pensieve"
+    let pensievePath = PensievePaths.installedBinaryURL().path
     let written = try HookInstaller.install(inRepo: url, pensievePath: pensievePath)
     for w in written { print("installed \(w.path)") }
   }
