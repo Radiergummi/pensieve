@@ -46,7 +46,7 @@ targets:
         copy:
           destination: wrapper
           subpath: Contents/Library/Helpers
-      - target: pensieve
+      - target: PensieveCLI
         embed: true
         codeSign: true
         copy:
@@ -112,7 +112,7 @@ targets:
         CODE_SIGNING_ALLOWED: "YES"
         CODE_SIGNING_REQUIRED: "NO"
         SWIFT_VERSION: "6.0"
-  pensieve:
+  PensieveCLI:
     type: tool
     platform: macOS
     sources:
@@ -128,6 +128,7 @@ targets:
         product: MCP
     settings:
       base:
+        PRODUCT_NAME: pensieve
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.cli
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_ALLOWED: "YES"
