@@ -8,6 +8,8 @@ struct GeneralSettingsTab: View {
   @AppStorage(AppDefaults.hideDockIconKey) private var hideDockIcon = false
   @AppStorage(AppDefaults.backgroundSyncEnabledKey) private var backgroundSyncEnabled = true
   @State private var syncStatus: SMAppService.Status = .notRegistered
+  @State private var cliPlan: CLIToolInstaller.Plan = .create
+  @State private var showReplaceConfirm = false
 
   var body: some View {
     Form {
@@ -30,10 +32,33 @@ struct GeneralSettingsTab: View {
           Button("Open Login Items Settings") { SMAppService.openSystemSettingsLoginItems() }
         }
       }
+
+      Section("Command-line tool") {
+        LabeledContent("Status") { Text(cliStatusText) }
+        switch cliPlan {
+        case .create:
+          Button("Install command-line tool") { applyCLI(.create) }
+        case .repoint:
+          Button("Repair") { applyCLI(.repoint) }
+        case .blockedRealFile:
+          Button("Replace existing binary") { showReplaceConfirm = true }
+            .confirmationDialog(
+              "Replace the pensieve binary in ~/.local/bin with a link to the app’s copy?",
+              isPresented: $showReplaceConfirm, titleVisibility: .visible) {
+                Button("Replace", role: .destructive) { replaceCLI() }
+                Button("Cancel", role: .cancel) {}
+              }
+        case .upToDate:
+          EmptyView()
+        }
+      }
     }
     .formStyle(.grouped)
     .frame(width: 460)
-    .onAppear { syncStatus = BackgroundSyncService.status }
+    .onAppear {
+      syncStatus = BackgroundSyncService.status
+      cliPlan = currentCLIPlan()
+    }
   }
 
   private var statusText: LocalizedStringKey {
@@ -44,5 +69,35 @@ struct GeneralSettingsTab: View {
     case .notFound: return "Not found"
     @unknown default: return "Off"
     }
+  }
+
+  private var cliStatusText: LocalizedStringKey {
+    switch cliPlan {
+    case .upToDate: return "Installed"
+    case .create: return "Not installed"
+    case .repoint: return "Points elsewhere"
+    case .blockedRealFile: return "A file is in the way"
+    }
+  }
+
+  private func currentCLIPlan() -> CLIToolInstaller.Plan {
+    CLIToolInstaller.plan(
+      linkPath: PensievePaths.installedBinaryURL(),
+      desiredTarget: CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL))
+  }
+
+  private func applyCLI(_ plan: CLIToolInstaller.Plan) {
+    try? CLIToolInstaller.apply(
+      plan,
+      linkPath: PensievePaths.installedBinaryURL(),
+      desiredTarget: CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL))
+    cliPlan = currentCLIPlan()
+  }
+
+  private func replaceCLI() {
+    try? CLIToolInstaller.replace(
+      linkPath: PensievePaths.installedBinaryURL(),
+      desiredTarget: CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL))
+    cliPlan = currentCLIPlan()
   }
 }

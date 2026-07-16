@@ -12,6 +12,28 @@
         }
       }
     },
+    "A file is in the way" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Datei blockiert den Pfad"
+          }
+        }
+      }
+    },
+    "Command-line tool" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehlszeilenprogramm"
+          }
+        }
+      }
+    },
     "Enabled" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -19,6 +41,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktiviert"
+          }
+        }
+      }
+    },
+    "Install command-line tool" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehlszeilenprogramm installieren"
+          }
+        }
+      }
+    },
+    "Points elsewhere" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verweist woanders hin"
+          }
+        }
+      }
+    },
+    "Repair" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reparieren"
+          }
+        }
+      }
+    },
+    "Replace" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ersetzen"
+          }
+        }
+      }
+    },
+    "Replace existing binary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorhandene Datei ersetzen"
+          }
+        }
+      }
+    },
+    "Replace the pensieve binary in ~/.local/bin with a link to the app’s copy?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die pensieve-Datei in ~/.local/bin durch einen Verweis auf die Kopie der App ersetzen?"
           }
         }
       }
