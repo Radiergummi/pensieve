@@ -13,6 +13,15 @@ packages:
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     from: "2.4.1"
+  sqlite-data:
+    url: https://github.com/pointfreeco/sqlite-data
+    from: "1.6.0"
+  swift-argument-parser:
+    url: https://github.com/apple/swift-argument-parser
+    from: "1.5.0"
+  swift-sdk:
+    url: https://github.com/modelcontextprotocol/swift-sdk
+    exactVersion: "0.12.1"
 targets:
   Pensieve:
     type: application
@@ -37,6 +46,12 @@ targets:
         copy:
           destination: wrapper
           subpath: Contents/Library/Helpers
+      - target: pensieve
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     info:
       path: Sources/PensieveApp/Info.plist
       properties:
@@ -97,3 +112,25 @@ targets:
         CODE_SIGNING_ALLOWED: "YES"
         CODE_SIGNING_REQUIRED: "NO"
         SWIFT_VERSION: "6.0"
+  pensieve:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/pensieve
+    dependencies:
+      - package: PensieveKit
+        product: PensieveKit
+      - package: sqlite-data
+        product: SQLiteData
+      - package: swift-argument-parser
+        product: ArgumentParser
+      - package: swift-sdk
+        product: MCP
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.cli
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGNING_REQUIRED: "NO"
+        SWIFT_VERSION: "6.0"
+    scheme: {}

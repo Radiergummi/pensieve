@@ -6,26 +6,14 @@ let package = Package(
   platforms: [.macOS(.v14)],
   products: [
     .library(name: "PensieveKit", targets: ["PensieveKit"]),
-    .executable(name: "pensieve", targets: ["pensieve"]),
   ],
   dependencies: [
     .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.6.0"),
-    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
-    .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1"),
   ],
   targets: [
     .target(
       name: "PensieveKit",
       dependencies: [.product(name: "SQLiteData", package: "sqlite-data")]
-    ),
-    .executableTarget(
-      name: "pensieve",
-      dependencies: [
-        "PensieveKit",
-        .product(name: "ArgumentParser", package: "swift-argument-parser"),
-        .product(name: "SQLiteData", package: "sqlite-data"),
-        .product(name: "MCP", package: "swift-sdk"),
-      ]
     ),
     .testTarget(
       name: "PensieveKitTests",
