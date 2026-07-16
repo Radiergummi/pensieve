@@ -37,19 +37,30 @@ Package.swift   →  library(PensieveKit) + PensieveKitTests only     (no .execu
 project.yml     →  Pensieve.app
                      ├── embeds  pensieve          (tool) → Contents/Helpers/pensieve
                      └── embeds  PensieveSyncAgent  (tool) → Contents/Library/Helpers/PensieveSyncAgent
-new packages in project.yml:  swift-argument-parser, swift-sdk (MCP)   (CLI-only deps)
+new packages in project.yml:  sqlite-data (from 1.6.0), swift-argument-parser (from 1.5.0),
+                              swift-sdk (exact 0.12.1)     (pins mirror Package.swift verbatim)
 ```
 
 - The `pensieve` tool target keeps its **exact** sources — all 25 subcommands, `openCanonicalReadOnly`,
   everything. It ships as-is, **including `eval`** (stripping a dev subcommand is extra work for no
-  gain — YAGNI).
-- **Dev loop change:** `swift run pensieve …` is **gone**. The CLI is now built via
-  `xcodebuild -scheme pensieve build` (XcodeGen emits a per-target scheme) and run from the built
-  product, or via the bundled binary after an app build. Kit iteration is unchanged (`swift test`).
-- `swift-argument-parser` and `swift-sdk` (the MCP SDK) move from `Package.swift`'s dependency list
-  into `project.yml`'s `packages:` (they are consumed only by the CLI target now). `SQLiteData` is
-  already reachable transitively via PensieveKit; the CLI target declares whatever products it directly
-  imports.
+  gain — YAGNI). Note: `eval` resolves `.eval/` + `eval-config.json` **cwd-relative** (`EvalPaths`), so
+  a shipped `pensieve eval` run from `~` would create `~/.eval/` and find no config → graceful
+  empty-roster fallback. Dev-only, harmless; called out so it isn't mistaken for a bug.
+- **CLI-only SPM deps move to `project.yml`.** The CLI directly `import`s **`ArgumentParser`, `MCP`,
+  *and* `SQLiteData`** (verified: `Pensieve.swift`, `Group.swift`, `Mcp.swift` — `openCanonicalReadOnly`
+  returns `any DatabaseReader`, a SQLiteData type; PensieveKit does **not** `@_exported` it). So all
+  **three** packages — `sqlite-data`, `swift-argument-parser`, `swift-sdk` — must be declared in
+  `project.yml`'s `packages:` (with the pins above), and the tool target lists `product: SQLiteData`,
+  `product: ArgumentParser`, `product: MCP`. "Transitive via PensieveKit" is false for `import`
+  resolution.
+- **Target identity.** The tool sets an explicit `PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.cli` —
+  without it XcodeGen defaults to `bundleIdPrefix + ".pensieve"` = `me.mazetti.pensieve`, **colliding
+  with the app**. (Mirrors how `PensieveSyncAgent` sets `me.mazetti.pensieve.sync`.)
+- **Dev-loop change:** `swift run pensieve …` is **gone**. XcodeGen does **not** emit a shared scheme
+  per target by default (only the app has one, via its `scheme:` block) — so a bare
+  `xcodebuild -scheme pensieve` would fail. The tool target therefore gets its **own minimal `scheme:`
+  block** in `project.yml`, restoring `xcodebuild -scheme pensieve build` as the standalone CLI build.
+  (Building the app scheme also compiles + embeds the CLI.) Kit iteration is unchanged (`swift test`).
 
 ## The symlink install logic — a tested PensieveKit kernel
 
@@ -60,6 +71,13 @@ pensieve mcp` — and today they resolve `~/.local/bin/pensieve`. A **symlink**
 changes to existing configs**. Because the symlink points at the stable `/Applications` path, the app
 updates *in place behind it* — there is no per-update reinstall. This is precisely the VS Code `code` /
 `gh` "install command-line tool" idiom.
+
+Caveat (review finding #5): git + session hooks embed an **absolute** path, so they are PATH-independent
+and the symlink fully serves them. But `claude mcp add pensieve -- pensieve mcp` stores the **bare token
+`pensieve`**, resolved via `$PATH` at runtime — the symlink only helps if `~/.local/bin` is on the
+user's `PATH`. It is on the dogfooding machine (the current setup works). **Managing/validating `PATH`
+membership is out of scope** — the design assumes it, and the Settings status reflects the symlink's
+existence, not PATH reachability.
 
 Per the house rule (logic in tested Kit; app stays thin), the decision of *what to do* is a **pure Kit
 function**, not app code. New `Sources/PensieveKit/Support/CLIToolInstaller.swift`:
@@ -101,10 +119,14 @@ from a throwaway build reuses the existing `BackgroundSyncGuard.shouldManage(bun
      a `.build-xcode` smoke-launch must never write `~/.local/bin`).
   2. `desiredTarget = Bundle.main.bundleURL/Contents/Helpers/pensieve`;
      `linkPath = ~/.local/bin/pensieve`.
-  3. `switch CLIToolInstaller.plan(...)`: `.create` / `.repoint` → `try? apply(...)` (silent; a
-     `mkdir -p` + symlink is cheap enough to run inline — unlike background-sync's legacy `launchctl`
-     boot-out, this needs no off-main hop); `.upToDate` / `.blockedRealFile` → do nothing. **Never**
-     clobber a real file at launch.
+  3. `switch CLIToolInstaller.plan(...)`: **only `.create` auto-applies at launch** → `try? apply(...)`
+     (silent; a `mkdir -p` + symlink is cheap enough to run inline — unlike background-sync's legacy
+     `launchctl` boot-out, this needs no off-main hop). `.upToDate` → nothing. `.repoint` and
+     `.blockedRealFile` → **do nothing at launch**; surface them in Settings only. Rationale (review
+     finding): a symlink-pointing-elsewhere is indistinguishable from a *deliberate* user symlink to a
+     second install/dev build, so silently repointing it at launch could hijack the user's intent;
+     repointing is therefore an explicit Settings action. `.create` writes into an empty path, so its
+     mutation is a plain create (no non-atomic remove+create window, and no risk to a running CLI).
 - **Settings ▸ General ▸ "Command-line tool"** section (below Background sync):
   - A status line derived from `CLIToolInstaller.plan`:
     - `.upToDate` → "Installed"
@@ -128,9 +150,21 @@ kernel.
 - **`Package.swift`:** delete `.executable(name: "pensieve", targets: ["pensieve"])` from `products`
   and the `pensieve` `.executableTarget` from `targets`. Move `swift-argument-parser` + `swift-sdk`
   out of the package dependencies (they become `project.yml` packages). Leave PensieveKit + tests.
-- **`project.yml`:** add the `pensieve` tool target (deps: PensieveKit + ArgumentParser + MCP;
-  ad-hoc signing block matching `PensieveSyncAgent`); add it to the app target's `dependencies:` with
-  `embed: true, codeSign: true, copy: { destination: wrapper, subpath: Contents/Helpers }`.
+- **`project.yml`:** add the `pensieve` tool target (deps: PensieveKit + `SQLiteData` + `ArgumentParser`
+  + `MCP`; ad-hoc signing block + explicit `me.mazetti.pensieve.cli` bundle id + a minimal `scheme:`
+  block; otherwise matching `PensieveSyncAgent`); add it to the app target's `dependencies:` with
+  `embed: true, codeSign: true, copy: { destination: wrapper, subpath: Contents/Helpers }`. The CLI
+  goes in `Contents/Helpers/` (the conventional bundled-CLI location, e.g. Sparkle) — deliberately
+  distinct from `PensieveSyncAgent`'s `Contents/Library/Helpers/`, which is a launchd/SMAppService
+  helper, a different kind of thing. Both are valid signed locations for an ad-hoc bundle.
+- **Hook-install commands emit the symlink path, not the resolved bundle path (review finding #4).**
+  `InstallHooks`, `InstallSessionHook`, and `Scan` currently write `Bundle.main.executablePath` into the
+  generated git/Claude-Code hook configs. Run *through* the symlink, `Bundle.main.executablePath`
+  resolves to `/Applications/Pensieve.app/Contents/Helpers/pensieve`, so a **fresh** `install-*` after
+  migration would hard-code the bundle path and lose the symlink indirection (breaking on an app
+  move/rename). Point all three at the already-existing `PensievePaths.installedBinaryURL()` (=
+  `~/.local/bin/pensieve`) instead, so newly-written configs match the existing ones and stay durable.
+  Existing configs are unaffected (they already reference `~/.local/bin/pensieve`).
 - **Docs:** `CLAUDE.md` (Dogfooding + Build/test bullets) and the plan runbooks drop *"rebuild +
   reinstall the release CLI"*; the new story is "the CLI ships inside `Pensieve.app`; install/repair the
   `~/.local/bin/pensieve` symlink once via Settings (auto on launch from `/Applications`)." Note the
@@ -157,10 +191,13 @@ kernel.
 
 ## Scope
 
-**In scope:** the `pensieve` Xcode `tool` target + bundle embedding; `Package.swift` executable
-removal + dependency move; the tested `CLIToolInstaller` Kit kernel; `AppDelegate` launch wiring
-(guarded, non-clobbering); the Settings "Command-line tool" section (status + install/repair/replace) +
-German l10n; docs/runbook updates.
+**In scope:** the `pensieve` Xcode `tool` target (explicit `me.mazetti.pensieve.cli` id + `scheme:`
+block) + bundle embedding at `Contents/Helpers/`; `Package.swift` executable removal + the three
+CLI-only package deps (`sqlite-data`, `swift-argument-parser`, `swift-sdk`) moved to `project.yml`;
+the tested `CLIToolInstaller` Kit kernel; `AppDelegate` launch wiring (guarded; auto-applies `.create`
+only); the Settings "Command-line tool" section (status + install/repair/replace) + German l10n;
+repointing the three hook-install commands (`InstallHooks`/`InstallSessionHook`/`Scan`) at
+`PensievePaths.installedBinaryURL()`; docs/runbook updates.
 
 **Out of scope / deferred:** collapsing PensieveKit/tests into Xcode; notarization/Developer-ID
 signing; a CLI CI target; rewriting existing hook configs (the symlink makes that unnecessary);
