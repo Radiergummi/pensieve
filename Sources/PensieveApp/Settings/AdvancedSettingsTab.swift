@@ -3,13 +3,13 @@ import AppKit
 import ServiceManagement
 import PensieveKit
 
-/// Settings ▸ Advanced. Resolved provider, the background-sync control + status, and the store
-/// paths. Reads the tested `SystemStatusGatherer` kernel once on appear; the background-sync toggle
-/// is the single control (register/unregister via `BackgroundSyncService`).
+/// Settings ▸ Advanced. A read-only diagnostics glance: resolved provider, background-sync status,
+/// and the store paths. Re-gathers the tested `SystemStatusGatherer` kernel every few seconds while
+/// visible (the gather is a cheap file-stat + one-row DB read), so "Last sync" / "Last captured
+/// activity" stay live. It never mutates the agent — the toggle lives in Settings ▸ General.
 struct AdvancedSettingsTab: View {
   @ObservedObject var model: AppModel
 
-  @AppStorage(AppDefaults.backgroundSyncEnabledKey) private var backgroundSyncEnabled = true
   @State private var status: SystemStatus?
   @State private var syncStatus: SMAppService.Status = .notRegistered
 
@@ -21,20 +21,9 @@ struct AdvancedSettingsTab: View {
           Label("Foundation Models isn’t available on this Mac.", systemImage: "info.circle")
             .font(.caption).foregroundStyle(.secondary)
         }
+        LabeledContent("Background sync") { Text(syncStatusText) }
         LabeledContent("Last sync") { Text(relative(status?.lastSyncAt)) }
         LabeledContent("Last captured activity") { Text(relative(status?.lastEventAt)) }
-      }
-
-      Section("Background sync") {
-        Toggle("Keep Pensieve synced in the background", isOn: $backgroundSyncEnabled)
-          .onChange(of: backgroundSyncEnabled) { _, on in
-            if on { BackgroundSyncService.registerIfNeeded() } else { BackgroundSyncService.unregister() }
-            syncStatus = BackgroundSyncService.status
-          }
-        LabeledContent("Status") { Text(syncStatusText) }
-        if syncStatus == .requiresApproval {
-          Button("Open Login Items Settings") { SMAppService.openSystemSettingsLoginItems() }
-        }
       }
 
       Section("Store & Logs") {
@@ -49,10 +38,17 @@ struct AdvancedSettingsTab: View {
     }
     .formStyle(.grouped)
     .frame(width: 460)
-    .onAppear(perform: load)
+    .task {
+      // Poll while the tab is visible; `.task` cancels on disappear. Keeps the relative
+      // times ("2 minutes ago") and the agent status honest without a resident observer.
+      while !Task.isCancelled {
+        load()
+        try? await Task.sleep(for: .seconds(5))
+      }
+    }
   }
 
-  /// The live SMAppService registration state, in human words (mirrors the Settings status line).
+  /// The live SMAppService registration state, in human words (mirrors the General status line).
   private var syncStatusText: LocalizedStringKey {
     switch syncStatus {
     case .enabled: return "Enabled"
