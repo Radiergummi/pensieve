@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     DiagnosticsCollector.shared.start()
     applyDockVisibility()
     configureBackgroundSync()
+    configureCommandLineTool()
   }
 
   /// Retire the legacy hand-installed agent, then (if enabled and safe) register the bundled one.
@@ -38,6 +39,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     if AppDefaults.backgroundSyncEnabled {
       BackgroundSyncService.registerIfNeeded()
+    }
+  }
+
+  /// Create the ~/.local/bin/pensieve → in-bundle-CLI symlink when the path is simply empty. Guarded
+  /// off `.build` paths (a throwaway smoke-launch must never write ~/.local/bin). Only `.create` is
+  /// auto-applied; `.repoint` (a symlink elsewhere — possibly a deliberate dev link) and
+  /// `.blockedRealFile` (the legacy hand-copied binary) are surfaced in Settings, never resolved here.
+  private func configureCommandLineTool() {
+    guard BackgroundSyncGuard.shouldManage(bundlePath: Bundle.main.bundlePath) else { return }
+    let link = PensievePaths.installedBinaryURL()
+    let target = CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL)
+    if CLIToolInstaller.plan(linkPath: link, desiredTarget: target) == .create {
+      try? CLIToolInstaller.apply(.create, linkPath: link, desiredTarget: target)
     }
   }
 
