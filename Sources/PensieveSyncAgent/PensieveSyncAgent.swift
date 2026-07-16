@@ -23,20 +23,8 @@ enum PensieveSyncAgent {
     } catch {
       line = "\(now) sync FAILED: \(error)\n"
     }
-    appendToSyncLog(line)
-  }
-
-  /// Append the summary line to sync.log (creating it if absent). This is what keeps the log's
-  /// mtime moving so `SystemStatus.lastSyncAt` stays honest without a plist `StandardOutPath`.
-  private static func appendToSyncLog(_ line: String) {
-    let url = PensievePaths.syncLogURL()
-    let data = Data(line.utf8)
-    if let handle = try? FileHandle(forWritingTo: url) {
-      defer { try? handle.close() }
-      _ = try? handle.seekToEnd()
-      try? handle.write(contentsOf: data)
-    } else {
-      try? data.write(to: url)
-    }
+    // Size-capped append (keeps the mtime moving so `SystemStatus.lastSyncAt` stays honest
+    // without a plist `StandardOutPath`, while never letting the file grow unboundedly).
+    SyncLog.append(line, to: PensievePaths.syncLogURL())
   }
 }

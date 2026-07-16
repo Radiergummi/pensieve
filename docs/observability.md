@@ -80,6 +80,7 @@ log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style ndjs
 ```
 ~/Library/Logs/Pensieve/
 ├── sync.log              ← summary line per sync cycle, appended by the bundled agent's helper
+│                            (size-capped at 1 MB — trimmed to its newest half past that)
 ├── README.md             ← short doc with log commands
 └── diagnostics/
     ├── diagnostic-2026-07-09T14:32:00Z.json   ← crash/hang payload
