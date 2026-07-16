@@ -8,19 +8,19 @@ public struct SystemStatus: Sendable, Equatable {
   /// The RESOLVED concrete kind ("foundationModels" / "claudeCLI" / "cloud") — never a preference.
   public var providerKind: String
   public var foundationModelsAvailable: Bool
-  /// The launchd LaunchAgent plist exists on disk.
-  public var daemonInstalled: Bool
-  /// mtime of sync.log. An honest "last daemon run": `pensieve sync` prints a summary line on EVERY
-  /// run (even a no-op) and the LaunchAgent redirects stdout/stderr there, so the mtime always moves.
+  /// The SMAppService background agent is registered + enabled.
+  public var backgroundSyncEnabled: Bool
+  /// mtime of sync.log. An honest "last sync run": every sync writes a summary line on EVERY run
+  /// (even a no-op) — the bundled agent's helper appends it directly — so the mtime always moves.
   public var lastSyncAt: Date?
   /// The most recent canonical `Event.occurredAt`. nil when the store is empty or unreadable.
   public var lastEventAt: Date?
 
-  public init(providerKind: String, foundationModelsAvailable: Bool, daemonInstalled: Bool,
+  public init(providerKind: String, foundationModelsAvailable: Bool, backgroundSyncEnabled: Bool,
               lastSyncAt: Date?, lastEventAt: Date?) {
     self.providerKind = providerKind
     self.foundationModelsAvailable = foundationModelsAvailable
-    self.daemonInstalled = daemonInstalled
+    self.backgroundSyncEnabled = backgroundSyncEnabled
     self.lastSyncAt = lastSyncAt
     self.lastEventAt = lastEventAt
   }
@@ -37,11 +37,9 @@ public enum SystemStatusGatherer {
                            defaults: UserDefaults,
                            cloudConfig: CloudConfig?,
                            apiKey: String?,
-                           launchAgentURL: URL,
+                           backgroundSyncEnabled: Bool,
                            syncLogURL: URL) -> SystemStatus {
     let kind = resolvedProviderKind(defaults: defaults, cloudConfig: cloudConfig, apiKey: apiKey)
-
-    let daemonInstalled = FileManager.default.fileExists(atPath: launchAgentURL.path)
 
     let lastSyncAt = try? syncLogURL
       .resourceValues(forKeys: [.contentModificationDateKey])
@@ -57,7 +55,7 @@ public enum SystemStatusGatherer {
 
     return SystemStatus(providerKind: kind,
                         foundationModelsAvailable: FoundationModelsProbe.isAvailable(),
-                        daemonInstalled: daemonInstalled,
+                        backgroundSyncEnabled: backgroundSyncEnabled,
                         lastSyncAt: lastSyncAt ?? nil,
                         lastEventAt: lastEventAt ?? nil)
   }

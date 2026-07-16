@@ -9,37 +9,35 @@ private func throwawayDefaults() -> (UserDefaults, String) {
   return (UserDefaults(suiteName: suite)!, suite)
 }
 
-@Test func gatherReportsAbsentDaemonAndEmptyStore() throws {
+@Test func gatherReportsDisabledSyncAndEmptyStore() throws {
   let (d, suite) = throwawayDefaults()
   defer { d.removePersistentDomain(forName: suite) }
   let db = try openCanonicalDatabase(at: tempURL("status-empty"))
 
   let status = SystemStatusGatherer.gather(db: db, defaults: d,
                                            cloudConfig: nil, apiKey: nil,
-                                           launchAgentURL: tempURL("absent", ext: "plist"),
+                                           backgroundSyncEnabled: false,
                                            syncLogURL: tempURL("absent", ext: "log"))
 
-  #expect(status.daemonInstalled == false)
+  #expect(status.backgroundSyncEnabled == false)
   #expect(status.lastSyncAt == nil)
   #expect(status.lastEventAt == nil)                  // store has no events
   #expect(status.providerKind == "foundationModels" || status.providerKind == "claudeCLI")
   #expect(status.foundationModelsAvailable == FoundationModelsProbe.isAvailable())
 }
 
-@Test func gatherReportsPresentDaemonAndSyncLogMtime() throws {
+@Test func gatherReportsEnabledSyncAndSyncLogMtime() throws {
   let (d, suite) = throwawayDefaults()
   defer { d.removePersistentDomain(forName: suite) }
 
-  let plist = tempURL("agent", ext: "plist")
-  try "<plist/>".write(to: plist, atomically: true, encoding: .utf8)
   let log = tempURL("sync", ext: "log")
   try "ran".write(to: log, atomically: true, encoding: .utf8)
 
   let status = SystemStatusGatherer.gather(db: nil, defaults: d,
                                            cloudConfig: nil, apiKey: nil,
-                                           launchAgentURL: plist, syncLogURL: log)
+                                           backgroundSyncEnabled: true, syncLogURL: log)
 
-  #expect(status.daemonInstalled == true)
+  #expect(status.backgroundSyncEnabled == true)
   let mtime = try #require(status.lastSyncAt)
   #expect(abs(mtime.timeIntervalSinceNow) < 60)       // just written
   #expect(status.lastEventAt == nil)                  // nil db degrades, never throws
@@ -67,7 +65,7 @@ private func throwawayDefaults() -> (UserDefaults, String) {
 
   let status = SystemStatusGatherer.gather(db: db, defaults: d,
                                            cloudConfig: nil, apiKey: nil,
-                                           launchAgentURL: tempURL("absent", ext: "plist"),
+                                           backgroundSyncEnabled: false,
                                            syncLogURL: tempURL("absent", ext: "log"))
 
   let last = try #require(status.lastEventAt)
@@ -84,14 +82,14 @@ private func throwawayDefaults() -> (UserDefaults, String) {
 
   let configured = SystemStatusGatherer.gather(db: nil, defaults: d,
                                                cloudConfig: config, apiKey: "sk-test",
-                                               launchAgentURL: tempURL("absent", ext: "plist"),
+                                               backgroundSyncEnabled: false,
                                                syncLogURL: tempURL("absent", ext: "log"))
   #expect(configured.providerKind == "cloud")
 
   // Selected but keyless ⇒ falls back to a local kind (never "cloud"), same as the factory.
   let keyless = SystemStatusGatherer.gather(db: nil, defaults: d,
                                             cloudConfig: config, apiKey: nil,
-                                            launchAgentURL: tempURL("absent", ext: "plist"),
+                                            backgroundSyncEnabled: false,
                                             syncLogURL: tempURL("absent", ext: "log"))
   #expect(keyless.providerKind != "cloud")
 }

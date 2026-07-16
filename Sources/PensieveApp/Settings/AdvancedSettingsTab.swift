@@ -1,10 +1,11 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 import PensieveKit
 
-/// Settings ▸ Advanced. A read-only glance: resolved provider, daemon/sync status, and the store
+/// Settings ▸ Advanced. A read-only glance: resolved provider, background-sync status, and the store
 /// paths. Reads the tested `SystemStatusGatherer` kernel once on appear — no live observation, and
-/// it never mutates the daemon (installing/editing it is a separate, later spec).
+/// it never mutates the agent (the toggle lives in Settings ▸ General).
 struct AdvancedSettingsTab: View {
   @ObservedObject var model: AppModel
 
@@ -18,8 +19,8 @@ struct AdvancedSettingsTab: View {
           Label("Foundation Models isn’t available on this Mac.", systemImage: "info.circle")
             .font(.caption).foregroundStyle(.secondary)
         }
-        LabeledContent("Sync daemon") {
-          Text(status?.daemonInstalled == true ? "Installed" : "Not installed")
+        LabeledContent("Background sync") {
+          Text(status?.backgroundSyncEnabled == true ? "Enabled" : "Off")
         }
         LabeledContent("Last sync") { Text(relative(status?.lastSyncAt)) }
         LabeledContent("Last captured activity") { Text(relative(status?.lastEventAt)) }
@@ -66,7 +67,7 @@ struct AdvancedSettingsTab: View {
                                          defaults: .standard,
                                          cloudConfig: config,
                                          apiKey: key,
-                                         launchAgentURL: PensievePaths.launchAgentURL(),
+                                         backgroundSyncEnabled: BackgroundSyncService.status == .enabled,
                                          syncLogURL: PensievePaths.syncLogURL())
   }
 
