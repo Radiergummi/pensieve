@@ -79,7 +79,7 @@ log show --predicate 'subsystem == "me.mazetti.pensieve"' --last 2h --style ndjs
 
 ```
 ~/Library/Logs/Pensieve/
-├── sync.log              ← launchd daemon stdout (unstructured, legacy)
+├── sync.log              ← summary line per sync cycle, appended by the bundled agent's helper
 ├── README.md             ← short doc with log commands
 └── diagnostics/
     ├── diagnostic-2026-07-09T14:32:00Z.json   ← crash/hang payload
@@ -141,14 +141,16 @@ log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "app"' 
 # If missing, the FSEventStream watches may have stopped
 ```
 
-### "The launchd daemon isn't running"
+### "Background sync isn't running"
 ```bash
-# Check daemon status
-launchctl list | grep pensieve
-# Check daemon log (unstructured, separate from os.Logger)
+# Check the bundled SMAppService agent's launchd job (registered from /Applications/Pensieve.app)
+launchctl print gui/$(id -u)/me.mazetti.pensieve.sync 2>&1 | grep -iE "state|last exit"
+# `last exit code = 78 (EX_CONFIG)` / `needs LWCR update` ⇒ stale cdhash after a rebuild;
+# relaunch the app (registerIfNeeded does unregister()+register() to refresh the LWCR).
+# Summary line per cycle, appended by the helper (mtime feeds SystemStatus.lastSyncAt):
 tail -50 ~/Library/Logs/Pensieve/sync.log
-# os.Logger messages from daemon runs show up under process name "pensieve" (not "Pensieve")
-log show --predicate 'subsystem == "me.mazetti.pensieve" AND process == "pensieve"' --last 1h --info
+# os.Logger from the helper shows up under process name "PensieveSyncAgent"
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND process == "PensieveSyncAgent"' --last 1h --info
 ```
 
 ## Source code
