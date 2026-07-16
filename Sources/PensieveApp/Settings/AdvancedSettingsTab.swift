@@ -3,13 +3,15 @@ import AppKit
 import ServiceManagement
 import PensieveKit
 
-/// Settings ▸ Advanced. A read-only glance: resolved provider, background-sync status, and the store
-/// paths. Reads the tested `SystemStatusGatherer` kernel once on appear — no live observation, and
-/// it never mutates the agent (the toggle lives in Settings ▸ General).
+/// Settings ▸ Advanced. Resolved provider, the background-sync control + status, and the store
+/// paths. Reads the tested `SystemStatusGatherer` kernel once on appear; the background-sync toggle
+/// is the single control (register/unregister via `BackgroundSyncService`).
 struct AdvancedSettingsTab: View {
   @ObservedObject var model: AppModel
 
+  @AppStorage(AppDefaults.backgroundSyncEnabledKey) private var backgroundSyncEnabled = true
   @State private var status: SystemStatus?
+  @State private var syncStatus: SMAppService.Status = .notRegistered
 
   var body: some View {
     Form {
@@ -19,11 +21,20 @@ struct AdvancedSettingsTab: View {
           Label("Foundation Models isn’t available on this Mac.", systemImage: "info.circle")
             .font(.caption).foregroundStyle(.secondary)
         }
-        LabeledContent("Background sync") {
-          Text(status?.backgroundSyncEnabled == true ? "Enabled" : "Off")
-        }
         LabeledContent("Last sync") { Text(relative(status?.lastSyncAt)) }
         LabeledContent("Last captured activity") { Text(relative(status?.lastEventAt)) }
+      }
+
+      Section("Background sync") {
+        Toggle("Keep Pensieve synced in the background", isOn: $backgroundSyncEnabled)
+          .onChange(of: backgroundSyncEnabled) { _, on in
+            if on { BackgroundSyncService.registerIfNeeded() } else { BackgroundSyncService.unregister() }
+            syncStatus = BackgroundSyncService.status
+          }
+        LabeledContent("Status") { Text(syncStatusText) }
+        if syncStatus == .requiresApproval {
+          Button("Open Login Items Settings") { SMAppService.openSystemSettingsLoginItems() }
+        }
       }
 
       Section("Store & Logs") {
@@ -39,6 +50,17 @@ struct AdvancedSettingsTab: View {
     .formStyle(.grouped)
     .frame(width: 460)
     .onAppear(perform: load)
+  }
+
+  /// The live SMAppService registration state, in human words (mirrors the Settings status line).
+  private var syncStatusText: LocalizedStringKey {
+    switch syncStatus {
+    case .enabled: return "Enabled"
+    case .requiresApproval: return "Needs approval"
+    case .notRegistered: return "Off"
+    case .notFound: return "Not found"
+    @unknown default: return "Off"
+    }
   }
 
   /// A full store path does NOT fit 460 pt — truncate in the middle and put the whole path in a
@@ -62,12 +84,13 @@ struct AdvancedSettingsTab: View {
   }
 
   private func load() {
+    syncStatus = BackgroundSyncService.status
     let (config, key) = model.cloudInputs()
     status = SystemStatusGatherer.gather(db: model.db,
                                          defaults: .standard,
                                          cloudConfig: config,
                                          apiKey: key,
-                                         backgroundSyncEnabled: BackgroundSyncService.status == .enabled,
+                                         backgroundSyncEnabled: syncStatus == .enabled,
                                          syncLogURL: PensievePaths.syncLogURL())
   }
 
