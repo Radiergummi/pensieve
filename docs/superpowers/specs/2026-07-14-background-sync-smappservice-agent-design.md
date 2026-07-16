@@ -256,3 +256,47 @@ Following the daemon precedent (system-mutating calls are hand-verified, pure pa
 
 If (1) or (2) is a hard blocker under ad-hoc signing, stop and reassess before building the full
 surface.
+
+## Spike outcome (2026-07-16) — GATE PASSED
+
+Verified on the live machine with the bundled helper installed to `/Applications/Pensieve.app`
+(ad-hoc signed). Bundle layout and signing are correct (Risk 3): the helper lands at
+`Contents/Library/Helpers/PensieveSyncAgent` and the plist at
+`Contents/Library/LaunchAgents/me.mazetti.pensieve.sync.plist`, both ad-hoc signed;
+`BundleProgram = Contents/Library/Helpers/PensieveSyncAgent` resolves and launchd launches it.
+
+1. **Ad-hoc registration reaches enabled (Risk 1) — PASS.** `register()` from the installed app
+   registers the agent (`launchctl print gui/$uid/me.mazetti.pensieve.sync` shows a `Submitted` job
+   `managed_by = com.apple.xpc.ServiceManagement`), and after the one-time Login-Items approval the
+   job spawns and runs. The paid-team entitlement is *not* required, as expected.
+
+2. **cdhash churn (Risk 1b) — REAL PROBLEM, MITIGATED IN CODE.** Every ad-hoc rebuild mints a new
+   helper cdhash, and SMAppService pins the registration to path + cdhash via a LightWeight Code
+   Requirement (LWCR). A registration left over from a previous build **spawn-fails on every interval
+   with `last exit code = 78 (EX_CONFIG)` and `needs LWCR update`** — the job never runs. A bare
+   `agent.register()` on an already-`.enabled` item is a **silent no-op that does NOT refresh the
+   LWCR**, so the app cannot self-heal with `register()` alone. **`unregister()` + `register()` DOES
+   refresh the LWCR** to the current binary, and — critically — **approval PERSISTS across the cycle**
+   for an already-approved bundle id (the job went straight back to `running`, no re-prompt). Fix
+   applied: `BackgroundSyncService.registerIfNeeded()` now does `unregister()` then `register()` on
+   every launch (when the pref is on). Cost on a normal launch is nil; it only heals the cdhash after
+   a rebuild. (Accepted trade-off: a user who disables the item in System Settings but leaves the
+   in-app toggle on would see it resurrected to "needs approval" — acceptable for a single-user tool
+   where the in-app toggle is the authoritative control; the toggle-off path calls `unregister()` and
+   does not re-register.)
+
+3. **On-device provider under the bundled helper (Risk 4) — PASS.** `makeDefaultLLMProvider(defaults:)`
+   resolves to `FoundationModelsProvider` inside the helper, and the runtime `PATH` (`~/.local/bin`,
+   `/opt/homebrew/bin`, `/usr/bin`, `/bin`) is set correctly so `git`/`claude` children resolve. The
+   helper **does** extract — a scare during the spike (the helper appeared to "hang" at the first LLM
+   call) turned out to be a **~5-day extraction backlog** (the legacy daemon had been dead since
+   Jul 11; ~900 transcripts to catch up on) processed at ~2–3 s per on-device inference, which simply
+   exceeded the short manual timeouts. Confirmed by streaming debug logs: steady `LLM prompt
+   dispatched` / `LLM completion received` pairs, `looseEnds` count climbing (679+ and counting). A
+   minimal standalone `LanguageModelSession.respond` round-trip returns instantly, and the bare CLI
+   exhibits the identical backlog behavior — nothing helper-specific, no hang.
+
+4. **Path stability (Risk 2) — TO VERIFY (human).** Register from `/Applications`, quit, `rm -rf
+   .build-xcode`, wait one interval, confirm the job still fires. Low risk (the job runs from
+   `/Applications`, independent of DerivedData) but not yet exercised end-to-end; deferred to the
+   post-merge human runbook along with the one-time Login-Items approval.
