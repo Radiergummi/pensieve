@@ -19,15 +19,17 @@ order is a recommendation, nothing is foreclosed.
 
 ### Shipped (the core loop is live)
 
-Capture → ingest → grounded/cited loose ends → `next`/`digest` (1A + 1B); the typed tree &
-strands (1B-org); source discovery (`scan`); the launchd auto-flow sync daemon; the v0.1
-heartbeat window; **the three-pane `Pensieve.app` slices 1–2** (read-only core + Briefing home +
-⌘K palette — see pillar #2); the **GUI base-state** (SwiftUI `App` lifecycle, standard menu bar,
-⌘K/⌘R `.commands`); **Xcode adoption** (a real `Pensieve.app` bundle built by XcodeGen with
-PensieveKit as a local SwiftPM package, ad-hoc signed, bundled `icons/Pensieve.icon` via `actool`);
-and the **menu-bar item + `pensieve://` deep links (v0.2)** (a `MenuBarExtra` popover glance + a
-tested `DeepLink` router; the `pensieve://` scheme is now **live** — see pillar #1). **The make-or-break
-intelligence gate passed.** Dogfooding is on. This is the hard part, done.
+The full loop is **LIVE and dogfooded** (415 tests). **`CLAUDE.md` Status is the authoritative,
+exhaustive shipped changelog** — this is the short version. Shipped: capture → ingest → grounded/cited
+loose ends → `next`/`digest` (1A/1B); the typed tree & strands (1B-org); source discovery (`scan`);
+**background sync** via a bundled `SMAppService.agent` (retired the launchd daemon, pillar #3); the real
+**`Pensieve.app`** (Xcode/XcodeGen bundle) three-pane app through slice 4 + visual identity, IA rework,
+Share-recall, **archive nodes**, and **organizing-writes error surfacing**; the **bundled `pensieve` CLI**
+(inside the app, symlink-managed); OS-integration — **menu-bar item + `pensieve://`**, **App Intents +
+Spotlight**, **Focus filters**, **in-app find (⌘F)** (⌘K palette retired); intelligence config — the
+**App Settings surface** (tabbed) with **on-device / `claude -p` / cloud provider** selection; and the
+**MCP context server** (`pensieve mcp`/`prime` + `recall`). **The make-or-break intelligence gate passed.**
+This is the hard part, done.
 
 ### Pending pillars (sequenced; each is a brainstorm → spec → plan item unless noted)
 
@@ -36,13 +38,12 @@ brainstorm→spec→plan cycle (the loop in `CONTINUE.md` → "How we work here"
 sections after the first `---` hold the parked depth-features + forward ideas, each with a revisit
 trigger. Order is a recommendation, not a commitment.
 
-1. **Menu-bar item / `LSUIElement` (v0.2)** — ✅ **menu-bar item DONE** (merged 2026-07-06); **`LSUIElement`
-   hide-dock toggle deferred.** Shipped: a `MenuBarExtra` `.window` popover (heartbeat over `MonitorSnapshot`
-   + top-5 What's Next over `SmartLists`; status by glyph shape; click-to-jump) in the *same* app, plus the
-   minimal, tested `pensieve://` `DeepLink` router as its first consumer. Spec/plan:
-   `{specs,plans}/2026-07-06-menu-bar-deeplinks*`. **What remains (deferred → ledger below):** the optional
-   `LSUIElement`/hide-dock toggle (needs a Settings surface); a menu-bar icon count badge; a Dormant/Recently-
-   Active peek in the popover.
+1. **Menu-bar item / `LSUIElement` (v0.2)** — ✅ **DONE** (menu-bar item merged 2026-07-06; the
+   `LSUIElement` hide-dock toggle shipped 2026-07-08 in the App Settings surface). Shipped: a `MenuBarExtra`
+   `.window` popover (heartbeat over `MonitorSnapshot` + top-5 What's Next over `SmartLists`; status by glyph
+   shape; click-to-jump) in the *same* app, plus the minimal, tested `pensieve://` `DeepLink` router as its
+   first consumer. Spec/plan: `{specs,plans}/2026-07-06-menu-bar-deeplinks*`. **What remains (deferred →
+   ledger below):** a menu-bar icon count badge; a Dormant/Recently-Active peek in the popover.
 
 2. **The three-pane `Pensieve.app` (Phase 3) — THE product.** *The spine; specced + underway.* Design:
    `specs/2026-07-05-pensieve-app-three-pane-design.md` (a 6-slice build sequence). Sidebar smart-lists /
@@ -74,16 +75,13 @@ trigger. Order is a recommendation, not a commitment.
      per-node "latest event + days-dormant + open-loose-end-count" helper (that shape now recurs in
      `NextQueries` / `MonitorSnapshot` / `BriefingQueries`).
 
-3. **Retire the launchd daemon → in-app background service (Phase 2)** — *medium; partially
-   superseded.* The app already self-drains (FSEvents spool watch + `Debouncer` → `drainThenRefresh`)
-   and runs extraction while foregrounded; with `MenuBarExtra` keeping the process alive, a separate
-   `pensieved` agent is redundant while the app is running. The move: make the app's background
-   `ExtractionRunner` + periodic drain authoritative, register itself as an `SMAppService.loginItem`
-   (auto-launch on login), and drop the `com.pensieve.sync` LaunchAgent. Fallback question: what
-   happens on force-quit / pre-login? Options: keep a minimal launchd one-shot as a safety-net,
-   or accept that capture accrues and drains on next launch. Pure convenience/latency upgrade;
-   no data-integrity risk either way. *Trigger: when the app's always-running posture is confirmed
-   (hide-Dock + login-item), or on the next Settings / daemon-management pass.*
+3. **Retire the launchd daemon → in-app background service (Phase 2)** — ✅ **DONE (2026-07-16, see the
+   dated entry below).** The hand-installed `com.pensieve.sync` LaunchAgent + `install-daemon` command are
+   gone, replaced by a code-signed `SMAppService.agent` (`me.mazetti.pensieve.sync`) bundled inside the app,
+   running the same `SyncRunner` every 300 s independently of the GUI (no force-quit gap). App owns
+   register/unregister/status via `BackgroundSyncService` (Settings toggle + status + open-Login-Items); the
+   app boots out the legacy agent on first launch. *(The app also still self-drains while foregrounded via
+   the FSEvents spool watch + `Debouncer` → `drainThenRefresh`.)*
 
 4. **CloudKit sync + iOS companion** — *large; on-ramp preserved, unbuilt.* SQLiteData's opt-in
    `SyncEngine`; sync lives only in the entitled app process (hooks/CLI stay local). "Flip it on,"
@@ -141,9 +139,11 @@ Subagent-driven (7 tasks + fix wave; Opus whole-branch READY-TO-MERGE). **260 te
 **Post-merge carry:** rebuild + reinstall the release CLI (the provider-selection read changed).
 
 **Deferred out of the first cut (on the roadmap, not foreclosed):**
-- **Organizing-writes error surfacing** (code-quality carry) — still needs an app error-presentation mechanism;
-  pairs with this surface but was not built. *Trigger: when an error-surface is added.*
-- More knobs as they arise (capture/scan folders, daemon interval); tabbed multi-pane Settings.
+- **Organizing-writes error surfacing** (code-quality carry) — ✅ **DONE (2026-07-14)** with the Settings v2
+  work: `AppError`/`presentedError` → one `.alert` on `RootView`, all six writes classify refusal vs failure.
+  See the "App Settings v2 + organizing-writes error surfacing" dated entry below.
+- **Tabbed multi-pane Settings** — ✅ **DONE (2026-07-14)**: General · Intelligence · Advanced. Remaining
+  knobs as they arise (capture/scan source-management GUI, daemon-interval editing — Spec 2, own brainstorm).
 
 ### Platform extension points (candidate surfaces) — a menu, not a sequence
 
@@ -205,6 +205,42 @@ availability + deployment-target floors at each surface's spec time.
 changes): Writing Tools / Image Playground / Genmoji / Visual Intelligence (content-creation AI); Endpoint
 Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print services / legacy Automator
 (App Intents + Shortcuts subsumes the useful part).
+
+---
+
+## Bundle the `pensieve` CLI into the app — DONE (2026-07-17, through `3a9092c` 2026-07-18)
+
+Retired the standalone SwiftPM `pensieve` executable + the "rebuild + reinstall the release CLI"
+step. The CLI is now an embedded Xcode **tool target** (`PensieveCLI`, `PRODUCT_NAME=pensieve` — the
+target is renamed to dodge a case-insensitive-filesystem collision with the app target `Pensieve`;
+the shipped binary is still `pensieve`) at `Pensieve.app/Contents/Helpers/pensieve`.
+`~/.local/bin/pensieve` is an **app-managed symlink** to it, auto-created on launch when absent
+(guarded off `.build` paths) and installable/repairable/replaceable via **Settings ▸ General ▸
+Command-line tool**, over a tested `CLIToolInstaller` symlink kernel (`apply`/`replace` deduped via
+`forceLink`). Git hooks, `~/.claude/settings.json`, and `claude mcp add` all resolve the CLI through
+that symlink. **Updating the app now updates the CLI.** `swift run pensieve` no longer exists — build
+via `xcodebuild -scheme PensieveCLI` (or the app scheme, which embeds it); PensieveKit + tests stay
+SwiftPM. Spec/plan: `{specs,plans}/2026-07-16-bundle-cli-into-app-design.md` +
+`2026-07-17-bundle-cli-into-app.md`.
+
+---
+
+## Background sync via a bundled `SMAppService.agent` — DONE (2026-07-16, = pillar #3)
+
+Replaced the hand-installed `com.pensieve.sync` LaunchAgent with a code-signed agent
+(`me.mazetti.pensieve.sync`) bundled inside the app. A committed, **home-independent** plist
+(`Contents/Library/LaunchAgents/…`, `BundleProgram`, `StartInterval 300`, `ProcessType Background`)
+schedules a thin in-bundle helper `Contents/Library/Helpers/PensieveSyncAgent` running the *same*
+`SyncRunner`, exiting between runs. The helper resolves the machine-specific `PATH`
+(`SyncAgentEnvironment.resolvedPATH` — launchd does no `~` expansion) and writes a **size-capped**
+`sync.log` itself (keeping `SystemStatus.lastSyncAt`'s mtime honest). App owns register/unregister/
+status via a thin `BackgroundSyncService` (Settings toggle + status + open-Login-Items), **guarded off
+`.build` paths** (`BackgroundSyncGuard`) so a smoke-launch never touches real Login Items; it boots
+out the legacy `com.pensieve.sync` on first launch. On-device provider only (trust gate unchanged).
+**Gotchas:** must run from `/Applications/Pensieve.app` (SMAppService pins path + cdhash);
+`registerIfNeeded()` does unregister+register to refresh the LWCR across ad-hoc cdhash churn (approval
+persists — no re-prompt). Spec/plan: `{specs,plans}/2026-07-14-background-sync-smappservice-agent-design.md`
++ `2026-07-15-background-sync-smappservice-agent.md`.
 
 ---
 
