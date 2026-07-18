@@ -239,12 +239,18 @@ final class AppModel: ObservableObject {
   // MARK: - In-app find
   @Published var searchText: String = ""
   @Published private(set) var searchResults: SearchResults = SearchResults()
+  /// Semantic ("Related") hits, populated after the exact search when the Settings toggle is on.
+  @Published private(set) var semanticHits: [SemanticHit] = []
   /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
   @Published var expandedLooseEndID: UUID?
   /// Set by the Find command; RootView observes it to move focus into the .searchable field.
   @Published var focusSearchRequested = false
   private var searchTask: Task<Void, Never>?
   private var searchToken = 0
+  // Built once; NLContextualEmbedder resolves dimension from the loaded asset at init.
+  private lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
+  private lazy var semanticStore = SemanticIndexStore(
+    url: PensievePaths.semanticIndexURL(), dimension: embedder.dimension, embedderVersion: embedder.version)
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
   /// site that branches on search (the middle content, the refresh re-run, the detail one-home
@@ -315,6 +321,13 @@ final class AppModel: ObservableObject {
     // selected node happens in DetailView (force: on same-node token bump).
     refreshToken += 1
     await SpotlightIndexer.reindex(activeContext: activeFocusContext)   // launch + ⌘R
+    // Best-effort semantic index catch-up (launch + ⌘R cadence, mirroring SpotlightIndexer above).
+    // The sync daemon also runs this periodically; this just keeps ⌘F "Related" fresh sooner after
+    // in-app activity. Detached + toggle-gated so it never blocks the UI refresh.
+    if AppDefaults.semanticSearchEnabled, let db {
+      let store = semanticStore, embedder = self.embedder
+      Task.detached { await SemanticIndexer(store: store, embedder: embedder).sync(db) }
+    }
   }
 
   /// Watch-triggered drain: ingest new spool rows on our own connection. The resulting canonical
@@ -476,6 +489,7 @@ final class AppModel: ObservableObject {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= SearchQueries.minQueryLength, let db else {
       searchResults = SearchResults()
+      semanticHits = []
       expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
       return
     }
@@ -488,6 +502,14 @@ final class AppModel: ObservableObject {
       }.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchResults = results ?? SearchResults()
+
+      guard AppDefaults.semanticSearchEnabled else { self.semanticHits = []; return }
+      let exact = Set((results?.nodes.map { $0.id } ?? []) + (results?.looseEnds.map { $0.id } ?? []))
+      let sem = await SemanticQueries.search(
+        query: query, visibleNodeIDs: visible, excludingIDs: exact, k: 8, floor: 0.25,
+        store: self.semanticStore, embedder: self.embedder, db)
+      guard self.searchToken == token, !Task.isCancelled else { return }
+      self.semanticHits = sem
     }
   }
 
@@ -504,10 +526,22 @@ final class AppModel: ObservableObject {
     expandedLooseEndID = hit.id
   }
 
+  /// A "Related" (semantic) search hit: a loose-end hit auto-expands like an exact loose-end hit;
+  /// node/event hits drive the detail like an exact node hit (an event's home is its node).
+  func selectSemanticHit(_ hit: SemanticHit) {
+    if hit.kind == "loose_end" {
+      selectedNodeID = hit.nodeID
+      expandedLooseEndID = hit.id
+    } else {
+      selectSearchNode(hit.nodeID)
+    }
+  }
+
   /// Exit search mode (e.g. on sidebar navigation): clear the field, results, and pending expand.
   func clearSearch() {
     searchText = ""
     searchResults = SearchResults()
+    semanticHits = []
     expandedLooseEndID = nil
     searchTask?.cancel()
   }

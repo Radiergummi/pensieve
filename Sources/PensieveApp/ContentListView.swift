@@ -82,9 +82,22 @@ struct ContentListView: View {
           }
         }
       }
+      if !model.semanticHits.isEmpty {
+        Section(header: Text("Related")) {
+          ForEach(model.semanticHits) { hit in
+            Button { model.selectSemanticHit(hit) } label: {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(hit.title).lineLimit(1)
+                SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
+              }
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
     }
     .overlay {
-      if r.isEmpty { ContentUnavailableView.search(text: model.searchText) }
+      if r.isEmpty && model.semanticHits.isEmpty { ContentUnavailableView.search(text: model.searchText) }
     }
   }
 

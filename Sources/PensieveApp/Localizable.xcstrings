@@ -1870,6 +1870,17 @@
         }
       }
     },
+    "Related" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verwandt"
+          }
+        }
+      }
+    },
     "rename" : {
       "extractionState" : "manual",
       "localizations" : {
