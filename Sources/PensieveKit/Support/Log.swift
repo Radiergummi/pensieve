@@ -8,4 +8,5 @@ enum Log {
   static let llm        = Logger(subsystem: "me.mazetti.pensieve", category: "llm")
   static let ingest     = Logger(subsystem: "me.mazetti.pensieve", category: "ingest")
   static let discovery  = Logger(subsystem: "me.mazetti.pensieve", category: "discovery")
+  static let semantic   = Logger(subsystem: "me.mazetti.pensieve", category: "semantic")
 }

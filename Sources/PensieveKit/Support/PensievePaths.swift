@@ -16,6 +16,11 @@ public enum PensievePaths {
   public static func narrationCacheURL() -> URL {
     supportDirectory().appendingPathComponent("narration-cache.sqlite")
   }
+  /// The disposable, device-local, never-synced semantic index (shared across app / CLI / daemon /
+  /// MCP). Losing it costs only a re-index. Drop-and-rebuilt on embedder-version change.
+  public static func semanticIndexURL() -> URL {
+    supportDirectory().appendingPathComponent("semantic-index.sqlite")
+  }
   /// The current user's home, resolved via `getpwuid` (correct even when launchd does not
   /// export HOME) rather than the HOME environment variable.
   public static func homeDirectory() -> URL {
