@@ -36,6 +36,13 @@ struct Mcp: AsyncParsableCommand {
                "radius": .object(["type": .string("number"), "description": .string("messages of context each side (default 8)")]),
              ]), "required": .array([.string("loose_end_id")])]),
              annotations: .init(readOnlyHint: true, openWorldHint: false)),
+        Tool(name: "search",
+             description: "Find across all your work by keyword AND meaning — exact first, related below; each result is a real, cited item.",
+             inputSchema: .object(["type": .string("object"), "properties": .object([
+               "query": .object(["type": .string("string"), "description": .string("what to find")]),
+               "limit": .object(["type": .string("number"), "description": .string("max results per group (default 8)")]),
+             ]), "required": .array([.string("query")])]),
+             annotations: .init(readOnlyHint: true, openWorldHint: false)),
       ])
     }
 
@@ -64,6 +71,13 @@ struct Mcp: AsyncParsableCommand {
         }
         let radius = params.arguments?["radius"]?.intValue ?? 8
         let json = try PensieveMCP.recallJSON(looseEndID: id, radius: radius)
+        return PensieveMCP.result(json)
+      case "search":
+        guard let query = params.arguments?["query"]?.stringValue, !query.isEmpty else {
+          return .init(content: [.text(text: "search requires a non-empty query", annotations: nil, _meta: nil)], isError: true)
+        }
+        let limit = params.arguments?["limit"]?.intValue ?? 8
+        let json = try await PensieveMCP.searchJSON(query: query, limit: limit)
         return PensieveMCP.result(json)
       default:
         return .init(content: [.text(text: "unknown tool", annotations: nil, _meta: nil)], isError: true)
@@ -167,10 +181,107 @@ enum PensieveMCP {
     return try makeEncoder().encode(bundle)   // encodes `null` for an unknown id
   }
 
+  /// Unified "find across my work" tool: exact substring match (`SearchQueries`) plus, when the
+  /// semantic-search toggle is on, semantically related items (`SemanticQueries`) over the on-device
+  /// index — excluding anything already surfaced as an exact hit. Scope is all active nodes (MCP has
+  /// no Focus context). Cloud is never used here; the embedder + index are on-device only.
+  static func searchJSON(query: String, limit: Int) async throws -> Data {
+    guard let db = try? openCanonicalReadOnly() else {
+      return try makeEncoder().encode(SearchPayload(exact: [], related: []))
+    }
+    let allActive = try await db.read { db in
+      Set(try Node.where { $0.state.eq("active") }.fetchAll(db).map { $0.id })
+    }
+    let exact = try SearchQueries.search(query: query, visibleNodeIDs: allActive, db)
+    let exactIDs = Set(exact.nodes.map { $0.id } + exact.looseEnds.map { $0.id })
+
+    let related: [SemanticHit]
+    if PensieveDefaults.semanticSearchEnabled() {
+      let embedder = NLContextualEmbedder()
+      let store = SemanticIndexStore(url: PensievePaths.semanticIndexURL(),
+                                     dimension: embedder.dimension, embedderVersion: embedder.version)
+      related = await SemanticQueries.search(query: query, visibleNodeIDs: allActive, excludingIDs: exactIDs,
+                                             k: limit, floor: 0.25, store: store, embedder: embedder, db)
+    } else {
+      related = []
+    }
+
+    let exactItems = exact.nodes.map(SearchItem.init(node:)) + exact.looseEnds.map(SearchItem.init(looseEnd:))
+    let relatedItems = related.map(SearchItem.init(semantic:))
+    let payload = SearchPayload(exact: Array(exactItems.prefix(limit)), related: Array(relatedItems.prefix(limit)))
+    return try makeEncoder().encode(payload)
+  }
+
   /// A text tool result carrying the JSON payload + the result-size hint Claude Code honors.
   static func result(_ json: Data) -> CallTool.Result {
     let text = String(decoding: json, as: UTF8.self)
     return .init(content: [.text(text: text, annotations: nil, _meta: nil)],
                  _meta: Metadata(additionalFields: [maxResultSizeMeta: .int(500_000)]))
+  }
+}
+
+/// The `search` tool's response shape: `{ "exact": [...], "related": [...] }`. `similarity` is
+/// present only on related (semantic) items — `encode(to:)` omits it (not `null`) for exact items,
+/// since exact matches have no similarity score.
+private struct SearchPayload: Encodable {
+  var exact: [SearchItem]
+  var related: [SearchItem]
+}
+
+private struct SearchItem: Encodable {
+  var id: String
+  var kind: String
+  var node_id: String
+  var node_name: String
+  var title: String
+  var snippet: String
+  var similarity: Double?
+
+  init(node hit: NodeHit) {
+    id = hit.id.uuidString
+    kind = "node"
+    node_id = hit.id.uuidString
+    node_name = hit.name
+    title = hit.name
+    snippet = Self.text(hit.snippet)
+    similarity = nil
+  }
+
+  init(looseEnd hit: LooseEndHit) {
+    id = hit.id.uuidString
+    kind = "loose_end"
+    node_id = hit.nodeID.uuidString
+    node_name = hit.nodeName
+    let snippetText = Self.text(hit.snippet)
+    title = snippetText
+    snippet = snippetText
+    similarity = nil
+  }
+
+  init(semantic hit: SemanticHit) {
+    id = hit.id.uuidString
+    kind = hit.kind
+    node_id = hit.nodeID.uuidString
+    node_name = hit.nodeName
+    title = hit.title
+    snippet = Self.text(hit.snippet)
+    similarity = hit.similarity
+  }
+
+  private static func text(_ s: Snippet) -> String { s.leading + s.match + s.trailing }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, kind, node_id, node_name, title, snippet, similarity
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(kind, forKey: .kind)
+    try c.encode(node_id, forKey: .node_id)
+    try c.encode(node_name, forKey: .node_name)
+    try c.encode(title, forKey: .title)
+    try c.encode(snippet, forKey: .snippet)
+    try c.encodeIfPresent(similarity, forKey: .similarity)
   }
 }
