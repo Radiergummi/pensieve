@@ -21,4 +21,11 @@ import Foundation
     let v = a![0]
     #expect(abs(v.reduce(0) { $0 + $1 * $1 } - 1.0) < 1e-6)   // unit length
   }
+
+  @Test func cosineFromL2MapsIdenticalAndOrthogonal() {
+    // L2 distance between identical unit vectors is 0 -> cosine similarity 1.
+    #expect(abs(EmbeddingMath.cosine(fromL2: 0) - 1.0) < 1e-9)
+    // L2 distance between orthogonal unit vectors is sqrt(2) -> cosine similarity 0.
+    #expect(abs(EmbeddingMath.cosine(fromL2: 2.0.squareRoot()) - 0.0) < 1e-9)
+  }
 }

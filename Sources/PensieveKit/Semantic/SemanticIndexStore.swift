@@ -47,6 +47,7 @@ public struct SemanticIndexStore: Sendable {
     do {
       try PensievePaths.ensureParentDirectory(of: url)
       var config = Configuration()
+      config.busyMode = .timeout(5)   // wait out cross-process writer contention (app/daemon/⌘F), matching CanonicalStore
       config.prepareDatabase { db in
         let rc = pensieve_sqlite_vec_init_connection(UnsafeMutableRawPointer(db.sqliteConnection))
         if rc != 0 {
@@ -120,7 +121,7 @@ public struct SemanticIndexStore: Sendable {
   public func delete(itemIDs: [String]) {
     guard let db, !itemIDs.isEmpty else { return }
     let marks = Array(repeating: "?", count: itemIDs.count).joined(separator: ",")
-    let args = StatementArguments(itemIDs)!
+    let args = StatementArguments(itemIDs)
     try? db.write { db in
       try db.execute(sql: "DELETE FROM embeddings WHERE item_id IN (\(marks))", arguments: args)
       try db.execute(sql: "DELETE FROM items WHERE item_id IN (\(marks))", arguments: args)
