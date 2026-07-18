@@ -170,4 +170,35 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(hits.first?.itemID == n.id.uuidString)
     #expect(hits.first!.similarity > 0.99)   // the stored vector IS the new content's embedding
   }
+
+  @Test func failedEmbeddingIsRetriedOnNextSyncNotPermanentlySkipped() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semidx-nilembed-retry"))
+    let n = Node(name: "N", kind: NodeKind.project)
+    try await db.write { try Node.insert { n }.execute($0) }
+    let ev = try makeEvent(db, node: n, kind: CaptureKind.ccSession, workSummary: "wired up refunds")
+    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "wire up refunds", quote: "TODO refunds")
+    try await db.write { try LooseEnd.insert { le }.execute($0) }
+
+    let s = store()
+
+    // First sync: embedder fails entirely (e.g. model asset not yet downloaded). None of these
+    // brand-new items may be marked done — otherwise they'd be permanently unsearchable.
+    let failingIdx = SemanticIndexer(store: s, embedder: NilEmbedder(dimension: 16))
+    await failingIdx.sync(db)
+    #expect(s.existingItems().isEmpty)
+
+    // Second sync: embedder recovers. The same items must be retried (not starved by a stale
+    // "already handled" marker) and become searchable.
+    let workingIdx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
+    await workingIdx.sync(db)
+
+    let items = s.existingItems()
+    #expect(items.keys.contains(n.id.uuidString))
+    #expect(items.keys.contains(le.id.uuidString))
+    #expect(items.keys.contains(ev.id.uuidString))
+
+    let queryVec = await StubEmbedder(dimension: 16).embed(["wire up refunds — TODO refunds"])![0]
+    let hits = s.knn(query: queryVec, k: 5, activeOnly: true)
+    #expect(hits.contains { $0.itemID == le.id.uuidString })
+  }
 }

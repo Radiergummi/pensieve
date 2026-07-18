@@ -32,7 +32,13 @@ public struct SemanticIndexer: Sendable {
       for (item, vec) in zip(needEmbed, embedded) { vectors[item.itemID] = vec }
     }
     // Upsert every live item: metadata always; vector only when (re-)embedded this run.
+    // Items that needed embedding but didn't get a vector (embedder returned nil / partial
+    // result) are skipped entirely so they stay absent/stale in existingItems() and are
+    // retried on the next sync() — never permanently starved of their first-ever embedding
+    // or left with a silently stale one.
     for item in corpus {
+      let unchanged = existing[item.itemID] == item.contentHash
+      guard unchanged || vectors[item.itemID] != nil else { continue }
       store.upsert(row: .init(itemID: item.itemID, kind: item.kind, nodeID: item.nodeID,
                               state: item.state, contentHash: item.contentHash),
                    embedding: vectors[item.itemID])
