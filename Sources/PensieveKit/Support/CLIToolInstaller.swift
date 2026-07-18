@@ -28,9 +28,12 @@ public enum CLIToolInstaller {
     }
     let stored = (try? fileManager.destinationOfSymbolicLink(atPath: linkPath.path)) ?? ""
     let resolved = stored.hasPrefix("/")
-      ? stored
-      : linkPath.deletingLastPathComponent().appendingPathComponent(stored).path
-    return resolved == desiredTarget.path ? .upToDate : .repoint
+      ? URL(fileURLWithPath: stored)
+      : linkPath.deletingLastPathComponent().appendingPathComponent(stored)
+    // Lexically standardize (collapse `.`/`..`) so a relative link that resolves to the target
+    // isn't misread as `.repoint`. Does NOT follow symlinks — we compare link targets, not files.
+    return resolved.standardizedFileURL.path == desiredTarget.standardizedFileURL.path
+      ? .upToDate : .repoint
   }
 
   /// Apply the SAFE plans: `.create` / `.repoint` create (or replace a stale symlink with) the link,
@@ -38,12 +41,7 @@ public enum CLIToolInstaller {
   public static func apply(_ plan: Plan, linkPath: URL, desiredTarget: URL, fileManager: FileManager = .default) throws {
     switch plan {
     case .create, .repoint:
-      try fileManager.createDirectory(
-        at: linkPath.deletingLastPathComponent(), withIntermediateDirectories: true)
-      if (try? fileManager.attributesOfItem(atPath: linkPath.path)) != nil {
-        try fileManager.removeItem(at: linkPath)   // remove the stale symlink (never its target)
-      }
-      try fileManager.createSymbolicLink(at: linkPath, withDestinationURL: desiredTarget)
+      try forceLink(linkPath: linkPath, desiredTarget: desiredTarget, fileManager: fileManager)
     case .upToDate, .blockedRealFile:
       return
     }
@@ -52,6 +50,13 @@ public enum CLIToolInstaller {
   /// Explicit + destructive: remove WHATEVER is at `linkPath` (incl. a real file) and create the
   /// symlink. Only called from the Settings "Replace existing binary" confirmation — never at launch.
   public static func replace(linkPath: URL, desiredTarget: URL, fileManager: FileManager = .default) throws {
+    try forceLink(linkPath: linkPath, desiredTarget: desiredTarget, fileManager: fileManager)
+  }
+
+  /// Ensure `~/.local/bin` exists, remove whatever currently sits at `linkPath` (a stale symlink or a
+  /// real file — never its target), then create the symlink. The single filesystem write shared by the
+  /// safe `apply` cases and the destructive `replace`.
+  private static func forceLink(linkPath: URL, desiredTarget: URL, fileManager: FileManager) throws {
     try fileManager.createDirectory(
       at: linkPath.deletingLastPathComponent(), withIntermediateDirectories: true)
     if (try? fileManager.attributesOfItem(atPath: linkPath.path)) != nil {

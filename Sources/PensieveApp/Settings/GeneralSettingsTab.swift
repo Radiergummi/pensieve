@@ -80,24 +80,20 @@ struct GeneralSettingsTab: View {
     }
   }
 
+  private var cliLink: URL { PensievePaths.installedBinaryURL() }
+  private var cliTarget: URL { CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL) }
+
   private func currentCLIPlan() -> CLIToolInstaller.Plan {
-    CLIToolInstaller.plan(
-      linkPath: PensievePaths.installedBinaryURL(),
-      desiredTarget: CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL))
+    CLIToolInstaller.plan(linkPath: cliLink, desiredTarget: cliTarget)
   }
 
   private func applyCLI(_ plan: CLIToolInstaller.Plan) {
-    try? CLIToolInstaller.apply(
-      plan,
-      linkPath: PensievePaths.installedBinaryURL(),
-      desiredTarget: CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL))
+    try? CLIToolInstaller.apply(plan, linkPath: cliLink, desiredTarget: cliTarget)
     cliPlan = currentCLIPlan()
   }
 
   private func replaceCLI() {
-    try? CLIToolInstaller.replace(
-      linkPath: PensievePaths.installedBinaryURL(),
-      desiredTarget: CLIToolInstaller.bundledCLIURL(appBundleURL: Bundle.main.bundleURL))
+    try? CLIToolInstaller.replace(linkPath: cliLink, desiredTarget: cliTarget)
     cliPlan = currentCLIPlan()
   }
 }
