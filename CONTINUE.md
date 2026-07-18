@@ -6,7 +6,7 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-Everything is **on `main`**; the tracked tree is clean. **415 tests**, run with `./scripts/test.sh`
+Everything is **on `main`**; the tracked tree is clean. **439 tests**, run with `./scripts/test.sh`
 (thin `swift test` passthrough). The full loop is **LIVE and dogfooded**: capture → ingest →
 auto-extract runs unattended via the bundled background-sync agent; the app is a real `Pensieve.app`
 bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The core intelligence gate passed
@@ -17,6 +17,14 @@ long ago. The hard part is done — remaining work is feature breadth, not found
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
+- **Semantic / vector recall — Track C #2** (2026-07-18, merged `e640645`). "Find without exact words"
+  across ⌘F ("Related" section) and a unified MCP `search` tool, over one shared Kit kernel. Native
+  `NLContextualEmbedding` + vendored `sqlite-vec` (registered **per-connection** — Apple disables the
+  process-global path) in a **separate, rebuildable, never-synced `semantic-index.sqlite`**; incremental
+  membership-driven indexer runs in the daemon + app sync paths; KNN over-fetch + a canonical join that
+  re-applies the live predicate (grounded-retrieval-only; on-device only). Default-on Settings toggle.
+  **439 tests.** **Post-merge carry:** rebuild + reinstall the app to `/Applications` so the bundled
+  `pensieve mcp` exposes `search`. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-18-semantic-vector-recall*`.
 - **Bundle the `pensieve` CLI into the app** (2026-07-17, through `3a9092c` 2026-07-18). The CLI is now
   an embedded Xcode **tool target** (`PensieveCLI`, `PRODUCT_NAME=pensieve`) at
   `Pensieve.app/Contents/Helpers/pensieve`; `~/.local/bin/pensieve` is an **app-managed symlink** to it,
@@ -57,12 +65,15 @@ error surfacing (2026-07-14). Nothing open. (Spec 2's deferred source-management
 editing remain parked in `backlog.md`, not part of Track B.)
 
 **Track C — findability / OS-integration.** In-app find (⌘F), the menu-bar item, `pensieve://`, App
-Intents + Spotlight, and Focus filters are all live. Remaining, unblocked + sequenced:
-- **1b** — index loose-end text into Spotlight (own spec; extend `NodeEntity`/`SpotlightIndexer`).
-- **#2** — semantic / vector recall (`sqlite-vec` / on-device embeddings; reuses the in-app-find corpus;
-  the grounding caveat — opaque clusters are hard to cite — must be solved).
+Intents + Spotlight, Focus filters, and **semantic/vector recall (#2, shipped 2026-07-18)** are all live.
+Remaining, unblocked + sequenced:
+- **1b** — index loose-end text into *Spotlight* specifically (own spec; extend `NodeEntity`/
+  `SpotlightIndexer`). Note #2 already covers in-app + MCP semantic recall — this is the OS-index leg.
 - Small follow-up: an "include archived" toggle in in-app search (archived nodes are currently only
   reachable via the collapsed Archived section).
+- Semantic-recall fast-follows (from the whole-branch review, deferred): expand-and-retry under heavy
+  Focus-muting; idempotent rebuild guard on embedder-version bump; MCP per-call embedder/store caching;
+  transcript-passage chunking (the next corpus increment — its own spec).
 
 **Blocked — do not start:** Widgets + CloudKit need a **paid Apple Developer team** (App Groups / Team-ID
 entitlement). That single gate unblocks the whole extension family at once; revisit only when a paid

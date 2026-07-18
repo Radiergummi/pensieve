@@ -19,7 +19,7 @@ order is a recommendation, nothing is foreclosed.
 
 ### Shipped (the core loop is live)
 
-The full loop is **LIVE and dogfooded** (415 tests). **`CLAUDE.md` Status is the authoritative,
+The full loop is **LIVE and dogfooded** (439 tests). **`CLAUDE.md` Status is the authoritative,
 exhaustive shipped changelog** — this is the short version. Shipped: capture → ingest → grounded/cited
 loose ends → `next`/`digest` (1A/1B); the typed tree & strands (1B-org); source discovery (`scan`);
 **background sync** via a bundled `SMAppService.agent` (retired the launchd daemon, pillar #3); the real
@@ -167,8 +167,8 @@ availability + deployment-target floors at each surface's spec time.
 - **Menu-bar item** (`MenuBarExtra`) — ✅ **DONE (v0.2, 2026-07-06).** Heartbeat + top-5 What's Next popover + click-to-jump. **= pillar #1.**
 - **Desktop / Notification-Center widgets** (WidgetKit) — *small–medium; strong.* "What's Next" / "Dormant" as a glance. Part of pillar #5.
 - **Control Center controls** (`ControlWidget`, macOS 15+) — *small; medium.* "Open briefing" / "Refresh" button; rides on WidgetKit.
-- **Spotlight indexing** — ✅ **DONE (v0.3, 2026-07-06)** as the **App Intents foundation** pillar (spec+plan `{specs,plans}/2026-07-06-app-intents-foundation*`). Nodes as `IndexedEntity` (macOS 15+) *on* App Intents, not standalone Core Spotlight — one `NodeEntity` serves Spotlight content + Siri + Shortcuts + Open-Node/Show-Pensieve-List intents; clear-then-index on launch + ⌘R. **Future extensions (roadmap):** index loose-end text; **semantic / vector search** so recall doesn't need exact words — evaluate `sqlite-vec`, on-device embeddings (`NLContextualEmbedding` / Foundation Models SDK), and native Spotlight semantic indexing (shares the embedding substrate with the theme-discovery spike below); live/background re-indexing (slice-3 liveness); `.text` vs `.content` attribute-set refinement if body matching underperforms. Part of pillar #5.
-- **In-app find (search captured content)** — ✅ **DONE (2026-07-11, merged to `main` `02bb0a1`)** as **Track C sub-project 1a**. Native `.searchable` field + ⌘F over the grounded core corpus (node name/description, open loose-end text/quote), grouped results in the content column, land-on-the-cited-row (auto-expand + scroll); Focus-scoped; tested `SnippetMaker` + `SearchQueries` Kit kernels; ⌘K palette retired (nav core retained). Spec/plan: `{specs,plans}/2026-07-10-in-app-find*`. **Deferred siblings:** **1b** — index loose-end text into Spotlight (own spec); **#2** — semantic/vector recall (`sqlite-vec` / on-device embeddings; reuses this corpus; grounding caveat). **Follow-up carry — ✅ DONE (2026-07-11, `192641d`):** a description-only node hit now leads with `hit.name` (primary) + the description snippet (secondary); name-matches keep the highlighted name + kind. `NodeHit.matchedField` drives the layout. Debounced search input + consolidated search-mode state landed alongside (`15594ee`).
+- **Spotlight indexing** — ✅ **DONE (v0.3, 2026-07-06)** as the **App Intents foundation** pillar (spec+plan `{specs,plans}/2026-07-06-app-intents-foundation*`). Nodes as `IndexedEntity` (macOS 15+) *on* App Intents, not standalone Core Spotlight — one `NodeEntity` serves Spotlight content + Siri + Shortcuts + Open-Node/Show-Pensieve-List intents; clear-then-index on launch + ⌘R. **Future extensions (roadmap):** index loose-end text (**1b**, still open); **semantic / vector search** — ✅ **DONE (2026-07-18, in-app ⌘F + MCP)** via `NLContextualEmbedding` + `sqlite-vec` (see the dated entry below); native *Spotlight* semantic indexing specifically remains open; live/background re-indexing (slice-3 liveness); `.text` vs `.content` attribute-set refinement if body matching underperforms. Part of pillar #5.
+- **In-app find (search captured content)** — ✅ **DONE (2026-07-11, merged to `main` `02bb0a1`)** as **Track C sub-project 1a**. Native `.searchable` field + ⌘F over the grounded core corpus (node name/description, open loose-end text/quote), grouped results in the content column, land-on-the-cited-row (auto-expand + scroll); Focus-scoped; tested `SnippetMaker` + `SearchQueries` Kit kernels; ⌘K palette retired (nav core retained). Spec/plan: `{specs,plans}/2026-07-10-in-app-find*`. **Deferred siblings:** **1b** — index loose-end text into Spotlight (own spec, still open); **#2** — semantic/vector recall — ✅ **DONE (2026-07-18, `e640645`)**, see the dated entry below (`NLContextualEmbedding` + `sqlite-vec`, ⌘F "Related" + MCP `search`). **Follow-up carry — ✅ DONE (2026-07-11, `192641d`):** a description-only node hit now leads with `hit.name` (primary) + the description snippet (secondary); name-matches keep the highlighted name + kind. `NodeHit.matchedField` drives the layout. Debounced search input + consolidated search-mode state landed alongside (`15594ee`).
 - **Notifications** (UserNotifications) — *small–medium; strong but sparing.* Grounded nudges (left-open, briefing-ready, dormant); noise risk → rare + cited.
 - **Dock tile** — *tiny; marginal.* Open-loose-ends badge + a recent-projects dock menu.
 
@@ -205,6 +205,38 @@ availability + deployment-target floors at each surface's spec time.
 changes): Writing Tools / Image Playground / Genmoji / Visual Intelligence (content-creation AI); Endpoint
 Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print services / legacy Automator
 (App Intents + Shortcuts subsumes the useful part).
+
+---
+
+## Semantic / vector recall (Track C #2) — DONE (2026-07-18, merged to `main` `e640645`)
+
+"Find without exact words" across ⌘F and MCP over one shared Kit kernel. **Native
+`NLContextualEmbedding`** (per-token → mean-pooled → unit-normalized; by-script Latin covers EN+DE)
++ **`sqlite-vec`** vendored as a static SwiftPM C target (`Sources/CSQLiteVec`). Apple disables
+process-global `sqlite3_auto_extension`, so it registers **per-connection** via GRDB
+`Configuration.prepareDatabase` → `pensieve_sqlite_vec_init_connection`. The index is a **separate,
+rebuildable, never-synced `semantic-index.sqlite`** (`vec0` + `node_id`/`state` metadata cols;
+drop+rebuild on embedder-version/dimension change; busy `.timeout(5)`). **Kit (tested):**
+`TextEmbedder`/`NLContextualEmbedder`, `SemanticIndexStore`, `EmbeddableItem`+`SemanticIndexer`
+(**membership/metadata-driven** — prune by live `LooseEnd.isOpen`/`state`, repoint without re-embed,
+embedder-nil skips-and-retries), `SemanticQueries` (**over-fetch** `k'=max(k*8,50)` + in-KNN `state`
+filter, then `visibleNodeIDs`/floor; the canonical join **re-applies the live predicate** — last
+grounding defense). **Grounded-retrieval-only, on-device only** (cloud never used), best-effort
+throughout. **App:** ⌘F "Related" section + app-side index sync in `drainThenRefresh`; default-on
+Settings ▸ Intelligence toggle (`PensieveDefaults.semanticSearchKey`, honored by app/daemon/MCP);
+German. **MCP:** a unified `search` tool (exact+semantic blend — **subsumes the deferred keyword
+sibling**). v1 corpus = active nodes + open loose ends + enriched events; the `EmbeddableItem` seam
+makes transcripts/future sources additive. Subagent-driven (sqlite-vec GO/NO-GO spike + 8 tasks;
+**Opus** whole-branch = READY-TO-MERGE, 0 Critical, 1 Important fixed = busy timeout; two real
+defects caught+fixed — embedder-nil starvation, a non-failing over-fetch test). **439 tests.**
+Spec/plan: `{specs,plans}/2026-07-18-semantic-vector-recall*`.
+
+**Deferred (fast-follow, not foreclosed):** expand-and-retry under heavy Focus-muting; single-writer/
+idempotent rebuild guard on version bump; MCP per-call embedder/store caching; per-hit `db.read`
+batching in `resolve`; **transcript-passage chunking** (the next corpus increment — its own spec).
+**Post-merge carry:** rebuild + reinstall the app to `/Applications` so the bundled `pensieve mcp`
+exposes `search`. **Human-verify:** live MCP `search`; ⌘F "Related" after the NL asset downloads;
+toggle-off → no Related + MCP exact-only; German "Verwandt" in situ.
 
 ---
 
