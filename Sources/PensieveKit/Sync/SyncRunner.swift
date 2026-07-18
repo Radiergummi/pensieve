@@ -12,11 +12,13 @@ public struct SyncRunner {
   let provider: any LLMProvider
   let projectsDir: URL
   let now: @Sendable () -> Date
+  let semanticIndexer: SemanticIndexer?
 
   public init(spool: CaptureSpool, db: any DatabaseWriter, provider: any LLMProvider,
-              projectsDir: URL, now: @escaping @Sendable () -> Date = Date.init) {
+              projectsDir: URL, now: @escaping @Sendable () -> Date = Date.init,
+              semanticIndexer: SemanticIndexer? = nil) {
     self.spool = spool; self.db = db; self.provider = provider
-    self.projectsDir = projectsDir; self.now = now
+    self.projectsDir = projectsDir; self.now = now; self.semanticIndexer = semanticIndexer
   }
 
   public struct Summary: Sendable {
@@ -44,6 +46,19 @@ public struct SyncRunner {
     let results = try await ExtractionRunner(db: db, provider: provider).run()
     let extracted = results.reduce(0) { $0 + $1.inserted }
     Log.sync.info("Sync complete: ingested=\(ingested, privacy: .public) discovered=\(discovered.count, privacy: .public) extracted=\(extracted, privacy: .public)")
+
+    // Semantic index refresh (best-effort, on-device, toggle-gated). Never blocks the sync summary.
+    if let semanticIndexer {
+      await semanticIndexer.sync(db)
+    } else if PensieveDefaults.semanticSearchEnabled() {
+      let embedder = NLContextualEmbedder()
+      let store = SemanticIndexStore(url: PensievePaths.semanticIndexURL(),
+                                     dimension: embedder.dimension, embedderVersion: embedder.version)
+      if store.isAvailable, embedder.dimension > 0 {
+        await SemanticIndexer(store: store, embedder: embedder).sync(db)
+      }
+    }
+
     return Summary(ingested: ingested, discovered: discovered.count, extracted: extracted)
   }
 }

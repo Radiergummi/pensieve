@@ -10,8 +10,15 @@ public enum PensieveDefaults {
   public static let cloudFlavorKey = "cloudFlavor"
   public static let cloudBaseURLKey = "cloudBaseURL"
   public static let cloudModelKey = "cloudModel"
+  public static let semanticSearchKey = "app.semanticSearch"
 
   /// The app's defaults domain, read from the CLI/daemon. Falls back to `.standard` if the suite
   /// can't be opened (never nil). The app itself uses `.standard` directly (its own domain).
   public static func shared() -> UserDefaults { UserDefaults(suiteName: appDomain) ?? .standard }
+
+  /// Semantic search is ON by default (matching the app's @AppStorage default). Cross-process
+  /// readers (the daemon) must honor the same default — `bool` alone reads false when unset.
+  public static func semanticSearchEnabled(_ defaults: UserDefaults = shared()) -> Bool {
+    defaults.object(forKey: semanticSearchKey) == nil ? true : defaults.bool(forKey: semanticSearchKey)
+  }
 }
