@@ -12,8 +12,17 @@ let package = Package(
   ],
   targets: [
     .target(
+      name: "CSQLiteVec",
+      // sqlite-vec.c uses SQLITE_CORE-off extension mode; link the system sqlite3.
+      cSettings: [.define("SQLITE_CORE", to: "0")],
+      linkerSettings: [.linkedLibrary("sqlite3")]
+    ),
+    .target(
       name: "PensieveKit",
-      dependencies: [.product(name: "SQLiteData", package: "sqlite-data")]
+      dependencies: [
+        .product(name: "SQLiteData", package: "sqlite-data"),
+        "CSQLiteVec",
+      ]
     ),
     .testTarget(
       name: "PensieveKitTests",
