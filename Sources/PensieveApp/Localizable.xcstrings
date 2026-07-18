@@ -12,6 +12,17 @@
         }
       }
     },
+    "Builds an on-device index so ⌘F and Claude Code can find work by meaning, not just exact words. First use downloads a small on-device model." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erstellt einen geräteinternen Index, damit ⌘F und Claude Code Arbeit nach Bedeutung finden, nicht nur nach exakten Wörtern. Bei der ersten Nutzung wird ein kleines geräteinternes Modell geladen."
+          }
+        }
+      }
+    },
     "A file is in the way" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1983,6 +1994,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Projekt auswählen"
+          }
+        }
+      }
+    },
+    "Semantic search (find by meaning)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semantische Suche (nach Bedeutung finden)"
           }
         }
       }

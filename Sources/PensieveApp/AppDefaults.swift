@@ -1,4 +1,5 @@
 import Foundation
+import PensieveKit
 
 /// UserDefaults keys shared between an `@AppStorage` binding in a View and a plain
 /// `UserDefaults` read elsewhere (e.g. the AppDelegate, which can't use `@AppStorage`), so
@@ -21,5 +22,11 @@ enum AppDefaults {
   static var backgroundSyncEnabled: Bool {
     UserDefaults.standard.object(forKey: backgroundSyncEnabledKey) == nil
       ? true : UserDefaults.standard.bool(forKey: backgroundSyncEnabledKey)
+  }
+
+  /// Semantic search is ON by default (matching the @AppStorage default and the Kit reader).
+  static var semanticSearchEnabled: Bool {
+    UserDefaults.standard.object(forKey: PensieveDefaults.semanticSearchKey) == nil
+      ? true : UserDefaults.standard.bool(forKey: PensieveDefaults.semanticSearchKey)
   }
 }

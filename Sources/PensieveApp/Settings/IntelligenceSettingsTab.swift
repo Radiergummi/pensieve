@@ -8,6 +8,7 @@ struct IntelligenceSettingsTab: View {
   @ObservedObject var model: AppModel
   @AppStorage(PensieveDefaults.llmProviderKey) private var providerRaw = ProviderPreference.auto.rawValue
   @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
+  @AppStorage(PensieveDefaults.semanticSearchKey) private var semanticSearchEnabled = true
 
   @AppStorage(PensieveDefaults.cloudFlavorKey) private var cloudFlavorRaw = CloudFlavor.anthropic.rawValue
   @AppStorage(PensieveDefaults.cloudBaseURLKey) private var cloudBaseURL = ""
@@ -61,6 +62,10 @@ struct IntelligenceSettingsTab: View {
     Form {
       Section {
         Toggle("Show “Last Work Done” narration", isOn: $narrationEnabled)
+
+        Toggle("Semantic search (find by meaning)", isOn: $semanticSearchEnabled)
+        Text("Builds an on-device index so ⌘F and Claude Code can find work by meaning, not just exact words. First use downloads a small on-device model.")
+          .font(.caption).foregroundStyle(.secondary)
 
         Picker("LLM Provider", selection: provider) {
           ForEach([ProviderPreference.auto, .foundationModels, .claudeCLI, .cloud], id: \.self) { p in
