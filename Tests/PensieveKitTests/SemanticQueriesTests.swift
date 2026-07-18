@@ -44,6 +44,37 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(!hits.contains { $0.nodeID == muted.id })    // muted node filtered out post-KNN
   }
 
+  /// Regression guard for the over-fetch itself: builds a corpus where MORE muted-context items
+  /// outrank the one visible item than `k`, so a NON-over-fetched (`kPrime == k`) KNN would
+  /// exclude the visible node before the Focus filter ever runs. Exploits StubEmbedder's
+  /// determinism — an item whose embeddable text is IDENTICAL to the query embeds to the SAME
+  /// vector (cosine ~1.0), guaranteeing it ranks above the visible node's (different-text, lower
+  /// cosine) hit for any k <= the muted count.
+  @Test func overFetchSurfacesVisibleHitRankedBelowMutedTop() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semq-overfetch"))
+    let query = "refunds pipeline overhaul"
+    let visible = Node(name: "Something entirely different", kind: NodeKind.project)
+    let mutedA = Node(name: query, kind: NodeKind.project, context: "personal")
+    let mutedB = Node(name: query, kind: NodeKind.project, context: "personal")
+    let mutedC = Node(name: query, kind: NodeKind.project, context: "personal")
+    try await db.write { db in
+      try Node.insert { visible }.execute(db)
+      try Node.insert { mutedA }.execute(db)
+      try Node.insert { mutedB }.execute(db)
+      try Node.insert { mutedC }.execute(db)
+    }
+    let embedder = StubEmbedder(dimension: 16)
+    let s = store()
+    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+
+    // 3 muted nodes tie at cosine 1.0, outranking the visible node for k=2 — only the over-fetch
+    // (kPrime = max(k*8, 50)) reaches past them to find it.
+    let hits = await SemanticQueries.search(
+      query: query, visibleNodeIDs: [visible.id], excludingIDs: [], k: 2, floor: -1.0,
+      store: s, embedder: embedder, db)
+    #expect(hits.contains { $0.nodeID == visible.id })
+  }
+
   @Test func staleIndexRowDroppedByJoin() async throws {
     let db = try openCanonicalDatabase(at: tempURL("semq-stale"))
     let n = Node(name: "N", kind: NodeKind.project)
