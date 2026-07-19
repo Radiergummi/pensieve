@@ -159,7 +159,11 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(!s.existingItems().keys.contains(le.id.uuidString))
   }
 
-  @Test func archivingNodePrunesItsItems() async throws {
+  /// Superseded contract: archiving used to prune a node's items from the index entirely. Task 1
+  /// widens the corpus producer to include archived nodes (tagged with their real state), so
+  /// archiving now re-tags instead of pruning — the items stay recallable, just no longer surfaced
+  /// by an `activeOnly` query (knn's own scoping is untouched by this task; see Task 2/3).
+  @Test func archivingNodeUpdatesItsItemsStateInsteadOfPruning() async throws {
     let db = try openCanonicalDatabase(at: tempURL("semidx-archive"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await db.write { try Node.insert { n }.execute($0) }
@@ -178,10 +182,15 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
       try Node.where { $0.id.eq(n.id) }.update { $0.state = NodeState.archived }.execute(db)
     }
     await idx.sync(db)
+
     let items = s.existingItems()
-    #expect(!items.keys.contains(n.id.uuidString))
-    #expect(!items.keys.contains(le.id.uuidString))
-    #expect(!items.keys.contains(ev.id.uuidString))
+    #expect(items.keys.contains(n.id.uuidString))
+    #expect(items.keys.contains(le.id.uuidString))
+    #expect(items.keys.contains(ev.id.uuidString))
+
+    let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
+    let activeHits = s.knn(query: queryVec, k: 5, activeOnly: true)
+    #expect(!activeHits.contains { $0.itemID == le.id.uuidString })
   }
 
   @Test func repointUpdatesNodeWithoutChangingHash() async throws {
@@ -264,5 +273,55 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     let queryVec = await StubEmbedder(dimension: 16).embed(["wire up refunds — TODO refunds"])![0]!
     let hits = s.knn(query: queryVec, k: 5, activeOnly: true)
     #expect(hits.contains { $0.itemID == le.id.uuidString })
+  }
+
+  @Test func gatherIncludesArchivedNodesTaggedWithTheirState() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("corpus-archived"))
+    let active = Node(name: "Payments", kind: NodeKind.project)
+    let archived = Node(name: "Legacy billing", state: .archived, kind: NodeKind.project)
+    try await db.write { db in
+      try Node.insert { active }.execute(db)
+      try Node.insert { archived }.execute(db)
+    }
+    let items = try EmbeddableCorpus.gather(db)
+
+    let byID = Dictionary(items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+    #expect(byID[active.id.uuidString]?.state == "active")
+    #expect(byID[archived.id.uuidString]?.state == "archived")
+  }
+
+  @Test func gatherTagsLooseEndsAndEventsWithTheirOwningNodesState() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("corpus-archived-children"))
+    let archived = Node(name: "Legacy billing", state: .archived, kind: NodeKind.project)
+    try await db.write { try Node.insert { archived }.execute($0) }
+    let ev = try makeEvent(db, node: archived, kind: CaptureKind.ccSession,
+                           workSummary: "migrated the old invoices")
+    let le = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+                      text: "drop the legacy invoice table", quote: "TODO drop invoices")
+    try await db.write { try LooseEnd.insert { le }.execute($0) }
+
+    let items = try EmbeddableCorpus.gather(db)
+    let byID = Dictionary(items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+
+    #expect(byID[le.id.uuidString]?.state == "archived")
+    #expect(byID[ev.id.uuidString]?.state == "archived")
+  }
+
+  @Test func gatherStillExcludesMutedNodesAndClosedLooseEnds() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("corpus-muted"))
+    let muted = Node(name: "Muted work", state: .muted, kind: NodeKind.project)
+    let archived = Node(name: "Archived work", state: .archived, kind: NodeKind.project)
+    try await db.write { db in
+      try Node.insert { muted }.execute(db)
+      try Node.insert { archived }.execute(db)
+    }
+    let ev = try makeEvent(db, node: archived)
+    let closed = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+                          text: "already handled", quote: "done", status: "closed")
+    try await db.write { try LooseEnd.insert { closed }.execute($0) }
+
+    let ids = Set(try EmbeddableCorpus.gather(db).map { $0.itemID })
+    #expect(!ids.contains(muted.id.uuidString))
+    #expect(!ids.contains(closed.id.uuidString))
   }
 }

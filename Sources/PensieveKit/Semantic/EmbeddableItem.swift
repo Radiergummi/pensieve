@@ -14,8 +14,9 @@ public struct EmbeddableItem: Sendable {
   }
 }
 
-/// v1 producer of the semantic corpus: active nodes + open loose ends + enriched events.
-/// The seam future producers (transcript chunks, etc.) extend.
+/// v1 producer of the semantic corpus: active AND archived nodes + their open loose ends +
+/// their enriched events, each tagged with its owning node's state (the query layer scopes on it).
+/// `muted` is never indexed. The seam future producers (transcript chunks, etc.) extend.
 public enum EmbeddableCorpus {
   /// Degenerate LLM output ("[]", "/", stray punctuation) is not searchable content — it embeds to
   /// noise and renders as an empty-looking "Related" row. Applies ONLY to model-generated text;
@@ -27,19 +28,26 @@ public enum EmbeddableCorpus {
   public static func gather(_ db: any DatabaseReader) throws -> [EmbeddableItem] {
     try db.read { db in
       var out: [EmbeddableItem] = []
-      let nodes = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
-      let activeIDs = Set(nodes.map { $0.id })
+      // Active AND archived: archiving hides work from the normal views, it does not make the work
+      // unrecallable. `muted` stays out of the corpus entirely. Each item carries its owning node's
+      // real state, which is what lets the query layer scope results per search scope.
+      let nodes = try Node.all.fetchAll(db)
+        .filter { $0.state == .active || $0.state == .archived }
+      let stateByNodeID = Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
+                                     uniquingKeysWith: { a, _ in a })
       for n in nodes {
         out.append(.init(itemID: n.id.uuidString, kind: "node", nodeID: n.id.uuidString,
                          state: n.state.rawValue, text: [n.name, n.description].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
-      for le in ends where activeIDs.contains(le.nodeID) {
+      for le in ends {
+        guard let state = stateByNodeID[le.nodeID] else { continue }
         out.append(.init(itemID: le.id.uuidString, kind: "loose_end", nodeID: le.nodeID.uuidString,
-                         state: "active", text: [le.text, le.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
+                         state: state, text: [le.text, le.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
       let events = try Event.all.fetchAll(db)
-      for e in events where activeIDs.contains(e.nodeID) {
+      for e in events {
+        guard let state = stateByNodeID[e.nodeID] else { continue }
         let text: String?
         switch e.kind {
         // LLM-enriched prose — gate it: degenerate model output ("[]", a bare "/") is not content.
@@ -49,7 +57,7 @@ public enum EmbeddableCorpus {
         }
         if let text {
           out.append(.init(itemID: e.id.uuidString, kind: "event", nodeID: e.nodeID.uuidString,
-                           state: "active", text: text))
+                           state: state, text: text))
         }
       }
       return out
