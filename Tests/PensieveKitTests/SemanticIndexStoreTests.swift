@@ -28,7 +28,7 @@ import Foundation
     #expect(hits.first!.similarity > hits.last!.similarity)
   }
 
-  @Test func activeOnlyFilterExcludesArchivedInKNN() async {
+  @Test func defaultScopeKNNExcludesArchived() async {
     let store = SemanticIndexStore(url: tempURL(), dimension: 8, embedderVersion: "stub:8")
     let e = StubEmbedder(dimension: 8)
     let v = await e.embed(["x"])![0]!

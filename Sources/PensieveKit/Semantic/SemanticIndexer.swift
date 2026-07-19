@@ -3,8 +3,9 @@ import SQLiteData
 
 /// Incremental reconciliation of the semantic index against the live canonical corpus.
 /// Membership- and metadata-driven, NOT hash-driven: pruning follows corpus membership (so a
-/// closed/noise loose end or an archived node's items disappear even though their text never
-/// changed). For an UNCHANGED item, metadata (node_id/state) is upserted unconditionally (so a
+/// closed/noise loose end disappears even though its text never changed; an archived node's
+/// items stay, with their `state` flipped instead). For an UNCHANGED item, metadata (node_id/state)
+/// is upserted unconditionally (so a
 /// repoint updates the index without re-embedding). A NEW or content-CHANGED item is only
 /// upserted once it has been (re-)embedded this run — if the embedder can't produce a vector,
 /// it's skipped entirely and retried on the next sync(). Best-effort: no-ops when the index is
@@ -22,7 +23,8 @@ public struct SemanticIndexer: Sendable {
     let existing = store.existingItems()                 // item_id -> content_hash
     let liveIDs = Set(corpus.map { $0.itemID })
 
-    // Prune anything no longer in the live corpus (closed/noise loose ends, archived, deleted).
+    // Prune anything no longer in the live corpus (closed/noise loose ends, deleted). Archived
+    // items stay live (their `state` metadata is upserted below, not pruned).
     let stale = existing.keys.filter { !liveIDs.contains($0) }
     store.delete(itemIDs: Array(stale))
 

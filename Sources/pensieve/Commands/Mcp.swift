@@ -253,6 +253,7 @@ private struct SearchItem: Encodable {
   var title: String
   var snippet: String
   var similarity: Double?
+  var archived: Bool
 
   init(node hit: NodeHit) {
     id = hit.id.uuidString
@@ -262,6 +263,7 @@ private struct SearchItem: Encodable {
     title = hit.name
     snippet = Self.text(hit.snippet)
     similarity = nil
+    archived = hit.isArchived
   }
 
   init(looseEnd hit: LooseEndHit) {
@@ -273,6 +275,7 @@ private struct SearchItem: Encodable {
     title = snippetText
     snippet = snippetText
     similarity = nil
+    archived = hit.isArchived
   }
 
   init(semantic hit: SemanticHit) {
@@ -283,12 +286,13 @@ private struct SearchItem: Encodable {
     title = hit.title
     snippet = Self.text(hit.snippet)
     similarity = hit.similarity
+    archived = hit.isArchived
   }
 
   private static func text(_ s: Snippet) -> String { s.leading + s.match + s.trailing }
 
   private enum CodingKeys: String, CodingKey {
-    case id, kind, node_id, node_name, title, snippet, similarity
+    case id, kind, node_id, node_name, title, snippet, similarity, archived
   }
 
   func encode(to encoder: Encoder) throws {
@@ -300,5 +304,6 @@ private struct SearchItem: Encodable {
     try c.encode(title, forKey: .title)
     try c.encode(snippet, forKey: .snippet)
     try c.encodeIfPresent(similarity, forKey: .similarity)
+    try c.encode(archived, forKey: .archived)
   }
 }

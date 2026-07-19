@@ -191,6 +191,41 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
     let activeHits = s.knn(query: queryVec, k: 5, includeArchived: false)
     #expect(!activeHits.contains { $0.itemID == le.id.uuidString })
+
+    // The vector itself is still there, not destroyed — it's reachable under the wide filter.
+    // This is what distinguishes "re-tagged" from "pruned-and-re-embedded" (both would satisfy
+    // the assertions above; only this one pins the vector survived unpruned).
+    let archivedHits = s.knn(query: queryVec, k: 5, includeArchived: true)
+    #expect(archivedHits.contains { $0.itemID == le.id.uuidString })
+  }
+
+  @Test func unarchivingNodeRestoresItsItemsToDefaultScopeResults() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semidx-unarchive"))
+    let n = Node(name: "N", kind: NodeKind.project)
+    try await db.write { try Node.insert { n }.execute($0) }
+    let ev = try makeEvent(db, node: n)
+    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "t", quote: "q")
+    try await db.write { try LooseEnd.insert { le }.execute($0) }
+
+    let s = store()
+    let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
+    await idx.sync(db)
+
+    try await db.write { db in
+      try Node.where { $0.id.eq(n.id) }.update { $0.state = NodeState.archived }.execute(db)
+    }
+    await idx.sync(db)
+
+    let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
+    #expect(!s.knn(query: queryVec, k: 5, includeArchived: false).contains { $0.itemID == le.id.uuidString })
+
+    try await db.write { db in
+      try Node.where { $0.id.eq(n.id) }.update { $0.state = NodeState.active }.execute(db)
+    }
+    await idx.sync(db)
+
+    let restoredHits = s.knn(query: queryVec, k: 5, includeArchived: false)
+    #expect(restoredHits.contains { $0.itemID == le.id.uuidString })
   }
 
   @Test func repointUpdatesNodeWithoutChangingHash() async throws {
