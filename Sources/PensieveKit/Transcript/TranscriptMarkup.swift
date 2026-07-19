@@ -34,9 +34,10 @@ struct Scanner {
       if atLineStart, consumeFencedBlock() { continue }
       if atLineStart, consumeIndentedCodeLine() { continue }
       if text[i] == "`", consumeInlineCode() { continue }
+      if consumeProseHarness() { continue }
       if text[i] == "<" {
         if consumeCallout() { continue }
-        // Task 5 inserts `if consumeHarness() { continue }` here.
+        if consumeHarness() { continue }
         if consumePlaceholderOrOrphan() { continue }
       }
       pending.append(text[i])
@@ -232,5 +233,126 @@ struct Scanner {
     guard i > text.startIndex else { return false }
     let prev = text[text.index(before: i)]
     return prev.isLetter || prev.isNumber || prev == "_" || prev == "(" || prev == "["
+  }
+
+  /// The modelled children of `<task-notification>`, recognised ONLY inside a matched span.
+  private static let taskNotificationChildren = [
+    "task-id", "tool-use-id", "output-file", "status", "summary", "note",
+  ]
+
+  /// Reads `<name>…</name>` starting at `from`, returning the body and the index past the close.
+  private func element(_ name: String, from: String.Index) -> (body: String, end: String.Index)? {
+    guard let open = tagName(at: from), !open.isClose, open.name == name else { return nil }
+    guard let close = text.range(of: "</\(name)>", range: open.end..<text.endIndex) else { return nil }
+    return (String(text[open.end..<close.lowerBound]), close.upperBound)
+  }
+
+  /// Precedence 3: an allowlisted harness tag, matched forward to its nearest close.
+  mutating func consumeHarness() -> Bool {
+    guard let open = tagName(at: i), !open.isClose,
+          TranscriptVocabulary.harnessTagNames.contains(open.name),
+          let close = text.range(of: "</\(open.name)>", range: open.end..<text.endIndex)
+    else { return false }
+
+    let body = String(text[open.end..<close.lowerBound])
+    var end = close.upperBound
+    let kind: HarnessKind
+
+    switch open.name {
+    case "command-name":
+      // The trio arrives adjacent; absorb the siblings that are actually present.
+      var message: String?, args: String?
+      if let m = element("command-message", from: end) { message = m.body; end = m.end }
+      if let a = element("command-args", from: end) { args = a.body; end = a.end }
+      kind = .command(name: body, message: message, args: args)
+    case "command-message", "command-args":
+      // Orphaned sibling (no preceding command-name): still a command block, name unknown.
+      kind = .command(name: "", message: open.name == "command-message" ? body : nil,
+                      args: open.name == "command-args" ? body : nil)
+    case "task-notification":
+      kind = .taskNotification(Self.parseTaskNotification(body))
+    case "system-reminder":
+      kind = .systemReminder(body)
+    case "local-command-caveat":
+      kind = .commandCaveat(body)
+    case "local-command-stdout", "local-command-stderr":
+      kind = .commandOutput(body)
+    case "bash-input":
+      var output: String?
+      if let o = element("bash-stdout", from: end) { output = o.body; end = o.end }
+      kind = .bashIO(input: body, output: output)
+    case "bash-stdout":
+      kind = .bashIO(input: nil, output: body)
+    case "tool_uses":
+      kind = .toolUses(body)
+    case "tool_use_error":
+      kind = .toolUseError(body)
+    default:
+      kind = .unknown(tag: open.name, body: body)
+    }
+
+    flushPending()
+    out.append(.harness(.init(kind: kind, raw: String(text[i..<end]))))
+    i = end
+    return true
+  }
+
+  /// Splits a task-notification's interior into modelled fields; anything else is preserved in
+  /// `unrecognisedChildren` so nothing is silently dropped.
+  private static func parseTaskNotification(_ body: String) -> TaskNotificationBlock {
+    var found: [String: String] = [:]
+    var scanner = Scanner(body)
+    while scanner.i < body.endIndex {
+      if let tag = scanner.tagName(at: scanner.i), !tag.isClose,
+         let close = body.range(of: "</\(tag.name)>", range: tag.end..<body.endIndex) {
+        found[tag.name] = String(body[tag.end..<close.lowerBound])
+        scanner.i = close.upperBound
+      } else {
+        scanner.i = body.index(after: scanner.i)
+      }
+    }
+    var unrecognised = found
+    for key in taskNotificationChildren { unrecognised.removeValue(forKey: key) }
+    return TaskNotificationBlock(
+      taskID: found["task-id"], toolUseID: found["tool-use-id"],
+      outputFile: found["output-file"], status: found["status"],
+      summary: found["summary"], note: found["note"],
+      unrecognisedChildren: unrecognised)
+  }
+
+  /// The two harness kinds Claude Code emits as prose, not tags. `skillPreamble` is anchored to the
+  /// start of the message with `hasPrefix` — a mid-message mention is someone talking about a
+  /// skill, not the harness injecting one.
+  mutating func consumeProseHarness() -> Bool {
+    let skillMarker = "Base directory for this skill:"
+    let caveatMarker =
+      "Caveat: The messages below were generated by the user while running local commands"
+
+    if i == text.startIndex, text.hasPrefix(skillMarker) {
+      let (l, next) = line(at: i)
+      let path = l.dropFirst(skillMarker.count).trimmingCharacters(in: .whitespaces)
+      flushPending()
+      out.append(.harness(.init(kind: .skillPreamble(path: path), raw: String(text[i..<next]))))
+      i = next
+      return true
+    }
+
+    if atLineStart, text[i...].hasPrefix(caveatMarker) {
+      let (l, next) = line(at: i)
+      flushPending()
+      out.append(.harness(.init(kind: .commandCaveat(String(l)), raw: String(text[i..<next]))))
+      i = next
+      return true
+    }
+
+    if atLineStart, text[i...].hasPrefix("[Request interrupted") {
+      let (_, next) = line(at: i)
+      flushPending()
+      out.append(.harness(.init(kind: .interrupted, raw: String(text[i..<next]))))
+      i = next
+      return true
+    }
+
+    return false
   }
 }
