@@ -19,5 +19,10 @@ struct PensieveShortcuts: AppShortcutsProvider {
       phrases: ["Open a node in \(.applicationName)"],
       shortTitle: "Open Node",
       systemImageName: "doc.text")
+    AppShortcut(
+      intent: OpenLooseEndIntent(),
+      phrases: ["Open a loose end in \(.applicationName)"],
+      shortTitle: "Open Loose End",
+      systemImageName: "text.badge.checkmark")
   }
 }

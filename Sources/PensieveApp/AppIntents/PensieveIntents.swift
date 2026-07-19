@@ -43,6 +43,18 @@ struct OpenNodeIntent: OpenIntent {
   }
 }
 
+/// Open a specific loose end — its node's recall view with the cited row expanded. `OpenIntent`
+/// implies opening the app. The system resolves `target` via LooseEndEntityQuery BEFORE perform().
+struct OpenLooseEndIntent: OpenIntent {
+  static let title: LocalizedStringResource = "Open Loose End"
+  @Parameter(title: "Loose End") var target: LooseEndEntity
+
+  @MainActor func perform() async throws -> some IntentResult {
+    PensieveIntentBridge.route(.looseEnd(target.id))
+    return .result()
+  }
+}
+
 /// Open one of the three smart lists (What's Next / Dormant / Recently Active).
 struct ShowPensieveListIntent: AppIntent {
   static let title: LocalizedStringResource = "Show Pensieve List"
