@@ -34,7 +34,11 @@ struct Scanner {
       if atLineStart, consumeFencedBlock() { continue }
       if atLineStart, consumeIndentedCodeLine() { continue }
       if text[i] == "`", consumeInlineCode() { continue }
-      // Tasks 4-5 insert callout / harness / placeholder / orphan-close handling here.
+      if text[i] == "<" {
+        if consumeCallout() { continue }
+        // Task 5 inserts `if consumeHarness() { continue }` here.
+        if consumePlaceholderOrOrphan() { continue }
+      }
       pending.append(text[i])
       i = text.index(after: i)
     }
@@ -158,5 +162,75 @@ struct Scanner {
       cursor = text.index(tick, offsetBy: runLength)
     }
     return false
+  }
+
+  /// Parses `<NAME>` or `</NAME>` at `start`. Returns the bare name, whether it was a close tag,
+  /// and the index just past `>`. Returns nil for anything that isn't a well-formed simple tag.
+  func tagName(at start: String.Index) -> (name: String, isClose: Bool, end: String.Index)? {
+    guard start < text.endIndex, text[start] == "<" else { return nil }
+    var cursor = text.index(after: start)
+    guard cursor < text.endIndex else { return nil }
+    let isClose = text[cursor] == "/"
+    if isClose { cursor = text.index(after: cursor) }
+    guard let gt = text[cursor...].firstIndex(of: ">") else { return nil }
+    let name = String(text[cursor..<gt])
+    guard !name.isEmpty,
+          name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
+    else { return nil }
+    return (name, isClose, text.index(after: gt))
+  }
+
+  private func isAllCaps(_ name: String) -> Bool {
+    name.contains { $0.isLetter } && !name.contains { $0.isLetter && $0.isLowercase }
+  }
+
+  /// Precedence 2: a paired ALL-CAPS tag, matched forward to the NEAREST matching close in the
+  /// same message. The interior is emitted as markdown only — harness tags inside are not
+  /// recursively parsed (I5).
+  mutating func consumeCallout() -> Bool {
+    guard let open = tagName(at: i), !open.isClose, isAllCaps(open.name) else { return false }
+    guard let closeRange = text.range(of: "</\(open.name)>", range: open.end..<text.endIndex)
+    else { return false }
+
+    flushPending()
+    let body = String(text[open.end..<closeRange.lowerBound])
+    let raw = String(text[i..<closeRange.upperBound])
+    out.append(.callout(.init(severity: .forTagName(open.name),
+                              tagName: open.name, body: body, raw: raw)))
+    i = closeRange.upperBound
+    return true
+  }
+
+  /// Precedence 4 and 5: an unmatched ALL-CAPS open, or ANY orphan close, becomes an inert
+  /// monospace run. Backward pairing is forbidden — an orphan close pairing with a distant earlier
+  /// open would swallow unrelated content, which is exactly what I4 exists to prevent.
+  ///
+  /// The rewrite is suppressed when the preceding character is an identifier char, `(`, or `[`,
+  /// which kills two real hazards in one predicate: Swift generics in prose (`Optional<NSError>`)
+  /// and link destinations (`[docs](<PROJECT>/readme)`). Suppressed tags are backslash-escaped
+  /// rather than left bare, because bare `<NSError>` is valid CommonMark raw HTML that MarkdownUI
+  /// would swallow — losing the text is worse than the bug being fixed.
+  mutating func consumePlaceholderOrOrphan() -> Bool {
+    guard let tag = tagName(at: i) else { return false }
+    guard tag.isClose || isAllCaps(tag.name) else {
+      // A lowercase, unallowlisted open tag: escape so it stays visible, don't code-span it.
+      pending += "\\<\(tag.name)\\>"
+      i = tag.end
+      return true
+    }
+
+    if suppressRewriteAtCurrentPosition {
+      pending += "\\<\(tag.isClose ? "/" : "")\(tag.name)\\>"
+    } else {
+      pending += "`\(tag.isClose ? "/" : "")\(tag.name)`"
+    }
+    i = tag.end
+    return true
+  }
+
+  private var suppressRewriteAtCurrentPosition: Bool {
+    guard i > text.startIndex else { return false }
+    let prev = text[text.index(before: i)]
+    return prev.isLetter || prev.isNumber || prev == "_" || prev == "(" || prev == "["
   }
 }
