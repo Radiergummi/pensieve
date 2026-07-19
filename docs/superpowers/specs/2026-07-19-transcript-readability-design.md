@@ -1,107 +1,139 @@
 # Transcript readability — chat rendering, harness-tag vocabulary, type scale
 
 **Date:** 2026-07-19
-**Status:** design, awaiting approval
+**Status:** design, revised after two adversarial reviews + a corpus re-measurement
 **Scope:** sub-project #1 of 3 split out of one dogfooding report. Siblings (rich code blocks;
 Writing Tools) are parked in `backlog.md` → "Transcript rendering — deferred siblings".
+
+**Revision note.** The first draft was reviewed by two independent Opus agents (parser-safety and
+integration lenses), producing 3 Critical and ~10 Important findings. Re-measuring the corpus then
+invalidated the evidence base of the draft *and* of both reviews — see §Corpus evidence. This
+document is a rewrite, not a patch.
 
 ## Problem
 
 The inline provenance view renders a Claude Code transcript window as a flat list. Every message —
-whether the user typed it, Claude wrote it, or the harness injected it — gets the same treatment:
-a raw lowercase role caption, `Markdown(msg.text)` at `FontSize(14)`, and `opacity(0.7)` if
-`!isUserPrompt`. All of it lives in one 15-line function, `messageRow` (`LooseEndRow.swift:156`).
-
-Four concrete complaints from dogfooding:
+typed by the user, written by Claude, or injected by the harness — gets the same treatment: a raw
+lowercase role caption, `Markdown(msg.text)` at `FontSize(14)`, and `opacity(0.7)` when
+`!isUserPrompt` (`LooseEndRow.swift:156-170`).
 
 1. **Role labels** are tiny, lowercase, unlocalized, impersonal.
-2. **XML-ish tags render raw.** `<HARD-GATE>…</HARD-GATE>`, `<local-command-caveat>`,
-   `<command-name>/clear</command-name>`, `<task-notification>` blocks all appear as literal angle
-   brackets in the middle of prose.
-3. **Heading scale is too loud.** MarkdownUI's default multipliers put `h1` near 28pt against 14pt
-   body, so a skill doc's title dominates the pane.
-4. Code blocks are unhighlighted and diagrams unrendered — **deferred, see backlog.**
+2. **XML-ish tags render raw** — `<HARD-GATE>`, `<command-name>`, `<task-notification>` appear as
+   literal angle brackets mid-prose.
+3. **Heading scale is too loud** — MarkdownUI's defaults put `h1` near 28pt against 14pt body.
+4. Code blocks unhighlighted, diagrams unrendered — **deferred, see backlog.**
 
 ## Corpus evidence
 
-Measured across `~/.claude/projects/*/*.jsonl` before designing. This drove every detection rule.
+**Methodology matters more than the numbers, because the first draft got this wrong twice.**
 
-**Paired ALL-CAPS tags** (open count == close count) — the semantic ones, and there are only four:
+The draft grepped `~/.claude/projects/*/*.jsonl` — a single-level glob matching **898 of 5124**
+files, i.e. 17.5% of the corpus. Both adversarial reviews then re-grepped recursively and produced
+different (larger) numbers, but still over **raw JSONL**, which counts tag text inside
+`toolUseResult`, thinking blocks, and tool *inputs* — none of which reach the parser.
 
-| Tag | Open | Close |
+`TranscriptParser.extractText` (`TranscriptParser.swift:59-65`) surfaces only `message.content`,
+either as a string or the `{type:text}` blocks joined by newlines. The numbers below were produced
+by decoding every line with `jq` and reproducing exactly that extraction — **the text the parser
+actually receives**. Any future re-measurement must use this method.
+
+**Consequence: the callout feature was designed around tags that barely exist in parser input.**
+
+| Tag | Raw JSONL (misleading) | **Parser-visible** |
 |---|---|---|
-| `EXTREMELY-IMPORTANT` | 1786 | 1786 |
-| `EXTREMELY_IMPORTANT` | 1786 | 1786 |
-| `SUBAGENT-STOP` | 1786 | 1786 |
-| `HARD-GATE` | 144 | **143** |
+| `SUBAGENT-STOP` | 1785 open | **1 open / 3 close** |
+| `EXTREMELY-IMPORTANT` | 1785 open | **1 open / 3 close** |
+| `EXTREMELY_IMPORTANT` | 1784 open | **0 open / 2 close** |
+| `HARD-GATE` | 200 open | **154 open / 150 close** |
+| `<string>` (code content) | 12210 | **132** |
+| `<span>` (code content) | 2711 | **60** |
 
-**Never-closed ALL-CAPS tags** — placeholders, not markup: `<UUID>` 255, `<VAR>` 169,
-`<SECRET_NAME>` 62, `<REDACTED>`, `<PROJECT>`, `<DB_BACKUPS_PROJECT_ID>`, `<FOLDER_ID>`, `<TAB>`,
-`<ORG>`, `<LIB>`. Zero closing tags for any of them.
+`EXTREMELY-IMPORTANT` and `SUBAGENT-STOP` live in system-prompt/skill-injection channels that never
+become `message.content`. Only `HARD-GATE` is genuinely present, because the brainstorming skill
+body *is* delivered as a user message.
 
-**Lowercase tags** split into two very different groups. Harness envelopes:
-`task-notification` 3224 (+ children `task-id`, `tool-use-id`, `output-file`, `status`, `summary`,
-`note`), `command-name` 761, `command-message` 704, `command-args` 581, `local-command-stdout` 520,
-`local-command-caveat` 464, `system-reminder` 462. And **code content that must never be touched**:
-`<string>` 2077, `<name>` 1216, `<span>` 886, `<code>` 774, `<void>` 718, `<key>` 433.
+**Orphan closing tags are the dominant shape, not an edge case.** In parser-visible text the true
+orphans are `</FUTURE-SKILL-TAG>` 8, `</SUBAGENT-STOP>` 2, `</TAG>` 2, `</HARD_GATE>` 1 — and
+`SUBAGENT-STOP` has *more closes than opens*. A design that only handles matched pairs and unmatched
+*opens* mishandles the commonest real case.
 
-Three conclusions:
+**Harness tags, parser-visible:**
 
-- **Pairing separates placeholders from markup.** Placeholders never close.
-- **Uppercase can stay open-ended** — pairing alone is a sufficient filter, so tags invented by
-  future skills are handled without maintenance.
-- **Lowercase must be an explicit allowlist.** That namespace collides with real code content;
-  accepting arbitrary lowercase tags would eat `<string>` and `<span>` out of code samples.
+| Tag | Count | | Tag | Count |
+|---|---|---|---|---|
+| `task-notification` | 969 | | `local-command-caveat` | 457 |
+| `tool_uses` | 759 | | `system-reminder` | 157 |
+| `command-name` | 649 | | `local-command-stdout` | 124 |
+| `command-message` | 638 | | `bash-input` / `bash-stdout` | 23 / 23 |
+| `command-args` | 532 | | `local-command-stderr` / `tool_use_error` | 3 / 2 |
+
+`<summary>` 958 against `task-notification` 969 is near 1:1, so summary is overwhelmingly a child of
+the envelope rather than standalone HTML. (The reviews claimed summary *outnumbers*
+task-notification; that holds only in raw JSONL.) Child-scoping is still specified below as a
+defensive measure, but it is not the urgent hazard the reviews described.
+
+**Code-content collision is real but ~100× smaller than the draft claimed**: `<string>` 132,
+`<span>` 60, `<code>` 25. The allowlist discipline stands; the justification is proportionate now.
+
+## Prior art in the codebase — reuse, don't duplicate
+
+`TranscriptParser.isInjectedOrCommand` (`TranscriptParser.swift:81-92`) **already** maintains an
+envelope marker list, and it is a superset of the draft's allowlist:
+
+```
+<command-name> <command-message> <command-args> <local-command-stdout> <local-command-stderr>
+<bash-input> <bash-stdout> <system-reminder> <task-notification> </tool_uses> <subagent
+"[Request interrupted"  "Base directory for this skill:"
+"Caveat: The messages below were generated by the user while running local commands"
+```
+
+Two consequences, both binding on this design:
+
+- **One source of truth.** The vocabulary moves to a shared Kit constant consumed by *both*
+  `isInjectedOrCommand` and `TranscriptMarkup`. Two parallel lists of the same concept would drift
+  silently.
+- **`local-command-caveat` is matched upstream as prose**, not as a tag — via the literal "Caveat:
+  The messages below…". The tag form does exist in parser input (457), so both forms must be
+  recognized.
 
 ## Decisions
 
-Settled during brainstorming:
+From brainstorming: (1) machine envelopes are a **third visual class**, not user bubbles;
+(2) **keyword severity** for callouts; (3) placeholders as monospace runs; (4) **all harness kinds
+bespoke**; (5) type scale **moderate** (22/18/16 on 14pt body); (6) role label **on speaker change**,
+small and subtle; (7) **approach A** — tested Kit parser, thin views.
 
-1. **Machine envelopes are a third visual class**, not user bubbles. Rendering an injected
-   `<command-name>` as a right-aligned user bubble would assert the user said something they didn't.
-2. **Callout severity by keyword heuristic**, with a neutral fallback.
-3. **Placeholders render as monospace chips.**
-4. **All six harness kinds get bespoke rendering.**
-5. **Type scale: moderate** — h1 22 / h2 18 / h3 16 against 14pt body (down from ~28).
-6. **Role label on speaker change only**, small and subtle.
-7. **Approach A** — a tested Kit parser producing typed segments; thin app views.
+Added after review: (8) **the work splits into two sequenced parts** at the Kit/app seam;
+(9) success criteria are **rescoped** to what is actually reachable.
 
-## Architecture
+## Part 1 — `TranscriptMarkup` (PensieveKit, tested)
 
-```
-ProvenanceMessage.text  ──▶  TranscriptMarkup.parse(_:)  ──▶  [TranscriptSegment]
-   (raw transcript)            PensieveKit, pure, tested        │
-                                                                ▼
-                                                        MessageBubble (app, thin)
-                                                        ├─ .markdown → Markdown(…) + theme
-                                                        ├─ .callout  → CalloutView
-                                                        └─ .harness  → HarnessBlockView
-```
-
-Parsing is pure PensieveKit and fully unit-tested; the app maps segments to views and owns styling
-only. This follows the standing rule — derivation in tested Kit, views thin — and is the only
-approach that supports bespoke structured cards.
-
-**New Kit file:** `Sources/PensieveKit/Transcript/TranscriptMarkup.swift` (alongside the existing
-`TranscriptParser.swift`). No changes to `ProvenanceQueries`, the trust gate, or any store.
+**New file:** `Sources/PensieveKit/Transcript/TranscriptMarkup.swift`. No changes to
+`ProvenanceQueries`, the stores, extraction, or the trust gate.
 
 ### Types
 
+Every case carries `raw` — the exact source substring — which is what makes the no-loss invariant
+executable rather than aspirational (see I2).
+
 ```swift
 public enum TranscriptSegment: Equatable, Sendable {
-  case markdown(String)
+  case markdown(String)                       // raw == the string itself
   case callout(TranscriptCallout)
   case harness(HarnessBlock)
+
+  public var raw: String { … }                // exact source text of this segment
 }
 
 public struct TranscriptCallout: Equatable, Sendable {
   public let severity: CalloutSeverity
-  public let title: String        // prettified: "HARD-GATE" → "Hard Gate"
-  public let body: String         // markdown, rendered recursively as markdown only
+  public let tagName: String    // verbatim, e.g. "HARD-GATE" — CONTENT, never localized
+  public let body: String       // markdown; rendered per I5
+  public let raw: String
 }
 
-public enum CalloutSeverity: Equatable, Sendable {
-  case caution, warning, important, tip, note, neutral
+public enum CalloutSeverity: String, Equatable, Sendable {
+  case caution, warning, important, tip, note, neutral   // closed set → localizable chrome
 }
 
 public enum HarnessBlock: Equatable, Sendable {
@@ -109,184 +141,276 @@ public enum HarnessBlock: Equatable, Sendable {
   case taskNotification(TaskNotificationBlock)
   case systemReminder(String)
   case commandCaveat(String)
-  case commandOutput(String)
+  case commandOutput(String)          // local-command-stdout / stderr
+  case bashIO(input: String?, output: String?)
+  case toolUses(String)
+  case interrupted                    // "[Request interrupted…"
   case skillPreamble(path: String)
+  case unknown(tag: String, body: String)   // allowlisted-shape but unrecognised
+
+  public var raw: String { … }
 }
 
 public struct TaskNotificationBlock: Equatable, Sendable {
-  public let taskID: String?
-  public let toolUseID: String?
-  public let outputFile: String?
-  public let status: String?
-  public let summary: String?
-  public let note: String?
+  public let taskID, toolUseID, outputFile, status, summary, note: String?
+  public let unrecognisedChildren: [String: String]   // nothing is silently dropped
+  public let raw: String
 }
 ```
 
-### Parse rules, in order
+### Parse algorithm
 
-1. **Protect code.** Fenced blocks (` ``` `, `~~~`) and inline code spans are located first and
-   never transformed. Everything inside passes through as `.markdown` verbatim. This is what keeps
-   `<string>` and `<span>` in code samples intact.
-2. **Harness allowlist** (lowercase, exact names only): `task-notification`, the
-   `command-name`/`command-message`/`command-args` group, `system-reminder`, `local-command-caveat`,
-   `local-command-stdout`. A matched pair becomes `.harness`.
-3. **Skill preamble** — the plain-text prefix `Base directory for this skill: <path>` becomes
-   `.skillPreamble`. *Not tag-detected; the lowest-confidence rule in the design, isolated so it can
-   be dropped without touching anything else.*
-4. **Paired ALL-CAPS tags** (`<[A-Z][A-Z0-9_-]{2,}>` with a matching close) become `.callout`.
-5. **Unpaired ALL-CAPS tags** are rewritten to inline code spans so they render as monospace chips.
-6. **Everything else** stays `.markdown`, byte-identical.
+**A single left-to-right scan in which the outermost construct wins.** The draft's numbered rule
+list implied a multi-pass pipeline, which review showed to be self-contradictory: harness-before-
+callout splits a callout containing a `<system-reminder>` into two unpaired fragments, both then
+demoted to raw text, and the callout vanishes.
 
-### Severity mapping
+At each position, in this precedence:
 
-Checked in this precedence order against the uppercased tag name; first match wins:
+1. **Code (highest).** A fenced block or inline code span consumes to its close and emits
+   `.markdown` verbatim. **CommonMark rules, pinned:** an opening fence is ≥3 identical `` ` `` or
+   `~` with ≤3 leading spaces; it closes only on ≥N of the *same* character; an unterminated fence
+   runs to end of message. 4-space-indented code blocks are **also** protected — MarkdownUI renders
+   them as code, so transforming them would violate I3 from the reader's point of view even if not
+   by its letter.
+2. **Callout open** — a paired ALL-CAPS tag, matched forward to the **nearest** matching close in
+   the same message. Its interior is emitted per I5.
+3. **Harness open** — an allowlisted tag, matched forward to its nearest close.
+4. **Placeholder** — an ALL-CAPS tag that is not an open of a matched pair (see guards below).
+5. **Orphan close** — `</ANYTHING>` with no open. Treated exactly like a placeholder: rendered as a
+   monospace run, never as markup, never paired backwards. Backward scanning is **forbidden**: an
+   orphan close pairing with a distant earlier open would swallow unrelated content, which is
+   precisely the failure I4 exists to prevent.
+6. **Otherwise** — accumulate into `.markdown`.
 
-| Severity | Matches on | Known corpus tags |
+`task-notification` children (`task-id`, `tool-use-id`, `output-file`, `status`, `summary`, `note`)
+are recognised **only within** a matched `<task-notification>`…`</task-notification>` span, never at
+top level. Unrecognised children are preserved in `unrecognisedChildren`.
+
+### Placeholder guards
+
+The rewrite `<NAME>` → `` `NAME` `` is **suppressed** when the immediately preceding character is an
+identifier character, `(`, or `[`. This kills two real hazards in one predicate:
+
+- **Swift generics in prose** — `Optional<NSError>` must not become `` Optional`NSError` ``. These
+  are Swift-project transcripts; this is common, not theoretical.
+- **Link destinations** — `[docs](<PROJECT>/readme)` must not get a code span inside a destination.
+
+Inline-span detection pairs backticks left-to-right; a trailing unbalanced backtick protects
+nothing. A placeholder adjacent to existing backticks must not produce unbalanced delimiters.
+
+### Severity mapping — token-based, not substring
+
+The tag name is split on `[-_]` and keywords are matched against **whole tokens**. Substring
+matching produces wrong severities on real names: `GATE` would fire `.caution` inside
+`AUTHGW_RESOLVE_KEY_URL`, `STOP` inside `NON-STOP`, `TIP` inside `MULTIPLE-TIPS`.
+
+| Severity | Tokens | Known |
 |---|---|---|
-| `.caution` | `STOP`, `GATE`, `CRITICAL`, `DANGER`, `NEVER` | `HARD-GATE`, `SUBAGENT-STOP` |
-| `.warning` | `WARNING`, `CAUTION` | — |
-| `.important` | `IMPORTANT`, `MUST`, `REQUIRED` | `EXTREMELY-IMPORTANT`, `EXTREMELY_IMPORTANT` |
-| `.tip` | `TIP`, `HINT` | — |
-| `.note` | `NOTE`, `INFO` | — |
-| `.neutral` | fallback | any future tag |
+| `.caution` | `STOP` `GATE` `CRITICAL` `DANGER` `NEVER` | `HARD-GATE`, `SUBAGENT-STOP` |
+| `.warning` | `WARNING` `CAUTION` | — |
+| `.important` | `IMPORTANT` `MUST` `REQUIRED` | `EXTREMELY-IMPORTANT/_IMPORTANT` |
+| `.tip` | `TIP` `HINT` | — |
+| `.note` | `NOTE` `INFO` | — |
+| `.neutral` | fallback | future tags |
 
-Hyphen and underscore are equivalent, so `EXTREMELY-IMPORTANT` and `EXTREMELY_IMPORTANT` map
-identically. Titles prettify by replacing separators with spaces and title-casing.
+Precedence is table order; first match wins. `-` and `_` are equivalent.
 
-### Parser invariants (the safety contract)
+### Invariants
 
-The parser runs over arbitrary transcript text; a bug here could silently swallow captured content,
-which matters more than any styling. Each invariant gets a test:
+- **I1 — Passthrough.** Input with no recognised construct returns `[.markdown(input)]`,
+  byte-identical.
+- **I2 — No loss, executable.** `segments.map(\.raw).joined() == input`, with **one** documented
+  exception: the placeholder rewrite, whose exact output shape is pinned by its own test. Because
+  every case carries `raw`, this is a literal property test rather than an aspiration. *This is the
+  load-bearing invariant: it makes "the parser ate my message" a test failure.*
+- **I3 — Code is sacred.** No transformation inside fenced blocks, inline spans, or 4-space-indented
+  blocks.
+- **I4 — Unmatched tolerance.** An unmatched open **or close** stays inert and never swallows to
+  end-of-message. Justified by 4 unmatched `HARD-GATE` opens and 13 orphan closes in parser input.
+- **I5 — Flat nesting.** A callout body renders as markdown only; harness tags inside a callout are
+  not recursively parsed. Deliberate.
 
-- **I1 — Passthrough.** Input containing no recognized construct returns exactly
-  `[.markdown(input)]`, byte-identical.
-- **I2 — No loss.** Reassembling every segment reproduces the input exactly, with **one documented
-  exception**: the placeholder rewrite of rule 5 (`<NAME>` → `` `NAME` ``). That exception is pinned
-  by its own test asserting the exact output shape, so it cannot widen silently. This is the
-  load-bearing property; it makes "the parser ate my message" a test failure.
-  *Edge case to cover:* a placeholder adjacent to existing backticks must not produce unbalanced
-  code-span delimiters.
-- **I3 — Code is sacred.** No transformation inside fenced blocks or inline code spans.
-- **I4 — Unmatched tolerance.** An opening tag with no close stays plain text and never swallows to
-  end-of-message. Directly motivated by the observed `HARD-GATE` 144/143 mismatch.
-- **I5 — Flat nesting.** A callout body is rendered as markdown only; nested harness tags inside a
-  callout are not recursively parsed in v1. Deliberate simplification, not an oversight.
+## Part 2 — Rendering (app, thin)
 
-## Rendering
+Depends on Part 1 being merged and green.
 
-### Speaker classification
+### Speaker classification — conjunctive, not disjunctive
 
-Three classes, derived from the parse rather than the flag alone:
+The draft quoted `isUserPrompt` incorrectly. The real definition (`TranscriptParser.swift:43-44`):
 
-```
-system  ← !isUserPrompt, OR the message body is entirely harness blocks
-you     ← role == "user" and not system
-claude  ← role == "assistant"
+```swift
+let isUserPrompt = (type == "user") && !isMeta && !isToolResult(content)
+  && !isInjectedOrCommand(text) && !text.isEmpty
 ```
 
-`isUserPrompt` is `(type == "user") && !isMeta && !isToolResult(content)`
-(`TranscriptParser.swift:43`). A command envelope arriving without the meta flag would otherwise be
-classified as *you*; folding the parse result into the decision makes the classification
-self-correcting.
+`isInjectedOrCommand` is a bare `text.contains(marker)`. **A genuine user message that merely
+*quotes* an envelope therefore already scores `isUserPrompt == false`** — 309 such `"type":"user"`
+records exist in this project's transcripts alone, because debugging this very feature means pasting
+envelopes into chat.
 
-### Bubbles
+Under the draft's disjunctive rule (`system ← !isUserPrompt OR …`) those messages would render as
+full-width "not a person talking" strips — **the app asserting the user did not write something they
+did write**, an inversion of Decision 1's own principle. Today the cost is only `opacity(0.7)`.
 
-- **You** — trailing-aligned, accent-tinted fill, max width 95% of the container.
-- **Claude** — leading-aligned, neutral fill, same max width.
-- **System** — no bubble. Full-width, centered, dimmed strip or card; the shape itself says
-  "not a person talking".
-- Corner radius 12, padding 10 vertical / 12 horizontal, 8 between bubbles, 16 across a speaker
-  change.
-- **The cited-message highlight survives unchanged** — the orange leading bar still marks
-  `msg.isCited`. This is provenance, not decoration, and no restyling may drop it.
-- Role label appears **only on the first bubble of a run**, 11pt secondary, aligned to the bubble's
-  side.
+```
+system  ←  !isUserPrompt  AND  the parse yields no non-empty .markdown or .callout segment
+you     ←  role == "user" and not system
+claude  ←  role == "assistant"
+```
 
-### Harness block rendering
+A pasted envelope surrounded by human prose keeps its user bubble; a purely injected envelope still
+classifies as system.
 
-| Kind | Rendering |
+### Both row states are in scope
+
+`LooseEndRow` renders two paths, and the draft only addressed one:
+
+- `messageRow` (`:156`) — expanded, uses `Markdown`.
+- `previewRow` (`:146`) — **the collapsed default** whenever `ctx.messages.count > 1`
+  (`:81-87`), and it renders raw `Text(msg.text)`, not Markdown. Tags appear as literal brackets
+  here regardless of anything done to `messageRow`.
+
+`previewRow` renders the first `.markdown` segment (or a callout's severity label) at `lineLimit(3)`
+with the same mapped role label.
+
+### Two consumers at very different widths
+
+`LooseEndRow` is instantiated in the **middle column** (`ContentListView.swift:138,153`), clamped to
+`min 240 / ideal 300 / max 420` (`RootView.swift:33`). Net of padding, ~180pt is usable — bubbles and
+22pt headings do not work there, and left/right alternation carries no information.
+
+`LooseEndRow` takes a `compact: Bool`. Compact keeps today's full-width stack with the new parsed
+rendering (callouts, harness cards, chips, type scale) but **no bubbles**. Bubble max width is
+`0.95 × min(container, Prose.measure)` so it stays sane in a wide detail pane too.
+
+### The cited highlight — specified per class
+
+`ProvenanceQueries.swift:50-52` hard-guards `citedMessage.isUserPrompt`, so **the cited message is
+always a user prompt** ⇒ always the "you" class ⇒ always a *trailing*-aligned bubble. Today's marker
+is a leading `.overlay` + `.padding(.leading, 10)` (`:163-166`), which has no leading edge to attach
+to. The sacred invariant had nowhere to land in the draft.
+
+| Class | Cited treatment |
 |---|---|
-| `command` | `⌘ /clear · clear` — glyph, command name, message when present. Missing `command-message`/empty `command-args` must not break the layout (`/simplify` appears with `command-name` alone). |
-| `taskNotification` | Status dot + summary as the headline; output-file basename as a secondary line; ids demoted or hidden. |
-| `systemReminder` | ⓘ label + prose. |
-| `commandCaveat` | ⚠ label + prose. |
-| `commandOutput` | Monospace block, visually a code block. |
-| `skillPreamble` | Compact one-liner naming the skill. |
+| you (trailing bubble) | trailing accent bar inside the bubble + tinted border |
+| claude (leading bubble) | leading accent bar, as today |
+| system (strip) | leading accent bar |
+
+All three are separate eyeball-checklist items.
 
 ### Type scale
 
-Applied via `.markdownBlockStyle(\.heading1…6)` — MarkdownUI 2.4.1 exposes styles for
-`heading1…6`, `paragraph`, `blockquote`, `codeBlock` (verified in the vendored checkout; it has
-**no** native GitHub-alert support, which is why callouts are drawn by us).
+Via `.markdownBlockStyle(\.heading1…6)`. Verified against the vendored 2.4.1 checkout: styles exist
+for `heading1…6`, `paragraph`, `blockquote`, `codeBlock` (`Theme.swift:127-169`); there is **no**
+native GitHub-alert support, so callouts are hand-drawn; `BlockStyle<CodeBlockConfiguration>`
+(`:169`) is the seam deferred syntax highlighting will use.
 
-| Element | Size | Weight |
-|---|---|---|
-| h1 | 22 | semibold |
-| h2 | 18 | semibold |
-| h3 | 16 | semibold |
-| h4–h6 | 15 / 14 / 14 | semibold |
-| body | 14 | regular, lineSpacing 4 (existing `prose()`) |
+h1 22 · h2 18 · h3 16 · h4–h6 15/14/14, all semibold · body 14 regular, lineSpacing 4.
+
+### Placeholders render as tinted monospace runs, not pills
+
+`.markdownTextStyle(\.code)` composes `FontFamilyVariant(.monospaced)`, `FontSize`, and
+`BackgroundColor` (`TextStyle/Styles/BackgroundColor.swift:4`). `TextStyle` emits `AttributedString`
+attributes only, so the background is a **flat rectangle behind the glyphs** — no corner radius, no
+padding. A rounded pill is unreachable through this API; "chip" in the brainstorm meant the pill, so
+this is a deliberate, recorded downgrade. Real pills would require lifting placeholders into inline
+views, which the block-level segment model does not support.
+
+Consequence: a placeholder and genuine inline code look identical. Accepted — both are tokens, and
+the alternative is a sentinel that could collide with content.
 
 ### Localization
 
-Chrome is localized (en + de String Catalog): callout severity titles, harness block labels, role
-display names, accessibility labels. Content is never localized: message text, quotes, command
-names, task summaries, transcript prose.
+**Severity labels are localizable chrome** (closed enum: "Caution"/"Achtung", "Important"/"Wichtig").
+**Tag names are content** and render verbatim, unlocalized, as a secondary token. The draft claimed
+callout *titles* were localized while also deriving them from arbitrary tag names — those cannot both
+be true, since a String Catalog key cannot exist for a tag invented next month.
 
-**Recorded rule change:** CLAUDE.md's localization section lists `roles` among never-localized
-content. That still holds for the stored role *string* — we never render it raw. A mapped display
-label ("You"/"Du", "Claude") is chrome derived from the role, not the content itself. CLAUDE.md
-gets a one-line amendment saying so, rather than being silently contradicted.
+Harness block labels and role display names are chrome and localized; message text, quotes, command
+names, and task summaries are content and are not.
+
+**CLAUDE.md:** the roles-are-never-localized text sits at line 22 *inside a historical
+shipped-feature bullet*, not in a rules section — so it is **not edited**. The clarification is
+recorded in this feature's own status bullet when it ships. Precedent already exists in shipped code:
+`LooseEndRow.swift:54` uses `String(localized: "captured")` as a role display fallback, so
+role-derived display chrome is localized today.
 
 ### Accessibility
 
-Bubbles carry an `accessibilityLabel` of "<localized role>: <text>" so the speaker survives for
-VoiceOver even though the label is drawn only on speaker change. System strips announce their kind.
-Chips read as their token.
+`.accessibilityElement(children: .contain)` with an `accessibilityLabel` naming only the class
+("You"/"Claude"/"System"), leaving segments as navigable children. Labelling the container with the
+full text would either compose unpredictably over MarkdownUI's view tree or, with `.ignore`, flatten
+a multi-segment message into one unnavigable string — losing per-paragraph rotor navigation that
+today's flat `Markdown(msg.text)` provides.
+
+### Parsing happens once, not memoized
+
+Parse all messages where `context` is assigned (`LooseEndRow.swift:69`) into a parallel array held in
+the same `@State`. No cache key, no invalidation, no cross-session collision — `ProvenanceMessage.index`
+is per-session, so a shared index-keyed cache could serve session A's segments for session B.
+
+### Shared container modifiers
+
+All three segment views share one modifier set — `.fixedSize(horizontal: false, vertical: true)` and
+`.frame(maxWidth: .infinity, alignment: .leading)`. A `CalloutView` missing `.fixedSize` truncates
+vertically inside `ContentListView`'s `List`. Intra-message segment spacing: 8pt; between bubbles
+8pt; across a speaker change 16pt.
 
 ## Testing
 
-**Kit** — `Tests/PensieveKitTests/TranscriptMarkupTests.swift`, ~18 cases:
+**Part 1 (Kit)** — `Tests/PensieveKitTests/TranscriptMarkupTests.swift`, ~28 cases:
 
-- I1 passthrough on plain prose; I2 no-loss over a mixed fixture.
-- `<HARD-GATE>` and `<string>` inside a fenced block: untouched (I3).
-- Inline code span containing a tag: untouched.
-- `<HARD-GATE>` with no close: plain text, nothing swallowed (I4).
-- `<UUID>`, `<SECRET_NAME>` → chips; `<UUID>` inside a fence → untouched.
-- Command group: full trio; `command-name` alone; empty `command-args`.
-- `task-notification`: all children; missing children.
-- Severity precedence table incl. fallback; `-` vs `_` equivalence.
-- Adjacent and nested tags; empty message; tag-only message (→ system classification).
+- I1 passthrough; **I2 as a property test** (`segments.map(\.raw).joined() == input`) over a mixed
+  fixture, plus the pinned placeholder-rewrite exception.
+- I3: fences of length 3 and 4; `~~~`; ≤3-space-indented; 4-space-indented block; unterminated fence;
+  a tag inside each.
+- I4: unmatched `<HARD-GATE>` open; bare `</FUTURE-SKILL-TAG>` orphan close; `</TAG>`.
+- Nearest-match pairing; explicit test that an orphan close does **not** pair backwards.
+- Callout containing a `<system-reminder>` → callout survives whole (I5 + outermost-wins).
+- Placeholder guards: `Optional<NSError>`, `[docs](<PROJECT>/readme)`, backtick adjacency,
+  unbalanced trailing backtick.
+- `<summary>x</summary>` at top level → untouched; inside `task-notification` → a child; an
+  unrecognised child lands in `unrecognisedChildren`.
+- Command group: full trio, `command-name` alone, empty `command-args`.
+- Severity: token vs substring (`AUTHGW_GATEWAY_NOTE → .note`); `-`/`_` equivalence; fallback.
+- Skill preamble anchored with `hasPrefix`, not `contains` (mid-message occurrence → not a preamble).
+- Empty message; tag-only message.
 
-**App** — no unit tests by project convention. Verified by `xcodebuild` build, a non-blocking
-smoke-launch of the inner binary with throwaway `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`, and an
-eyeball checklist against the reported screenshot.
+**Part 2 (App)** — no unit tests by convention. Verification is an enumerated matrix, written into
+the plan: detail pane wide · detail pane at the 860pt min window · middle column at 240pt · recall
+window at 480pt × {you, claude, system} × {cited, not cited} × {en, de}.
 
 ## Risks
 
-- **Parser swallowing content** — the real risk. Mitigated by I2 as an executable property.
-- **Allowlist goes stale** as Claude Code changes its envelope format. Mitigation is honest
-  degradation: unknown tags fall through to plain text, so raw angle brackets reappear and are
-  themselves the signal to update. Recorded as a maintenance expectation, not a defect.
-- **Segmentation splits markdown constructs.** A message becomes several `Markdown` views, so an
-  ordered list straddling a tag boundary restarts its numbering. Accepted — these tags wrap whole
-  blocks in practice.
-- **Parse cost per render.** Parse once per message and memoize by message index rather than
-  re-parsing in `body`.
-- **Placeholder chips are indistinguishable from real inline code**, since both become code spans.
-  Accepted: both are tokens, and the alternative is a sentinel that could collide with content.
+- **Parser swallowing content** — mitigated by I2 as an executable property over `raw`.
+- **Vocabulary drift** — mitigated by sharing one Kit constant with `isInjectedOrCommand`.
+- **Allowlist staleness** — unknown tags fall through to `.unknown` / plain text; raw brackets
+  reappearing is the signal to update. This is *designed* behaviour, which is why success criterion 1
+  is scoped rather than absolute.
+- **Segmentation splits markdown constructs** — an ordered list straddling a tag boundary restarts
+  numbering. Accepted; these tags wrap whole blocks.
+- **Text selection** — whole-message select-and-copy does not work today (no `textSelection` anywhere
+  in the app, none in MarkdownUI), so segmentation regresses nothing. It does foreclose adding it
+  later without a separate copy affordance.
+- **Part 2 has no automated coverage** while being a full rewrite of the rendering path. The
+  Kit/app split exists so the half that *can* be proven is proven independently.
 
 ## Out of scope
 
-Syntax highlighting, Mermaid/Graphviz rendering, and Writing Tools — all in `backlog.md` with
-their revisit triggers. `BlockStyle<CodeBlockConfiguration>` is the seam highlighting will use.
+Syntax highlighting, Mermaid/Graphviz rendering, Writing Tools — all in `backlog.md` with revisit
+triggers.
 
 ## Success criteria
 
-1. The reported screenshot renders with **zero raw angle brackets**.
-2. Injected envelopes are visually distinct from user messages; nothing the user did not write is
-   attributed to them.
-3. The cited-message provenance highlight is preserved exactly.
-4. `./scripts/test.sh` green at 448 + new Kit tests; `xcodebuild` clean; smoke launch survives.
-5. German renders in situ without layout breakage.
+Rescoped: "zero raw angle brackets" is unreachable and contradicts the allowlist-staleness risk.
+
+1. Every construct in the reported screenshot renders without raw angle brackets, **and** every tag
+   in the shared `isInjectedOrCommand` vocabulary is handled. Tags outside it (`<result>`,
+   `<subagent_tokens>`, `<duration_ms>`) are **known-unhandled** and recorded as such.
+2. Nothing the user did not write is attributed to them; a message quoting an envelope keeps its
+   user bubble.
+3. The cited-provenance highlight is preserved and specified for all three speaker classes.
+4. `./scripts/test.sh` green at 448 + Part 1's ~28 Kit tests; `xcodebuild` clean; smoke launch
+   survives.
+5. The verification matrix passes at all four widths in both languages.
