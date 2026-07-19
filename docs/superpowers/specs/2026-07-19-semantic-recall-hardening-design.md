@@ -17,8 +17,7 @@ in-app-find deferred siblings:
 
 - **A — Include-archived toggle (⌘F)** — *user-facing.*
 - **B — Rebuild robustness** (rescoped after review: the concurrency mechanism already works, so this
-  becomes a regression test for the version-bump invariant + an optional delete-and-retry hardening) —
-  *invisible.*
+  is a regression test for the version-bump invariant only — no production code change) — *invisible.*
 - **C — MCP embedder/store caching** across calls — *invisible.*
 - **D — Expand-and-retry under heavy Focus-muting** (with a floor-aware exit) — *invisible.*
 
@@ -123,22 +122,18 @@ today's `open`:
 **That is already the desired behavior.** The proposed transaction change would be a literal no-op
 refactor. It is dropped.
 
-**What Part B actually delivers:**
+**What Part B delivers (test-only, per user decision):**
 
-1. **A regression test that locks in the invariant** (the real deliverable): open the store, index
-   items; reopen with the **same** version/dimension → indexed data survives, no drop. Reopen with a
-   **bumped** version → tables dropped, index empty, `meta` reinserted. This pins the "rebuild only on
-   mismatch, idempotent on match" contract so a future refactor can't silently regress it.
+**A regression test that locks in the invariant** — the sole deliverable. Open the store, index
+items; reopen with the **same** version/dimension → indexed data survives, no drop. Reopen with a
+**bumped** version → tables dropped, index empty, `meta` reinserted. This pins the "rebuild only on
+mismatch, idempotent on match" contract so a future refactor can't silently regress it.
 
-2. **A narrow hardening of the delete-and-retry footgun** — `open`'s blanket `catch { return nil }`
-   (`SemanticIndexStore.swift:86`) turns *any* thrown error into `init`'s `removeItem` (lines 30–34).
-   A rebuild that ever exceeded the 5 s busy timeout would throw `SQLITE_BUSY` → nil → **delete a
-   freshly-built index**. Rated *near-impossible* in practice (an empty-table DROP/CREATE is
-   sub-millisecond), so per YAGNI this is **optional** and gated on the user's call (see the open
-   question at hand-off). If included: have `open` distinguish a genuine unopenable/corrupt signal
-   from a transient write-lock timeout, and let `init` delete-and-retry only on the former.
-
-The upsert path is untouched throughout.
+**Not included (decided against, YAGNI).** Hardening `open`'s blanket `catch { return nil }`
+(`SemanticIndexStore.swift:86`) — which turns *any* thrown error into `init`'s `removeItem` and could,
+in principle, delete a freshly-built index if a rebuild ever exceeded the 5 s busy timeout — is a
+*near-impossible* scenario (an empty-table DROP/CREATE is sub-millisecond) and is deliberately left
+alone. No production code changes in Part B; the upsert and open paths are untouched.
 
 ## Part C — MCP embedder/store caching
 
@@ -227,8 +222,7 @@ bump/reconsider the cap at that point.
     `meta`. (The cross-process serialization is already provided by GRDB's immediate write transaction —
     see Part B — so this test pins the *invariant*, not a new mechanism.)
   - MCP caching + the app toggle: no MCP/app unit tests — behavior is guarded by the existing search
-    tests; verified by manual smoke. The optional delete-and-retry hardening (Part B item 2), if
-    included, gets its own unit test (a transient-busy throw does not delete the file).
+    tests; verified by manual smoke.
 - **Verification.** `./scripts/test.sh` for Kit; `xcodebuild` build + non-blocking inner-binary
   smoke-launch for the app (throwaway `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`). Interactive checks
   (the scope bar toggling live results incl. an archived hit; German scope labels) are human-verify
