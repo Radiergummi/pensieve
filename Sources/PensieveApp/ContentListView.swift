@@ -3,7 +3,7 @@ import SwiftUI
 import PensieveKit
 
 struct ContentListView: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   // A focused leaf's loose ends, loaded off-`body` via `.task` (never a DB query in `body`).
   @State private var looseEnds: [LooseEndView] = []
   @State private var reviewItems: [LooseEndView] = []

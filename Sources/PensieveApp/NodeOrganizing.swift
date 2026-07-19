@@ -7,7 +7,7 @@ import PensieveKit
 /// through AppModel → Kit NodeCommands. The chosen icon keeps the stored "sf:<name>" / "emoji:<g>"
 /// form.
 struct NodeEditor: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   let request: NodeEditRequest
   @Environment(\.dismiss) private var dismiss
 
@@ -118,7 +118,7 @@ struct NodeEditor: View {
 
 /// The organizing context menu shared by sidebar-tree and content-list rows.
 struct NodeContextMenu: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   let node: Node
 
   var body: some View {
@@ -146,7 +146,7 @@ struct NodeContextMenu: View {
 
 /// Reparent `nodeID` under a chosen node (or to top level). Targets exclude self + descendants.
 struct MovePicker: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   let nodeID: UUID
   @Environment(\.dismiss) private var dismiss
 
@@ -168,7 +168,7 @@ struct MovePicker: View {
 /// Merge `nodeID` into a chosen target (destructive; confirmation required). Targets exclude
 /// self + descendants.
 struct MergePicker: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   let nodeID: UUID
   @Environment(\.dismiss) private var dismiss
   @State private var pendingTarget: Node?

@@ -8,7 +8,7 @@ import PensieveKit
 /// visible (the gather is a cheap file-stat + one-row DB read), so "Last sync" / "Last captured
 /// activity" stay live. It never mutates the agent — the toggle lives in Settings ▸ General.
 struct AdvancedSettingsTab: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
 
   @State private var status: SystemStatus?
   @State private var syncStatus: SMAppService.Status = .notRegistered

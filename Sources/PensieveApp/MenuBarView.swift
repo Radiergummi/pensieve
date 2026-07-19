@@ -24,7 +24,7 @@ extension MonitorSnapshot.Status {
 /// The menu-bar popover content: capture heartbeat + a short What's Next glance. Reads the shared
 /// AppModel and renders only — all data is from the tested MonitorSnapshot / SmartLists kernels.
 struct MenuBarView: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   @Environment(\.openWindow) private var openWindow
 
   private static let maxRows = 5
@@ -104,7 +104,7 @@ struct MenuBarView: View {
 /// AppDelegate to the shared model, ensuring `start()` has run (so What's Next isn't empty even if
 /// the main window never opened), and observing external deep links.
 struct MenuBarLabel: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   let appDelegate: AppDelegate
   @Environment(\.openWindow) private var openWindow
 

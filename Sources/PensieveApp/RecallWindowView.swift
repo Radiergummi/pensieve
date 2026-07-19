@@ -5,9 +5,9 @@ import PensieveKit
 /// A focused, single-node recall window (⌘⌥N). Reuses DetailView; provenance shows inline in each
 /// loose-end row, so there's no window-specific inspector state to worry about.
 /// Reads the shared AppModel; a cold-restored window may briefly resolve nil before the store
-/// loads — it re-renders when @Published forest/allNodes refresh, so the first nil is transient.
+/// loads — it re-renders when the observed `forest` refreshes, so the first nil is transient.
 struct RecallWindowView: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   let nodeID: UUID
 
   var body: some View {

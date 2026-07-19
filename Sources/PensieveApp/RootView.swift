@@ -3,7 +3,7 @@ import SwiftUI
 import PensieveKit
 
 struct RootView: View {
-  @ObservedObject var model: AppModel
+  @Bindable var model: AppModel
   @Environment(\.openWindow) private var openWindow
   // Bound column visibility so the native NavigationSplitView sidebar toggle (in the sidebar, like
   // Mail) works. The sidebar is fully independent of the provenance panel now.

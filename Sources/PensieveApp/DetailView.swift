@@ -3,7 +3,7 @@ import SwiftUI
 import PensieveKit
 
 struct DetailView: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
   let node: Node
   /// When false, the detail omits its Loose Ends section (the middle column is showing this same

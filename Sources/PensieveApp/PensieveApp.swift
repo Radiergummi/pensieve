@@ -17,7 +17,7 @@ enum Stores {
 @main
 struct PensieveApp: App {
   // One AppModel for the app's lifetime. Its init reads/writes the lastOpenedAt UserDefault.
-  @StateObject private var model = AppModel()
+  @State private var model = AppModel()
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
   var body: some Scene {

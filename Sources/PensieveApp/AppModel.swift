@@ -1,6 +1,7 @@
 // Sources/PensieveApp/AppModel.swift
 import Foundation
 import SwiftUI
+import Observation
 import SQLiteData
 import GRDB
 import os
@@ -114,75 +115,76 @@ struct AppError: Identifiable {
 }
 
 @MainActor
-final class AppModel: ObservableObject {
-  @Published var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
-  @Published var forest: [NodeForestNode] = []
-  @Published var archivedForest: [NodeForestNode] = []
-  @Published var sidebarSelection: SidebarSelection? = .briefing
-  @Published var selectedNodeID: UUID?
+@Observable
+final class AppModel {
+  var lists = SmartLists(whatsNext: [], dormant: [], recentlyActive: [])
+  var forest: [NodeForestNode] = []
+  var archivedForest: [NodeForestNode] = []
+  var sidebarSelection: SidebarSelection? = .briefing
+  var selectedNodeID: UUID?
   /// Drives the New/Edit node modal. nil = closed. Mounted in RootView.
-  @Published var editingNode: NodeEditRequest?
+  var editingNode: NodeEditRequest?
   /// Non-nil while a Move/Merge picker sheet is up for that node. Mounted in RootView.
-  @Published var movePickerNodeID: UUID?
-  @Published var mergePickerNodeID: UUID?
+  var movePickerNodeID: UUID?
+  var mergePickerNodeID: UUID?
   /// Non-nil while the delete confirmation is presented for that node. Mounted in RootView.
-  @Published var pendingDeleteNodeID: UUID?
+  var pendingDeleteNodeID: UUID?
   /// The one surfaced organizing-write failure. Mounted as a single `.alert` in RootView.
-  @Published var presentedError: AppError?
-  @Published var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
+  var presentedError: AppError?
+  var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
-  @Published var briefingCards: [BriefingCard] = []
+  var briefingCards: [BriefingCard] = []
   /// Count of open, unlabeled, machine-suggested loose ends — the "Review Suggestions" badge.
-  @Published var reviewCount = 0
+  var reviewCount = 0
   /// Set by the AppDelegate when an external `pensieve://` URL is opened; observed by the
   /// always-mounted menu-bar label, which applies it and clears it back to nil.
-  @Published var pendingDeepLink: DeepLink?
+  var pendingDeepLink: DeepLink?
   /// Set by File ▸ Open in New Window (⌘⌥N); observed by RootView, which opens a recall window
   /// via its own openWindow environment and clears it. (RootView is a View, so it reliably has
   /// openWindow; a Commands struct's environment access is less reliable — hence this bridge.)
-  @Published var openNodeRequest: UUID?
+  var openNodeRequest: UUID?
   /// "Since when" the Briefing measures movement: the previous launch's timestamp (or 7 days ago on
   /// first run). Fixed for the session so cards don't shift under you while the window is open.
   let briefingSince: Date
 
-  var db: (any DatabaseWriter)?
+  @ObservationIgnored var db: (any DatabaseWriter)?
   /// Persistent spool connection, reused for BOTH drains and the heartbeat. Opening a fresh
   /// connection per refresh/drain touches the store dir's `-shm`/`-wal` sidecars, which re-fires
   /// the FSEvents watch below into a busy-loop; a long-lived connection reads without that churn.
-  private var spool: CaptureSpool?
-  private var allNodes: [Node] = []
+  @ObservationIgnored private var spool: CaptureSpool?
+  @ObservationIgnored private var allNodes: [Node] = []
   /// The active Focus context ("" = no Focus / unfiltered), mirrored from UserDefaults by the
   /// SetFocusFilterIntent. Drives the visible-node filter applied in refresh()/refreshGlance().
-  private var activeFocusContext = ""
+  @ObservationIgnored private var activeFocusContext = ""
   /// Last context the forest was built for — so a context change rebuilds it even when the node set
   /// is unchanged (the `fetched != allNodes` guard alone would skip it).
-  private var lastForestContext: String?
-  private var observationTask: Task<Void, Never>?
-  private var spoolWatcher: DirectoryWatcher?
-  private var canonicalWatcher: DirectoryWatcher?
-  private lazy var refreshDebouncer = Debouncer(interval: 0.15) { [weak self] in
+  @ObservationIgnored private var lastForestContext: String?
+  @ObservationIgnored private var observationTask: Task<Void, Never>?
+  @ObservationIgnored private var spoolWatcher: DirectoryWatcher?
+  @ObservationIgnored private var canonicalWatcher: DirectoryWatcher?
+  @ObservationIgnored private lazy var refreshDebouncer = Debouncer(interval: 0.15) { [weak self] in
     await self?.refreshFromWatch()
   }
-  private lazy var drainDebouncer = Debouncer(interval: 0.15) { [weak self] in
+  @ObservationIgnored private lazy var drainDebouncer = Debouncer(interval: 0.15) { [weak self] in
     await self?.drainThenRefreshFromWatch()
   }
   /// Coalesces rapid typing in the .searchable field into one DB read (runSearch), instead of a
   /// full node+loose-end scan per keystroke.
-  private lazy var searchDebouncer = Debouncer(interval: 0.2) { [weak self] in
+  @ObservationIgnored private lazy var searchDebouncer = Debouncer(interval: 0.2) { [weak self] in
     await self?.runSearch()
   }
-  private var started = false
+  @ObservationIgnored private var started = false
   // NOT lazy: rebuilt when the provider preference/config changes (SettingsView), so an in-session
   // switch takes effect on the next narration instead of requiring a relaunch. Bootstrapped cheaply
   // here; `init()` calls rebuildSummaryBuilder() to fold in any configured cloud provider.
-  private var summaryBuilder = SummaryBuilder(provider: ClaudeCLIProvider())
+  @ObservationIgnored private var summaryBuilder = SummaryBuilder(provider: ClaudeCLIProvider())
   /// The raw narration provider, retained so the manual "describe this node" action can call
   /// `NodeDescriber.describe` directly (SummaryBuilder's provider is private). Rebuilt alongside
   /// `summaryBuilder` on a provider/config change.
-  private var descriptionProvider: any LLMProvider = ClaudeCLIProvider()
+  @ObservationIgnored private var descriptionProvider: any LLMProvider = ClaudeCLIProvider()
   /// The provider kind the current `summaryBuilder` uses — folded into the narration cache key so a
   /// provider/model switch invalidates prose cached under the old provider.
-  private var providerKind = "claudeCLI"
+  @ObservationIgnored private var providerKind = "claudeCLI"
 
   /// Reads the app-side cloud inputs: config from UserDefaults (via the tested Kit derivation, which
   /// defaults an unset flavor to the one the picker shows), key from the Keychain. The config is
@@ -216,7 +218,7 @@ final class AppModel: ObservableObject {
   /// don't pollute the real cache. Device-local: narration is a derived, provider-specific
   /// output cache and must not sync.
   private struct CachedNarration: Codable { let prose: String; let key: String }
-  private var narrationCache: [UUID: CachedNarration] = [:]
+  @ObservationIgnored private var narrationCache: [UUID: CachedNarration] = [:]
 
   private static func narrationCacheDefaultsKey() -> String {
     "pensieve.narrationCache." + Stores.canonicalURL.path
@@ -242,22 +244,22 @@ final class AppModel: ObservableObject {
   /// Bumped on launch + ⌘R (drainThenRefresh). Views key their reload `.task` on it so the OPEN
   /// detail re-narrates after a refresh. The watch-driven refreshDebouncer calls `refresh()` (not
   /// drainThenRefresh), so this never bumps on background liveness updates.
-  @Published private(set) var refreshToken = 0
+  private(set) var refreshToken = 0
 
   // MARK: - In-app find
-  @Published var searchText: String = ""
-  @Published private(set) var searchResults: SearchResults = SearchResults()
+  var searchText: String = ""
+  private(set) var searchResults: SearchResults = SearchResults()
   /// Semantic ("Related") hits, populated after the exact search when the Settings toggle is on.
-  @Published private(set) var semanticHits: [SemanticHit] = []
+  private(set) var semanticHits: [SemanticHit] = []
   /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
-  @Published var expandedLooseEndID: UUID?
+  var expandedLooseEndID: UUID?
   /// Set by the Find command; RootView observes it to move focus into the .searchable field.
-  @Published var focusSearchRequested = false
-  private var searchTask: Task<Void, Never>?
-  private var searchToken = 0
+  var focusSearchRequested = false
+  @ObservationIgnored private var searchTask: Task<Void, Never>?
+  @ObservationIgnored private var searchToken = 0
   // Built once; NLContextualEmbedder resolves dimension from the loaded asset at init.
-  private lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
-  private lazy var semanticStore = SemanticIndexStore(
+  @ObservationIgnored private lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
+  @ObservationIgnored private lazy var semanticStore = SemanticIndexStore(
     url: PensievePaths.semanticIndexURL(), dimension: embedder.dimension, embedderVersion: embedder.version)
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
@@ -285,7 +287,7 @@ final class AppModel: ObservableObject {
     activeFocusContext = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
     Task { await drainThenRefresh() }
 
-    // Liveness (retires the 3 s Timer). Watches are app-lifetime (this @StateObject never deinits),
+    // Liveness (retires the 3 s Timer). Watches are app-lifetime (this AppModel never deinits),
     // so the menu-bar glyph stays live even when the main window is closed.
     if let db {
       observationTask = Task { [weak self] in

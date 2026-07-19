@@ -5,7 +5,7 @@ import PensieveKit
 /// The default landing: a by-project "world map" — what moved since your last visit, and each
 /// project's most-outstanding loose end. Clicking a card drills into that project's detail.
 struct BriefingView: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
 
   private var moved: [BriefingCard] { model.briefingCards.filter { $0.movedSince > 0 } }
   private var quiet: [BriefingCard] { model.briefingCards.filter { $0.movedSince == 0 } }

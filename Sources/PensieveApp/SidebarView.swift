@@ -3,7 +3,7 @@ import SwiftUI
 import PensieveKit
 
 struct SidebarView: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   @AppStorage("sidebar.smartLists.expanded") private var smartExpanded = true
   @AppStorage("sidebar.projects.expanded") private var projectsExpanded = true
   @AppStorage("sidebar.archived.expanded") private var archivedExpanded = false

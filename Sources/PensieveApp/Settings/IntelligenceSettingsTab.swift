@@ -5,7 +5,7 @@ import PensieveKit
 /// moved verbatim out of the old single-Form SettingsView and given vertical room. Reads/writes
 /// preferences via @AppStorage; the only AppModel touch is rebuilding its summary builder on change.
 struct IntelligenceSettingsTab: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
   @AppStorage(PensieveDefaults.llmProviderKey) private var providerRaw = ProviderPreference.auto.rawValue
   @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
   @AppStorage(PensieveDefaults.semanticSearchKey) private var semanticSearchEnabled = true

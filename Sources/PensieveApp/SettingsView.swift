@@ -4,7 +4,7 @@ import PensieveKit
 /// The app's Settings pane (⌘,) — a native multi-pane TabView, the first-party settings pattern.
 /// The window sizes to the visible tab; each tab carries its own .frame(width: 460).
 struct SettingsView: View {
-  @ObservedObject var model: AppModel
+  var model: AppModel
 
   var body: some View {
     TabView {
