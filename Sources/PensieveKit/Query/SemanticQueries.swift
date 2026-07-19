@@ -32,16 +32,33 @@ public enum SemanticQueries {
     guard query.count >= 2, store.isAvailable,
           let qvec = await embedder.embed([query])?.first else { return [] }
 
-    // Over-fetch so post-KNN filtering (Focus/exclude/floor/join) can't starve results.
-    let kPrime = max(k * 8, 50)
-    let raw = store.knn(query: qvec, k: kPrime, activeOnly: true)
+    // Over-fetch, and grow the fetch window if post-KNN filtering (Focus-muting) starved the
+    // result below k. A floor-aware exit keeps ordinary sparse queries (few above-floor items) at
+    // one fetch: similarity is monotonically non-increasing across `raw`, so once the farthest
+    // fetched neighbor is below `floor`, no deeper neighbor can ever become a hit.
+    var kFetch = max(k * 8, 50)
+    let maxFetch = 2000
+    while true {
+      let raw = store.knn(query: qvec, k: kFetch, activeOnly: true)
+      let hits = buildHits(raw, k: k, floor: floor, visibleNodeIDs: visibleNodeIDs,
+                           excludingIDs: excludingIDs, query: query, db)
+      if hits.count >= k || raw.count < kFetch || kFetch >= maxFetch { return hits }
+      if let last = raw.last, last.similarity < floor { return hits }
+      kFetch = min(kFetch * 4, maxFetch)
+    }
+  }
 
+  /// Filter one KNN page down to at most `k` grounded, visible, above-floor, non-excluded hits,
+  /// re-resolving each survivor against canonical (the last grounding defense). Deterministic KNN
+  /// ordering makes each larger fetch a superset prefix, so rebuilding from the top is correct.
+  private static func buildHits(_ raw: [KNNResult], k: Int, floor: Double,
+                                visibleNodeIDs: Set<UUID>, excludingIDs: Set<UUID>,
+                                query: String, _ db: any DatabaseReader) -> [SemanticHit] {
     var hits: [SemanticHit] = []
     for r in raw {
       guard r.similarity >= floor,
             let nodeID = UUID(uuidString: r.nodeID), visibleNodeIDs.contains(nodeID) else { continue }
       guard let itemID = UUID(uuidString: r.itemID), !excludingIDs.contains(itemID) else { continue }
-      // Join canonical + re-apply the live corpus predicate (last grounding defense).
       guard let hit = try? resolve(kind: r.kind, itemID: itemID, similarity: r.similarity,
                                    query: query, db) else { continue }
       hits.append(hit)

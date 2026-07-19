@@ -75,6 +75,30 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(hits.contains { $0.nodeID == visible.id })
   }
 
+  /// 55 muted-context nodes whose name == the query embed to cosine ~1.0 (StubEmbedder is
+  /// deterministic), so they fill the entire initial kPrime=50 window. The one visible node has
+  /// different text (lower cosine) and ranks ~56th — only the expand-and-retry loop (kFetch grows
+  /// 50 → 200) reaches past the muted block to surface it. A single fetch would return [].
+  @Test func expandAndRetrySurfacesVisibleHitBeyondInitialOverFetch() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semq-retry"))
+    let query = "refunds pipeline overhaul"
+    let visible = Node(name: "Something entirely different", kind: NodeKind.project)
+    try await db.write { db in
+      try Node.insert { visible }.execute(db)
+      for _ in 0..<55 {
+        try Node.insert { Node(name: query, kind: NodeKind.project, context: "personal") }.execute(db)
+      }
+    }
+    let embedder = StubEmbedder(dimension: 16)
+    let s = store()
+    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+
+    let hits = await SemanticQueries.search(
+      query: query, visibleNodeIDs: [visible.id], excludingIDs: [], k: 2, floor: -1.0,
+      store: s, embedder: embedder, db)
+    #expect(hits.contains { $0.nodeID == visible.id })
+  }
+
   @Test func staleIndexRowDroppedByJoin() async throws {
     let db = try openCanonicalDatabase(at: tempURL("semq-stale"))
     let n = Node(name: "N", kind: NodeKind.project)
