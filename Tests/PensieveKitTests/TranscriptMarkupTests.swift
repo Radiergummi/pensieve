@@ -46,3 +46,69 @@ import Testing
     .init(kind: .systemReminder("note"), raw: "<system-reminder>note</system-reminder>"))
   #expect(harness.raw == "<system-reminder>note</system-reminder>")
 }
+
+// MARK: - I1 passthrough
+
+@Test func plainProseRoundTripsByteIdentical() {
+  let input = "Just some prose.\n\nWith a second paragraph."
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+@Test func emptyInputYieldsNoSegments() {
+  #expect(TranscriptMarkup.parse("").isEmpty)
+}
+
+// MARK: - I3 code is sacred
+
+@Test func fencedBlockContentIsNotTransformed() {
+  let input = "before\n```\n<HARD-GATE>not a callout</HARD-GATE>\n```\nafter"
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+@Test func fourBacktickFenceIsNotClosedByThreeBackticks() {
+  let input = "````\n```\n<system-reminder>x</system-reminder>\n````"
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+@Test func tildeFenceProtectsItsContent() {
+  let input = "~~~\n<task-notification>x</task-notification>\n~~~"
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+@Test func fenceIndentedUpToThreeSpacesStillOpens() {
+  let input = "   ```\n<HARD-GATE>x</HARD-GATE>\n   ```"
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+@Test func unterminatedFenceRunsToEndOfMessage() {
+  let input = "text\n```\n<HARD-GATE>x</HARD-GATE>\nstill in the fence"
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+/// MarkdownUI renders a 4-space-indented block as code, so transforming it would violate I3 from
+/// the reader's point of view even though CommonMark calls it a different construct.
+@Test func fourSpaceIndentedBlockIsProtected() {
+  let input = "prose\n\n    <system-reminder>x</system-reminder>\n"
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+@Test func inlineCodeSpanProtectsItsContent() {
+  let input = "use `<HARD-GATE>` carefully"
+  #expect(TranscriptMarkup.parse(input) == [.markdown(input)])
+}
+
+// MARK: - I2 no loss, as a property
+
+@Test func rawJoinReconstructsTheInputForMixedContent() {
+  let input = """
+  Intro prose.
+
+  ```swift
+  let x = "<HARD-GATE>"
+  ```
+
+  Trailing prose with `inline <code>` in it.
+  """
+  let segments = TranscriptMarkup.parse(input)
+  #expect(segments.map(\.raw).joined() == input)
+}
