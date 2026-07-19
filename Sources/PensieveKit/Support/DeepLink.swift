@@ -8,6 +8,7 @@ import Foundation
 ///   pensieve://briefing
 ///   pensieve://node/<uuid>
 ///   pensieve://smartlist/<whatsNext|dormant|recentlyActive>
+///   pensieve://looseend/<uuid>
 public enum DeepLink: Equatable, Sendable {
   /// The three sidebar smart lists. Raw values match the app's `SmartListKind` raw values so the
   /// app-side bridge needs no hand-maintained string table.
@@ -18,6 +19,7 @@ public enum DeepLink: Equatable, Sendable {
   case briefing
   case node(UUID)
   case smartList(SmartList)
+  case looseEnd(UUID)
 
   public static let scheme = "pensieve"
 
@@ -36,6 +38,9 @@ public enum DeepLink: Equatable, Sendable {
     case "smartlist":
       guard segments.count == 1, let kind = SmartList(rawValue: segments[0]) else { return nil }
       self = .smartList(kind)
+    case "looseend":
+      guard segments.count == 1, let id = UUID(uuidString: segments[0]) else { return nil }
+      self = .looseEnd(id)
     default:
       return nil
     }
@@ -54,6 +59,9 @@ public enum DeepLink: Equatable, Sendable {
     case .smartList(let kind):
       comps.host = "smartlist"
       comps.path = "/\(kind.rawValue)"
+    case .looseEnd(let id):
+      comps.host = "looseend"
+      comps.path = "/\(id.uuidString)"
     }
     return comps.url!
   }

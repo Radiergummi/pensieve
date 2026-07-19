@@ -42,3 +42,20 @@ import Testing
   #expect(DeepLink.SmartList.dormant.rawValue == "dormant")
   #expect(DeepLink.SmartList.recentlyActive.rawValue == "recentlyActive")
 }
+
+@Test func deepLinkRoundTripsLooseEnd() {
+  let link = DeepLink.looseEnd(UUID())
+  #expect(DeepLink(url: link.url) == link)
+}
+
+@Test func deepLinkParsesLooseEndForm() {
+  let id = UUID()
+  #expect(DeepLink(url: URL(string: "pensieve://looseend/\(id.uuidString)")!) == .looseEnd(id))
+}
+
+@Test func deepLinkRejectsMalformedLooseEnd() {
+  #expect(DeepLink(url: URL(string: "pensieve://looseend")!) == nil)             // missing uuid
+  #expect(DeepLink(url: URL(string: "pensieve://looseend/not-a-uuid")!) == nil)  // bad uuid
+  let id = UUID()
+  #expect(DeepLink(url: URL(string: "pensieve://looseend/\(id.uuidString)/extra")!) == nil) // trailing
+}
