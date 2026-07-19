@@ -121,6 +121,15 @@ struct Mcp: AsyncParsableCommand {
 enum PensieveMCP {
   static let maxResultSizeMeta = "anthropic/maxResultSizeChars"
 
+  // Built once for the server's lifetime (the MCP process is long-lived): the NL asset load + the
+  // index pool open are otherwise repeated on every `search` call. Both are Sendable. Caveat: a
+  // version bump WHILE the server runs won't reopen the cached store — acceptable, the server is
+  // session-scoped and the app/daemon own rebuilds.
+  private static let semanticEmbedder = NLContextualEmbedder()
+  private static let semanticStore = SemanticIndexStore(
+    url: PensievePaths.semanticIndexURL(),
+    dimension: semanticEmbedder.dimension, embedderVersion: semanticEmbedder.version)
+
   private static func makeBuilderAndKind() -> (SummaryBuilder, String) {
     let defaults = PensieveDefaults.shared()
     let provider = makeDefaultLLMProvider(defaults: defaults)
@@ -197,11 +206,9 @@ enum PensieveMCP {
 
     let related: [SemanticHit]
     if PensieveDefaults.semanticSearchEnabled() {
-      let embedder = NLContextualEmbedder()
-      let store = SemanticIndexStore(url: PensievePaths.semanticIndexURL(),
-                                     dimension: embedder.dimension, embedderVersion: embedder.version)
       related = await SemanticQueries.search(query: query, visibleNodeIDs: allActive, excludingIDs: exactIDs,
-                                             k: limit, floor: 0.25, store: store, embedder: embedder, db)
+                                             k: limit, floor: 0.25, store: semanticStore,
+                                             embedder: semanticEmbedder, db)
     } else {
       related = []
     }
