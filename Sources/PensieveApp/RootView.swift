@@ -32,6 +32,10 @@ struct RootView: View {
       ContentListView(model: model)
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         .searchable(text: $model.searchText, placement: .sidebar, prompt: Text("Search"))
+        .searchScopes($model.searchScope) {
+          Text("Active").tag(AppModel.SearchScope.active)
+          Text("Include Archived").tag(AppModel.SearchScope.all)
+        }
         .searchFocused($isSearchFocused)
     } detail: {
       // Provenance is now shown inline inside each loose-end row (expand to see the surrounding
@@ -53,6 +57,9 @@ struct RootView: View {
       model.openNodeRequest = nil
     }
     .onChange(of: model.searchText) { _, _ in model.searchTextChanged() }
+    .onChange(of: model.searchScope) { _, _ in
+      if model.isSearching { model.runSearch() }
+    }
     .onChange(of: model.sidebarSelection) { _, _ in
       if model.isSearching { model.clearSearch() }
     }

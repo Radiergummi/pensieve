@@ -1103,6 +1103,17 @@
         }
       }
     },
+    "Include Archived" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivierte einschließen"
+          }
+        }
+      }
+    },
     "Initiative" : {
       "extractionState" : "manual",
       "localizations" : {

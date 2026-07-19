@@ -251,6 +251,10 @@ final class AppModel {
 
   // MARK: - In-app find
   var searchText: String = ""
+  /// ⌘F search scope. `.all` opts archived nodes into EXACT results (semantic "Related" stays
+  /// active-only — the semantic index holds no archived content). Observable → drives the scope bar.
+  enum SearchScope: Hashable { case active, all }
+  var searchScope: SearchScope = .active
   private(set) var searchResults: SearchResults = SearchResults()
   /// Semantic ("Related") hits, populated after the exact search when the Settings toggle is on.
   private(set) var semanticHits: [SemanticHit] = []
@@ -510,11 +514,13 @@ final class AppModel {
       return
     }
     let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
+    let includeArchived = (searchScope == .all)   // pre-Task local: reading self.searchScope off-main is an isolation violation
     searchToken += 1
     let token = searchToken
     searchTask = Task { [weak self] in
       let results = try? await Task.detached {
-        try SearchQueries.search(query: query, visibleNodeIDs: visible, db)
+        try SearchQueries.search(query: query, visibleNodeIDs: visible,
+                                 includeArchived: includeArchived, db)
       }.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchResults = results ?? SearchResults()
