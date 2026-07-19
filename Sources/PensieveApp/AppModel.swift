@@ -152,7 +152,10 @@ final class AppModel {
   /// connection per refresh/drain touches the store dir's `-shm`/`-wal` sidecars, which re-fires
   /// the FSEvents watch below into a busy-loop; a long-lived connection reads without that churn.
   @ObservationIgnored private var spool: CaptureSpool?
-  @ObservationIgnored private var allNodes: [Node] = []
+  // Tracked (NOT @ObservationIgnored): read by view bodies via node(_:) — e.g. RecallWindowView,
+  // whose body reads only node(nodeID). Silencing it would leave that body with no observation
+  // dependency, so a cold-restored recall window could never recover from its transient nil.
+  private var allNodes: [Node] = []
   /// The active Focus context ("" = no Focus / unfiltered), mirrored from UserDefaults by the
   /// SetFocusFilterIntent. Drives the visible-node filter applied in refresh()/refreshGlance().
   @ObservationIgnored private var activeFocusContext = ""
