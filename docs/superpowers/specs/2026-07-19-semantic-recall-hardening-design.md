@@ -16,9 +16,19 @@ The four items were selected from the semantic-recall whole-branch-review deferr
 in-app-find deferred siblings:
 
 - **A — Include-archived toggle (⌘F)** — *user-facing.*
-- **B — Idempotent rebuild guard** on embedder-version/dimension bump — *invisible.*
+- **B — Rebuild robustness** (rescoped after review: the concurrency mechanism already works, so this
+  becomes a regression test for the version-bump invariant + an optional delete-and-retry hardening) —
+  *invisible.*
 - **C — MCP embedder/store caching** across calls — *invisible.*
-- **D — Expand-and-retry under heavy Focus-muting** — *invisible.*
+- **D — Expand-and-retry under heavy Focus-muting** (with a floor-aware exit) — *invisible.*
+
+> **Review note.** This spec was revised after two independent adversarial reviews. The material
+> change: **Part B's original premise was false** — GRDB's `pool.write` already begins an immediate
+> transaction, so the proposed guard was a no-op and was dropped in favor of the invariant test. Other
+> folded-in fixes: default the new parameter (fully additive, no broken call sites); a floor-aware exit
+> in Part D (avoid pointless `k` escalation on sparse queries); push the state filter down into KNN
+> (keep `muted` out of the fetch window); one localization key, not two; spike the `.searchScopes` bar
+> under `.sidebar` placement first, with a fallback.
 
 ## Current state (as built)
 
@@ -41,7 +51,10 @@ in-app-find deferred siblings:
 **Goal:** archived nodes (currently reachable only via the collapsed Archived sidebar section) can
 be opted into ⌘F results, exact and semantic.
 
-**Kit.** Add `includeArchived: Bool` to both query kernels:
+**Kit.** Add `includeArchived: Bool = false` to both query kernels — **defaulted**, placed just
+before the trailing `_ db`, so the change is fully additive: all 17 existing test call sites
+(`SearchQueriesTests` ×12, `SemanticQueriesTests` ×5) and both MCP sites compile untouched, and only
+the app opts in.
 
 - `SearchQueries.search(query:visibleNodeIDs:includeArchived:_:)`
   - Node filter widens from `state == .active` to
@@ -50,17 +63,38 @@ be opted into ⌘F results, exact and semantic.
     only *open* loose ends, just also those under archived nodes.
   - Ranking, snippets, caps unchanged.
 - `SemanticQueries.search(query:visibleNodeIDs:excludingIDs:k:floor:store:embedder:includeArchived:_:)`
-  - Passes `activeOnly: !includeArchived` to `store.knn`.
   - The join-survival guard in `resolve` widens from `n.state == .active` to also admit `.archived`
     when the flag is set (for `node`, and for the node joined by `loose_end`/`event`).
-  - `muted` state stays excluded in both.
+  - **The store's KNN filter must never go empty.** `SemanticIndexStore.knn`'s `activeOnly: Bool`
+    is replaced/extended so its predicate is `state = 'active'` (default) or
+    `state IN ('active','archived')` (include-archived) — **never `""`**. This keeps `muted` (and any
+    future non-surfaced state) out of the KNN window *and* out of Part D's exhaustion accounting.
+    Both reviewers flagged that `activeOnly:false` today drops the filter entirely, letting `muted`
+    rows consume fetch slots and rely solely on the `resolve` guard for exclusion.
+  - `muted` state stays excluded in both, now at the index layer too.
 
-**App.** `AppModel` gains a `searchScope` enum (`.active` / `.all`). `RootView` attaches
-`.searchScopes($appModel.searchScope)` with two `Text` labels; `.onChange(of:)` re-runs the search;
-`runSearch` reads it and passes `includeArchived: (searchScope == .all)` to both Kit calls. The
-scope bar renders under the `.searchable` field only while searching (native behavior). Two new
-German strings for the scope labels ("Active" / "Include Archived"); node/loose-end **content is
-never localized** (unchanged rule).
+**App.** `AppModel` gains a `searchScope` enum (`.active` / `.all`).
+
+- **Spike-first (the only user-visible deliverable is hostage to a platform assumption).** `.searchable`
+  is attached to `ContentListView` in the **content** column with `placement: .sidebar`
+  (`RootView.swift:34`). Whether a `.searchScopes` scope bar actually *renders* under `.sidebar`
+  placement inside a `NavigationSplitView` is macOS-version/placement-dependent and SwiftUI can
+  silently drop it. **First implementation task = spike the scope bar with the real `.sidebar`
+  placement.** `.searchScopes` must chain **directly onto the `ContentListView` that carries
+  `.searchable`**, not onto `RootView`/`NavigationSplitView`.
+- **Pre-committed fallback** if the scope bar doesn't render: a segmented `Picker` in the search-results
+  header (the reviewer-2 "Toggle in results header" layout), or switch `.searchable` to `.automatic`
+  placement. Either keeps the feature shipping regardless of the scope-bar outcome.
+- Scope change re-runs the search through the existing debounce/`searchToken` machinery (already
+  cancels the prior task and gates assignment on a monotonic token, so a scope-change re-run can't be
+  raced by a stale in-flight query, and it re-runs **both** exact and semantic in one pass).
+  `runSearch` captures the flag as a **pre-Task local** (`let includeArchived = (searchScope == .all)`),
+  mirroring how `query`/`visible` are snapshotted before the off-main `Task` — reading `self.searchScope`
+  inside the async closure would be a main-actor-isolation violation.
+- **Localization: exactly one new key** — `"Include Archived"` (hand-authored into
+  `Localizable.xcstrings` with its German + `state: "translated"`, per the project gotcha that
+  `xcodebuild` does not auto-populate the source catalog). The `"Active"` label **reuses the existing
+  key** (already `"Aktiv"`). Node/loose-end **content is never localized** (unchanged rule).
 
 **Why no forest/selection plumbing:** archived nodes are already in `allNodes` (the FULL set) and
 therefore in the Focus-visible set (`NodeContextResolver` filters by *context*, not *state*). The
@@ -71,33 +105,40 @@ archived nodes, so navigation to an archived hit works without new wiring.
 **MCP stays active-only** (`includeArchived: false`) — exposing an `include_archived` param on the
 MCP `search` tool is a non-goal (see below).
 
-## Part B — Idempotent rebuild guard
+## Part B — Rebuild robustness (rescoped after review)
 
-**Problem (TOCTOU).** `open` reads `meta` and then conditionally rebuilds inside one `pool.write`.
-GRDB's default write transaction is deferred: the `meta` SELECT takes only a shared lock. With app +
-daemon + MCP all opening the store, on a version bump two processes can both read stale `meta`
-(mismatch = true), then both try to upgrade to a write lock to DROP. In WAL mode the loser gets
-`SQLITE_BUSY_SNAPSHOT` (not resolved by the busy handler) → `open` throws → returns nil → `init`'s
-delete-and-retry **removes the file the winner just rebuilt** → churn, and a brief window where the
-index is empty.
+**The original premise was wrong.** The spec first proposed wrapping the `meta` check + rebuild in
+`BEGIN IMMEDIATE` to close a TOCTOU. Adversarial review (verified against the vendored GRDB source)
+established that GRDB's `pool.write` **already** begins an immediate transaction on a writable
+connection — `Database.inTransaction(nil)` resolves to `.immediate` for exactly this reason
+(`Database.swift:1732`, comment cites the read-then-upgrade `SQLITE_BUSY` hazard and issue 1483). So
+today's `open`:
 
-**Fix.** Wrap the `meta` check + drop/create/insert-meta in an explicit **`BEGIN IMMEDIATE`**
-transaction so the write lock is acquired *before* the `meta` read:
+- already takes the write lock **before** the `meta` SELECT → no read-snapshot-then-upgrade → no
+  `SQLITE_BUSY_SNAPSHOT`;
+- a second concurrent opener blocks on `BEGIN IMMEDIATE`, which `busyMode = .timeout(5)` waits out
+  (ordinary `SQLITE_BUSY`, unlike a snapshot conflict, *is* retried by the busy handler);
+- the loser then reads the committed, updated `meta`, sees `mismatch == false`, and no-ops.
 
-```swift
-try pool.writeWithoutTransaction { db in
-  try db.inTransaction(.immediate) {
-    // ... existing meta read + mismatch DROP/CREATE/INSERT ...
-    return .commit
-  }
-}
-```
+**That is already the desired behavior.** The proposed transaction change would be a literal no-op
+refactor. It is dropped.
 
-Now the second opener blocks on `BEGIN IMMEDIATE` (busyMode `.timeout(5)` waits it out), then reads
-the **committed, updated** `meta`, sees mismatch = false, and no-ops the rebuild. The delete-and-retry
-in `init` stays as the genuine-corruption fallback but no longer fires on the race (a contending
-opener now waits rather than throwing). The upsert path is **unchanged** — only `open`'s schema work
-becomes immediate.
+**What Part B actually delivers:**
+
+1. **A regression test that locks in the invariant** (the real deliverable): open the store, index
+   items; reopen with the **same** version/dimension → indexed data survives, no drop. Reopen with a
+   **bumped** version → tables dropped, index empty, `meta` reinserted. This pins the "rebuild only on
+   mismatch, idempotent on match" contract so a future refactor can't silently regress it.
+
+2. **A narrow hardening of the delete-and-retry footgun** — `open`'s blanket `catch { return nil }`
+   (`SemanticIndexStore.swift:86`) turns *any* thrown error into `init`'s `removeItem` (lines 30–34).
+   A rebuild that ever exceeded the 5 s busy timeout would throw `SQLITE_BUSY` → nil → **delete a
+   freshly-built index**. Rated *near-impossible* in practice (an empty-table DROP/CREATE is
+   sub-millisecond), so per YAGNI this is **optional** and gated on the user's call (see the open
+   question at hand-off). If included: have `open` distinguish a genuine unopenable/corrupt signal
+   from a transient write-lock timeout, and let `init` delete-and-retry only on the former.
+
+The upsert path is untouched throughout.
 
 ## Part C — MCP embedder/store caching
 
@@ -118,6 +159,16 @@ long-lived server.
 store — acceptable, since the server is session-scoped and the app/daemon own rebuilds. A server that
 predates a bump simply serves the prior index until the session ends.
 
+**Implementation note (review).** Caching snapshots `semanticEmbedder.dimension` at first access. The
+per-call code self-heals if the NL asset isn't ready (a later call reconstructs with a nonzero
+dimension); a cached store constructed while `dimension == 0` would hit `SemanticIndexStore`'s
+`guard dimension > 0` and stay `isAvailable == false` for the whole session. Confirm
+`NLContextualEmbedding(script:).dimension` is asset-**independent** (model-revision metadata,
+almost certainly nonzero immediately — which is why the shipped per-call code works). If that can't
+be confirmed, construct `semanticStore` lazily on the first *successful* embed instead of eagerly at
+type init. The cached embedder itself is fine either way — `embed` re-checks `hasAvailableAssets`
+each call, so it starts returning vectors once assets land.
+
 ## Part D — Expand-and-retry under Focus-muting
 
 **Problem.** Focus context is applied post-KNN (`visibleNodeIDs`), not pushed into the vec0 query
@@ -125,40 +176,59 @@ predates a bump simply serves the prior index until the session ends.
 neighbors can all be muted → few/zero visible hits, even though visible matches exist deeper in the
 ranking.
 
-**Fix.** Wrap the existing over-fetch in a grow-`k` loop:
+**Fix.** Wrap the existing over-fetch in a grow-`k` loop with a **floor-aware** early exit:
 
 ```swift
 var kFetch = max(k * 8, 50)
 let maxFetch = 2000
 while true {
-  let raw = store.knn(query: qvec, k: kFetch, activeOnly: !includeArchived)
-  let hits = buildHits(raw, upTo: k)               // existing filter+resolve, capped at k
+  let raw = store.knn(query: qvec, k: kFetch, includeArchived: includeArchived)
+  let hits = buildHits(raw, upTo: k)               // existing filter+resolve+floor, capped at k
   if hits.count >= k || raw.count < kFetch || kFetch >= maxFetch { return hits }
+  if let last = raw.last, last.similarity < floor { return hits }   // below-floor boundary reached
   kFetch = min(kFetch * 4, maxFetch)
 }
 ```
 
-KNN ordering is deterministic, so each larger fetch is a superset prefix; re-resolving from the top
-is simple and correct. The loop terminates when we have `k` hits, the index is exhausted
-(`raw.count < kFetch`), or we hit the `maxFetch` cap (returns what it found — honest, best-effort).
-Only triggers under heavy muting; the common case fetches once as today.
+The **floor-aware exit is load-bearing** (review finding): similarity is monotonically non-increasing
+across `raw` (KNN is `ORDER BY distance` ascending; `cosine(fromL2:)` is monotonically decreasing in
+distance). So once the farthest fetched neighbor is below `floor`, every deeper neighbor is too —
+growing `kFetch` could only fetch strictly-below-floor items that can never become hits. Without this
+exit, an ordinary *sparse* query (few genuinely-similar items — common, not just muted) would escalate
+50 → 200 → 800 → 2000 pointlessly, adding latency to the common case. With it, the loop grows **only**
+when the shortfall is caused by Focus-muting (above-floor neighbors exist but are muted), and the
+common/sparse case still fetches once.
+
+KNN ordering is deterministic, so each larger fetch is a superset prefix; re-resolving from the top is
+simple and correct (and cheap — `floor`/`visibleNodeIDs`/`excludingIDs` are applied *before* the
+per-hit `resolve` DB read, so few candidates reach it). The loop also terminates on `k` hits, index
+exhaustion (`raw.count < kFetch`), or the `maxFetch` cap (returns what it found — honest, best-effort).
+
+**`maxFetch = 2000` — revisit with chunking.** Fine for today's single-user corpus (hundreds–low
+thousands). When transcript-passage chunking lands (the next corpus increment), the index may exceed
+2000 and a heavily-muted Focus could have visible matches ranked beyond the cap that never surface —
+bump/reconsider the cap at that point.
 
 ## Cross-cutting
 
-- **Signature growth.** `includeArchived` is added to both query kernels — 2 call sites each (app +
-  MCP). MCP passes `false`; the app passes the scope.
+- **Signature growth (additive).** `includeArchived: Bool = false` is **defaulted** on both kernels,
+  so the only site that changes is the app (1 call site each). The 17 existing test call sites and
+  both MCP sites compile unchanged. MCP's `visibleNodeIDs` set (`allActive`) is already active-only,
+  so MCP needs **no** change and stays active-only by construction — no explicit `false` required.
 - **Testing (Kit, TDD).**
   - Include-archived: exact + semantic each return archived hits iff the flag is set; default
-    (active-only) behavior unchanged.
-  - Expand-and-retry: a fixture where most nodes are in a muted Focus context and the visible matches
-    rank beyond the initial `kPrime` — assert the visible ones surface (they would not with a single
-    fetch).
-  - Rebuild guard: same-version reopen preserves indexed data (regression invariant); bumped-version
-    reopen drops. The cross-process concurrency guarantee is structural (immediate transaction) and
-    documented rather than unit-tested (true concurrency is not deterministically reproducible in a
-    unit test).
+    (active-only) behavior unchanged. Also assert `muted` never surfaces even with the flag on (guarded
+    by both the widened KNN filter and the `resolve` guard).
+  - Expand-and-retry: (a) a fixture where most nodes are in a muted Focus context and the visible
+    matches rank beyond the initial `kPrime` — assert the visible ones surface (they would not with a
+    single fetch); (b) a sparse fixture where only a couple of items are above `floor` — assert the
+    loop exits after **one** fetch (no pointless escalation), guarding the floor-aware exit.
+  - Rebuild invariant: same-version reopen preserves indexed data; bumped-version reopen drops + resets
+    `meta`. (The cross-process serialization is already provided by GRDB's immediate write transaction —
+    see Part B — so this test pins the *invariant*, not a new mechanism.)
   - MCP caching + the app toggle: no MCP/app unit tests — behavior is guarded by the existing search
-    tests; verified by manual smoke.
+    tests; verified by manual smoke. The optional delete-and-retry hardening (Part B item 2), if
+    included, gets its own unit test (a transient-busy throw does not delete the file).
 - **Verification.** `./scripts/test.sh` for Kit; `xcodebuild` build + non-blocking inner-binary
   smoke-launch for the app (throwaway `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`). Interactive checks
   (the scope bar toggling live results incl. an archived hit; German scope labels) are human-verify
