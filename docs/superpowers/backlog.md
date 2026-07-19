@@ -231,9 +231,14 @@ makes transcripts/future sources additive. Subagent-driven (sqlite-vec GO/NO-GO 
 defects caught+fixed — embedder-nil starvation, a non-failing over-fetch test). **439 tests.**
 Spec/plan: `{specs,plans}/2026-07-18-semantic-vector-recall*`.
 
-**Deferred (fast-follow, not foreclosed):** expand-and-retry under heavy Focus-muting; single-writer/
-idempotent rebuild guard on version bump; MCP per-call embedder/store caching; per-hit `db.read`
-batching in `resolve`; **transcript-passage chunking** (the next corpus increment — its own spec).
+**Deferred (fast-follow, not foreclosed):** ✅ **expand-and-retry under heavy Focus-muting** (DONE
+2026-07-19, `3ece8b5` — grow-`k` loop + floor-aware exit); ✅ **MCP per-call embedder/store caching**
+(DONE 2026-07-19, `static let` hoist); ✅ **idempotent rebuild guard** (RESOLVED 2026-07-19 — proven
+already race-safe via GRDB implicit `BEGIN IMMEDIATE`; a regression test pins the invariant, no code
+change); per-hit `db.read` batching in `resolve`; **archived content in the semantic index / "Related"**
+(the 2026-07-19 include-archived toggle is EXACT-only — `EmbeddableCorpus.gather` is active-only; needs a
+corpus-producer change to surface archived in semantic recall); **transcript-passage chunking** (the next
+corpus increment — its own spec; would also make Part D's `maxFetch=2000` cap worth revisiting).
 **Post-merge carry:** rebuild + reinstall the app to `/Applications` so the bundled `pensieve mcp`
 exposes `search`. **Human-verify:** live MCP `search`; ⌘F "Related" after the NL asset downloads;
 toggle-off → no Related + MCP exact-only; German "Verwandt" in situ.
@@ -371,9 +376,9 @@ whole-branch review, which found **2 Important** (both fixed + re-reviewed → R
 - **`NodeState` constants enum** — bare `"active"`/`"archived"` literals are now spread across Kit
   and app (several pre-date this branch). Cleanup, not a regression; a mistyped literal silently
   no-ops.
-- **An archived node is unfindable by name in search** — the collapsed Archived section is the only
-  route back. Consistent with "drops out of every normal view"; an "include archived" search toggle
-  is the natural follow-up.
+- ~~**An archived node is unfindable by name in search**~~ — ✅ **DONE (2026-07-19, `3ece8b5`)**: the
+  `.searchScopes` "Include Archived" toggle surfaces archived nodes + their open loose ends in **exact**
+  ⌘F. (Semantic "Related" still excludes archived — see the semantic-recall fast-follow ledger above.)
 - **Archived-tree housekeeping is impossible in-app** — you can't move/merge an archived node into
   another archived node (`moveTargets` excludes archived). Deliberate; revisit if it ever matters.
 - **Known snooze limit (by design):** an in-progress `cc.session` already ingested dedups on its

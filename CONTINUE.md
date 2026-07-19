@@ -1,4 +1,4 @@
-# CONTINUE — session handoff (2026-07-18)
+# CONTINUE — session handoff (2026-07-19)
 
 Self-contained pickup for a fresh agent. Read `CLAUDE.md` first (project rules + the full shipped
 changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the durable long-term list
@@ -6,7 +6,7 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-Everything is **on `main`**; the tracked tree is clean. **439 tests**, run with `./scripts/test.sh`
+Everything is **on `main`**; the tracked tree is clean. **448 tests**, run with `./scripts/test.sh`
 (thin `swift test` passthrough). The full loop is **LIVE and dogfooded**: capture → ingest →
 auto-extract runs unattended via the bundled background-sync agent; the app is a real `Pensieve.app`
 bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The core intelligence gate passed
@@ -17,6 +17,18 @@ long ago. The hard part is done — remaining work is feature breadth, not found
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
+- **Semantic-recall hardening + include-archived ⌘F search** (2026-07-19, merged `3ece8b5`). Four small
+  items over the shipped semantic stack. **(A)** Include-archived toggle for **exact** ⌘F (defaulted
+  `SearchQueries.search(includeArchived:)` + a native `.searchScopes` bar); semantic "Related" stays
+  active-only (the index has no archived content — deferred). **(B)** A regression test pinning the
+  same-version rebuild invariant (no prod change — the guard already ships and is race-safe; the planned
+  transaction fix was proven a no-op by review). **(C)** MCP `PensieveMCP` caches its embedder+store in
+  `static let` instead of per-call. **(D)** `SemanticQueries.search` expand-and-retry under Focus-muting
+  with a floor-aware early exit (extracted `buildHits`, all grounding guards preserved). Trust gate
+  untouched. Tasks 1–4 subagent-driven (Opus whole-branch = READY-TO-MERGE); Task 5 (app toggle) inline.
+  **448 tests.** **Post-merge carry:** rebuild + reinstall to `/Applications` (Part C + the app toggle).
+  **Human-verify:** the `.searchScopes` bar renders under `.sidebar` (fallback = header Picker, in the
+  plan); toggle includes/excludes archived; German in-situ. Spec/plan: `{specs,plans}/2026-07-19-semantic-recall-hardening*`.
 - **Semantic / vector recall — Track C #2** (2026-07-18, merged `e640645`). "Find without exact words"
   across ⌘F ("Related" section) and a unified MCP `search` tool, over one shared Kit kernel. Native
   `NLContextualEmbedding` + vendored `sqlite-vec` (registered **per-connection** — Apple disables the
@@ -65,15 +77,15 @@ error surfacing (2026-07-14). Nothing open. (Spec 2's deferred source-management
 editing remain parked in `backlog.md`, not part of Track B.)
 
 **Track C — findability / OS-integration.** In-app find (⌘F), the menu-bar item, `pensieve://`, App
-Intents + Spotlight, Focus filters, and **semantic/vector recall (#2, shipped 2026-07-18)** are all live.
-Remaining, unblocked + sequenced:
-- **1b** — index loose-end text into *Spotlight* specifically (own spec; extend `NodeEntity`/
-  `SpotlightIndexer`). Note #2 already covers in-app + MCP semantic recall — this is the OS-index leg.
-- Small follow-up: an "include archived" toggle in in-app search (archived nodes are currently only
-  reachable via the collapsed Archived section).
-- Semantic-recall fast-follows (from the whole-branch review, deferred): expand-and-retry under heavy
-  Focus-muting; idempotent rebuild guard on embedder-version bump; MCP per-call embedder/store caching;
-  transcript-passage chunking (the next corpus increment — its own spec).
+Intents + Spotlight, Focus filters, **semantic/vector recall (#2, 2026-07-18)**, **Spotlight loose-end
+indexing (1b, 2026-07-19)**, and the **semantic-recall hardening batch (2026-07-19)** — include-archived
+⌘F toggle + expand-and-retry + MCP caching + the rebuild-invariant test — are all live. Remaining:
+- **Archived content in the semantic index / "Related"** — the include-archived toggle is EXACT-only
+  because `EmbeddableCorpus.gather` is active-only; surfacing archived in semantic recall needs a
+  corpus-producer change (index active+archived with correct per-item state, stop the pruner dropping
+  archived, re-embed). Its own effort.
+- **Transcript-passage chunking** — the next corpus increment (own spec); would also make the Part D
+  `maxFetch=2000` cap worth revisiting.
 
 **Blocked — do not start:** Widgets + CloudKit need a **paid Apple Developer team** (App Groups / Team-ID
 entitlement). That single gate unblocks the whole extension family at once; revisit only when a paid
