@@ -150,4 +150,74 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
       store: s, embedder: embedder, db)
     #expect(!hits.contains { $0.id == n.id })
   }
+
+  /// Indexes one active + one archived node whose names are near-identical, so both are plausible
+  /// KNN neighbours of the same query and only the state filter can separate them.
+  private func archivedFixture() async throws -> (db: any DatabaseWriter, store: SemanticIndexStore,
+                                                  embedder: StubEmbedder, active: Node, archived: Node) {
+    let db = try openCanonicalDatabase(at: tempURL("semq-archived"))
+    let active = Node(name: "Refund handling", kind: NodeKind.project)
+    let archived = Node(name: "Refund handling legacy", state: .archived, kind: NodeKind.project)
+    try await db.write { db in
+      try Node.insert { active }.execute(db)
+      try Node.insert { archived }.execute(db)
+    }
+    let embedder = StubEmbedder(dimension: 16)
+    let s = store()
+    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    return (db, s, embedder, active, archived)
+  }
+
+  @Test func searchExcludesArchivedByDefault() async throws {
+    let f = try await archivedFixture()
+    let visible: Set<UUID> = [f.active.id, f.archived.id]
+
+    // No includeArchived argument at all — the defaulted-parameter regression guard for every
+    // existing call site.
+    let hits = await SemanticQueries.search(
+      query: "Refund handling legacy", visibleNodeIDs: visible, excludingIDs: [],
+      k: 8, floor: -1.0, store: f.store, embedder: f.embedder, f.db)
+
+    #expect(!hits.contains { $0.id == f.archived.id })
+    #expect(hits.allSatisfy { !$0.isArchived })
+  }
+
+  @Test func searchSurfacesArchivedWhenAsked() async throws {
+    let f = try await archivedFixture()
+    let visible: Set<UUID> = [f.active.id, f.archived.id]
+
+    let hits = await SemanticQueries.search(
+      query: "Refund handling legacy", visibleNodeIDs: visible, excludingIDs: [],
+      k: 8, floor: -1.0, includeArchived: true, store: f.store, embedder: f.embedder, f.db)
+
+    let archivedHit = hits.first { $0.id == f.archived.id }
+    #expect(archivedHit != nil)
+    #expect(archivedHit?.isArchived == true)
+    #expect(hits.first { $0.id == f.active.id }?.isArchived == false)
+  }
+
+  @Test func archivedLooseEndsAndEventsAlsoResolveWhenAsked() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semq-archived-children"))
+    let archived = Node(name: "Legacy billing", state: .archived, kind: NodeKind.project)
+    try await db.write { try Node.insert { archived }.execute($0) }
+    let ev = try makeEvent(db, node: archived, kind: CaptureKind.ccSession,
+                           workSummary: "migrated the old invoices")
+    let le = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+                      text: "drop the legacy invoice table", quote: "TODO drop invoices")
+    try await db.write { try LooseEnd.insert { le }.execute($0) }
+
+    let embedder = StubEmbedder(dimension: 16)
+    let s = store()
+    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+
+    let hits = await SemanticQueries.search(
+      query: "drop the legacy invoice table", visibleNodeIDs: [archived.id], excludingIDs: [],
+      k: 8, floor: -1.0, includeArchived: true, store: s, embedder: embedder, db)
+
+    // All three item kinds under an archived node resolve, and every one is flagged archived.
+    #expect(hits.contains { $0.id == le.id && $0.kind == "loose_end" })
+    #expect(hits.contains { $0.id == ev.id && $0.kind == "event" })
+    #expect(hits.contains { $0.id == archived.id && $0.kind == "node" })
+    #expect(hits.allSatisfy { $0.isArchived })
+  }
 }
