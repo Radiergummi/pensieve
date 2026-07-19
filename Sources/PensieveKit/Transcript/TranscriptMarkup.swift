@@ -90,17 +90,21 @@ struct Scanner {
 
   /// A run of one or more 4-space-indented lines, started only when the line before it is blank or
   /// absent — i.e. it can actually *open* an indented code block, per CommonMark; a continuation
-  /// line of an ordinary paragraph that merely happens to be indented is left as prose. Once
-  /// opened, the block continues through further indented lines and absorbs blank lines only when
-  /// another indented line follows — a trailing blank line before ordinary prose is left for the
-  /// prose scan, so a tag on the line right after the block isn't swallowed into "code".
+  /// line of an ordinary paragraph that merely happens to be indented is left as prose. A line that
+  /// is itself blank (only spaces/tabs, even ones satisfying the 4-space prefix) cannot open a
+  /// block either — CommonMark treats blank lines as separators, not content. Once opened, the
+  /// block continues through further indented lines and absorbs blank lines only when another
+  /// indented line follows — a trailing blank line before ordinary prose is left for the prose
+  /// scan, so a tag on the line right after the block isn't swallowed into "code".
   mutating func consumeIndentedCodeLine() -> Bool {
     guard previousLineIsBlank else { return false }
-    let (first, _) = line(at: i)
-    guard first.hasPrefix("    ") else { return false }
+    let (first, firstNext) = line(at: i)
+    guard first.hasPrefix("    "), !first.allSatisfy({ $0 == " " || $0 == "\t" }) else {
+      return false
+    }
 
-    var cursor = i
-    var end = i
+    var cursor = firstNext
+    var end = firstNext
     while cursor < text.endIndex {
       let (l, next) = line(at: cursor)
       if l.hasPrefix("    ") {

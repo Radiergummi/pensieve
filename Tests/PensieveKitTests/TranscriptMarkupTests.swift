@@ -112,3 +112,22 @@ import Testing
   let segments = TranscriptMarkup.parse(input)
   #expect(segments.map(\.raw).joined() == input)
 }
+
+// MARK: - `Scanner.consumeIndentedCodeLine` internals (white-box regression)
+
+/// Everything above folds into one `.markdown` segment regardless of whether this method consumes
+/// one line or the whole block, so I1/I2 can't observe a regression here — it only becomes visible
+/// once a later task adds tag recognition, as a silent I3 violation (a tag on line 2+ of an
+/// indented block wrongly parsed as a callout/harness). This test pins the method's own contract
+/// directly: the whole run of indented lines is consumed, including an interior blank line that is
+/// followed by more indented content (absorbed, per this file's doc comment) — not just the first
+/// line.
+@Test func consumeIndentedCodeLineSpansMultipleLinesAcrossAnInteriorBlankLine() {
+  let input = "    line one\n\n    line two\nprose"
+  let expectedPrefix = "    line one\n\n    line two\n"
+  var scanner = Scanner(input)
+  #expect(scanner.consumeIndentedCodeLine() == true)
+  let expectedEnd = input.index(input.startIndex, offsetBy: expectedPrefix.count)
+  #expect(scanner.i == expectedEnd)
+  #expect(String(input[input.startIndex..<scanner.i]) == expectedPrefix)
+}
