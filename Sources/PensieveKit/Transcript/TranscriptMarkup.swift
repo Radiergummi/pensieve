@@ -298,7 +298,9 @@ struct Scanner {
   }
 
   /// Splits a task-notification's interior into modelled fields; anything else is preserved in
-  /// `unrecognisedChildren` so nothing is silently dropped.
+  /// `unrecognisedChildren` so nothing is silently dropped. Duplicate children (e.g. two
+  /// `<status>`) are last-write-wins — not observed in practice, and harness output isn't expected
+  /// to repeat a child tag.
   private static func parseTaskNotification(_ body: String) -> TaskNotificationBlock {
     var found: [String: String] = [:]
     var scanner = Scanner(body)

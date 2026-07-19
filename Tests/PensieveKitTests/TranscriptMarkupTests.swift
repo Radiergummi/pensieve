@@ -264,14 +264,85 @@ import Testing
   #expect(h.raw == input)
 }
 
+/// Trailing content + a `raw` assertion, so a wrong `end` (over- or under-consuming into what
+/// follows) actually shows up — a bare `<command-name>…</command-name>` with nothing after it
+/// cannot distinguish "end computed correctly" from "correct by coincidence".
 @Test func commandNameAloneStillFormsACommandBlock() {
-  let input = "<command-name>/commit</command-name>"
+  let input = "<command-name>/commit</command-name> after"
   let segments = TranscriptMarkup.parse(input)
   guard case .harness(let h) = segments[0], case .command(let name, let m, let a) = h.kind
   else { Issue.record("not a command block"); return }
   #expect(name == "/commit")
   #expect(m == nil)
   #expect(a == nil)
+  #expect(h.raw == "<command-name>/commit</command-name>")
+  #expect(segments.map(\.raw).joined() == input)
+}
+
+/// Sibling absorption (the command trio) with content BEFORE and AFTER the block, so a wrong
+/// `end` index — over-consuming into the trailing prose, or under-consuming and leaving a sibling
+/// tag unabsorbed — is visible in the round trip, unlike `theCommandTrioCollapsesIntoOneBlock`
+/// above (whose input is exactly the tag span, with nothing trailing).
+@Test func commandTrioAbsorptionRoundTripsWithSurroundingProse() {
+  let input = "pre <command-name>/clear</command-name>"
+    + "<command-message>clear</command-message><command-args></command-args> post"
+  let segments = TranscriptMarkup.parse(input)
+  #expect(segments.count == 3)
+  #expect(segments.map(\.raw).joined() == input)
+  guard case .harness(let h) = segments[1], case .command(let name, let message, let args) = h.kind
+  else { Issue.record("not a command block"); return }
+  #expect(name == "/clear")
+  #expect(message == "clear")
+  #expect(args == "")
+}
+
+/// Same discrimination for the other sibling-absorbing pair, `bash-input`/`bash-stdout`.
+@Test func bashIOAbsorptionRoundTripsWithSurroundingProse() {
+  let input = "x <bash-input>ls</bash-input><bash-stdout>a.txt</bash-stdout> y"
+  let segments = TranscriptMarkup.parse(input)
+  #expect(segments.map(\.raw).joined() == input)
+  guard case .harness(let h) = segments[1], case .bashIO(let inp, let outp) = h.kind
+  else { Issue.record("not a bashIO block"); return }
+  #expect(inp == "ls")
+  #expect(outp == "a.txt")
+}
+
+/// The orphaned-sibling branches (`TranscriptMarkup.swift` `case "command-message", "command-args"`
+/// and `case "bash-stdout"`): a sibling tag with no preceding opener still forms a harness block,
+/// name/input unknown, and — with trailing content present — `raw` proves `end` didn't over-consume.
+@Test func orphanedCommandMessageFormsACommandBlockWithUnknownName() {
+  let input = "<command-message>only</command-message> after"
+  let segments = TranscriptMarkup.parse(input)
+  guard case .harness(let h) = segments[0], case .command(let name, let message, let args) = h.kind
+  else { Issue.record("not a command block"); return }
+  #expect(name == "")
+  #expect(message == "only")
+  #expect(args == nil)
+  #expect(h.raw == "<command-message>only</command-message>")
+  #expect(segments.map(\.raw).joined() == input)
+}
+
+@Test func orphanedCommandArgsFormsACommandBlockWithUnknownName() {
+  let input = "<command-args>--flag</command-args> after"
+  let segments = TranscriptMarkup.parse(input)
+  guard case .harness(let h) = segments[0], case .command(let name, let message, let args) = h.kind
+  else { Issue.record("not a command block"); return }
+  #expect(name == "")
+  #expect(message == nil)
+  #expect(args == "--flag")
+  #expect(h.raw == "<command-args>--flag</command-args>")
+  #expect(segments.map(\.raw).joined() == input)
+}
+
+@Test func orphanedBashStdoutFormsABashIOBlockWithNoInput() {
+  let input = "<bash-stdout>a.txt</bash-stdout> after"
+  let segments = TranscriptMarkup.parse(input)
+  guard case .harness(let h) = segments[0], case .bashIO(let inp, let outp) = h.kind
+  else { Issue.record("not a bashIO block"); return }
+  #expect(inp == nil)
+  #expect(outp == "a.txt")
+  #expect(h.raw == "<bash-stdout>a.txt</bash-stdout>")
+  #expect(segments.map(\.raw).joined() == input)
 }
 
 @Test func taskNotificationChildrenAreParsed() {
