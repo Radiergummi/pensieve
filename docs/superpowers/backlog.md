@@ -208,6 +208,69 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## Semantic relevance floor is inert — OPEN DEFECT (found 2026-07-19, needs its own spec)
+
+**The `floor: 0.25` similarity cutoff never rejects anything.** Measured against the live store via
+`pensieve mcp` `search` right after the 2026-07-19 reinstall:
+
+| Query | Top hit | Similarity |
+|---|---|---|
+| "German localization String Catalog" | the localization spec commit ✅ | 0.936 |
+| "sqlite-vec vendored C target" | `feat(acl): allow tag:ci-pipeline-puppet SSH to panopticon` ❌ | 0.934 |
+| "background sync agent login items" | `Log owner-mode seq-scan finding` ❌ | 0.921 |
+| **"banana zeppelin custard velocipede"** (gibberish) | `checkout feat/pensieve-app-three-pane` | **0.880** |
+
+Gibberish scores **0.880**; a perfect topical match scores **0.936**. The entire usable range is
+~0.06 wide and sits far above the 0.25 floor (`Mcp.swift:210`, `AppModel.swift:531`).
+
+**Consequences.** (1) ⌘F "Related" and MCP `search` **always** return a full result set regardless of
+relevance — the grounding guards hold (every hit is a real cited item, nothing fabricated) but
+relevance is not enforced at all. (2) Ranking is directionally correct yet so compressed that corpus
+noise outranks true matches — see the sqlite-vec and background-sync rows. (3) *Reasoned, not
+measured:* Part D's floor-aware early exit (`SemanticQueries.swift:46`) can never fire, so a
+heavily-Focus-muted query should climb the grow-`k` loop to the `maxFetch=2000` cap instead of
+exiting early — the inverse of that optimization's intent.
+
+**Likely cause:** anisotropy of mean-pooled contextual embeddings — vectors occupy a narrow cone, so
+raw cosine is compressed and offset far from zero. Short git-commit-subject documents amplify it.
+**Candidate remedies (pick at spec time):** center embeddings against the corpus mean before
+comparing; calibrate the floor empirically (percentile / z-score against a sampled baseline) instead
+of an absolute constant; or hybrid retrieval blending a lexical signal so rare tokens like
+"sqlite-vec" carry weight. **Not a one-line tweak** — a floor change alone would be guesswork without
+a calibration method. *Revisit trigger:* next time semantic recall is touched, or sooner — this is
+live, default-on, and currently diluting the grounded context fed to Claude via MCP.
+
+---
+
+## Transcript rendering — deferred siblings (2026-07-19, split out of the readability spec)
+
+Raised together while dogfooding the inline provenance view; **sub-project #1 (transcript
+readability — role bubbles, XML-tag callouts, heading type scale) is being specced now.** These two
+were split off because each is a different *kind* of decision, not a styling one.
+
+- **Rich code blocks — syntax highlighting + diagram rendering.** *Medium–large; its own spec.*
+  Transcript code fences currently render unhighlighted (MarkdownUI default). Two separable pieces:
+  (1) **syntax highlighting** — needs a highlighter dependency (or a hand-rolled tokenizer for the
+  handful of languages that actually appear: Swift, shell, JSON, Markdown); (2) **diagram
+  rendering** — the harder half. **Note: the observed diagrams are Graphviz DOT** (`digraph … {}`
+  emitted by skill docs), **not Mermaid**, though Claude emits both depending on context. Neither has
+  a first-party macOS renderer: Mermaid means bundling mermaid.js in a `WKWebView`; DOT means a
+  WebView (viz.js) or a Swift layout engine. Both collide with **"platform primitives first"** and
+  add a heavyweight dependency to a view that today is pure SwiftUI. **Decide the DOT-vs-Mermaid
+  question with real corpus evidence before committing** — a Mermaid-only renderer may buy nothing.
+  *Revisit trigger:* transcript readability has shipped and code blocks are still the worst part of
+  the view.
+- **macOS Writing Tools on loose ends** (condense / summarize / explain). *Unknown feasibility;
+  spike first.* **Open question that gates the whole idea:** Writing Tools attaches to the standard
+  text system (`NSTextView`/`TextEditor`); MarkdownUI renders custom SwiftUI views, so Writing Tools
+  may never appear in that hierarchy at all. **Do a small spike before any design.** Second gate is
+  the **trust gate**: rewriting a loose end *in place* would mutate displayed provenance — the one
+  thing that must stay verbatim. A read-only "explain this" overlay is a different, safer feature
+  than "condense this text", and the spec must pick one deliberately. *Revisit trigger:* the spike
+  proves Writing Tools reachable from the loose-end surface.
+
+---
+
 ## Semantic / vector recall (Track C #2) — DONE (2026-07-18, merged to `main` `e640645`)
 
 "Find without exact words" across ⌘F and MCP over one shared Kit kernel. **Native
