@@ -141,9 +141,13 @@ Design-first, subagent-driven. The proven loop, per feature:
   fingerprints trusted (Xcode "Trust & Enable", or the two `defaults write …IDESkip{PackagePlugin,Macro}
   FingerprintValidation` per-machine flags).
 - On a SwiftSyntax/macro **linker error**, `rm -rf .build` and retry (recurs intermittently).
-- **Stray build artifacts** currently sit untracked in the repo root (`BackgroundSyncGuard-2.{d,dia,
-  swiftdeps,swiftmodule}`, `StoreOpen-2.*`, `SyncAgentEnvironment-2.*`, `SyncLog-2.*`) plus a modified
-  `eval-config.json`. Noise from an out-of-tree build; safe to clean, but out of scope for a docs pass.
+- **The CLI symlink auto-create does NOT overwrite a stale real binary.** Found 2026-07-19: a pre-bundling
+  `pensieve` *binary* (Jul 11) was still sitting at `~/.local/bin/pensieve`, so the launch-time auto-create
+  — which only fires when the path is **absent** — silently never ran. The registered MCP server and the
+  `prime` SessionStart hook had been running 8-day-old code since the CLI-bundling ship. After installing a
+  new app, verify with `ls -l ~/.local/bin/pensieve` that it is a **symlink** into
+  `/Applications/Pensieve.app/Contents/Helpers/`; if not, use Settings ▸ General ▸ Command-line tool ▸
+  Replace (`forceLink`) or relink by hand.
 
 **Swift / SwiftUI**
 - Predicates: `.eq(x)` NOT `== x`. Reuse `SourceKind`/`CaptureKind` constants. No shared mutable

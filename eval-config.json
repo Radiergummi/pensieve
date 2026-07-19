@@ -8,9 +8,9 @@
     "kind": "cloud",
     "flavor": "anthropic",
     "baseURL": "https://api.anthropic.com",
-    "model": "claude-opus-4-20250514",
-    "inputPricePerM": 15.0,
-    "outputPricePerM": 75.0
+    "model": "claude-opus-4-8",
+    "inputPricePerM": 5.0,
+    "outputPricePerM": 25.0
   },
   "roster": [
     {
