@@ -72,6 +72,7 @@ struct ContentListView: View {
                     SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
                   }
                 }
+                if hit.isArchived { Spacer(); ArchivedBadge() }
               }
               .rowHitArea()
             }
@@ -84,7 +85,10 @@ struct ContentListView: View {
           ForEach(r.looseEnds) { hit in
             Button { model.selectSearchLooseEnd(hit) } label: {
               VStack(alignment: .leading, spacing: 2) {
-                Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                  Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+                  if hit.isArchived { ArchivedBadge() }
+                }
                 SnippetText(snippet: hit.snippet)
               }
               .rowHitArea()
@@ -98,7 +102,10 @@ struct ContentListView: View {
           ForEach(model.semanticHits) { hit in
             Button { model.selectSemanticHit(hit) } label: {
               VStack(alignment: .leading, spacing: 2) {
-                Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                  Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+                  if hit.isArchived { ArchivedBadge() }
+                }
                 Text(hit.title).lineLimit(2)
               }
               .rowHitArea()
@@ -171,6 +178,19 @@ struct ContentListView: View {
     case .reviewSuggestions:
       return String(localized: "\(reviewItems.count) to review")
     }
+  }
+}
+
+/// A small trailing marker on a search row whose owning node is archived, so archived work is never
+/// mistaken for live work. Rendered only when the Include Archived scope surfaced the row.
+private struct ArchivedBadge: View {
+  var body: some View {
+    Text("Archived")
+      .font(.caption2)
+      .padding(.horizontal, 5)
+      .padding(.vertical, 1)
+      .background(.quaternary, in: Capsule())
+      .foregroundStyle(.secondary)
   }
 }
 

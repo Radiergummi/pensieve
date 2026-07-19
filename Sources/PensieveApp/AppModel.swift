@@ -529,6 +529,7 @@ final class AppModel {
       let exact = Set((results?.nodes.map { $0.id } ?? []) + (results?.looseEnds.map { $0.id } ?? []))
       let sem = await SemanticQueries.search(
         query: query, visibleNodeIDs: visible, excludingIDs: exact, k: 8, floor: 0.25,
+        includeArchived: includeArchived,
         store: self.semanticStore, embedder: self.embedder, db)
       guard self.searchToken == token, !Task.isCancelled else { return }
       self.semanticHits = sem
