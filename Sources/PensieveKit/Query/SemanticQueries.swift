@@ -41,7 +41,7 @@ public enum SemanticQueries {
     var kFetch = max(k * 8, 50)
     let maxFetch = 2000
     while true {
-      let raw = store.knn(query: qvec, k: kFetch, activeOnly: true)
+      let raw = store.knn(query: qvec, k: kFetch, includeArchived: false)
       let hits = buildHits(raw, k: k, floor: floor, visibleNodeIDs: visibleNodeIDs,
                            excludingIDs: excludingIDs, query: query, db)
       if hits.count >= k || raw.count < kFetch || kFetch >= maxFetch { return hits }

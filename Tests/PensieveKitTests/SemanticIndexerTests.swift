@@ -162,7 +162,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
   /// Superseded contract: archiving used to prune a node's items from the index entirely. Task 1
   /// widens the corpus producer to include archived nodes (tagged with their real state), so
   /// archiving now re-tags instead of pruning — the items stay recallable, just no longer surfaced
-  /// by an `activeOnly` query (knn's own scoping is untouched by this task; see Task 2/3).
+  /// by an `includeArchived: false` query (knn's own scoping is untouched by this task; see Task 2/3).
   @Test func archivingNodeUpdatesItsItemsStateInsteadOfPruning() async throws {
     let db = try openCanonicalDatabase(at: tempURL("semidx-archive"))
     let n = Node(name: "N", kind: NodeKind.project)
@@ -189,7 +189,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(items.keys.contains(ev.id.uuidString))
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
-    let activeHits = s.knn(query: queryVec, k: 5, activeOnly: true)
+    let activeHits = s.knn(query: queryVec, k: 5, includeArchived: false)
     #expect(!activeHits.contains { $0.itemID == le.id.uuidString })
   }
 
@@ -218,7 +218,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     // content_hash for the loose end is unchanged (repoint is metadata-only, not a re-embed).
     #expect(s.existingItems()[le.id.uuidString] == hashBefore)
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
-    let hits = s.knn(query: queryVec, k: 5, activeOnly: true)
+    let hits = s.knn(query: queryVec, k: 5, includeArchived: false)
     #expect(hits.first(where: { $0.itemID == le.id.uuidString })?.nodeID == b.id.uuidString)
   }
 
@@ -239,7 +239,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(s.existingItems()[n.id.uuidString] != hashBefore)   // content_hash changed → re-embedded
 
     let newVec = await StubEmbedder(dimension: 16).embed(["N — changed description"])![0]!
-    let hits = s.knn(query: newVec, k: 1, activeOnly: true)
+    let hits = s.knn(query: newVec, k: 1, includeArchived: false)
     #expect(hits.first?.itemID == n.id.uuidString)
     #expect(hits.first!.similarity > 0.99)   // the stored vector IS the new content's embedding
   }
@@ -271,7 +271,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(items.keys.contains(ev.id.uuidString))
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["wire up refunds — TODO refunds"])![0]!
-    let hits = s.knn(query: queryVec, k: 5, activeOnly: true)
+    let hits = s.knn(query: queryVec, k: 5, includeArchived: false)
     #expect(hits.contains { $0.itemID == le.id.uuidString })
   }
 

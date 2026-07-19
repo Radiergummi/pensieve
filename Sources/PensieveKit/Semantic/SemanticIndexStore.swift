@@ -128,10 +128,16 @@ public struct SemanticIndexStore: Sendable {
     }
   }
 
-  public func knn(query: [Float], k: Int, activeOnly: Bool) -> [KNNResult] {
+  /// `includeArchived: false` returns active items only; `true` widens to active + archived.
+  /// `muted` is excluded in BOTH modes — the filter is an allow-list, never a deny-list, so a
+  /// future state can never leak in by omission. The SQL fragment is chosen from a Bool (no
+  /// interpolated caller input), so there is no injection surface.
+  public func knn(query: [Float], k: Int, includeArchived: Bool) -> [KNNResult] {
     guard let db else { return [] }
     let json = "[" + query.map { String($0) }.joined(separator: ",") + "]"
-    let filter = activeOnly ? "AND state = 'active'" : ""
+    let filter = includeArchived
+      ? "AND state IN ('active','archived')"
+      : "AND state = 'active'"
     return (try? db.read { db in
       try Row.fetchAll(db, sql: """
         SELECT item_id, kind, node_id, distance FROM embeddings
