@@ -45,6 +45,7 @@ public enum SearchQueries {
 
   public static func search(query rawQuery: String,
                             visibleNodeIDs: Set<UUID>,
+                            includeArchived: Bool = false,
                             _ db: any DatabaseReader) throws -> SearchResults {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= minQueryLength else { return SearchResults() }
@@ -52,8 +53,11 @@ public enum SearchQueries {
 
     return try db.read { db in
       let nodes = try Node.order { $0.name }.fetchAll(db)
-        .filter { visibleNodeIDs.contains($0.id) && $0.state == .active }
-      let activeVisibleIDs = Set(nodes.map { $0.id })
+        .filter { n -> Bool in
+          guard visibleNodeIDs.contains(n.id) else { return false }
+          return n.state == .active || (includeArchived && n.state == .archived)
+        }
+      let matchedNodeIDs = Set(nodes.map { $0.id })
 
       // NODES — rank 0 = name match, rank 1 = description-only match.
       var nodeScored: [(rank: Int, node: Node)] = []
@@ -75,7 +79,7 @@ public enum SearchQueries {
       // LOOSE ENDS — open + not-noise, visible nodes only. rank 0 = text match, 1 = quote-only.
       let nameByID = Dictionary(nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
-        .filter { activeVisibleIDs.contains($0.nodeID) }
+        .filter { matchedNodeIDs.contains($0.nodeID) }
       var leScored: [(rank: Int, le: LooseEnd)] = []
       for le in ends {
         let textHit = hit(le.text)

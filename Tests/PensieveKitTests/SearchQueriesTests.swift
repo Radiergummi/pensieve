@@ -122,3 +122,20 @@ private func allVisible(_ db: any DatabaseReader) throws -> Set<UUID> {
   #expect(r.looseEnds.count == 1)
   #expect(r.looseEnds.first?.nodeID == active.id)
 }
+
+@Test func searchIncludesArchivedWhenFlagSet() throws {
+  let db = try openCanonicalDatabase(at: tempURL("search-incl-archived"))
+  let active = try seed(db, name: "Deploy pipeline", ends: [("deploy the release", "ship it", "todo")])
+  let archived = try seed(db, name: "Deploy legacy", ends: [("deploy old thing", "legacy", "todo")])
+  #expect(try NodeCommands.archive(db, nodeID: archived.id))
+
+  // Flag OFF (default) → archived excluded (matches the existing exclusion test).
+  let off = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(db), db)
+  #expect(off.nodes.map(\.id) == [active.id])
+
+  // Flag ON → both the active AND the archived node + their open loose ends surface.
+  let on = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(db),
+                                    includeArchived: true, db)
+  #expect(Set(on.nodes.map(\.id)) == [active.id, archived.id])
+  #expect(Set(on.looseEnds.map(\.nodeID)) == [active.id, archived.id])
+}
