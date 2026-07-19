@@ -126,6 +126,30 @@ import SQLiteData
   #expect(commitEvent?.nodeID == sessionEvent?.nodeID)
 }
 
+/// A session whose cwd is the filesystem root (or $HOME) is not an area of work — it's a session
+/// launched from nowhere in particular, e.g. Pensieve's own `claude -p` subprocess under the
+/// launchd daemon, which inherits cwd `/`. Attributing it created a catch-all phantom project
+/// named "/" that swallowed hundreds of events. Drop it: no node, no event, spool row consumed.
+@Test func sessionFromDegenerateRootIsNotAttributed() async throws {
+  for root in ["/", NSHomeDirectory()] {
+    let spool = try CaptureSpool(at: tempURL("spool"))
+    let db = try openCanonicalDatabase(at: tempURL("canon"))
+
+    let transcript = tempURL("session", ext: "jsonl")
+    let line = """
+      {"type":"user","cwd":"\(root)","timestamp":"2026-06-30T10:00:00Z","message":{"role":"user","content":"hi"}}
+      """
+    try line.write(to: transcript, atomically: true, encoding: .utf8)
+    try spool.append(kind: CaptureKind.ccSession, payload: try encodeJSON(SessionRefPayload(transcriptPath: transcript.path)))
+
+    _ = try await Ingester(spool: spool, db: db).drain()
+
+    #expect(try await db.read { db in try Node.all.fetchAll(db) }.isEmpty, "cwd \(root) must not create a node")
+    #expect(try await db.read { db in try Event.all.fetchAll(db) }.isEmpty, "cwd \(root) must not create an event")
+    #expect(try spool.pending().isEmpty, "row must be consumed, not retried forever")
+  }
+}
+
 @Test func strandBranchKeyIgnoresDefaultAndDetached() {
   #expect(Git.strandBranchKey(branch: "main", defaultBranch: "main") == nil)
   #expect(Git.strandBranchKey(branch: "HEAD", defaultBranch: "main") == nil)

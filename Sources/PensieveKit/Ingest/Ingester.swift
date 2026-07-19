@@ -101,6 +101,13 @@ public struct Ingester: Sendable {
       // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
       // so a session launched from a subdirectory lands in the same project as its commits.
       let key = Git.commonDir(in: cwd) ?? ProjectResolver.canonical(cwd)
+      // A degenerate root is not an area of work. Dropping it here is permanent (return 0 → the
+      // drain marks the row ingested) exactly like the non-empty-transcript-without-cwd case
+      // above: such a session will never become attributable, so retrying it forever is worse.
+      guard !ProjectResolver.isDegenerateRoot(key) else {
+        Log.ingest.info("Dropped session with degenerate cwd \(key, privacy: .public) — not an area of work")
+        return 0
+      }
       let detail = try encodeJSON(["sessionID": session.sessionID,
                                    "prompts": String(session.userPromptCount),
                                    "transcriptPath": p.transcriptPath])

@@ -36,6 +36,12 @@ public struct ClaudeCLIProvider: LLMProvider {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = ["claude", "-p"]
+    // Pin the cwd. Without this the child inherits ours — which under the launchd daemon is `/`,
+    // so every extraction call became a Claude Code session at the filesystem root, got captured
+    // by the SessionEnd hook, and was re-ingested as "work" (a feedback loop that produced a
+    // phantom project named "/"). A dedicated scratch dir is inert and recognizable; the ingester
+    // refuses degenerate roots as a second line of defense (ProjectResolver.isDegenerateRoot).
+    process.currentDirectoryURL = PensievePaths.llmScratchDirectory()
     let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
     process.standardInput = stdin
     process.standardOutput = stdout

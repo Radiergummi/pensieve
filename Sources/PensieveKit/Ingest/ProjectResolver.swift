@@ -12,6 +12,15 @@ public struct ProjectResolver: Sendable {
     URL(fileURLWithPath: path).resolvingSymlinksInPath().path
   }
 
+  /// Catch-all locations that are never "an area of work": the filesystem root and $HOME. A
+  /// session with such a cwd is one launched from nowhere in particular — most notably Pensieve's
+  /// own `claude -p` subprocess, which under the launchd daemon inherits cwd `/`. Attributing
+  /// those mixes unrelated sessions into one phantom project (a node literally named "/").
+  static func isDegenerateRoot(_ key: String) -> Bool {
+    let path = canonical(key)
+    return path == "/" || path == canonical(NSHomeDirectory())
+  }
+
   /// Human-readable node name from an identity key. A git common-dir ends in `.git`;
   /// name the node after the repo directory, not ".git".
   static func displayName(forKey key: String) -> String {

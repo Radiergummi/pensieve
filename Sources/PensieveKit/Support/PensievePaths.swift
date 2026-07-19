@@ -21,6 +21,16 @@ public enum PensievePaths {
   public static func semanticIndexURL() -> URL {
     supportDirectory().appendingPathComponent("semantic-index.sqlite")
   }
+  /// Working directory pinned onto Pensieve's own `claude -p` subprocesses. Inert and empty by
+  /// design: the child would otherwise inherit our cwd (`/` under launchd), producing a captured
+  /// session at the filesystem root that Pensieve then re-ingests as work. Created on demand;
+  /// best-effort — a creation failure just leaves the child with the inherited cwd, which the
+  /// ingester's degenerate-root guard still refuses.
+  public static func llmScratchDirectory() -> URL {
+    let url = supportDirectory().appendingPathComponent("llm-scratch", isDirectory: true)
+    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+  }
   /// The current user's home, resolved via `getpwuid` (correct even when launchd does not
   /// export HOME) rather than the HOME environment variable.
   public static func homeDirectory() -> URL {
