@@ -526,6 +526,24 @@ final class AppModel: ObservableObject {
     expandedLooseEndID = hit.id
   }
 
+  /// A Spotlight/App-Intent loose-end open: resolve the loose end → its node (read-only lookup),
+  /// select the node, and mark the row to auto-expand. Degrades honestly: a deleted loose end (no
+  /// resolution) falls back to the briefing. A since-closed end still resolves → opens its node
+  /// (the closed row simply won't render). Window fronting is done by `applyDeepLink`.
+  func openLooseEnd(_ id: UUID) {
+    guard let db = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL),
+          let facts = try? LooseEndFactsQueries.facts(for: [id], db),
+          let f = facts.first else {
+      sidebarSelection = .briefing
+      selectedNodeID = nil
+      expandedLooseEndID = nil
+      return
+    }
+    sidebarSelection = .node(f.nodeID)
+    selectedNodeID = f.nodeID
+    expandedLooseEndID = f.looseEndID
+  }
+
   /// A "Related" (semantic) search hit: a loose-end hit auto-expands like an exact loose-end hit;
   /// node/event hits drive the detail like an exact node hit (an event's home is its node).
   func selectSemanticHit(_ hit: SemanticHit) {
