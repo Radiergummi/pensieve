@@ -60,6 +60,21 @@ import Foundation
     #expect(reopened.existingItems().isEmpty)   // dropped + rebuilt
   }
 
+  @Test func sameVersionReopenPreservesData() async {
+    let url = tempURL()
+    let e = StubEmbedder(dimension: 8)
+    let v = await e.embed(["x"])![0]
+    do {
+      let s = SemanticIndexStore(url: url, dimension: 8, embedderVersion: "stub:8")
+      s.upsert(row: .init(itemID: "a", kind: "node", nodeID: "n", state: "active",
+                          contentHash: "h"), embedding: v)
+    }
+    // Reopen with the SAME version + dimension → must NOT drop; indexed data survives.
+    let reopened = SemanticIndexStore(url: url, dimension: 8, embedderVersion: "stub:8")
+    #expect(reopened.existingItems() == ["a": "h"])
+    #expect(reopened.knn(query: v, k: 1, activeOnly: true).first?.itemID == "a")
+  }
+
   @Test func existingItemsReturnsHashMap() async {
     let store = SemanticIndexStore(url: tempURL(), dimension: 8, embedderVersion: "stub:8")
     let e = StubEmbedder(dimension: 8)
