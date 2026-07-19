@@ -35,10 +35,10 @@ public struct SearchResults: Equatable, Sendable {
 
 /// Read-only find over the grounded core corpus (node name/description, open loose-end text/quote),
 /// scoped to `visibleNodeIDs` (the caller passes the Focus-visible set → Focus filtering is correct
-/// by construction) AND to active-state nodes only (archived/muted nodes and their loose ends never
-/// surface in search, matching every other normal-view surface). Case-insensitive substring match in
-/// Swift (correct for non-ASCII; the corpus is small and single-user). Deterministic ranking with an
-/// `id.uuidString` final tiebreaker.
+/// by construction) AND to active-state nodes only by default (archived nodes and their open loose
+/// ends surface only when `includeArchived` is set; `muted` is never included). Case-insensitive
+/// substring match in Swift (correct for non-ASCII; the corpus is small and single-user).
+/// Deterministic ranking with an `id.uuidString` final tiebreaker.
 public enum SearchQueries {
   public static let minQueryLength = 2
   private static let cap = 50
