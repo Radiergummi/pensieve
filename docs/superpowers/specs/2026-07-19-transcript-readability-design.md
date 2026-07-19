@@ -10,6 +10,15 @@ integration lenses), producing 3 Critical and ~10 Important findings. Re-measuri
 invalidated the evidence base of the draft *and* of both reviews — see §Corpus evidence. This
 document is a rewrite, not a patch.
 
+**Revision 2 (2026-07-19).** A third review, verified against the code rather than the document,
+found: **(C1)** the "one shared vocabulary constant" would have given the renderer a write path into
+`isUserPrompt` and therefore into loose-end extraction and the trust gate — split into two members
+(§Prior art); **(I1)** three `LooseEndRow` call sites, not two; **(I2)** the `.searchScopes`
+precedent in `RootView.swift:34-37` shows the Kit/app split is insufficient mitigation on its own —
+Part 2 now pre-commits fallbacks (§Risks); **(m1)** test baseline 448 → 465; **(m2)** `role` is not a
+closed set, so speaker classification needs an explicit fallback. Separately, `CalloutSeverity` was
+narrowed 6 → 3 cases on this document's own corpus evidence.
+
 ## Problem
 
 The inline provenance view renders a Claude Code transcript window as a flat list. Every message —
@@ -89,9 +98,27 @@ envelope marker list, and it is a superset of the draft's allowlist:
 
 Two consequences, both binding on this design:
 
-- **One source of truth.** The vocabulary moves to a shared Kit constant consumed by *both*
-  `isInjectedOrCommand` and `TranscriptMarkup`. Two parallel lists of the same concept would drift
-  silently.
+- **One source of truth — but two members, not one list.** A single flat constant shared verbatim
+  between the two consumers is **unsafe**, for two independent reasons.
+
+  *The shapes are not the same concept.* The marker list is not a tag list: `</tool_uses>` is a
+  closing tag only, `<subagent` is a prefix, and `[Request interrupted` / `Caveat: The messages
+  below…` are prose. `TranscriptMarkup` needs **open-tag names** to scan forward from; feeding it
+  these entries is meaningless, and reshaping the list to suit the parser changes the gate.
+
+  *And `isInjectedOrCommand` is upstream of the trust gate.* It gates `isUserPrompt`, which gates
+  `LooseEndExtractor.swift:42` (what is eligible to become a loose end at all) and
+  `LooseEndVerifier.swift:28` (`guard m.isUserPrompt else { return nil }`). A shared mutable list
+  means a tag added for **rendering** silently changes **which loose ends are extractable** — the
+  exact drift the sharing was meant to prevent, pointed the wrong way. This spec asserts the trust
+  gate is untouched; that assertion is only true if the renderer has no write path into extraction.
+
+  **Therefore:** a `TranscriptVocabulary` enum with two explicit members —
+  `harnessTagNames: [String]` (bare names, parser input) and `injectionMarkers: [String]` (gate
+  input: derived from `harnessTagNames` where derivable, explicit where not) — plus a Kit test
+  pinning that every `harnessTagNames` entry has corresponding gate coverage. Non-drift without
+  coupling. **`injectionMarkers` must stay byte-identical to today's list** at merge; any change to
+  it is a trust-gate change and out of scope for this feature.
 - **`local-command-caveat` is matched upstream as prose**, not as a tag — via the literal "Caveat:
   The messages below…". The tag form does exist in parser input (457), so both forms must be
   recognized.
@@ -103,8 +130,12 @@ From brainstorming: (1) machine envelopes are a **third visual class**, not user
 bespoke**; (5) type scale **moderate** (22/18/16 on 14pt body); (6) role label **on speaker change**,
 small and subtle; (7) **approach A** — tested Kit parser, thin views.
 
-Added after review: (8) **the work splits into two sequenced parts** at the Kit/app seam;
+Added after review 1: (8) **the work splits into two sequenced parts** at the Kit/app seam;
 (9) success criteria are **rescoped** to what is actually reachable.
+
+Added after review 2: (10) the harness vocabulary is **two members, not one list**, so rendering
+cannot reach the trust gate; (11) `CalloutSeverity` ships **3 cases**, grown on evidence;
+(12) Part 2 **pre-commits fallbacks** for its two unprovable visual claims.
 
 ## Part 1 — `TranscriptMarkup` (PensieveKit, tested)
 
@@ -133,7 +164,7 @@ public struct TranscriptCallout: Equatable, Sendable {
 }
 
 public enum CalloutSeverity: String, Equatable, Sendable {
-  case caution, warning, important, tip, note, neutral   // closed set → localizable chrome
+  case caution, important, neutral   // closed set → localizable chrome
 }
 
 public enum HarnessBlock: Equatable, Sendable {
@@ -207,14 +238,21 @@ matching produces wrong severities on real names: `GATE` would fire `.caution` i
 
 | Severity | Tokens | Known |
 |---|---|---|
-| `.caution` | `STOP` `GATE` `CRITICAL` `DANGER` `NEVER` | `HARD-GATE`, `SUBAGENT-STOP` |
-| `.warning` | `WARNING` `CAUTION` | — |
-| `.important` | `IMPORTANT` `MUST` `REQUIRED` | `EXTREMELY-IMPORTANT/_IMPORTANT` |
-| `.tip` | `TIP` `HINT` | — |
-| `.note` | `NOTE` `INFO` | — |
-| `.neutral` | fallback | future tags |
+| `.caution` | `STOP` `GATE` `CRITICAL` `DANGER` `NEVER` `WARNING` `CAUTION` | `HARD-GATE` (154), `SUBAGENT-STOP` (1) |
+| `.important` | `IMPORTANT` `MUST` `REQUIRED` | `EXTREMELY-IMPORTANT/_IMPORTANT` (1) |
+| `.neutral` | fallback | everything else, incl. future tags |
 
 Precedence is table order; first match wins. `-` and `_` are equivalent.
+
+**Three cases, not six — YAGNI applied to our own evidence.** The draft specified `.warning`,
+`.tip`, and `.note` alongside these. Parser-visible counts justify none of them: the corpus contains
+exactly one meaningfully-present callout tag (`HARD-GATE`), and the other two known names appear
+once each. Shipping six severities means four with zero instances — four sets of colors, icons, and
+localized labels designed against no evidence, all of which must be maintained and eyeballed in two
+languages. `.warning` folds into `.caution` (same visual register); `.tip`/`.note` fold into
+`.neutral`. The enum is the cheap thing to grow: adding a case later is additive, exhaustive
+`switch`es make every render site a compile error until handled, and the token table is one row.
+Grow it when a real tag appears, not before.
 
 ### Invariants
 
@@ -257,10 +295,18 @@ did write**, an inversion of Decision 1's own principle. Today the cost is only 
 system  ←  !isUserPrompt  AND  the parse yields no non-empty .markdown or .callout segment
 you     ←  role == "user" and not system
 claude  ←  role == "assistant"
+system  ←  any other role (fallback)
 ```
 
 A pasted envelope surrounded by human prose keeps its user bubble; a purely injected envelope still
 classifies as system.
+
+**The fallback is load-bearing, not defensive boilerplate.** `role` is
+`(message?["role"] as? String) ?? (type ?? "unknown")` (`TranscriptParser.swift:34`), so it is **not**
+a closed set — it can be `"unknown"`, `"system"`, or any future `type` value. Today `previewRow`
+renders `Text(msg.role)` raw, so an unexpected value degrades to a stray caption; under a three-class
+bubble layout an unhandled role has no branch to land in. Unknown roles classify **system** — the
+honest reading, since we cannot assert a person wrote something whose role we cannot identify.
 
 ### Both row states are in scope
 
@@ -274,11 +320,21 @@ classifies as system.
 `previewRow` renders the first `.markdown` segment (or a callout's severity label) at `lineLimit(3)`
 with the same mapped role label.
 
-### Two consumers at very different widths
+### Three call sites at two very different widths
 
-`LooseEndRow` is instantiated in the **middle column** (`ContentListView.swift:138,153`), clamped to
-`min 240 / ideal 300 / max 420` (`RootView.swift:33`). Net of padding, ~180pt is usable — bubbles and
-22pt headings do not work there, and left/right alternation carries no information.
+`LooseEndRow` has **three** instantiations, not the two the draft listed:
+
+| Site | Column | Width |
+|---|---|---|
+| `ContentListView.swift:145` (search results) | middle | `min 240 / ideal 300 / max 420` |
+| `ContentListView.swift:160` (node loose ends) | middle | same |
+| `DetailView.swift:67` | detail | `min 360 / ideal 800`, no max |
+
+The middle column is clamped by `RootView.swift:29-33`. Net of padding, ~180pt is usable — bubbles
+and 22pt headings do not work there, and left/right alternation carries no information.
+
+The `compact: Bool` threading below must reach **all three** sites; the draft's "two consumers"
+framing would have left `DetailView` unspecified.
 
 `LooseEndRow` takes a `compact: Bool`. Compact keeps today's full-width stack with the new parsed
 rendering (callouts, harness cards, chips, type scale) but **no bubbles**. Bubble max width is
@@ -373,7 +429,11 @@ vertically inside `ContentListView`'s `List`. Intra-message segment spacing: 8pt
 - `<summary>x</summary>` at top level → untouched; inside `task-notification` → a child; an
   unrecognised child lands in `unrecognisedChildren`.
 - Command group: full trio, `command-name` alone, empty `command-args`.
-- Severity: token vs substring (`AUTHGW_GATEWAY_NOTE → .note`); `-`/`_` equivalence; fallback.
+- Severity: token vs substring (`AUTHGW_RESOLVE_KEY_URL → .neutral`, **not** `.caution` via a
+  `GATE` substring inside `AUTHGW`; `NON-STOP → .neutral`); `-`/`_` equivalence; fallback.
+- **Vocabulary split:** every `TranscriptVocabulary.harnessTagNames` entry has gate coverage, and
+  `injectionMarkers` is byte-identical to the pre-change `isInjectedOrCommand` list — the test that
+  makes a rendering-driven trust-gate change fail loudly.
 - Skill preamble anchored with `hasPrefix`, not `contains` (mid-message occurrence → not a preamble).
 - Empty message; tag-only message.
 
@@ -394,7 +454,31 @@ window at 480pt × {you, claude, system} × {cited, not cited} × {en, de}.
   in the app, none in MarkdownUI), so segmentation regresses nothing. It does foreclose adding it
   later without a separate copy affordance.
 - **Part 2 has no automated coverage** while being a full rewrite of the rendering path. The
-  Kit/app split exists so the half that *can* be proven is proven independently.
+  Kit/app split exists so the half that *can* be proven is proven independently. **This is not
+  sufficient mitigation on its own** — see the precedent below.
+
+### Precedent: SwiftUI declining an app-side visual claim
+
+`RootView.swift:34-37` carries a comment from the semantic-recall-hardening batch:
+
+> `.searchScopes` is deliberately NOT used — under `.sidebar` placement SwiftUI rendered the scope
+> bar twice (sidebar + content column), overlaying content, and left it mounted after the field
+> cleared. The plan's pre-committed fallback (a segmented Picker in the results header) is used
+> instead.
+
+That is a human-verify carry resolving **negatively**, and it is the closest structural analogue to
+Part 2: an unprovable app-side visual claim that SwiftUI simply did not honor. What saved that batch
+was not the Kit/app split — it was that the **plan named the fallback in advance**, so discovering
+the problem cost a swap, not a redesign mid-execution.
+
+**Therefore Part 2's plan must pre-commit a fallback for its two riskiest claims:**
+
+| Claim | Risk | Pre-committed fallback |
+|---|---|---|
+| Trailing-aligned bubbles inside a `List` row | Bubble alignment/width inside `List` + `fixedSize` is unverified; the cited message is *always* this class (`ProvenanceQueries.swift:50`), so failure hits the sacred highlight | Full-width stack for all three classes (today's layout) + the new parsed rendering; class conveyed by role chip + background tint only |
+| Trailing accent bar inside the "you" bubble | No leading edge to attach to; `.overlay(alignment:)` behavior inside a tinted rounded shape unverified | Tinted border on the bubble + the existing leading bar retained on the *row*, outside the bubble |
+
+Both fallbacks preserve the cited highlight, which is the one thing that may not regress.
 
 ## Out of scope
 
@@ -406,11 +490,17 @@ triggers.
 Rescoped: "zero raw angle brackets" is unreachable and contradicts the allowlist-staleness risk.
 
 1. Every construct in the reported screenshot renders without raw angle brackets, **and** every tag
-   in the shared `isInjectedOrCommand` vocabulary is handled. Tags outside it (`<result>`,
+   in `TranscriptVocabulary.harnessTagNames` is handled. Tags outside it (`<result>`,
    `<subagent_tokens>`, `<duration_ms>`) are **known-unhandled** and recorded as such.
 2. Nothing the user did not write is attributed to them; a message quoting an envelope keeps its
-   user bubble.
+   user bubble; an unknown role classifies as system rather than as a person.
 3. The cited-provenance highlight is preserved and specified for all three speaker classes.
-4. `./scripts/test.sh` green at 448 + Part 1's ~28 Kit tests; `xcodebuild` clean; smoke launch
-   survives.
-5. The verification matrix passes at all four widths in both languages.
+4. `./scripts/test.sh` green at **465** + Part 1's ~28 Kit tests; `xcodebuild` clean; smoke launch
+   survives. (465 is the measured baseline on `main` at 2026-07-19 — the draft's 448 predated the
+   archived-semantic-index merge. CLAUDE.md's "window min 900×480" is likewise stale; the real floor
+   is `860×480`, `PensieveApp.swift:32`.)
+5. The verification matrix passes at all four widths in both languages — or a pre-committed fallback
+   is taken and recorded, which counts as a pass.
+6. `injectionMarkers` is unchanged, so `isUserPrompt` — and therefore loose-end extraction and the
+   trust gate — behaves identically before and after. Verified by the vocabulary test, not by
+   inspection.
