@@ -531,7 +531,7 @@ final class AppModel: ObservableObject {
   /// resolution) falls back to the briefing. A since-closed end still resolves → opens its node
   /// (the closed row simply won't render). Window fronting is done by `applyDeepLink`.
   func openLooseEnd(_ id: UUID) {
-    guard let db = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL),
+    guard let db,
           let facts = try? LooseEndFactsQueries.facts(for: [id], db),
           let f = facts.first else {
       sidebarSelection = .briefing
