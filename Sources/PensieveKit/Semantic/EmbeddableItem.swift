@@ -17,6 +17,13 @@ public struct EmbeddableItem: Sendable {
 /// v1 producer of the semantic corpus: active nodes + open loose ends + enriched events.
 /// The seam future producers (transcript chunks, etc.) extend.
 public enum EmbeddableCorpus {
+  /// Degenerate extraction output ("[]", "/", stray punctuation) is not searchable content — it
+  /// embeds to noise and renders as an empty-looking "Related" row. Require some real prose.
+  static func isSearchable(_ text: String) -> Bool {
+    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return t.count >= 8 && t.contains { $0.isLetter }
+  }
+
   public static func gather(_ db: any DatabaseReader) throws -> [EmbeddableItem] {
     try db.read { db in
       var out: [EmbeddableItem] = []
@@ -38,7 +45,7 @@ public enum EmbeddableCorpus {
         case CaptureKind.ccSession: text = e.workSummary   // nil = skip terse placeholder
         default: text = e.summary.isEmpty ? nil : e.summary
         }
-        if let text {
+        if let text, isSearchable(text) {
           out.append(.init(itemID: e.id.uuidString, kind: "event", nodeID: e.nodeID.uuidString,
                            state: "active", text: text))
         }

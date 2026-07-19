@@ -32,10 +32,10 @@ struct RootView: View {
       ContentListView(model: model)
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         .searchable(text: $model.searchText, placement: .sidebar, prompt: Text("Search"))
-        .searchScopes($model.searchScope) {
-          Text("Active").tag(AppModel.SearchScope.active)
-          Text("Include Archived").tag(AppModel.SearchScope.all)
-        }
+        // NOTE: `.searchScopes` is deliberately NOT used — under `.sidebar` placement SwiftUI
+        // rendered the scope bar twice (sidebar + content column), overlaying content, and left it
+        // mounted after the field cleared. The plan's pre-committed fallback (a segmented Picker in
+        // the results header, scoped to the search UI) is used instead — see ContentListView.
         .searchFocused($isSearchFocused)
     } detail: {
       // Provenance is now shown inline inside each loose-end row (expand to see the surrounding

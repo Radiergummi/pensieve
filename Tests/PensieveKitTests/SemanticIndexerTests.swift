@@ -7,7 +7,8 @@ import SQLiteData
 /// (looseEnds.sourceEventID REFERENCES events(id), and GRDB enforces foreign keys by default).
 private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = CaptureKind.gitCommit,
                        summary: String = "did a thing", workSummary: String? = nil) throws -> Event {
-  let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
+  // Unique per call — sources.(key, kind) is UNIQUE, so several events under one node need several sources.
+  let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)/\(UUID())")
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(), kind: kind,
                     summary: summary, detailJSON: "{}", workSummary: workSummary)
   try db.write { db in
@@ -53,6 +54,26 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     await idx.sync(db)
 
     #expect(!s.existingItems().keys.contains(ev.id.uuidString))
+  }
+
+  /// Degenerate extraction output ("[]", "/") is not searchable content — it must never reach the
+  /// index, or ⌘F "Related" surfaces empty-looking rows.
+  @Test func skipsDegenerateEventText() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semidx-degenerate"))
+    let n = Node(name: "N", kind: NodeKind.project)
+    try await db.write { try Node.insert { n }.execute($0) }
+    let empty = try makeEvent(db, node: n, kind: CaptureKind.ccSession, workSummary: "[]")
+    let slash = try makeEvent(db, node: n, kind: CaptureKind.ccSession, workSummary: "/")
+    let good = try makeEvent(db, node: n, kind: CaptureKind.ccSession, workSummary: "wired up refunds")
+
+    let s = store()
+    let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
+    await idx.sync(db)
+
+    let items = s.existingItems()
+    #expect(!items.keys.contains(empty.id.uuidString))
+    #expect(!items.keys.contains(slash.id.uuidString))
+    #expect(items.keys.contains(good.id.uuidString))
   }
 
   @Test func noiseLabelPrunesLooseEnd() async throws {

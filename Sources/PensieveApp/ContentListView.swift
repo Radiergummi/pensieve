@@ -44,6 +44,15 @@ struct ContentListView: View {
   @ViewBuilder private func searchResultsList() -> some View {
     let r = model.searchResults
     List {
+      // Scope control lives here (not `.searchScopes`) so it exists only while search is on screen.
+      Picker("", selection: Binding(get: { model.searchScope }, set: { model.searchScope = $0 })) {
+        Text("Active").tag(AppModel.SearchScope.active)
+        Text("Include Archived").tag(AppModel.SearchScope.all)
+      }
+      .pickerStyle(.segmented)
+      .labelsHidden()
+      .listRowSeparator(.hidden)
+
       if !r.nodes.isEmpty {
         Section(header: Text("Projects")) {
           ForEach(r.nodes) { hit in
@@ -64,6 +73,7 @@ struct ContentListView: View {
                   }
                 }
               }
+              .rowHitArea()
             }
             .buttonStyle(.plain)
           }
@@ -77,6 +87,7 @@ struct ContentListView: View {
                 Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
                 SnippetText(snippet: hit.snippet)
               }
+              .rowHitArea()
             }
             .buttonStyle(.plain)
           }
@@ -87,9 +98,10 @@ struct ContentListView: View {
           ForEach(model.semanticHits) { hit in
             Button { model.selectSemanticHit(hit) } label: {
               VStack(alignment: .leading, spacing: 2) {
-                Text(hit.title).lineLimit(1)
-                SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
+                Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+                Text(hit.title).lineLimit(2)
               }
+              .rowHitArea()
             }
             .buttonStyle(.plain)
           }
@@ -170,6 +182,14 @@ struct SnippetText: View {
       + Text(snippet.match).bold().foregroundColor(.accentColor)
       + Text(snippet.trailing))
       .lineLimit(2)
+  }
+}
+
+extension View {
+  /// A `.plain` Button only accepts clicks inside its label's bounds, so a short label (a one-word
+  /// hit) leaves most of the row dead. Widen the label to the full row and make it all hittable.
+  func rowHitArea() -> some View {
+    frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
   }
 }
 
