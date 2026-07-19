@@ -15,19 +15,24 @@ corpus, grounding predicates, and on-device-only rule are unchanged.
 The four items were selected from the semantic-recall whole-branch-review deferred ledger + the
 in-app-find deferred siblings:
 
-- **A — Include-archived toggle (⌘F)** — *user-facing.*
+- **A — Include-archived toggle (⌘F), exact-search only** — *user-facing.* (Semantic "Related" stays
+  active-only: the semantic index contains no archived content — see the Part A scope note.)
 - **B — Rebuild robustness** (rescoped after review: the concurrency mechanism already works, so this
   is a regression test for the version-bump invariant only — no production code change) — *invisible.*
 - **C — MCP embedder/store caching** across calls — *invisible.*
 - **D — Expand-and-retry under heavy Focus-muting** (with a floor-aware exit) — *invisible.*
 
-> **Review note.** This spec was revised after two independent adversarial reviews. The material
-> change: **Part B's original premise was false** — GRDB's `pool.write` already begins an immediate
-> transaction, so the proposed guard was a no-op and was dropped in favor of the invariant test. Other
-> folded-in fixes: default the new parameter (fully additive, no broken call sites); a floor-aware exit
-> in Part D (avoid pointless `k` escalation on sparse queries); push the state filter down into KNN
-> (keep `muted` out of the fetch window); one localization key, not two; spike the `.searchScopes` bar
-> under `.sidebar` placement first, with a fallback.
+> **Review note.** This spec was revised after two independent adversarial reviews **and** a
+> plan-time code check. Material changes:
+> - **Part B's original premise was false** — GRDB's `pool.write` already begins an immediate
+>   transaction, so the proposed guard was a no-op; dropped in favor of the invariant test only.
+> - **Include-archived is exact-search only** — the semantic index contains no archived content
+>   (`EmbeddableCorpus.gather` is active-only), so a KNN state relaxation would match nothing.
+>   Semantic archived recall is deferred (needs a corpus-producer change). This removed the
+>   `SemanticQueries`/`knn` signature changes and the `muted`-pushdown item entirely.
+> - Folded-in fixes: default the new `SearchQueries` parameter (additive, no broken call sites); a
+>   floor-aware exit in Part D (avoid pointless `k` escalation on sparse queries); one localization
+>   key, not two; spike the `.searchScopes` bar under `.sidebar` placement first, with a fallback.
 
 ## Current state (as built)
 
@@ -50,27 +55,25 @@ in-app-find deferred siblings:
 **Goal:** archived nodes (currently reachable only via the collapsed Archived sidebar section) can
 be opted into ⌘F results, exact and semantic.
 
-**Kit.** Add `includeArchived: Bool = false` to both query kernels — **defaulted**, placed just
-before the trailing `_ db`, so the change is fully additive: all 17 existing test call sites
-(`SearchQueriesTests` ×12, `SemanticQueriesTests` ×5) and both MCP sites compile untouched, and only
-the app opts in.
+**Scope (decided): exact-search only.** The semantic index contains **no archived content** —
+`EmbeddableCorpus.gather` (`EmbeddableItem.swift:23,30,35`) indexes only active nodes and their
+items (loose-end/event rows even hardcode `state: "active"`), and the `SemanticIndexer` prunes an
+item once it leaves the active corpus (so archiving a node *deletes* its vectors). Relaxing a KNN
+state filter would therefore match rows that don't exist. Indexing archived content (changing the
+corpus producer + pruner + re-embedding) is a larger, separate effort (deferred). So the toggle
+reaches **exact `⌘F` search only**; semantic "Related" stays active-only.
+
+**Kit.** Add `includeArchived: Bool = false` to **`SearchQueries.search`** only — **defaulted**,
+placed just before the trailing `_ db`, so it is fully additive: the 12 existing `SearchQueriesTests`
+call sites and the MCP site compile untouched, and only the app opts in. `SemanticQueries.search` is
+**not** changed for archived (it only gains Part D).
 
 - `SearchQueries.search(query:visibleNodeIDs:includeArchived:_:)`
   - Node filter widens from `state == .active` to
     `state == .active || (includeArchived && state == .archived)`.
   - Loose-end node-gating widens identically. `LooseEnd.isOpen($0)` **stays** — we still surface
     only *open* loose ends, just also those under archived nodes.
-  - Ranking, snippets, caps unchanged.
-- `SemanticQueries.search(query:visibleNodeIDs:excludingIDs:k:floor:store:embedder:includeArchived:_:)`
-  - The join-survival guard in `resolve` widens from `n.state == .active` to also admit `.archived`
-    when the flag is set (for `node`, and for the node joined by `loose_end`/`event`).
-  - **The store's KNN filter must never go empty.** `SemanticIndexStore.knn`'s `activeOnly: Bool`
-    is replaced/extended so its predicate is `state = 'active'` (default) or
-    `state IN ('active','archived')` (include-archived) — **never `""`**. This keeps `muted` (and any
-    future non-surfaced state) out of the KNN window *and* out of Part D's exhaustion accounting.
-    Both reviewers flagged that `activeOnly:false` today drops the filter entirely, letting `muted`
-    rows consume fetch slots and rely solely on the `resolve` guard for exclusion.
-  - `muted` state stays excluded in both, now at the index layer too.
+  - `muted` stays excluded. Ranking, snippets, caps unchanged.
 
 **App.** `AppModel` gains a `searchScope` enum (`.active` / `.all`).
 
@@ -86,10 +89,12 @@ the app opts in.
   placement. Either keeps the feature shipping regardless of the scope-bar outcome.
 - Scope change re-runs the search through the existing debounce/`searchToken` machinery (already
   cancels the prior task and gates assignment on a monotonic token, so a scope-change re-run can't be
-  raced by a stale in-flight query, and it re-runs **both** exact and semantic in one pass).
-  `runSearch` captures the flag as a **pre-Task local** (`let includeArchived = (searchScope == .all)`),
-  mirroring how `query`/`visible` are snapshotted before the off-main `Task` — reading `self.searchScope`
-  inside the async closure would be a main-actor-isolation violation.
+  raced by a stale in-flight query). `runSearch` captures the flag as a **pre-Task local**
+  (`let includeArchived = (searchScope == .all)`), mirroring how `query`/`visible` are snapshotted
+  before the off-main `Task` — reading `self.searchScope` inside the async closure would be a
+  main-actor-isolation violation. The flag is passed to **`SearchQueries.search` only**; the semantic
+  `SemanticQueries.search` call is left active-only (the "Related" section does not include archived —
+  see the scope note). This is a deliberate, documented asymmetry.
 - **Localization: exactly one new key** — `"Include Archived"` (hand-authored into
   `Localizable.xcstrings` with its German + `state: "translated"`, per the project gotcha that
   `xcodebuild` does not auto-populate the source catalog). The `"Active"` label **reuses the existing
@@ -101,8 +106,9 @@ state guard inside the query kernels is the only gate. Search hits drive the det
 (the briefing-card pattern in `selectSearchNode`/`selectSearchLooseEnd`), which already renders
 archived nodes, so navigation to an archived hit works without new wiring.
 
-**MCP stays active-only** (`includeArchived: false`) — exposing an `include_archived` param on the
-MCP `search` tool is a non-goal (see below).
+**MCP stays active-only** — its `SearchQueries.search` call keeps the defaulted `includeArchived`
+(false), and its `visibleNodeIDs` set (`allActive`) is active-only by construction anyway. Exposing an
+`include_archived` param on the MCP `search` tool is a non-goal (see below).
 
 ## Part B — Rebuild robustness (rescoped after review)
 
@@ -177,7 +183,7 @@ ranking.
 var kFetch = max(k * 8, 50)
 let maxFetch = 2000
 while true {
-  let raw = store.knn(query: qvec, k: kFetch, includeArchived: includeArchived)
+  let raw = store.knn(query: qvec, k: kFetch, activeOnly: true)   // unchanged signature
   let hits = buildHits(raw, upTo: k)               // existing filter+resolve+floor, capped at k
   if hits.count >= k || raw.count < kFetch || kFetch >= maxFetch { return hits }
   if let last = raw.last, last.similarity < floor { return hits }   // below-floor boundary reached
@@ -206,14 +212,14 @@ bump/reconsider the cap at that point.
 
 ## Cross-cutting
 
-- **Signature growth (additive).** `includeArchived: Bool = false` is **defaulted** on both kernels,
-  so the only site that changes is the app (1 call site each). The 17 existing test call sites and
-  both MCP sites compile unchanged. MCP's `visibleNodeIDs` set (`allActive`) is already active-only,
-  so MCP needs **no** change and stays active-only by construction — no explicit `false` required.
+- **Signature growth (additive).** `includeArchived: Bool = false` is **defaulted** on
+  `SearchQueries.search` only, so the only site that changes is the app (1 call site). The 12 existing
+  `SearchQueriesTests` call sites and the MCP site compile unchanged. `SemanticQueries.search` and
+  `SemanticIndexStore.knn` keep their current signatures (Part D is internal to `SemanticQueries`).
 - **Testing (Kit, TDD).**
-  - Include-archived: exact + semantic each return archived hits iff the flag is set; default
-    (active-only) behavior unchanged. Also assert `muted` never surfaces even with the flag on (guarded
-    by both the widened KNN filter and the `resolve` guard).
+  - Include-archived (exact): with the flag set, archived nodes + their open loose ends surface;
+    default (active-only) behavior unchanged; `muted` never surfaces. Mirror the existing
+    `searchExcludesArchivedNodesAndLooseEnds` fixture (uses `NodeCommands.archive`).
   - Expand-and-retry: (a) a fixture where most nodes are in a muted Focus context and the visible
     matches rank beyond the initial `kPrime` — assert the visible ones surface (they would not with a
     single fetch); (b) a sparse fixture where only a couple of items are above `floor` — assert the
@@ -230,6 +236,9 @@ bump/reconsider the cap at that point.
 
 ## Non-goals
 
+- **Archived content in semantic "Related" / the semantic index** — deferred. Needs
+  `EmbeddableCorpus.gather` to index active+archived with correct per-item state, the `SemanticIndexer`
+  pruner to stop dropping archived, and archived content re-embedded. Its own effort.
 - **Transcript-passage chunking** — the next corpus increment; its own spec.
 - **`include_archived` on the MCP `search` tool** — MCP stays active-only. Trivial to add later if
   wanted.
