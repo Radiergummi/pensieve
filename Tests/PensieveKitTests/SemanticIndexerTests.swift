@@ -76,6 +76,24 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(items.keys.contains(good.id.uuidString))
   }
 
+  /// The degenerate-output gate must NOT touch human-authored text: "wip" and "fix ci" are real
+  /// commit subjects, and dropping them would silently hole the semantic index.
+  @Test func keepsShortHumanAuthoredCommitSubjects() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semidx-shortcommit"))
+    let n = Node(name: "N", kind: NodeKind.project)
+    try await db.write { try Node.insert { n }.execute($0) }
+    let wip = try makeEvent(db, node: n, kind: CaptureKind.gitCommit, summary: "wip")
+    let ci = try makeEvent(db, node: n, kind: CaptureKind.gitCommit, summary: "fix ci")
+
+    let s = store()
+    let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
+    await idx.sync(db)
+
+    let items = s.existingItems()
+    #expect(items.keys.contains(wip.id.uuidString))
+    #expect(items.keys.contains(ci.id.uuidString))
+  }
+
   @Test func noiseLabelPrunesLooseEnd() async throws {
     let db = try openCanonicalDatabase(at: tempURL("semidx-noise"))
     let n = Node(name: "N", kind: NodeKind.project)

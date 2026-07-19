@@ -17,8 +17,9 @@ public struct EmbeddableItem: Sendable {
 /// v1 producer of the semantic corpus: active nodes + open loose ends + enriched events.
 /// The seam future producers (transcript chunks, etc.) extend.
 public enum EmbeddableCorpus {
-  /// Degenerate extraction output ("[]", "/", stray punctuation) is not searchable content — it
-  /// embeds to noise and renders as an empty-looking "Related" row. Require some real prose.
+  /// Degenerate LLM output ("[]", "/", stray punctuation) is not searchable content — it embeds to
+  /// noise and renders as an empty-looking "Related" row. Require some real prose. Applies ONLY to
+  /// model-generated text; human-authored text (a git commit subject) is legitimately short.
   static func isSearchable(_ text: String) -> Bool {
     let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
     return t.count >= 8 && t.contains { $0.isLetter }
@@ -42,10 +43,12 @@ public enum EmbeddableCorpus {
       for e in events where activeIDs.contains(e.nodeID) {
         let text: String?
         switch e.kind {
-        case CaptureKind.ccSession: text = e.workSummary   // nil = skip terse placeholder
+        // LLM-enriched prose — gate it: degenerate model output ("[]", a bare "/") is not content.
+        case CaptureKind.ccSession: text = e.workSummary.flatMap { isSearchable($0) ? $0 : nil }
+        // Human-authored (a git commit subject). NOT gated — "wip" and "fix ci" are real, short work.
         default: text = e.summary.isEmpty ? nil : e.summary
         }
-        if let text, isSearchable(text) {
+        if let text {
           out.append(.init(itemID: e.id.uuidString, kind: "event", nodeID: e.nodeID.uuidString,
                            state: "active", text: text))
         }
