@@ -19,7 +19,7 @@ public enum NextQueries {
   /// Deterministic ranking on grounded signals only. No model, no invented scores.
   public static func ranked(_ db: any DatabaseReader, now: Date) throws -> [NextItem] {
     try db.read { db in
-      let projects = try Node.where { $0.state.eq("active") }.fetchAll(db)
+      let projects = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
       var items: [NextItem] = []
       for p in projects {
         let latest = try Event.where { $0.nodeID.eq(p.id) }

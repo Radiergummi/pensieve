@@ -39,7 +39,7 @@ public struct RecallBundle: Codable, Sendable {
 public struct ProjectContextBundle: Codable, Sendable {
   public let nodeID: UUID
   public let name: String
-  public let kind: String
+  public let kind: NodeKind
   public let description: String
   public let context: String
   public let daysDormant: Int
@@ -54,7 +54,7 @@ public struct ProjectContextBundle: Codable, Sendable {
 public struct WhatsNextItem: Codable, Sendable {
   public let nodeID: UUID
   public let name: String
-  public let kind: String
+  public let kind: NodeKind
   public let openLooseEnds: Int
   public let daysDormant: Int
   public let score: Double

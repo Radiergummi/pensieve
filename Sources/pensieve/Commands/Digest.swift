@@ -10,7 +10,7 @@ struct Digest: AsyncParsableCommand {
     let builder = SummaryBuilder(provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()))
     print("# Pensieve digest\n")
     // Active projects only, matching the abstract (archived/muted don't belong in a morning digest).
-    for p in try ProjectQueries.all(db) where p.state == "active" {
+    for p in try ProjectQueries.all(db) where p.state == .active {
       guard let sum = try await builder.build(db, node: p, now: Date()) else { continue }
       print("## \(sum.whatItIs)")
       print("\n_\(sum.lastWorkDone)_  <!-- generated narration -->\n")   // fenced: clearly generated

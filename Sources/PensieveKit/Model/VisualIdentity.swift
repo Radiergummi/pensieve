@@ -37,16 +37,15 @@ public struct KindStyle: Equatable, Sendable {
 }
 
 public enum NodeKindStyle {
-  public static func style(for kind: String) -> KindStyle {
+  public static func style(for kind: NodeKind) -> KindStyle {
     switch kind {
-    case NodeKind.domain:     return KindStyle(icon: "sf:folder", colorTag: "gray")
-    case NodeKind.project:    return KindStyle(icon: "sf:shippingbox", colorTag: "blue")
-    case NodeKind.strand:     return KindStyle(icon: "sf:arrow.triangle.branch", colorTag: "teal")
-    case NodeKind.concept:    return KindStyle(icon: "sf:lightbulb", colorTag: "yellow")
-    case NodeKind.initiative: return KindStyle(icon: "sf:flag", colorTag: "orange")
-    case NodeKind.task:       return KindStyle(icon: "sf:checklist", colorTag: "green")
-    case NodeKind.topic:      return KindStyle(icon: "sf:tag", colorTag: "purple")
-    default:                  return KindStyle(icon: "sf:shippingbox", colorTag: "blue")
+    case .domain:     return KindStyle(icon: "sf:folder", colorTag: "gray")
+    case .project:    return KindStyle(icon: "sf:shippingbox", colorTag: "blue")
+    case .strand:     return KindStyle(icon: "sf:arrow.triangle.branch", colorTag: "teal")
+    case .concept:    return KindStyle(icon: "sf:lightbulb", colorTag: "yellow")
+    case .initiative: return KindStyle(icon: "sf:flag", colorTag: "orange")
+    case .task:       return KindStyle(icon: "sf:checklist", colorTag: "green")
+    case .topic:      return KindStyle(icon: "sf:tag", colorTag: "purple")
     }
   }
 }

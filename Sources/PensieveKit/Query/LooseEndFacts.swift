@@ -21,7 +21,7 @@ public enum LooseEndFactsQueries {
   /// Focus scoping is applied by the app-side indexer against this set (Kit stays Focus-agnostic).
   public static func all(_ db: any DatabaseReader) throws -> [LooseEndFacts] {
     try db.read { db in
-      let activeNodes = try Node.where { $0.state.eq("active") }.fetchAll(db)
+      let activeNodes = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
       let nameByID = Dictionary(activeNodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
       return ends.compactMap { le in

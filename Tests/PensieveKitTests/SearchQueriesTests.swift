@@ -5,7 +5,7 @@ import SQLiteData
 
 /// Insert a node + one event + loose ends; returns the node.
 private func seed(_ db: any DatabaseWriter, name: String, description: String = "",
-                  kind: String = NodeKind.project,
+                  kind: NodeKind = .project,
                   ends: [(text: String, quote: String, label: String)] = []) throws -> Node {
   let node = Node(name: name, kind: kind, description: description)
   let source = Source(id: UUID(), nodeID: node.id, kind: SourceKind.claudeCode, key: "/p/\(node.id)")

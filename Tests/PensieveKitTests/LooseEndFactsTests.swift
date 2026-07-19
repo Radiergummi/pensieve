@@ -35,7 +35,7 @@ import SQLiteData
   let db = try openCanonicalDatabase(at: tempURL("lef-archived"))
   let nodeID = UUID(), sourceID = UUID(), eventID = UUID()
   try db.write { db in
-    try Node.insert { Node(id: nodeID, name: "Archived", state: "archived") }.execute(db)
+    try Node.insert { Node(id: nodeID, name: "Archived", state: .archived) }.execute(db)
     try Source.insert {
       Source(id: sourceID, nodeID: nodeID, kind: SourceKind.claudeCode, key: "/archived")
     }.execute(db)

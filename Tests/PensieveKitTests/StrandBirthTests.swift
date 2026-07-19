@@ -33,7 +33,7 @@ private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: Capture
 
   _ = try await Ingester(spool: spool, db: db).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }
+  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
   #expect(strands.count == 1)
   #expect(strands.first?.branchKey == "feature-x")
   // Both commits on the branch are repointed to the strand.
@@ -49,7 +49,7 @@ private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: Capture
 
   _ = try await Ingester(spool: spool, db: db).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }
+  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
   #expect(strands.isEmpty)                              // tagged, not materialized
   let ev = try await db.read { db in try Event.all.fetchAll(db) }.first { $0.kind == CaptureKind.gitCommit }
   #expect(ev?.branchKey == "feature-y")                // branch is still recorded on the event
@@ -63,7 +63,7 @@ private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: Capture
 
   _ = try await Ingester(spool: spool, db: db, llm: StubLLM(text: "Auth refactor\nReworking the login flow.")).drain()
 
-  let strand = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }.first
+  let strand = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }.first
   #expect(strand?.name == "Auth refactor")
   #expect(strand?.description == "Reworking the login flow.")
 }
@@ -76,7 +76,7 @@ private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: Capture
 
   _ = try await Ingester(spool: spool, db: db, llm: FailingLLM()).drain()
 
-  let strand = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }.first
+  let strand = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }.first
   #expect(strand?.name == "billing")                   // falls back to branch name
   #expect(strand?.description == "")
 }
@@ -107,7 +107,7 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
 
   _ = try await Ingester(spool: spool, db: db).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }
+  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
   #expect(strands.count == 1)
   #expect(strands.first?.branchKey == "feature-s")
 }
@@ -121,7 +121,7 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
 
   _ = try await Ingester(spool: spool, db: db).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }
+  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
   #expect(strands.isEmpty)                                     // threshold is 2 of the SAME kind
 }
 
@@ -155,7 +155,7 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: secondHash, branch: "feature-z")))
   _ = try await Ingester(spool: spool, db: db).drain()
 
-  let strand = try await db.read { db in try Node.where { $0.kind.eq("strand") }.fetchAll(db) }.first
+  let strand = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }.first
   let strandID = try #require(strand?.id)
   let updated = try await db.read { db in try LooseEnd.where { $0.id.eq(looseEnd.id) }.fetchOne(db) }
   #expect(updated?.nodeID == strandID)

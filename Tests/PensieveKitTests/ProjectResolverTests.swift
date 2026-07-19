@@ -73,7 +73,7 @@ import SQLiteData
   try db.write { db in try Checkpoint.insert { checkpoint }.execute(db) }
 
   // A child node under B must re-parent to A on merge, not orphan.
-  let child = Node(name: "b-strand", parentID: b.project.id, kind: "strand", branchKey: "feature")
+  let child = Node(name: "b-strand", parentID: b.project.id, kind: .strand, branchKey: "feature")
   try db.write { db in try Node.insert { child }.execute(db) }
 
   try ProjectResolver(db: db).group(a.project.id, into: [b.project.id])
@@ -92,9 +92,9 @@ import SQLiteData
 
 @Test func groupMergingParentIntoChildRerootsAtGrandparent() throws {
   let db = try openCanonicalDatabase(at: tempURL("group-selfcycle"))
-  let grand = try #require(try NodeCommands.add(db, name: "Grand", kind: "domain", parent: nil, description: ""))
-  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: "project", parent: "Grand", description: ""))
-  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "strand", parent: "Parent", description: ""))
+  let grand = try #require(try NodeCommands.add(db, name: "Grand", kind: .domain, parent: nil, description: ""))
+  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: .project, parent: "Grand", description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: .strand, parent: "Parent", description: ""))
 
   try ProjectResolver(db: db).group(child.id, into: [parent.id])   // merge parent INTO its own child
 
@@ -107,8 +107,8 @@ import SQLiteData
 
 @Test func groupMergingRootParentIntoChildMakesChildRoot() throws {
   let db = try openCanonicalDatabase(at: tempURL("group-selfcycle-root"))
-  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: "project", parent: nil, description: ""))
-  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "strand", parent: "Parent", description: ""))
+  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: .project, parent: nil, description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: .strand, parent: "Parent", description: ""))
 
   try ProjectResolver(db: db).group(child.id, into: [parent.id])
 
@@ -118,9 +118,9 @@ import SQLiteData
 
 @Test func groupMergingAncestorChainInOneCallHasNoCycle() throws {
   let db = try openCanonicalDatabase(at: tempURL("group-multiancestor"))
-  let grand = try #require(try NodeCommands.add(db, name: "Grand", kind: "domain", parent: nil, description: ""))
-  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: "project", parent: "Grand", description: ""))
-  let child = try #require(try NodeCommands.add(db, name: "Child", kind: "strand", parent: "Parent", description: ""))
+  let grand = try #require(try NodeCommands.add(db, name: "Grand", kind: .domain, parent: nil, description: ""))
+  let parent = try #require(try NodeCommands.add(db, name: "Parent", kind: .project, parent: "Grand", description: ""))
+  let child = try #require(try NodeCommands.add(db, name: "Child", kind: .strand, parent: "Parent", description: ""))
 
   try ProjectResolver(db: db).group(child.id, into: [grand.id, parent.id])   // whole chain in one call
 
@@ -133,9 +133,9 @@ import SQLiteData
 
 @Test func groupMergingNonAdjacentAncestorHasNoCycle() throws {
   let db = try openCanonicalDatabase(at: tempURL("group-nonadjacent"))
-  let root = try #require(try NodeCommands.add(db, name: "Root", kind: "domain", parent: nil, description: ""))
-  let middle = try #require(try NodeCommands.add(db, name: "Middle", kind: "project", parent: "Root", description: ""))
-  let leaf = try #require(try NodeCommands.add(db, name: "Leaf", kind: "strand", parent: "Middle", description: ""))
+  let root = try #require(try NodeCommands.add(db, name: "Root", kind: .domain, parent: nil, description: ""))
+  let middle = try #require(try NodeCommands.add(db, name: "Middle", kind: .project, parent: "Root", description: ""))
+  let leaf = try #require(try NodeCommands.add(db, name: "Leaf", kind: .strand, parent: "Middle", description: ""))
 
   try ProjectResolver(db: db).group(leaf.id, into: [root.id])   // merge non-adjacent grandparent into leaf
 

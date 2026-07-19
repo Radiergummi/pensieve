@@ -96,7 +96,7 @@ private struct NamingProvider: LLMProvider {
                           projectsDir: projects, now: { Date() })
   _ = try await runner.run()
 
-  let node = try await db.read { db in try Node.where { $0.kind.eq("project") }.fetchAll(db) }.first!
+  let node = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db) }.first!
   #expect(node.name == "Cool Project")
   #expect(Ingester.nameInferred(inMetadata: node.metadataJSON) == true)
 }

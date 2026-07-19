@@ -183,13 +183,13 @@ import SQLiteData
   let proj = try #require(try await db.read { db in try Node.all.fetchAll(db).first })
 
   // Give P a parent domain D and an extra child strand S.
-  let domain = try #require(try NodeCommands.add(db, name: "Work", kind: "domain", parent: nil, description: ""))
+  let domain = try #require(try NodeCommands.add(db, name: "Work", kind: .domain, parent: nil, description: ""))
   _ = try NodeCommands.reparent(db, nodeID: proj.id, newParentID: domain.id)
-  let strand = try #require(try NodeCommands.add(db, name: "sibling", kind: "strand", parent: proj.name, description: ""))
+  let strand = try #require(try NodeCommands.add(db, name: "sibling", kind: .strand, parent: proj.name, description: ""))
 
   // Archive the whole subtree (D + P + S archived), then make D muted (sticky).
   #expect(try NodeCommands.archive(db, nodeID: domain.id))
-  try await db.write { db in try Node.where { $0.id.eq(domain.id) }.update { $0.state = "muted" }.execute(db) }
+  try await db.write { db in try Node.where { $0.id.eq(domain.id) }.update { $0.state = NodeState.muted }.execute(db) }
 
   // Second commit → drain → attributes to P.
   try "more".write(to: repo.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
@@ -201,7 +201,7 @@ import SQLiteData
   _ = try await Ingester(spool: spool, db: db).drain()
 
   func state(_ id: UUID) async throws -> String? {
-    try await db.read { db in try Node.where { $0.id.eq(id) }.fetchOne(db)?.state }
+    try await db.read { db in try Node.where { $0.id.eq(id) }.fetchOne(db)?.state.rawValue }
   }
   #expect(try await state(proj.id) == "active")     // resurfaced
   #expect(try await state(domain.id) == "muted")    // ancestor stays sticky

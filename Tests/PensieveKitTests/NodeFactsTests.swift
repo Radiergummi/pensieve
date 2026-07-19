@@ -54,7 +54,7 @@ import SQLiteData
   let db = try openCanonicalDatabase(at: tempURL("nodefacts-archived"))
   let archivedID = UUID()
   try db.write { db in
-    try Node.insert { Node(id: archivedID, name: "Archived", state: "archived") }.execute(db)
+    try Node.insert { Node(id: archivedID, name: "Archived", state: .archived) }.execute(db)
   }
   let all = try NodeFactsQueries.all(db, now: Date())
   #expect(!all.contains { $0.node.id == archivedID })   // active-only population

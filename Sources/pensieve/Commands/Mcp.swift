@@ -190,7 +190,7 @@ enum PensieveMCP {
       return try makeEncoder().encode(SearchPayload(exact: [], related: []))
     }
     let allActive = try await db.read { db in
-      Set(try Node.where { $0.state.eq("active") }.fetchAll(db).map { $0.id })
+      Set(try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db).map { $0.id })
     }
     let exact = try SearchQueries.search(query: query, visibleNodeIDs: allActive, db)
     let exactIDs = Set(exact.nodes.map { $0.id } + exact.looseEnds.map { $0.id })

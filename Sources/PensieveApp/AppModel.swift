@@ -231,6 +231,14 @@ final class AppModel: ObservableObject {
     guard let data = try? JSONEncoder().encode(narrationCache) else { return }
     UserDefaults.standard.set(data, forKey: Self.narrationCacheDefaultsKey())
   }
+  /// Drop entries for nodes that no longer exist (deleted / merged away) so the plist can't grow
+  /// unbounded. Keyed directly by node id, so intersecting with the live set is the whole fix.
+  private func pruneNarrationCache() {
+    let live = Set(allNodes.map(\.id))
+    let before = narrationCache.count
+    narrationCache = narrationCache.filter { live.contains($0.key) }
+    if narrationCache.count != before { saveNarrationCache() }
+  }
   /// Bumped on launch + ⌘R (drainThenRefresh). Views key their reload `.task` on it so the OPEN
   /// detail re-narrates after a refresh. The watch-driven refreshDebouncer calls `refresh()` (not
   /// drainThenRefresh), so this never bumps on background liveness updates.
@@ -388,7 +396,10 @@ final class AppModel: ObservableObject {
     let now = Date()
     let fetched = (try? ProjectQueries.all(db)) ?? allNodes
     let nodesChanged = fetched != allNodes
-    if nodesChanged { allNodes = fetched }
+    if nodesChanged {
+      allNodes = fetched
+      pruneNarrationCache()
+    }
     let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
 
     if let raw = try? SmartLists.compute(db, now: now) {
@@ -399,8 +410,8 @@ final class AppModel: ObservableObject {
     }
     if nodesChanged || activeFocusContext != lastForestContext {
       let source = activeFocusContext.isEmpty ? allNodes : allNodes.filter { visible.contains($0.id) }
-      forest = NodeForest.build(source.filter { $0.state == "active" })
-      archivedForest = NodeForest.build(source.filter { $0.state == "archived" })
+      forest = NodeForest.build(source.filter { $0.state == .active })
+      archivedForest = NodeForest.build(source.filter { $0.state == .archived })
       lastForestContext = activeFocusContext
     }
     reviewCount = (try? SalienceReviewQueries.pendingCount(db)) ?? 0
@@ -411,7 +422,7 @@ final class AppModel: ObservableObject {
 
   /// Count of top-level project nodes, for the content-column header.
   var projectCount: Int {
-    allNodes.filter { $0.parentID == nil && $0.kind == NodeKind.project && $0.state == "active" }.count
+    allNodes.filter { $0.parentID == nil && $0.kind == .project && $0.state == .active }.count
   }
 
   /// The middle column's content for the current `sidebarSelection`. Pure/in-memory (children reads
@@ -440,8 +451,8 @@ final class AppModel: ObservableObject {
   /// each other. The ONE state-scoped children filter: `middleKind()` and `detailShowsLooseEnds`
   /// both call this so they can never disagree about whether `id` has visible children.
   func visibleChildren(of id: UUID) -> [Node] {
-    let showArchived = node(id)?.state == "archived"
-    return children(of: id).filter { ($0.state == "archived") == showArchived }
+    let showArchived = node(id)?.state == .archived
+    return children(of: id).filter { ($0.state == .archived) == showArchived }
   }
 
   /// A middle-column node tap. In tree mode this DRILLS — the tapped node becomes the focused node, so
@@ -628,9 +639,9 @@ final class AppModel: ObservableObject {
   }
 
   /// Default kind for a new node: a child of a project/domain is a strand; everything else a project.
-  func defaultKind(under parentID: UUID?) -> String {
-    guard let parentID, let parent = node(parentID) else { return NodeKind.project }
-    return (parent.kind == NodeKind.project || parent.kind == NodeKind.domain) ? NodeKind.strand : NodeKind.project
+  func defaultKind(under parentID: UUID?) -> NodeKind {
+    guard let parentID, let parent = node(parentID) else { return .project }
+    return (parent.kind == .project || parent.kind == .domain) ? .strand : .project
   }
 
   /// Open the New Node modal (replaces the old immediate-insert + inline-rename flow → fixes #3).
@@ -639,7 +650,7 @@ final class AppModel: ObservableObject {
   func presentEditNode(_ node: Node) { editingNode = NodeEditRequest(mode: .edit(node)) }
 
   /// Commit the New Node modal: insert fully-formed, select it.
-  func commitNewNode(parent parentID: UUID?, name: String, kind: String,
+  func commitNewNode(parent parentID: UUID?, name: String, kind: NodeKind,
                      icon: String, colorTag: String, context: String) {
     guard let db else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -663,7 +674,7 @@ final class AppModel: ObservableObject {
   }
 
   /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
-  func updateNode(_ nodeID: UUID, name: String, kind: String,
+  func updateNode(_ nodeID: UUID, name: String, kind: NodeKind,
                   icon: String, colorTag: String, context: String) {
     guard let db else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -756,7 +767,7 @@ final class AppModel: ObservableObject {
   /// a phantom top-level root — see Finding 3 of the archive-nodes whole-branch review).
   func moveTargets(for nodeID: UUID) -> [Node] {
     let banned = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
-    return allNodes.filter { !banned.contains($0.id) && $0.state != "archived" }.sorted { $0.name < $1.name }
+    return allNodes.filter { !banned.contains($0.id) && $0.state != .archived }.sorted { $0.name < $1.name }
   }
 
   /// Delete a (source-free) node and its subtree via the Kit cascade. Moves selection off it.
@@ -829,7 +840,7 @@ final class AppModel: ObservableObject {
   /// True when `node` is a project with exactly one git source — i.e. `NodeDescriber` can act on
   /// it. Gates the DetailView's describe/refresh button so it never appears where it would no-op.
   func isDescribable(_ node: Node) -> Bool {
-    guard node.kind == NodeKind.project, let db else { return false }
+    guard node.kind == .project, let db else { return false }
     let key = try? db.read { db in try NodeDescriber.soleGitRepoKey(db, nodeID: node.id) }
     return (key ?? nil) != nil
   }

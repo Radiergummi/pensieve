@@ -56,7 +56,7 @@ public struct SummaryBuilder: Sendable {
     let narration = (try? await provider.complete(prompt: Self.makePrompt(facts: facts))) ?? facts   // fall back to raw facts
     let ends = try LooseEndQueries.open(db, nodeID: status.project.id, now: now)
     return ProjectSummary(
-      whatItIs: "\(status.project.name) — \(status.project.state)",
+      whatItIs: "\(status.project.name) — \(status.project.state.rawValue)",
       lastWorkDone: narration,
       looseEnds: ends)
   }

@@ -9,7 +9,7 @@ public enum RecallMarkdown {
     var out: [String] = []
     out.append("# \(node.name)")
     out.append("")
-    out.append("*\(capitalizedFirst(node.kind)) · \(capitalizedFirst(node.state))*")
+    out.append("*\(capitalizedFirst(node.kind.rawValue)) · \(capitalizedFirst(node.state.rawValue))*")
 
     if !node.description.isEmpty {
       out.append("")

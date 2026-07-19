@@ -17,7 +17,7 @@ public enum NodeFactsQueries {
   /// Active nodes with their grounded facts (the same live set `NextQueries` surfaces).
   public static func all(_ db: any DatabaseReader, now: Date) throws -> [NodeFacts] {
     try db.read { db in
-      try Node.where { $0.state.eq("active") }.fetchAll(db).map { try facts(for: $0, db, now: now) }
+      try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db).map { try facts(for: $0, db, now: now) }
     }
   }
 

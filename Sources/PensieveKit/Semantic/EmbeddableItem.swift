@@ -20,11 +20,11 @@ public enum EmbeddableCorpus {
   public static func gather(_ db: any DatabaseReader) throws -> [EmbeddableItem] {
     try db.read { db in
       var out: [EmbeddableItem] = []
-      let nodes = try Node.where { $0.state.eq("active") }.fetchAll(db)
+      let nodes = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
       let activeIDs = Set(nodes.map { $0.id })
       for n in nodes {
         out.append(.init(itemID: n.id.uuidString, kind: "node", nodeID: n.id.uuidString,
-                         state: n.state, text: [n.name, n.description].filter { !$0.isEmpty }.joined(separator: " — ")))
+                         state: n.state.rawValue, text: [n.name, n.description].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
       for le in ends where activeIDs.contains(le.nodeID) {

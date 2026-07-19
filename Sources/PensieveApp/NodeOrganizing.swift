@@ -124,7 +124,7 @@ struct NodeContextMenu: View {
   var body: some View {
     // Not offered on an archived row: a new child is created "active" (the Node default), which
     // would immediately become a phantom top-level root under a still-archived parent.
-    if node.state != "archived" {
+    if node.state != .archived {
       Button("New Child…") { model.presentNewNode(under: node.id) }
     }
     Button("Edit…") { model.presentEditNode(node) }
@@ -134,7 +134,7 @@ struct NodeContextMenu: View {
     Button("Move to…") { model.movePickerNodeID = node.id }
     Button("Merge into…") { model.mergePickerNodeID = node.id }
     Divider()
-    if node.state == "archived" {
+    if node.state == .archived {
       Button("Unarchive") { model.unarchive(node.id) }
     } else {
       Button("Archive") { model.archive(node.id) }

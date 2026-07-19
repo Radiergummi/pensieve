@@ -8,7 +8,7 @@ public struct NodeHit: Identifiable, Equatable, Sendable {
   public enum MatchedField: Sendable, Equatable { case name, description }
   public let id: UUID
   public var name: String
-  public var kind: String
+  public var kind: NodeKind
   public var matchedField: MatchedField
   public var snippet: Snippet
 }
@@ -52,7 +52,7 @@ public enum SearchQueries {
 
     return try db.read { db in
       let nodes = try Node.order { $0.name }.fetchAll(db)
-        .filter { visibleNodeIDs.contains($0.id) && $0.state == "active" }
+        .filter { visibleNodeIDs.contains($0.id) && $0.state == .active }
       let activeVisibleIDs = Set(nodes.map { $0.id })
 
       // NODES — rank 0 = name match, rank 1 = description-only match.

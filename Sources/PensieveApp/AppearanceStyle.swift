@@ -18,16 +18,15 @@ enum AppearanceStyle {
   }
 
   /// Localized kind label (chrome). English literals double as the String Catalog keys.
-  static func kindLabel(_ kind: String) -> LocalizedStringResource {
+  static func kindLabel(_ kind: NodeKind) -> LocalizedStringResource {
     switch kind {
-    case NodeKind.domain:     return "Domain"
-    case NodeKind.project:    return "Project"
-    case NodeKind.strand:     return "Strand"
-    case NodeKind.concept:    return "Concept"
-    case NodeKind.initiative: return "Initiative"
-    case NodeKind.task:       return "Task"
-    case NodeKind.topic:      return "Topic"
-    default:                  return "Project"
+    case .domain:     return "Domain"
+    case .project:    return "Project"
+    case .strand:     return "Strand"
+    case .concept:    return "Concept"
+    case .initiative: return "Initiative"
+    case .task:       return "Task"
+    case .topic:      return "Topic"
     }
   }
 
@@ -41,19 +40,19 @@ enum AppearanceStyle {
     }
   }
 
-  static func stateLabel(_ state: String) -> LocalizedStringResource {
+  static func stateLabel(_ state: NodeState) -> LocalizedStringResource {
     switch state {
-    case "muted":    return "Muted"
-    case "archived": return "Archived"
-    default:         return "Active"
+    case .muted:    return "Muted"
+    case .archived: return "Archived"
+    case .active:   return "Active"
     }
   }
 
-  static func stateColor(_ state: String) -> Color {
+  static func stateColor(_ state: NodeState) -> Color {
     switch state {
-    case "muted":    return .orange
-    case "archived": return .gray
-    default:         return .green
+    case .muted:    return .orange
+    case .archived: return .gray
+    case .active:   return .green
     }
   }
 }

@@ -6,7 +6,7 @@ public enum SessionContextRender {
   public static func markdown(_ b: ProjectContextBundle) -> String {
     var out = "# \(b.name)\n"
     if !b.description.isEmpty { out += "\n\(b.description)\n" }
-    out += "\n*\(b.kind) · \(b.daysDormant)d dormant · \(b.openLooseEndCount) open loose end(s)*\n"
+    out += "\n*\(b.kind.rawValue) · \(b.daysDormant)d dormant · \(b.openLooseEndCount) open loose end(s)*\n"
     if let prose = b.prose {
       out += "\n## Last Work Done\n\n\(prose)\n"
     }

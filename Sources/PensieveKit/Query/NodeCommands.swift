@@ -13,7 +13,7 @@ public enum NodeCommands {
   }
 
   @discardableResult
-  public static func add(_ db: any DatabaseWriter, name: String, kind: String,
+  public static func add(_ db: any DatabaseWriter, name: String, kind: NodeKind,
                          parent: String?, description: String,
                          icon: String = "", colorTag: String = "", context: String = "") throws -> Node? {
     try db.write { db in
@@ -78,7 +78,7 @@ public enum NodeCommands {
     }
   }
 
-  public static func retype(_ db: any DatabaseWriter, node: String, to newKind: String) throws -> Bool {
+  public static func retype(_ db: any DatabaseWriter, node: String, to newKind: NodeKind) throws -> Bool {
     try db.write { db in
       guard let n = try find(db, nameOrID: node) else { return false }
       try Node.where { $0.id.eq(n.id) }.update { $0.kind = newKind }.execute(db)
@@ -90,7 +90,7 @@ public enum NodeCommands {
   /// parentID, state, branchKey untouched. Returns false — writing nothing — for an unknown id.
   @discardableResult
   public static func update(_ db: any DatabaseWriter, nodeID: UUID,
-                            name: String, kind: String, icon: String, colorTag: String,
+                            name: String, kind: NodeKind, icon: String, colorTag: String,
                             context: String = "") throws -> Bool {
     try db.write { db in
       guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
@@ -106,7 +106,7 @@ public enum NodeCommands {
   /// `delete` refuses. Returns false — writing nothing — for an unknown id.
   @discardableResult
   public static func archive(_ db: any DatabaseWriter, nodeID: UUID) throws -> Bool {
-    try setSubtreeState(db, nodeID: nodeID, to: "archived")
+    try setSubtreeState(db, nodeID: nodeID, to: .archived)
   }
 
   /// Restore `nodeID` and all its descendants to state = "active", AND walk `nodeID`'s ancestor
@@ -117,18 +117,18 @@ public enum NodeCommands {
   @discardableResult
   public static func unarchive(_ db: any DatabaseWriter, nodeID: UUID) throws -> Bool {
     try db.write { db in
-      guard try setSubtreeState(db, nodeID: nodeID, to: "active") else { return false }
+      guard try setSubtreeState(db, nodeID: nodeID, to: .active) else { return false }
       try resurface(db, ids: ancestorIDs(db, of: nodeID))
       return true
     }
   }
 
-  private static func setSubtreeState(_ db: any DatabaseWriter, nodeID: UUID, to state: String) throws -> Bool {
+  private static func setSubtreeState(_ db: any DatabaseWriter, nodeID: UUID, to state: NodeState) throws -> Bool {
     try db.write { db in try setSubtreeState(db, nodeID: nodeID, to: state) }
   }
 
   /// In-transaction core, so `unarchive` can set the subtree AND walk the ancestor chain within one write.
-  private static func setSubtreeState(_ db: Database, nodeID: UUID, to state: String) throws -> Bool {
+  private static func setSubtreeState(_ db: Database, nodeID: UUID, to state: NodeState) throws -> Bool {
     guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(db) != nil else { return false }
     let all = try Node.all.fetchAll(db)
     let ids = NodeForest.descendantIDs(of: nodeID, in: all).union([nodeID])
@@ -142,8 +142,8 @@ public enum NodeCommands {
   /// untouched. In-transaction; shared by `unarchive` and `Ingester.resurfaceIfArchived`.
   static func resurface(_ db: Database, ids: [UUID]) throws {
     for id in ids {
-      guard let n = try Node.where({ $0.id.eq(id) }).fetchOne(db), n.state == "archived" else { continue }
-      try Node.where { $0.id.eq(id) }.update { $0.state = "active" }.execute(db)
+      guard let n = try Node.where({ $0.id.eq(id) }).fetchOne(db), n.state == .archived else { continue }
+      try Node.where { $0.id.eq(id) }.update { $0.state = NodeState.active }.execute(db)
     }
   }
 
@@ -208,8 +208,8 @@ public enum NodeTree {
     func walk(_ parent: UUID?, depth: Int) {
       for n in (byParent[parent] ?? []).sorted(by: { $0.name < $1.name }) {
         let indent = String(repeating: "  ", count: depth)
-        let kindTag = n.kind == NodeKind.project ? "" : " (\(n.kind))"
-        lines.append("\(indent)\(n.name)\(kindTag)  [\(n.state)]")
+        let kindTag = n.kind == .project ? "" : " (\(n.kind.rawValue))"
+        lines.append("\(indent)\(n.name)\(kindTag)  [\(n.state.rawValue)]")
         walk(n.id, depth: depth + 1)
       }
     }

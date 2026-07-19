@@ -12,7 +12,7 @@ import SQLiteData
     try Source.insert { source }.execute(db)
   }
   let fetched = try db.read { db in try Node.all.fetchAll(db) }.first
-  #expect(fetched?.kind == "project")       // existing rows migrate to top-level project nodes
+  #expect(fetched?.kind == NodeKind.project)       // existing rows migrate to top-level project nodes
   #expect(fetched?.parentID == nil)
   #expect(fetched?.description == "")
   #expect(fetched?.metadataJSON == "{}")

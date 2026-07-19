@@ -18,7 +18,7 @@ private func bornProjectNode(repo: URL, spool: CaptureSpool, db: any DatabaseWri
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")))
   _ = try await Ingester(spool: spool, db: db, llm: llm).drain()
-  return try await db.read { db in try Node.where { $0.kind.eq("project") }.fetchAll(db) }.first!
+  return try await db.read { db in try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db) }.first!
 }
 
 // MARK: marker helpers

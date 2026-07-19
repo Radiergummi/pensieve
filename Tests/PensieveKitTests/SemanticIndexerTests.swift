@@ -111,7 +111,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(s.existingItems().keys.contains(ev.id.uuidString))
 
     try await db.write { db in
-      try Node.where { $0.id.eq(n.id) }.update { $0.state = "archived" }.execute(db)
+      try Node.where { $0.id.eq(n.id) }.update { $0.state = NodeState.archived }.execute(db)
     }
     await idx.sync(db)
     let items = s.existingItems()

@@ -19,8 +19,8 @@ import Testing
     #expect(!s.colorTag.isEmpty)
     #expect(AppearanceIcon.parse(s.icon) != nil)   // the default is a parseable icon string
   }
-  // Unknown kind degrades to a valid style, not a crash.
-  #expect(!NodeKindStyle.style(for: "nonsense").icon.isEmpty)
+  // `NodeKind` is now a closed enum — an unknown kind is impossible by construction, so the
+  // former string-fallback assertion is gone (the compiler proves exhaustiveness).
 }
 
 @Test func everyCaptureKindHasASourceStyle() {

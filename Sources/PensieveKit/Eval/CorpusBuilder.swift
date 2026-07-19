@@ -78,7 +78,7 @@ public enum CorpusBuilder {
   // MARK: - Narration pool (active nodes with events; the emptiest node is the stress case)
 
   private static func buildNarrationPool(db: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
-    let activeNodes = try db.read { db in try Node.where { $0.state.eq("active") }.fetchAll(db) }
+    let activeNodes = try db.read { db in try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db) }
     var withEvents: [(node: Node, events: [Event])] = []
     for node in activeNodes {
       let events = try db.read { db in

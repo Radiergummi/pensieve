@@ -32,7 +32,7 @@ public enum BriefingQueries {
     // opens its own `db.read`, which can't be called with the `Database` handed to a closure already
     // inside a read transaction.
     let activity: [NodeActivity] = try db.read { db in
-      let actives = try Node.where { $0.state.eq("active") }.fetchAll(db)
+      let actives = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
       var result: [NodeActivity] = []
       for node in actives {
         let events = try Event.where { $0.nodeID.eq(node.id) }

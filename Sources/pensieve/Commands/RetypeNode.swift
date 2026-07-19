@@ -7,7 +7,11 @@ struct RetypeNode: ParsableCommand {
   @Argument var node: String
   @Argument var newKind: String
   func run() throws {
-    let ok = try NodeCommands.retype(try openCanonical(), node: node, to: newKind)
+    guard let kind = NodeKind(rawValue: newKind) else {
+      print("unknown kind '\(newKind)' (expected one of: \(NodeKind.all.map(\.rawValue).joined(separator: ", ")))")
+      return
+    }
+    let ok = try NodeCommands.retype(try openCanonical(), node: node, to: kind)
     print(ok ? "retyped \(node) → \(newKind)" : "unknown node '\(node)'")
   }
 }
