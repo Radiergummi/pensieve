@@ -448,7 +448,7 @@ widget, and that the widget can read a file the app wrote there — that go/no-g
 
 ---
 
-## Narration-cache carry — 2026-07-08 (deferred, non-blocking)
+## Narration-cache carry — ✅ DONE (2026-07-19, app-quality cleanup pass)
 
 From the ingestion-intelligence-quality branch (Part C). The persisted narration cache
 (`AppModel.narrationCache` in `UserDefaults`, keyed per-DB-path) replaced the blanket
@@ -468,7 +468,7 @@ off-cooperative-pool + SIGPIPE guard; `DatabaseReader` widening; `@Sendable` FSE
 `NodeKind` type; and a batch of smaller cleanups). These four were deliberately **not** taken on —
 too big, or a genuine design question.
 
-- **`AppModel` → `@Observable` migration** — the app still uses `ObservableObject`/`@Published`, so
+- **`AppModel` → `@Observable` migration** — ✅ **DONE (2026-07-19, app-quality cleanup pass; plan `plans/2026-07-19-appmodel-observable-migration.md`).** Turned out cleaner than feared: no `@EnvironmentObject` to rewire, only `RootView` needed `@Bindable`, and the named hotspots (`nodesForSelection`/`PaletteView.rows`) were already gone (IA rework + ⌘K retirement). Non-UI infra is `@ObservationIgnored`; the Opus whole-branch review caught one wrongly-silenced property (`allNodes`, read by bodies via `node(_:)`) breaking `RecallWindowView` cold-restore, fixed. *Original note below, for context.* — the app still uses `ObservableObject`/`@Published`, so
   any `@Published` write invalidates *every* observing view. That's the root cause of a cluster of
   small "recomputed in `body`" items: the (now-fixed) inspector re-query, `ContentListView.nodesForSelection()`
   (filter + O(n log n) sort on every unrelated refresh), and `PaletteView.rows` (re-runs `matchingNodes`
@@ -493,7 +493,7 @@ too big, or a genuine design question.
   any accidental off-main access at compile time. One-line change in declaration + removing the now-
   redundant explicit isolation annotations in `start()`/`focusContextDidChange()`. *Trigger: next
   touch of `AppModel`, or pair with the `@Observable` migration above.*
-- **`NodeKind` / `NodeState` / `EventKind` → real `RawRepresentable` enums** — currently string
+- **`NodeKind` / `NodeState` / `EventKind` → real `RawRepresentable` enums** — ✅ **DONE (2026-07-19, app-quality cleanup pass) for `NodeKind` + `NodeState`.** They're now `: String, CaseIterable, Codable, Sendable, Equatable, QueryBindable` enums (same strings on disk, no migration, all SchemaV4–V9 tests pass). **`EventKind` was NOT done — it doesn't exist:** `Event.kind` values come from `CaptureKind` on the sacred append-only capture spool, deliberately left `String`. *Original note below.* — currently string
   namespaces (`enum NodeKind { static let project = "project" ... }`). Making them real
   `enum NodeKind: String, Codable, Sendable, CaseIterable { case project, strand, ... }` gives
   exhaustive `switch` (the compiler catches a forgotten case), auto-`Codable`/`Equatable`, and
