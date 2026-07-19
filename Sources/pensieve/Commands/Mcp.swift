@@ -41,6 +41,7 @@ struct Mcp: AsyncParsableCommand {
              inputSchema: .object(["type": .string("object"), "properties": .object([
                "query": .object(["type": .string("string"), "description": .string("what to find")]),
                "limit": .object(["type": .string("number"), "description": .string("max results per group (default 8)")]),
+               "include_archived": .object(["type": .string("boolean"), "description": .string("also search archived projects (default false)")]),
              ]), "required": .array([.string("query")])]),
              annotations: .init(readOnlyHint: true, openWorldHint: false)),
       ])
@@ -77,7 +78,9 @@ struct Mcp: AsyncParsableCommand {
           return .init(content: [.text(text: "search requires a non-empty query", annotations: nil, _meta: nil)], isError: true)
         }
         let limit = params.arguments?["limit"]?.intValue ?? 8
-        let json = try await PensieveMCP.searchJSON(query: query, limit: limit)
+        let includeArchived = params.arguments?["include_archived"]?.boolValue ?? false
+        let json = try await PensieveMCP.searchJSON(query: query, limit: limit,
+                                                    includeArchived: includeArchived)
         return PensieveMCP.result(json)
       default:
         return .init(content: [.text(text: "unknown tool", annotations: nil, _meta: nil)], isError: true)
@@ -193,22 +196,29 @@ enum PensieveMCP {
   /// Unified "find across my work" tool: exact substring match (`SearchQueries`) plus, when the
   /// semantic-search toggle is on, semantically related items (`SemanticQueries`) over the on-device
   /// index — excluding anything already surfaced as an exact hit. Scope is all active nodes (MCP has
-  /// no Focus context). Cloud is never used here; the embedder + index are on-device only.
-  static func searchJSON(query: String, limit: Int) async throws -> Data {
+  /// no Focus context), widened to archived by `include_archived`, which gates the exact and semantic
+  /// halves alike. Cloud is never used here; the embedder + index are on-device only.
+  static func searchJSON(query: String, limit: Int, includeArchived: Bool = false) async throws -> Data {
     guard let db = try? openCanonicalReadOnly() else {
       return try makeEncoder().encode(SearchPayload(exact: [], related: []))
     }
-    let allActive = try await db.read { db in
-      Set(try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db).map { $0.id })
+    // The visible set must widen with the flag: it gates BOTH halves, so leaving it active-only
+    // would filter archived hits back out after the query layer allowed them through.
+    let visible = try await db.read { db -> Set<UUID> in
+      let nodes = try Node.all.fetchAll(db)
+      return Set(nodes.filter {
+        $0.state == .active || (includeArchived && $0.state == .archived)
+      }.map { $0.id })
     }
-    let exact = try SearchQueries.search(query: query, visibleNodeIDs: allActive, db)
+    let exact = try SearchQueries.search(query: query, visibleNodeIDs: visible,
+                                         includeArchived: includeArchived, db)
     let exactIDs = Set(exact.nodes.map { $0.id } + exact.looseEnds.map { $0.id })
 
     let related: [SemanticHit]
     if PensieveDefaults.semanticSearchEnabled() {
-      related = await SemanticQueries.search(query: query, visibleNodeIDs: allActive, excludingIDs: exactIDs,
-                                             k: limit, floor: 0.25, store: semanticStore,
-                                             embedder: semanticEmbedder, db)
+      related = await SemanticQueries.search(query: query, visibleNodeIDs: visible, excludingIDs: exactIDs,
+                                             k: limit, floor: 0.25, includeArchived: includeArchived,
+                                             store: semanticStore, embedder: semanticEmbedder, db)
     } else {
       related = []
     }
