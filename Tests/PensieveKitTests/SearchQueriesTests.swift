@@ -29,6 +29,18 @@ private func allVisible(_ db: any DatabaseReader) throws -> Set<UUID> {
   Set(try ProjectQueries.all(db).map(\.id))
 }
 
+private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = CaptureKind.gitCommit,
+                       summary: String = "did a thing", workSummary: String? = nil) throws -> Event {
+  let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(), kind: kind,
+                    summary: summary, detailJSON: "{}", workSummary: workSummary)
+  try db.write { db in
+    try Source.insert { source }.execute(db)
+    try Event.insert { event }.execute(db)
+  }
+  return event
+}
+
 @Test func searchShortCircuitsBelowMinLength() throws {
   let db = try openCanonicalDatabase(at: tempURL("search-min"))
   _ = try seed(db, name: "Auth")
@@ -138,4 +150,25 @@ private func allVisible(_ db: any DatabaseReader) throws -> Set<UUID> {
                                     includeArchived: true, db)
   #expect(Set(on.nodes.map(\.id)) == [active.id, archived.id])
   #expect(Set(on.looseEnds.map(\.nodeID)) == [active.id, archived.id])
+}
+
+@Test func hitsCarryTheOwningNodesArchivedFlag() async throws {
+  let db = try openCanonicalDatabase(at: tempURL("search-archived-flag"))
+  let active = Node(name: "Refund handling", kind: NodeKind.project)
+  let archived = Node(name: "Refund handling legacy", state: .archived, kind: NodeKind.project)
+  try await db.write { db in
+    try Node.insert { active }.execute(db)
+    try Node.insert { archived }.execute(db)
+  }
+  let ev = try makeEvent(db, node: archived)
+  let le = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+                    text: "refund the last batch", quote: "TODO refund")
+  try await db.write { try LooseEnd.insert { le }.execute($0) }
+
+  let r = try SearchQueries.search(query: "refund", visibleNodeIDs: [active.id, archived.id],
+                                   includeArchived: true, db)
+
+  #expect(r.nodes.first { $0.id == active.id }?.isArchived == false)
+  #expect(r.nodes.first { $0.id == archived.id }?.isArchived == true)
+  #expect(r.looseEnds.first { $0.id == le.id }?.isArchived == true)
 }

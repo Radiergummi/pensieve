@@ -11,6 +11,9 @@ public struct NodeHit: Identifiable, Equatable, Sendable {
   public var kind: NodeKind
   public var matchedField: MatchedField
   public var snippet: Snippet
+  /// The node is archived — the view badges the row (archived hits surface only when the caller
+  /// passed `includeArchived`).
+  public var isArchived: Bool
 }
 
 public struct LooseEndHit: Identifiable, Equatable, Sendable {
@@ -18,6 +21,8 @@ public struct LooseEndHit: Identifiable, Equatable, Sendable {
   public var nodeID: UUID
   public var nodeName: String
   public var snippet: Snippet
+  /// The owning node is archived — the view badges the row.
+  public var isArchived: Bool
 }
 
 public struct SearchResults: Equatable, Sendable {
@@ -73,11 +78,13 @@ public enum SearchQueries {
         let src = e.rank == 0 ? e.node.name : e.node.description
         return NodeHit(id: e.node.id, name: e.node.name, kind: e.node.kind,
                        matchedField: e.rank == 0 ? .name : .description,
-                       snippet: SnippetMaker.make(from: src, matching: query))
+                       snippet: SnippetMaker.make(from: src, matching: query),
+                       isArchived: e.node.state == .archived)
       }
 
       // LOOSE ENDS — open + not-noise, visible nodes only. rank 0 = text match, 1 = quote-only.
       let nameByID = Dictionary(nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+      let archivedNodeIDs = Set(nodes.filter { $0.state == .archived }.map { $0.id })
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
         .filter { matchedNodeIDs.contains($0.nodeID) }
       var leScored: [(rank: Int, le: LooseEnd)] = []
@@ -95,7 +102,8 @@ public enum SearchQueries {
         let src = e.rank == 0 ? e.le.text : e.le.quote
         return LooseEndHit(id: e.le.id, nodeID: e.le.nodeID,
                            nodeName: nameByID[e.le.nodeID] ?? "",
-                           snippet: SnippetMaker.make(from: src, matching: query))
+                           snippet: SnippetMaker.make(from: src, matching: query),
+                           isArchived: archivedNodeIDs.contains(e.le.nodeID))
       }
 
       return SearchResults(nodes: Array(nodeHits), looseEnds: Array(leHits),
