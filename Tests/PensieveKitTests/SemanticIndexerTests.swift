@@ -94,6 +94,31 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(items.keys.contains(ci.id.uuidString))
   }
 
+  /// One un-embeddable item must not starve its batch-mates. The embedder is called with the WHOLE
+  /// pending set, so an all-or-nothing failure would leave every other new item unindexed — and,
+  /// because a failed item never records its hash, it rejoins the next batch and blocks it again,
+  /// indefinitely. The poisoned item itself stays absent and retryable (the existing contract).
+  @Test func oneUnembeddableItemDoesNotStarveTheRestOfTheBatch() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("semidx-poison"))
+    let poisoned = Node(name: "ПОИСК", kind: NodeKind.project)   // non-Latin → real embedder fails it
+    let healthy = Node(name: "Payments", kind: NodeKind.project)
+    let alsoHealthy = Node(name: "Billing", kind: NodeKind.project)
+    try await db.write {
+      try Node.insert { poisoned }.execute($0)
+      try Node.insert { healthy }.execute($0)
+      try Node.insert { alsoHealthy }.execute($0)
+    }
+
+    let s = store()
+    let idx = SemanticIndexer(store: s, embedder: PoisonEmbedder(dimension: 16, poison: "ПОИСК"))
+    await idx.sync(db)
+
+    let items = s.existingItems()
+    #expect(items.keys.contains(healthy.id.uuidString))
+    #expect(items.keys.contains(alsoHealthy.id.uuidString))
+    #expect(!items.keys.contains(poisoned.id.uuidString))   // absent → retried next sync, not starving others
+  }
+
   @Test func noiseLabelPrunesLooseEnd() async throws {
     let db = try openCanonicalDatabase(at: tempURL("semidx-noise"))
     let n = Node(name: "N", kind: NodeKind.project)
@@ -183,7 +208,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
 
     // content_hash for the loose end is unchanged (repoint is metadata-only, not a re-embed).
     #expect(s.existingItems()[le.id.uuidString] == hashBefore)
-    let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]
+    let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
     let hits = s.knn(query: queryVec, k: 5, activeOnly: true)
     #expect(hits.first(where: { $0.itemID == le.id.uuidString })?.nodeID == b.id.uuidString)
   }
@@ -204,7 +229,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     await idx.sync(db)
     #expect(s.existingItems()[n.id.uuidString] != hashBefore)   // content_hash changed → re-embedded
 
-    let newVec = await StubEmbedder(dimension: 16).embed(["N — changed description"])![0]
+    let newVec = await StubEmbedder(dimension: 16).embed(["N — changed description"])![0]!
     let hits = s.knn(query: newVec, k: 1, activeOnly: true)
     #expect(hits.first?.itemID == n.id.uuidString)
     #expect(hits.first!.similarity > 0.99)   // the stored vector IS the new content's embedding
@@ -236,7 +261,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(items.keys.contains(le.id.uuidString))
     #expect(items.keys.contains(ev.id.uuidString))
 
-    let queryVec = await StubEmbedder(dimension: 16).embed(["wire up refunds — TODO refunds"])![0]
+    let queryVec = await StubEmbedder(dimension: 16).embed(["wire up refunds — TODO refunds"])![0]!
     let hits = s.knn(query: queryVec, k: 5, activeOnly: true)
     #expect(hits.contains { $0.itemID == le.id.uuidString })
   }

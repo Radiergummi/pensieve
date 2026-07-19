@@ -13,12 +13,12 @@ import Foundation
     #expect(abs((n[0] * n[0] + n[1] * n[1]) - 1.0) < 1e-6)
   }
 
-  @Test func stubIsDeterministicAndUnit() async {
+  @Test func stubIsDeterministicAndUnit() async throws {
     let e = StubEmbedder(dimension: 8)
     let a = await e.embed(["hello"])
     let b = await e.embed(["hello"])
     #expect(a == b)
-    let v = a![0]
+    let v = try #require(a![0])
     #expect(abs(v.reduce(0) { $0 + $1 * $1 } - 1.0) < 1e-6)   // unit length
   }
 

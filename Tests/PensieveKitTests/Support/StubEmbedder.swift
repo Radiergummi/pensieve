@@ -8,8 +8,8 @@ struct StubEmbedder: TextEmbedder {
   init(dimension: Int = 16, version: String = "stub:16") {
     self.dimension = dimension; self.version = version
   }
-  func embed(_ texts: [String]) async -> [[Float]]? {
-    texts.map { text in
+  func embed(_ texts: [String]) async -> [[Float]?]? {
+    texts.map { text -> [Float]? in
       var seed = UInt64(bitPattern: Int64(text.hashValue))
       var v = [Float](repeating: 0, count: dimension)
       for i in 0..<dimension {                      // xorshift → deterministic pseudo-random

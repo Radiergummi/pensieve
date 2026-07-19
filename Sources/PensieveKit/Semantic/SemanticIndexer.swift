@@ -30,6 +30,8 @@ public struct SemanticIndexer: Sendable {
     let needEmbed = corpus.filter { existing[$0.itemID] != $0.contentHash }
     var vectors: [String: [Float]] = [:]
     if !needEmbed.isEmpty, let embedded = await embedder.embed(needEmbed.map { truncate($0.text) }) {
+      // Per-item nil = that string failed; skip it (stays absent → retried next sync) and keep
+      // every successfully embedded batch-mate.
       for (item, vec) in zip(needEmbed, embedded) { vectors[item.itemID] = vec }
     }
     // Upsert every live item: metadata always; vector only when (re-)embedded this run.

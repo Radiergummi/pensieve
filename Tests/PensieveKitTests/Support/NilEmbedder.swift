@@ -9,5 +9,5 @@ struct NilEmbedder: TextEmbedder {
   init(dimension: Int = 16, version: String = "stub:16") {
     self.dimension = dimension; self.version = version
   }
-  func embed(_ texts: [String]) async -> [[Float]]? { nil }
+  func embed(_ texts: [String]) async -> [[Float]?]? { nil }
 }

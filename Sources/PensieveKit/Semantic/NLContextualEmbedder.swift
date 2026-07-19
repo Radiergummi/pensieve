@@ -20,17 +20,21 @@ public final class NLContextualEmbedder: TextEmbedder, @unchecked Sendable {
     self.version = "nl-latin:\(m?.dimension ?? 0)"
   }
 
-  public func embed(_ texts: [String]) async -> [[Float]]? {
-    guard let model, model.hasAvailableAssets else { return nil }
+  public func embed(_ texts: [String]) async -> [[Float]?]? {
+    guard let model, model.hasAvailableAssets else { return nil }   // asset-level → whole batch nil
     do { try model.load() } catch { return nil }
-    var out: [[Float]] = []
+    var out: [[Float]?] = []
     for text in texts {
-      guard let result = try? model.embeddingResult(for: text, language: nil) else { return nil }
+      // Per-ITEM failure only. This model is Latin-script-only, so a non-Latin string is an
+      // ordinary, expected outcome — it must not take its batch-mates down with it.
+      guard let result = try? model.embeddingResult(for: text, language: nil) else {
+        out.append(nil); continue
+      }
       var tokens: [[Float]] = []
       result.enumerateTokenVectors(in: text.startIndex..<text.endIndex) { vec, _ in
         tokens.append(vec.map { Float($0) }); return true
       }
-      guard !tokens.isEmpty else { return nil }
+      guard !tokens.isEmpty else { out.append(nil); continue }
       out.append(EmbeddingMath.normalize(EmbeddingMath.meanPool(tokens)))
     }
     return out

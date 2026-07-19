@@ -3,8 +3,16 @@ import Foundation
 public protocol TextEmbedder: Sendable {
   var version: String { get }     // e.g. "nl-latin:512" — derived from the loaded model at runtime
   var dimension: Int { get }
-  /// One unit-normalized vector per input string, or nil if the model asset is unavailable.
-  func embed(_ texts: [String]) async -> [[Float]]?
+  /// One entry per input string, positionally aligned with `texts`.
+  ///
+  /// Two levels of nil, deliberately distinct:
+  /// - outer nil — the model asset is unavailable; nothing could be embedded this run.
+  /// - inner nil — THAT string could not be embedded (tokenization failed / produced no tokens),
+  ///   while its batch-mates succeeded. One bad string must never sink the whole batch: the
+  ///   indexer feeds the entire pending set in one call, and an all-or-nothing failure would
+  ///   block every other pending item indefinitely (a failed item never records its hash, so it
+  ///   rejoins the next batch and fails it again).
+  func embed(_ texts: [String]) async -> [[Float]?]?
 }
 
 public enum EmbeddingMath {

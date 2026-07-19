@@ -30,7 +30,9 @@ public enum SemanticQueries {
                             _ db: any DatabaseReader) async -> [SemanticHit] {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= 2, store.isAvailable,
-          let qvec = await embedder.embed([query])?.first else { return [] }
+          // `.first` is doubly optional now (batch nil vs. this-item nil) — both mean "no query
+          // vector", so flatten and bail either way.
+          let qvec = await embedder.embed([query])?.first ?? nil else { return [] }
 
     // Over-fetch, and grow the fetch window if post-KNN filtering (Focus-muting) starved the
     // result below k. A floor-aware exit keeps ordinary sparse queries (few above-floor items) at
