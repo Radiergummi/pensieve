@@ -223,7 +223,11 @@ public struct Ingester: Sendable {
     s = s.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
     s = s.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
     s = s.trimmingCharacters(in: .whitespaces)
-    return s.isEmpty ? nil : s
+    // Enforce the "terse label, not a sentence" contract this doc comment always claimed. Observed
+    // failures: a 101-char name and multi-sentence commit-message-shaped output sitting in the
+    // sidebar. nil → the caller keeps the deterministic branch-key fallback.
+    guard TextQuality.isTerseLabel(s) else { return nil }
+    return s
   }
 
   /// Per-pass cap so a big first run (or a flush-and-reingest) can't stall the sync cycle on N

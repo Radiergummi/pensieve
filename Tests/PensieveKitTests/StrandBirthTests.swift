@@ -170,3 +170,18 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   #expect(Ingester.sanitizeStrandName("Already Clean") == "Already Clean")
   #expect(Ingester.sanitizeStrandName("   ") == nil)
 }
+
+/// A strand name is a terse organizational label, not a sentence. Real observed failures: a
+/// 101-char name, and multi-sentence commit-message-shaped output. Rejecting (nil) is the right
+/// outcome — the caller then keeps the deterministic branch-key fallback, which is honest and
+/// short, rather than a paragraph in the sidebar.
+@Test func sanitizeStrandNameRejectsSentencesAndOverlongOutput() {
+  #expect(Ingester.sanitizeStrandName("Wire noise filters into pipeline. Fixes chunk splitting issue") == nil)
+  #expect(Ingester.sanitizeStrandName(
+    "Adding a SessionSummarizer and a workSummary column to the feat/ingestion-intelligence-quality branch") == nil)
+  #expect(Ingester.sanitizeStrandName(
+    "Feature/Organizations: Tracking session prompts related to feature and organizations") == nil)
+  // A terse label with internal punctuation that is NOT a sentence boundary stays valid.
+  #expect(Ingester.sanitizeStrandName("v3.1 migration") == "v3.1 migration")
+  #expect(Ingester.sanitizeStrandName("Fix auth.middleware") == "Fix auth.middleware")
+}

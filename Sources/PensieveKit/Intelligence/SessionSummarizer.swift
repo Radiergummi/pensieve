@@ -56,7 +56,11 @@ public struct SessionSummarizer: Sendable {
   private func completeCapped(_ body: String) async -> String? {
     guard let raw = try? await provider.complete(prompt: Self.prompt(body)) else { return nil }
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : String(trimmed.prefix(Self.outputCap))
+    // Store prose or nothing. A model that answers the wrong question (observed: a JSON index
+    // array from a different prompt, bare or fenced) must not have that persisted as a recap —
+    // nil falls back to the terse "session (N prompts)" summary, which is honest.
+    guard TextQuality.isProseNotStructured(trimmed) else { return nil }
+    return String(trimmed.prefix(Self.outputCap))
   }
 
   static func prompt(_ body: String) -> String {

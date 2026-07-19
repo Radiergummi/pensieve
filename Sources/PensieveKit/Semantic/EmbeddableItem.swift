@@ -18,12 +18,11 @@ public struct EmbeddableItem: Sendable {
 /// The seam future producers (transcript chunks, etc.) extend.
 public enum EmbeddableCorpus {
   /// Degenerate LLM output ("[]", "/", stray punctuation) is not searchable content — it embeds to
-  /// noise and renders as an empty-looking "Related" row. Require some real prose. Applies ONLY to
-  /// model-generated text; human-authored text (a git commit subject) is legitimately short.
-  static func isSearchable(_ text: String) -> Bool {
-    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    return t.count >= 8 && t.contains { $0.isLetter }
-  }
+  /// noise and renders as an empty-looking "Related" row. Applies ONLY to model-generated text;
+  /// human-authored text (a git commit subject) is legitimately short. Kept as a second line of
+  /// defense: `SessionSummarizer` now refuses to store such output in the first place, but the
+  /// store already holds historical rows written before that guard existed.
+  static func isSearchable(_ text: String) -> Bool { TextQuality.isProse(text) }
 
   public static func gather(_ db: any DatabaseReader) throws -> [EmbeddableItem] {
     try db.read { db in

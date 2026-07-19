@@ -30,6 +30,24 @@ private func m(_ i: Int, _ role: String, _ text: String, user: Bool) -> Transcri
   #expect(out == nil)
 }
 
+/// Degenerate model output must never be stored as a session recap. Real observed corruption:
+/// 139 events whose workSummary was a JSON index array (bare or fenced) — structured output from
+/// a different prompt, echoed back as if it were prose. nil is correct: the caller falls back to
+/// the terse "session (N prompts)" summary, which is honest.
+@Test func summarizerRejectsStructuredNonProseOutput() async {
+  let msgs = [m(0, "assistant", "done", user: false)]
+  for junk in ["[]", "[1, 2, 3, 6, 7, 8]", "```json\n[1, 5]\n```", "/", "{\"indices\": [1]}", "   "] {
+    let out = await SessionSummarizer(provider: FixedReply(reply: junk)).summarize(msgs)
+    #expect(out == nil, "must reject degenerate output: \(junk)")
+  }
+}
+
+@Test func summarizerAcceptsOrdinaryProse() async {
+  let msgs = [m(0, "assistant", "done", user: false)]
+  let out = await SessionSummarizer(provider: FixedReply(reply: "Wired up the refunds endpoint.")).summarize(msgs)
+  #expect(out == "Wired up the refunds endpoint.")
+}
+
 @Test func summarizerCapsOutput() async {
   let long = String(repeating: "x", count: 5000)
   let msgs = [m(0, "assistant", "done", user: false)]
@@ -53,7 +71,9 @@ private func m(_ i: Int, _ role: String, _ text: String, user: Bool) -> Transcri
   actor Counter { var n = 0; func bump() { n += 1 }; func value() -> Int { n } }
   struct Counting: LLMProvider {
     let counter: Counter
-    func complete(prompt: String) async throws -> String { await counter.bump(); return "part" }
+    // Realistic prose: the summarizer now refuses to store non-prose output, and this test is
+    // about call counting, not content.
+    func complete(prompt: String) async throws -> String { await counter.bump(); return "partial summary" }
   }
   let counter = Counter()
   let big = String(repeating: "word ", count: SessionSummarizer.inputBudget)  // ~5x budget
