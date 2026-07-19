@@ -298,13 +298,34 @@ Spec/plan: `{specs,plans}/2026-07-18-semantic-vector-recall*`.
 2026-07-19, `3ece8b5` — grow-`k` loop + floor-aware exit); ✅ **MCP per-call embedder/store caching**
 (DONE 2026-07-19, `static let` hoist); ✅ **idempotent rebuild guard** (RESOLVED 2026-07-19 — proven
 already race-safe via GRDB implicit `BEGIN IMMEDIATE`; a regression test pins the invariant, no code
-change); per-hit `db.read` batching in `resolve`; **archived content in the semantic index / "Related"**
-(the 2026-07-19 include-archived toggle is EXACT-only — `EmbeddableCorpus.gather` is active-only; needs a
-corpus-producer change to surface archived in semantic recall); **transcript-passage chunking** (the next
-corpus increment — its own spec; would also make Part D's `maxFetch=2000` cap worth revisiting).
+change); per-hit `db.read` batching in `resolve`; ✅ **archived content in the semantic index /
+"Related"** (DONE 2026-07-19, see the dedicated section below — `EmbeddableCorpus.gather` now indexes
+archived nodes/items too, and `SemanticIndexStore.knn`/`SemanticQueries.search` grow an
+`includeArchived` allow-list flag so the ⌘F Include-Archived toggle drives semantic results, not just
+exact); **transcript-passage chunking** (the next corpus increment — its own spec; would also make
+Part D's `maxFetch=2000` cap worth revisiting).
 **Post-merge carry:** rebuild + reinstall the app to `/Applications` so the bundled `pensieve mcp`
 exposes `search`. **Human-verify:** live MCP `search`; ⌘F "Related" after the NL asset downloads;
 toggle-off → no Related + MCP exact-only; German "Verwandt" in situ.
+
+---
+
+## Archived content in the semantic index / "Related" — DONE (2026-07-19)
+
+Closes the deferred item the semantic-recall-hardening batch left open (above): archived work is now
+recallable through semantic search, not just exact ⌘F. **Kit (tested):** `EmbeddableCorpus.gather`
+now indexes archived nodes and their loose ends/events too, tagged with the owning node's live
+`state`; `SemanticIndexStore.knn` and `SemanticQueries.search` grow an **allow-list** `includeArchived`
+flag (defaulted `false`); `resolve`'s canonical re-check predicate widens in lockstep so a stale/pruned
+row can't leak through; `SemanticHit` (and `NodeHit`/`LooseEndHit`) carry `isArchived` for the caller
+to badge. **App:** the existing ⌘F Include-Archived scope now drives **both** the exact and semantic
+halves (previously exact-only) and badges archived rows in Related too. **MCP:** the `search` tool's
+`include_archived` parameter now reaches semantic results, and its JSON `SearchItem` carries the
+`archived` flag through all three hit types (a final whole-branch review caught this dropped at the
+MCP boundary — fixed). Trust gate untouched — only which live rows are eligible to be returned changes,
+never what may be said about them. **465 tests** (+1 Kit). Spec/plan:
+`docs/superpowers/{specs,plans}/2026-07-19-archived-semantic-index*`. **Post-merge carry:** rebuild +
+reinstall to `/Applications` so the bundled `pensieve mcp` and app pick up the widened search.
 
 ---
 
