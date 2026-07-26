@@ -99,17 +99,28 @@ import Testing
 
 // MARK: - I2 no loss, as a property
 
+/// Genuinely mixed: a callout and a harness block (both segment-partitioning) alongside a fenced
+/// code block and an inline code span (both code-protected, folded into their surrounding
+/// `.markdown` segment rather than partitioning on their own). `segments.count > 1` proves the
+/// partition actually happened — without it, every construct here being code-protected would let
+/// the parser produce a single `.markdown` segment and the join assertion would hold by identity
+/// (the passthrough case, already covered above), not by exercising the partition property.
 @Test func rawJoinReconstructsTheInputForMixedContent() {
   let input = """
   Intro prose.
+
+  <HARD-GATE>Do not skip this.</HARD-GATE>
 
   ```swift
   let x = "<HARD-GATE>"
   ```
 
+  <system-reminder>Reminder text.</system-reminder>
+
   Trailing prose with `inline <code>` in it.
   """
   let segments = TranscriptMarkup.parse(input)
+  #expect(segments.count > 1)
   #expect(segments.map(\.raw).joined() == input)
 }
 

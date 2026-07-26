@@ -88,7 +88,7 @@ struct LooseEndRow: View {
       if ctx.messages.count > 1 {
         if provenanceExpanded {
           ForEach(Array(ctx.messages.enumerated()), id: \.element.index) { idx, msg in
-            messageRow(msg, showsRole: idx == 0 || ctx.messages[idx - 1].role != msg.role)
+            messageRow(msg, showsRole: idx == 0 || speakerClass(for: ctx.messages[idx - 1]) != speakerClass(for: msg))
           }
         } else if let cited {
           previewRow(cited)
@@ -170,6 +170,14 @@ struct LooseEndRow: View {
           pos < parsed.count
     else { return [.markdown(msg.text)] }
     return parsed[pos]
+  }
+
+  /// The caption shown for a message is its `SpeakerClass`, not its raw `role` — an `assistant`
+  /// message that classifies `.system` (e.g. all-`<tool_uses>`) must not be conflated with a
+  /// following prose `assistant` message that classifies `.claude`, or the caption is wrongly
+  /// suppressed and the reader misattributes the speaker.
+  private func speakerClass(for msg: ProvenanceMessage) -> SpeakerClass {
+    .of(msg, segments: segments(for: msg))
   }
 
   /// The preview shows only the first meaningful segment — a harness envelope alone would tell the

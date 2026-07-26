@@ -120,8 +120,8 @@ extension HarnessKind {
   /// Content — verbatim, never localized. nil when the label alone says everything.
   var displayBody: String? {
     switch self {
-    case .command(let name, let message, _):
-      return [name, message].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — ")
+    case .command(let name, let message, let args):
+      return [name, message, args].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — ")
     case .taskNotification(let t):
       return [t.summary, t.status].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     case .systemReminder(let s), .commandCaveat(let s), .commandOutput(let s),
@@ -142,16 +142,36 @@ extension HarnessKind {
 extension View {
   /// The transcript type scale: h1 22 · h2 18 · h3 16 · h4-h6 15/14/14 semibold · body 14/ls 4.
   /// MarkdownUI's defaults put h1 near 28pt against 14pt body, which reads as shouting in a
-  /// chat transcript.
+  /// chat transcript. Each heading override keeps `Theme.basic`'s margin (`BlockSequence` derives
+  /// all inter-block spacing from it — dropping it collapses the space after a heading to zero).
   func transcriptProse() -> some View {
     self
       .markdownTextStyle { FontSize(14) }
-      .markdownBlockStyle(\.heading1) { $0.label.markdownTextStyle { FontSize(22); FontWeight(.semibold) } }
-      .markdownBlockStyle(\.heading2) { $0.label.markdownTextStyle { FontSize(18); FontWeight(.semibold) } }
-      .markdownBlockStyle(\.heading3) { $0.label.markdownTextStyle { FontSize(16); FontWeight(.semibold) } }
-      .markdownBlockStyle(\.heading4) { $0.label.markdownTextStyle { FontSize(15); FontWeight(.semibold) } }
-      .markdownBlockStyle(\.heading5) { $0.label.markdownTextStyle { FontSize(14); FontWeight(.semibold) } }
-      .markdownBlockStyle(\.heading6) { $0.label.markdownTextStyle { FontSize(14); FontWeight(.semibold) } }
+      .lineSpacing(4)
+      .markdownBlockStyle(\.heading1) {
+        $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
+          .markdownTextStyle { FontSize(22); FontWeight(.semibold) }
+      }
+      .markdownBlockStyle(\.heading2) {
+        $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
+          .markdownTextStyle { FontSize(18); FontWeight(.semibold) }
+      }
+      .markdownBlockStyle(\.heading3) {
+        $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
+          .markdownTextStyle { FontSize(16); FontWeight(.semibold) }
+      }
+      .markdownBlockStyle(\.heading4) {
+        $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
+          .markdownTextStyle { FontSize(15); FontWeight(.semibold) }
+      }
+      .markdownBlockStyle(\.heading5) {
+        $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
+          .markdownTextStyle { FontSize(14); FontWeight(.semibold) }
+      }
+      .markdownBlockStyle(\.heading6) {
+        $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
+          .markdownTextStyle { FontSize(14); FontWeight(.semibold) }
+      }
       .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)
   }
