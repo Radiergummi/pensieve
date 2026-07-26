@@ -1,7 +1,6 @@
 // Sources/PensieveApp/LooseEndRow.swift
 import SwiftUI
 import PensieveKit
-import MarkdownUI
 
 /// One loose-end row: a tappable summary that, when expanded, shows its provenance in a soft rounded
 /// box — a couple-line preview of the cited line, with a disclosure to expand to the full surrounding
@@ -17,11 +16,17 @@ struct LooseEndRow: View {
   let onLabel: (UUID, String) -> Void
   /// When this equals the row's loose end, the row starts/auto-expands (a search hit landing here).
   var expandedLooseEndID: UUID? = nil
+  /// True in the middle column, where ~180pt is usable. Drops bubbles and tightens the type scale.
+  var compact: Bool = false
 
   @State private var expanded = false            // the loose-end row itself
   @State private var provenanceExpanded = false  // the provenance box's own show-more/less
   @State private var context: ProvenanceContext?
   @State private var loading = false
+  /// Segments parallel to `context.messages`, parsed once when the context loads.
+  /// Deliberately NOT a shared cache: `ProvenanceMessage.index` is per-session, so an
+  /// index-keyed cache could serve session A's segments for session B.
+  @State private var parsed: [[TranscriptSegment]] = []
 
   /// Optimistic override of the confirmed label so a tap reflects immediately (the injected
   /// `LooseEndView` is an immutable snapshot). nil = show the stored value. The row is filtered out
@@ -66,7 +71,9 @@ struct LooseEndRow: View {
     .task(id: expanded) {
       guard expanded, context == nil else { return }
       loading = true
-      context = await loadProvenance(view.looseEnd)
+      let loaded = await loadProvenance(view.looseEnd)
+      context = loaded
+      parsed = (loaded?.messages ?? []).map { TranscriptMarkup.parse($0.text) }
       loading = false
     }
     .onAppear { if expandedLooseEndID == view.looseEnd.id { expanded = true } }
@@ -80,13 +87,15 @@ struct LooseEndRow: View {
       let cited = ctx.messages.first(where: \.isCited) ?? ctx.messages.first
       if ctx.messages.count > 1 {
         if provenanceExpanded {
-          ForEach(ctx.messages, id: \.index) { messageRow($0) }
+          ForEach(Array(ctx.messages.enumerated()), id: \.element.index) { idx, msg in
+            messageRow(msg, showsRole: idx == 0 || ctx.messages[idx - 1].role != msg.role)
+          }
         } else if let cited {
           previewRow(cited)
         }
         disclosureButton
       } else {
-        ForEach(ctx.messages, id: \.index) { messageRow($0) }
+        ForEach(ctx.messages, id: \.index) { messageRow($0, showsRole: true) }
       }
     } else if loading {
       ProgressView().controlSize(.small)
@@ -142,30 +151,38 @@ struct LooseEndRow: View {
     .padding(.top, 2)
   }
 
-  /// Collapsed preview: the cited line as plain text, capped to a couple of lines.
+  /// Collapsed preview: the cited message's first renderable segment, capped to a few lines.
   @ViewBuilder private func previewRow(_ msg: ProvenanceMessage) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(msg.role).font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
-      Text(msg.text).prose().lineLimit(3)
-        .padding(.leading, 10)
-        .overlay(alignment: .leading) { Rectangle().fill(.orange).frame(width: 3) }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
+    TranscriptMessageView(message: msg, segments: previewSegments(for: msg), compact: true)
+      .lineLimit(3)
   }
 
-  @ViewBuilder private func messageRow(_ msg: ProvenanceMessage) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(msg.role).font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
-      Markdown(msg.text)
-        .markdownTextStyle { FontSize(14) }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.leading, msg.isCited ? 10 : 0)
-        .overlay(alignment: .leading) {
-          if msg.isCited { Rectangle().fill(.orange).frame(width: 3) }
-        }
+  @ViewBuilder private func messageRow(_ msg: ProvenanceMessage, showsRole: Bool) -> some View {
+    TranscriptMessageView(message: msg, segments: segments(for: msg),
+                          compact: compact, showsRoleLabel: showsRole)
+  }
+
+  /// Segments for a message, by position in the parallel `parsed` array. Falls back to a single
+  /// raw markdown segment if the arrays ever disagree — never renders nothing.
+  private func segments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
+    guard let ctx = context,
+          let pos = ctx.messages.firstIndex(where: { $0.index == msg.index }),
+          pos < parsed.count
+    else { return [.markdown(msg.text)] }
+    return parsed[pos]
+  }
+
+  /// The preview shows only the first meaningful segment — a harness envelope alone would tell the
+  /// reader nothing about why this loose end exists.
+  private func previewSegments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
+    let all = segments(for: msg)
+    let firstProse = all.first { segment in
+      switch segment {
+      case .markdown(let t): return !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      case .callout: return true
+      case .harness: return false
+      }
     }
-    .opacity(msg.isUserPrompt ? 1 : 0.7)
-    .frame(maxWidth: .infinity, alignment: .leading)
+    return [firstProse ?? all.first ?? .markdown(msg.text)]
   }
 }

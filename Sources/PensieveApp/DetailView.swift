@@ -66,7 +66,7 @@ struct DetailView: View {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
                 LooseEndRow(view: view, loadProvenance: model.provenance,
                             onLabel: model.setLooseEndLabel,
-                            expandedLooseEndID: model.expandedLooseEndID)
+                            expandedLooseEndID: model.expandedLooseEndID, compact: false)
                   .id(view.looseEnd.id)
               }
             }

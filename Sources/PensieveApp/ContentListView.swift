@@ -142,7 +142,8 @@ struct ContentListView: View {
   @ViewBuilder private func looseEndList() -> some View {
     List {
       ForEach(looseEnds, id: \.looseEnd.id) { view in
-        LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel)
+        LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel,
+                    compact: true)
       }
     }
     .overlay {
@@ -157,7 +158,8 @@ struct ContentListView: View {
           if let name = model.node(view.looseEnd.nodeID)?.name {
             Text(name).font(.caption).foregroundStyle(.secondary)
           }
-          LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel)
+          LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel,
+                      compact: true)
         }
       }
     }
