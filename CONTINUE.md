@@ -1,4 +1,4 @@
-# CONTINUE — session handoff (2026-07-19)
+# CONTINUE — session handoff (2026-07-26)
 
 Self-contained pickup for a fresh agent. Read `CLAUDE.md` first (project rules + the full shipped
 changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the durable long-term list
@@ -6,21 +6,60 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-Everything is **on `main`**; the tracked tree is clean. **448 tests**, run with `./scripts/test.sh`
+Everything is **on `main`**; the tracked tree is clean. **524 tests**, run with `./scripts/test.sh`
 (thin `swift test` passthrough). The full loop is **LIVE and dogfooded**: capture → ingest →
 auto-extract runs unattended via the bundled background-sync agent; the app is a real `Pensieve.app`
 bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The core intelligence gate passed
 long ago. The hard part is done — remaining work is feature breadth, not foundations.
+
+**⚠️ The installed app is stale.** `/Applications/Pensieve.app` was built **2026-07-19** and is four
+ships behind `main` — so the running app has no chat transcript rendering, and the bundled
+`pensieve mcp` (which this and every Claude Code session actually calls) is missing the widened
+`include_archived` search. **Rebuild + reinstall before trusting anything you see in the live app**,
+then check `ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
+
+**One OPEN DEFECT is live in production:** the semantic relevance floor is inert — see THE NEXT
+ACTION below and `backlog.md:211`.
 
 ## Most recent ships (newest first)
 
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
+- **Transcript readability — chat rendering + harness vocabulary + type scale** (2026-07-26, merged
+  `4b184a3`). The inline provenance view renders a transcript window as readable chat instead of a flat
+  list of raw-tagged text. **Kit (tested, pure):** `TranscriptVocabulary` — **two members, not one list**:
+  renderer tag names vs a **FROZEN** `injectionMarkers` (moved verbatim out of `isInjectedOrCommand`,
+  pinned by test) so a tag added for *display* can never silently change *extraction*; `TranscriptMarkup`
+  — one left-to-right scan where the outermost construct wins (precedence code → callout → harness →
+  placeholder → orphan close → prose, CommonMark-pinned code protection, forward-only pairing, no-loss);
+  `SpeakerClass.of` is **conjunctive on purpose** (309 genuine user records in this repo's transcripts
+  contain envelope markers — a disjunctive rule would have the app assert you didn't write what you did).
+  **App (thin):** `TranscriptSegmentView` + `TranscriptMessageView`; `LooseEndRow`'s two paths gain
+  `compact:`, threaded through three call sites. Chrome localized en+de; message text/quotes/tag names
+  stay verbatim. **Trust gate untouched.** **524 tests** (+59 Kit). **Human-verify:** the Task 8 eyeball
+  matrix (needs the reinstall above). Spec/plan: `{specs,plans}/2026-07-19-transcript-readability*`.
+- **App-quality cleanup pass** (2026-07-19). Three carries: `NodeKind`/`NodeState` → real
+  `RawRepresentable` enums (**on-disk format byte-identical**, no migration); `AppModel.pruneNarrationCache`
+  bounds the cache against the **FULL** node set (Focus-muted/archived keep theirs); `AppModel` →
+  `@Observable`. An Opus review caught `allNodes` wrongly `@ObservationIgnored` (broke cold-restore recall
+  windows) — fixed. **Human-verify:** the invalidation eyeball list, esp. cold-restore ⌘⌥N.
+- **Archived content in the semantic index / "Related"** (2026-07-19). Closed the deferred item below:
+  `EmbeddableCorpus.gather` now indexes archived nodes/loose ends/events tagged with live `state`;
+  `knn`/`search` grow an allow-list `includeArchived` (defaulted `false`) with `resolve`'s canonical
+  re-check widened in lockstep; hits carry `isArchived`. The ⌘F Include Archived scope now drives **both**
+  halves; MCP `search` passes the flag through to semantic results (a final review caught it dropped at
+  the MCP boundary). **465 tests.**
+- **Spotlight loose-end indexing — Track C 1b** (2026-07-19, merged `c60e624`). Open loose ends are indexed
+  into macOS Spotlight (previously nodes only) — a phrase from a loose end's text **or its cited quote**
+  returns that item and opens Pensieve at it. New `DeepLink.looseEnd(UUID)` + `LooseEndFacts` (searchable
+  corpus = open ends in active nodes; degrade-safe any-state by-id quarantined to tap resolution);
+  `LooseEndEntity` **must be registered in `PensieveShortcuts`** or Spotlight never surfaces it. **445 tests.**
 - **Semantic-recall hardening + include-archived ⌘F search** (2026-07-19, merged `3ece8b5`). Four small
   items over the shipped semantic stack. **(A)** Include-archived toggle for **exact** ⌘F (defaulted
-  `SearchQueries.search(includeArchived:)` + a native `.searchScopes` bar); semantic "Related" stays
-  active-only (the index has no archived content — deferred). **(B)** A regression test pinning the
+  `SearchQueries.search(includeArchived:)` + a native `.searchScopes` bar); semantic "Related" stayed
+  active-only **at the time** because the index held no archived content — **since closed**, see the
+  archived-semantic-index ship above. **(B)** A regression test pinning the
   same-version rebuild invariant (no prod change — the guard already ships and is race-safe; the planned
   transaction fix was proven a no-op by review). **(C)** MCP `PensieveMCP` caches its embedder+store in
   `static let` instead of per-call. **(D)** `SemanticQueries.search` expand-and-retry under Focus-muting
@@ -66,6 +105,17 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
+**⚠️ FIRST — the semantic relevance floor is inert (OPEN DEFECT, in production).** `backlog.md:211`
+has the measurements: gibberish ("banana zeppelin custard velocipede") scores **0.880** cosine; a
+perfect topical match scores **0.936**. The whole usable range is ~0.06 wide and sits far above the
+`0.25` floor (`Mcp.swift:210`, `AppModel.swift:531`), so ⌘F "Related" and MCP `search` **always**
+return a full result set regardless of relevance, and corpus noise outranks true matches. The
+grounding guards hold — every hit is a real cited item, nothing fabricated — but relevance is not
+enforced at all, and this is **live, default-on, and diluting the context fed to Claude via MCP**.
+Likely cause: anisotropy of mean-pooled contextual embeddings (short git-commit subjects amplify it).
+**A floor change alone would be guesswork** — the spec must pick a calibration method (mean-centering
+/ empirical percentile / hybrid lexical blend). Its own brainstorm→spec→plan.
+
 **Track A — the three-pane app (the product spine).** Everything through Share-recall, archive, and
 error-surfacing has shipped. Next: **slice 5 (talk-to-system** — describe a strand in natural language →
 structured create via `LLMProvider`), then **slice 6 (forks** — gated on the unbuilt fork-capture backend;
@@ -78,14 +128,15 @@ editing remain parked in `backlog.md`, not part of Track B.)
 
 **Track C — findability / OS-integration.** In-app find (⌘F), the menu-bar item, `pensieve://`, App
 Intents + Spotlight, Focus filters, **semantic/vector recall (#2, 2026-07-18)**, **Spotlight loose-end
-indexing (1b, 2026-07-19)**, and the **semantic-recall hardening batch (2026-07-19)** — include-archived
-⌘F toggle + expand-and-retry + MCP caching + the rebuild-invariant test — are all live. Remaining:
-- **Archived content in the semantic index / "Related"** — the include-archived toggle is EXACT-only
-  because `EmbeddableCorpus.gather` is active-only; surfacing archived in semantic recall needs a
-  corpus-producer change (index active+archived with correct per-item state, stop the pruner dropping
-  archived, re-embed). Its own effort.
-- **Transcript-passage chunking** — the next corpus increment (own spec); would also make the Part D
-  `maxFetch=2000` cap worth revisiting.
+indexing (1b, 2026-07-19)**, the **semantic-recall hardening batch (2026-07-19)**, **archived content in
+the semantic index (2026-07-19)**, and **transcript readability (2026-07-26)** are all live. Remaining:
+- **Transcript-passage chunking** — the next corpus increment. **The spec is already written**
+  (`specs/2026-07-19-transcript-passage-chunking-design.md`, committed `35b0ed1`) — **no plan yet**, so
+  this is the shortest path to shipping. Would also make the Part D `maxFetch=2000` cap worth revisiting.
+- **Newly-live revisit triggers** from the readability spec's parked siblings (`backlog.md:245`): rich
+  code blocks (syntax highlighting + diagrams — corpus evidence says **Graphviz DOT, not Mermaid**, so a
+  Mermaid-only renderer may buy nothing) and macOS Writing Tools on loose ends (**spike feasibility
+  first** — MarkdownUI's custom views may put it out of reach entirely).
 
 **Blocked — do not start:** Widgets + CloudKit need a **paid Apple Developer team** (App Groups / Team-ID
 entitlement). That single gate unblocks the whole extension family at once; revisit only when a paid
