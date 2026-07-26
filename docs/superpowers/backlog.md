@@ -245,8 +245,9 @@ live, default-on, and currently diluting the grounded context fed to Claude via 
 ## Transcript rendering — deferred siblings (2026-07-19, split out of the readability spec)
 
 Raised together while dogfooding the inline provenance view; **sub-project #1 (transcript
-readability — role bubbles, XML-tag callouts, heading type scale) is being specced now.** These two
-were split off because each is a different *kind* of decision, not a styling one.
+readability — role bubbles, XML-tag callouts, heading type scale) SHIPPED 2026-07-26** (merged to
+`main` `4b184a3`; see CLAUDE.md ▸ Status). These two were split off because each is a different
+*kind* of decision, not a styling one — **both revisit triggers are now live.**
 
 - **Rich code blocks — syntax highlighting + diagram rendering.** *Medium–large; its own spec.*
   Transcript code fences currently render unhighlighted (MarkdownUI default). Two separable pieces:
