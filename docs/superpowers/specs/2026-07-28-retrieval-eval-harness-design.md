@@ -1,266 +1,198 @@
-# Retrieval eval harness — measure before fixing semantic recall
+# Semantic recall remediation — hygiene, BM25, and a paraphrase-only harness
 
 **Date:** 2026-07-28
-**Status:** design, awaiting user review
-**Scope:** a **measurement instrument only**. No production change to retrieval, ranking, or the
-similarity floor. The fix is a separate spec, written once this harness has produced numbers.
+**Status:** design, revised after an adversarial review that re-measured on the real corpus
+**Scope:** three independently shippable pieces, in order. **P1** corpus hygiene (production change,
+ungated). **P2** BM25 replaces the semantic half of ⌘F "Related" + MCP `search`; the vector goes
+default-off (production change). **P3** a minimal paraphrase-only eval harness over hand-written
+queries — the one question still genuinely unanswered.
 **Supersedes the diagnosis in:** `backlog.md` → "Semantic relevance floor is inert — OPEN DEFECT".
-That entry's *symptom* is confirmed; its *cause* and its lead remedy are wrong (§Why the original
-diagnosis was wrong).
+
+## Revision note (this document is a rewrite, not a patch)
+
+**Draft 1** proposed a 7-file eval harness with six strategies, a three-part gold set, and ROC-AUC as
+its primary cross-strategy metric, and deliberately shipped no production change. An adversarial
+review re-measured everything on the **real 2,630-item corpus** (draft 1 rested on an 18-document
+hand-built probe) and invalidated three load-bearing choices. What changed, and why:
+
+| Draft 1 | Verdict | Why |
+|---|---|---|
+| **ROC-AUC** as primary cross-strategy metric | **DELETED** | It pooled scores *across* queries. BM25's per-query scale varies with query length and idf mass, so AUC punishes it for variance, while cosine's anisotropy pins every score near 0.88 and flatters it. Measured: AUC ranked `vector` 0.333 **above** `bm25` 0.062 while BM25's actual P@5 was **1.7×** better. **The spec's own primary metric would have recommended keeping the broken incumbent.** |
+| **Provenance-pair gold stratum** ("free, lexically-easy") | **DELETED** | Two ways wrong. 434 of 704 pairs cite an event whose `workSummary` fails the `isSearchable` gate (`EmbeddableItem.swift:54`), so the gold document **is not in the corpus** and every strategy scores a forced miss. And it is the *hardest* stratum, not the easiest — measured query-token overlap with gold is **mean 14.8%**. A loose end is one verbatim sentence; its event's corpus text is an LLM summary of a whole session. |
+| **Gibberish negative queries** | **REPLACED** | Lexical methods reject gibberish *by construction* (every token OOV → no candidates → empty result), so "lexical has positive separation" was partly an artifact of a bar it cannot fail. Replaced with **plausible-but-wrong in-domain** queries — the failure users actually see. |
+| **`exact` (`SearchQueries`) in the roster** | **DROPPED** | It queries only `Node` and `LooseEnd` (`SearchQueries.swift:60,88`) — no event path — so it scores 0 on **64%** of the corpus by construction, for reasons unrelated to substring matching. The prose note about `SearchQueries.swift:57` is kept; the misleading column is not. |
+| **"File-copy of the canonical store"** for the snapshot | **FIXED** | The store is WAL-mode; a plain copy silently drops everything still in `-wal`. Demonstrated drift on the live store (802 vs 803 loose ends). Use `VACUUM INTO`. |
+| **"Top-quartile idf" leakage guard** | **MOOT** | Undefinable on this corpus — 42.7% of token types are hapax, all tied at max idf, so the quartile cut lands *inside* the tie block; the intended semantics would flag 57.5% of vocabulary and fire always. P3's hand-written queries remove the need for the guard entirely. |
+| **Incumbent-anchored bar alone** | **AMENDED** | The incumbent always clears its own bar, so "nothing cleared it" could never mean "the incumbent is unusable" — which is the actual situation. P3 pre-registers an **absolute** floor alongside it. |
+| **"No production change this cycle"** | **REVERSED** | Corpus hygiene and BM25 are supported *now* by n=300 measurement; withholding them behind a measurement cycle was the framing's main cost. |
+
+**Corrections to draft 1's own evidence.** Its anisotropy figures (mean pairwise 0.893, min 0.821)
+were over an 18-document hand-built corpus, not the real one — on the real corpus mean pairwise is
+**0.854** and min **0.502**, a materially wider cone. And its claim that mean-centring "was tested and
+fails" **does not hold on real data**: centring takes mean cross-document cosine 0.854 → ~0.000 and
+*slightly improves* P@1/P@5. The conclusion (centring does not rescue retrieval) survives; the stated
+evidence for it was wrong. Draft 1's probe files were never committed and are now **lost** — hence
+§Evidence below.
 
 ## Problem
 
-Semantic recall ships default-on and feeds ⌘F "Related" plus the MCP `search` tool that every Claude
-Code session calls. It does not work, and the reason is not what the defect report says.
+Semantic recall ships default-on, feeding ⌘F "Related" and the MCP `search` tool every Claude Code
+session calls. It does not work, and the original defect report misdiagnosed why.
 
-The report frames it as a threshold-calibration bug: the `floor: 0.25` cutoff
-(`Mcp.swift:220`, `AppModel.swift:531`) never rejects anything because mean-pooled contextual
-embeddings are anisotropic, so cosine is compressed far above 0.25. Fix the calibration, fix the
-feature. That framing is wrong in a way that matters: **it would have us tune a threshold on a score
-that carries almost no signal to threshold.**
+The report framed it as threshold calibration: the `floor: 0.25` cutoff (`Mcp.swift:220`,
+`AppModel.swift:531`) never rejects anything because anisotropic embeddings compress cosine far above
+0.25. That symptom is real. But the cause is **ranking failure, not scale failure** — and no
+calibration fixes a ranking that is already wrong:
 
-### Reproduced measurements
+- Gibberish ("banana zeppelin custard velocipede") tops out at **0.880**.
+- For "background sync agent login items" the vector's **#1 hit is the wrong document at 0.921** —
+  above gibberish, and above many correct hits. The correct document is in the corpus and adequately
+  long; BM25 finds it at rank 1–3, the vector misses it entirely.
 
-Reproduced 2026-07-28 with a standalone probe that duplicates `NLContextualEmbedder` exactly
-(per-token → mean-pool → unit-normalize), over an 18-document corpus shaped like what Pensieve
-indexes (git commit subjects, loose-end sentences, node names) and 6 topical + 3 negative queries.
+Mean-pooled token vectors from a *contextual* model were never a sentence-similarity encoder; that is
+what SBERT-style training exists to produce. The inert floor is a symptom of an encoder that does not
+discriminate.
 
-**Baseline anisotropy — the number the defect report was missing:**
+### Measured, real corpus (2,630 items: 240 nodes / 704 loose ends / 1,686 events)
 
-| Statistic (unrelated corpus doc vs doc, n=66 pairs) | Cosine |
-|---|---|
-| min | 0.8214 |
-| **mean** | **0.8930** |
-| max | 0.9507 |
+Gold set = **same-node relatedness** (query = one document, gold = any other item under the same node;
+self excluded), n=300 over 82 eligible nodes. Random-baseline P@5 = 0.006.
 
-Every vector lives in a cone between ~0.72 and ~0.96. No constant in that band separates anything —
-consistent with the defect report.
+| Strategy | P@1 | P@5 | MRR@50 |
+|---|---|---|---|
+| `vector` (**ships today**) | 0.250 | 0.153 | 0.354 |
+| `vectorCentered` | 0.257 | 0.165 | 0.365 |
+| **`bm25`** | **0.387** | **0.253** | **0.497** |
+| `hybridRRF` | 0.323 | 0.215 | 0.444 |
 
-**But the encoder, not the threshold, is the problem:**
+Per-query head-to-head on P@5: **bm25 better on 128, vector better on 30, 142 ties** (sign test
+\|128−30\| = 98 vs 2·SE = 12.6 — overwhelming). After P1 hygiene, BM25 rises further to **P@1 0.433**
+while the vector *drops* to 0.125.
 
-| Strategy | correct@1 | worst true match | best gibberish | **separation** |
-|---|---|---|---|---|
-| `NLContextualEmbedding` mean-pooled (**ships today**) | 3/6 | 0.8494 | 0.8801 | **−0.031** |
-| `NLEmbedding.sentenceEmbedding` (Apple's sentence model) | 3/6 | 0.4063 | 0.4678 | **−0.062** |
-| ~20 lines of idf-weighted lexical overlap | **5/6** | 2.9444 | 1.7047 | **+1.240** |
+**Two results that contradict expectations and must not be lost:** `hybridRRF` is **worse than `bm25`
+alone** — the vector contributes negatively, so the reflex "hybrid wins" is false here. And
+`vectorCentered` is marginally *better*, not worse.
 
-*Separation* = worst true-match score − best gibberish score. **Negative separation means gibberish
-outranks real matches**, so no threshold can enforce relevance regardless of calibration. A crude
-lexical baseline is positive by a wide margin — a usable threshold exists for it.
+### Known bias in this evidence (stated, not hidden)
 
-**The report's lead remedy was tested and fails.** Mean-centering (subtract corpus mean vector from
-docs and query, renormalize) spreads the scores out — and makes separation *worse*, −0.031 → **−0.507**,
-with correct@1 unchanged at 3/6. Centering is near-monotone per query; it cannot repair a ranking that
-is already wrong. Spreading a score distribution is not the same as making it discriminate.
+Same-node relatedness uses **a full document as the query**, so it measures document→document
+similarity with long queries — whereas the real ⌘F/MCP flow is a **short typed query**. Long queries
+hand BM25 many rare tokens to match, so this table's **direction is well-supported but its magnitude
+likely overstates BM25's edge for short queries.** Corroborating evidence in the same direction, on 8
+hand-written short paraphrase queries scored by inspection: `vector` ≈ **0/8**, `bm25` ≈ **2/8**.
+Both are bad; BM25 is less bad. **This gap is exactly what P3 exists to close** — and the reason P2
+turns the vector off rather than deleting it.
 
-### Why the original diagnosis was wrong
+## P1 — Corpus hygiene (ship first, ungated)
 
-Anisotropy is real and measured (mean pairwise 0.893), and it *does* explain why 0.25 never fires. It
-does **not** explain gibberish at 0.880 outranking a true match at 0.849 — that is a ranking failure,
-not a scale failure. Mean-pooled token vectors from a contextual model were never a sentence-similarity
-encoder; that is what SBERT-style training exists to fix. The defect is **retrieval quality**; the
-inert floor is a symptom of it.
+The corpus contains junk that occupies top-k slots and pollutes every strategy:
 
-### Honest limits of this evidence
+- **261 of 1,686 events (15.5%) are bare `checkout <branch>` strings** — 84 literally `checkout HEAD`,
+  72 `checkout main`. These are the *actual* source of the backlog's headline symptom: its gibberish
+  top hit was `checkout feat/pensieve-app-three-pane`, and post-hygiene gibberish's top-3 changes
+  entirely.
+- **400 rows (15%) are exact duplicate texts** across 111 groups; one string can occupy up to 84
+  top-k slots.
+- 155 of 704 loose ends (22%) have `text == quote` (bare prompt echo).
 
-The probe is 18 documents, 6 topical queries, labels chosen by the author, and — decisively — **biased
-toward lexical**: the queries share literal rare tokens ("sqlite-vec", "keychain") with their targets,
-which is the case semantic search is *not* needed for. The one low-overlap query ("focus mode filtering
-work vs personal") was rank 2 lexically and rank **7** by vector, so the vector did not win there either
-— but a 9-query probe cannot choose an architecture. **That is precisely why this spec builds an
-instrument instead of a fix.** The prior transcript-readability spec had its evidence base invalidated
-twice by loose measurement methodology; this spec treats its own probe as a hypothesis, not a result.
+**Change:** `EmbeddableCorpus.gather` skips `git.checkout` events and de-duplicates identical texts.
+Measured effect: 2,630 → 2,264 items, BM25 P@1 0.387 → **0.433**.
 
-## Goal & non-goals
+**Not in P1:** the `text == quote` loose ends. They are *real* captured user prompts, and suppressing
+them is a grounding/recall judgment, not hygiene — it belongs to whoever owns loose-end quality.
 
-**Goal.** Produce a trustworthy, repeatable answer to: *which retrieval strategy should Pensieve ship,
-and does a usable relevance threshold exist for it?*
+Tested in Kit (`gather` is already covered); the semantic index rebuilds itself on next sync.
 
-**Non-goals** (each deliberately excluded):
-- **No production change.** The inert floor stays as-is this cycle. `SemanticQueries`, `SearchQueries`,
-  `Mcp.swift`, `AppModel.swift` are untouched except where a strategy adapter *reads* them.
-- **No cloud embeddings.** Retrieval stays on-device. Cloud appears only as an opt-in for *gold-set
-  generation* (§Gold set).
-- **No transcript-passage chunking.** Its own spec (`2026-07-19-transcript-passage-chunking-design.md`);
-  it changes the corpus and would confound this measurement.
-- **The trust gate is untouched.** The harness is read-only over already-extracted data and calls no
-  extraction path. It cannot affect what may become a loose end.
+## P2 — BM25 replaces the semantic half; vector goes default-off
 
-## Architecture
+**Retrieval:** an FTS5 + `bm25()` index over the same `EmbeddableCorpus` items, replacing the vector
+behind the *existing* seams — ⌘F "Related" (`AppModel.swift:531`) and MCP `search` (`Mcp.swift:220`).
+The public shapes (`SemanticHit`, the MCP `SearchItem` JSON, `includeArchived`, Focus visibility,
+`excludingIDs`, the canonical re-resolve) are **unchanged**, because every grounding guard lives there
+and none of them are the defect.
 
-### Placement: a sibling harness, not an `EvalTask`
+**The vector stays in the tree, default-off** behind `PensieveDefaults.semanticSearchKey`. It is not
+deleted: P3 may yet justify a better encoder behind the same seam, and the sqlite-vec integration was
+hard-won.
 
-`pensieve eval`'s protocol is `run(item:model:reference:) -> TaskOutput` where the thing under test is
-an `LLMProvider`, and `CellScore` is keyed by model with cost/latency/fabrication. Retrieval has **no
-model under test** (the LLM only builds gold offline), its candidates are *strategies*, and its outputs
-are ranked lists. Forcing it through `EvalTask` would mean a meaningless `model:` parameter and a
-`TaskOutput` that carries no ranking. So: new types, same conventions.
+**The floor:** BM25 scores are unbounded and per-query-scaled, so `floor: 0.25` is meaningless for it
+and is **removed, not retuned**. Relevance is instead bounded by rank (`k`) plus the requirement that
+a document actually contain query terms — which, unlike cosine, is a real relevance signal. The honest
+consequence is stated in the report and in the code comment: **a rank cap is not a relevance
+threshold**, and P3 is what would earn one.
 
-Reused from the existing harness — **conventions, not code**:
-- frozen, content-hashed corpus (`CorpusHash`) so runs are comparable;
-- `.eval/` for all private work text and run outputs (**gitignored**: "private work text + run outputs,
-  never committed"), while bars live in the **committed** `eval-config.json`;
-- **incumbent-anchored bars** — never a hand-picked constant;
-- a **registry ↔ config consistency test** that fails the suite if strategies and bars drift apart.
+**Grounding is untouched.** Retrieval only chooses *which* real stored rows are eligible; the trust
+gate governs what may be *said* about them, and this touches neither extraction nor narration.
 
-```
-Sources/PensieveKit/Eval/Retrieval/
-  RetrievalStrategy.swift     protocol + the 6 strategy adapters' shared types
-  RetrievalGoldSet.swift      gold/negative queries, strata, leakage tags, provenance metadata
-  RetrievalCorpus.swift       freeze/load over EmbeddableCorpus.gather
-  RetrievalMetrics.swift      recall@k, MRR, nDCG, ROC-AUC, threshold search  (pure)
-  RetrievalGoldBuilder.swift  provenance pairs + LLM paraphrase generation + leakage guard
-  RetrievalRunner.swift       strategy × query sweep → scorecard
-  RetrievalReport.swift       markdown report + recommendation
-```
+**Kit-tested:** BM25 index build/query, hygiene interaction, Focus/archived filtering parity with the
+vector path (the existing `SemanticQueries` tests are the template), and the MCP JSON contract.
 
-### Corpus
+## P3 — A paraphrase-only harness (the one open question)
 
-**Reuse `EmbeddableCorpus.gather(db)` verbatim.** The eval must measure the corpus production actually
-indexes; a parallel corpus definition would silently diverge and invalidate every number.
+Two files, not seven, because only one question is left: **does any on-device strategy deliver
+"find without remembering the words"?** Both current candidates fail it (0/8, 2/8).
 
-**All six strategies MUST read the same frozen snapshot** — otherwise `vector` (which would query the
-live `semantic-index.sqlite`) and `exact` (which needs a canonical `DatabaseReader`) would be scored
-against different, drifting data and the comparison would be meaningless. So freezing produces three
-artifacts under `.eval/retrieval/`, all derived from one point-in-time **read-only copy** of the
-canonical store:
+- `RetrievalCorpus` — `VACUUM INTO` snapshot → `EmbeddableCorpus.gather` (verbatim; no parallel corpus
+  definition) → content hash recorded in every run.
+- `RetrievalMetrics` — pure: recall@{1,5,10}, MRR@10, nDCG@10, and the **operating-point search**
+  ("highest threshold retaining recall@10 ≥ 0.8 while rejecting ≥90% of negatives", in each
+  strategy's own units, never compared across strategies) with an explicit **`NO VIABLE THRESHOLD`**
+  verdict. **No ROC-AUC.**
 
-| Artifact | Built from | Consumed by |
-|---|---|---|
-| `snapshot.sqlite` | file-copy of the canonical store | `exact` (as its `DatabaseReader`), and the canonical re-resolve every strategy shares |
-| `corpus.json` | `EmbeddableCorpus.gather(snapshot)` — the item list, content-hashed | all strategies; the hash goes in the scorecard |
-| `vectors.sqlite` / `fts.sqlite` | built **from `corpus.json`**, not from the live index | `vector`/`vectorCentered`/`vectorSentence` and `bm25`/`hybridRRF` |
+**Gold set: 30–50 paraphrase queries the user writes**, from real recall needs, each naming the
+item(s) it should find. This single choice dissolves LLM circularity, the leakage guard, and the
+`--review` flag together — the sole user's own queries *are* the ground truth. Negatives are
+**plausible-but-wrong in-domain** queries; OOV-empty cases are reported separately as a trivially
+passed class.
 
-The live `semantic-index.sqlite` is never read — it is incrementally maintained and may lag the
-canonical store, which would confound the measurement with indexer staleness. A stale snapshot can
-never be mistaken for a fresh run because the corpus hash is recorded in every scorecard.
+**Decision rule:** incumbent-anchored **plus a pre-registered absolute floor** in `eval-config.json`
+(minimum paraphrase nDCG@10, and "a viable operating point must exist"), written *before* running, so
+the report can conclude "the incumbent is unusable" — which the incumbent-only bar structurally
+could not.
 
-### The six strategies
+**Strategies:** `bm25` (the new incumbent after P2), `vector`, `hybridRRF`. Three, not six —
+`vectorCentered` and `vectorSentence` are answered (§Evidence) and `exact` is unmeasurable.
 
-One protocol, six adapters, all on-device and read-only, zero API cost:
+**Where n matters:** the inherited `"noiseMargin": 0.03` corresponds to n≈300; at n=30–50 the
+sampling half-width is ~0.13–0.18. So P3's margin is **derived from n**, and P3 is explicitly a
+**go/no-go on a bundled sentence encoder**, not a fine-grained ranking of near-equals.
 
-```swift
-public struct ScoredItem: Sendable { public let itemID: String; public let score: Double }
+**CLI:** `pensieve eval retrieval {gold,run,report}`, nested under the existing `eval` command
+(already has `sample`/`run`/`report`/`keys`/`gold`).
 
-public protocol RetrievalStrategy: Sendable {
-  var id: String { get }                       // "vector" | "exact" | "bm25" | ...
-  /// Ranked best-first. `score` is strategy-scale-specific and NEVER compared across strategies.
-  func retrieve(query: String, k: Int) async -> [ScoredItem]
-}
-```
+**Guardrail note:** retrieval strategies are not `EvalTask`s, so `TaskRegistry.consistencyProblems`
+does **not** cover them and `CLAUDE.md`'s "must register an `EvalTask`" does not apply. P3 adds its own
+parallel registry↔config test; a reader must not assume inherited coverage.
 
-| id | What it is | Why it's in the roster |
-|---|---|---|
-| `vector` | today's `NLContextualEmbedder` + sqlite-vec KNN | **the incumbent anchor** — the bar |
-| `exact` | shipped `SearchQueries` substring match | what you already get today |
-| `bm25` | SQLite **FTS5** + `bm25()` over the same corpus | tokenized lexical; verified available in system SQLite 3.51.0 |
-| `hybridRRF` | reciprocal-rank fusion of `vector` + `bm25` | the standard hybrid; scale-free fusion, so it needs no score normalization |
-| `vectorCentered` | `vector` with corpus-mean-centered vectors | settles the backlog's proposed remedy on the **real** corpus, not an 18-doc probe |
-| `vectorSentence` | `NLEmbedding.sentenceEmbedding` encoder | settles "is it the pooling or the model?" |
+## Evidence
 
-**Note on `exact`:** `SearchQueries.swift:57` matches the **whole query as a case-insensitive
-substring**, untokenized. A multi-word natural query matches only if that entire string appears
-contiguously, so `bm25` is not a variation on what ships — it is a different capability. This is why
-both are in the roster.
+Draft 1's probes were uncommitted and are lost, while the spec cited six numbers from them — the same
+failure mode this project already hit with the transcript-readability spec. So: the measurement
+scripts behind every number above are committed under
+`docs/superpowers/measurements/2026-07-28-retrieval-recall/`, with a README stating what each measures
+and how to regenerate the corpus extract.
 
-### Gold set
+**The corpus extract itself is deliberately NOT committed** — it is real work text (see `.gitignore`'s
+`.eval/` rule and its rationale, "private work text … never committed"). Regenerate it through
+`EmbeddableCorpus.gather`; its composition at time of measurement (240 / 704 / 1,686 = 2,630) is
+recorded so a future run can confirm it is comparing like with like.
 
-Three parts, because one part alone would mislead.
+## Non-goals
 
-**1. Provenance pairs — free, no LLM.** A loose end cites a specific source event; that pair *is* a
-relevance judgment already in the canonical store. Query = loose-end text, gold = the cited event.
-**Tagged as the `provenance` (lexically-easy) stratum** — its text overlaps the event heavily, so it
-flatters lexical strategies. It must never be pooled with paraphrase results.
-
-**2. LLM paraphrase queries — the discriminating set.** For each sampled document, generate the query a
-person would actually type to find it, prompted **not to reuse the document's distinctive tokens**.
-Gold = the source document. Stratified across item kinds (node / loose end / event).
-- Provider: `makeDefaultLLMProvider()` (on-device FM) by default, `--provider` to override to cloud.
-  The provider + model is **recorded in the gold file**, so every run is attributable and reproducible.
-- **Leakage guard (load-bearing):** after generation, check the query for the gold document's rare
-  tokens — "rare" = **top-quartile idf computed over the frozen corpus itself**, not a hand-picked
-  constant, so the guard adapts to whatever the corpus actually contains. A violator is regenerated
-  once, then tagged `lexicalLeak: true` if it still leaks. Metrics are reported **with and without** leaked queries. Without this guard, "hybrid
-  wins" could be a pure artifact of vocabulary bleed-through — the exact bias that makes the author's
-  own probe untrustworthy.
-- **Spot-check:** `pensieve eval retrieval gold --review` prints a sample for human eyeball; the gold
-  file records `reviewed: true|false` and the report states which.
-
-**3. Negative queries — what actually tests the floor.** Deterministic gibberish (fixed word list, no
-RNG) plus real-but-unrelated queries ("sourdough starter hydration ratio", "flight change fee"). Gold =
-**empty set**. Without negatives, no threshold claim is measurable at all — their absence is why the
-original defect report could describe the symptom but not evaluate a remedy.
-
-Stored at `.eval/retrieval/gold.json` (gitignored — it contains real work text).
-
-### Metrics
-
-**Ranking quality, reported per stratum and never pooled:** recall@{1,5,10}, MRR@10, nDCG@10.
-Pooling `provenance` with `paraphrase` would let lexically-easy pairs mask paraphrase failure — the
-single most likely way this eval could lie.
-
-**Threshold viability** — the floor question, answered properly. Raw scores live on incompatible scales
-(cosine ≈0.9 vs BM25's negative log), so **thresholds are never compared across strategies.** Instead:
-- **ROC-AUC of gold-hit scores vs negative-query top scores** — scale-free, hence the primary
-  cross-strategy separation number. 0.5 = coin flip.
-- **The operating point:** the highest threshold retaining recall@10 ≥ 0.8 while rejecting ≥90% of
-  negative queries — reported per strategy in that strategy's own units.
-- An explicit **"NO VIABLE THRESHOLD"** verdict when the distributions overlap such that no operating
-  point satisfies both. Today's `vector` is expected to print exactly this; the report must be able to
-  say so rather than emitting a falsely precise number.
-
-### Decision rule
-
-Incumbent-anchored, mirroring the LLM harness. `vector` runs first and **its measured performance is
-the bar** — no hand-picked constants. A challenger is recommended only if it beats the incumbent on
-**paraphrase** nDCG@10 *and* on AUC, by more than the run-to-run noise margin. Bars live in the
-committed `eval-config.json` under a `retrieval` section; a **"no strategy clears the bar"** outcome is
-a legitimate, reportable result (and would itself be an argument for turning semantic recall off).
-
-### CLI
-
-Nested under the existing command (which already has `sample`/`run`/`report`/`keys`/`gold`):
-
-```
-pensieve eval retrieval gold    [--n N] [--provider auto|local|cloud] [--review]
-pensieve eval retrieval run     [--strategy id] [--k 10]
-pensieve eval retrieval report
-```
-
-Outputs `.eval/retrieval/{scorecard.json,report.md}`: strategy × stratum table, the AUC and
-operating-point columns, corpus hash, gold provenance and `reviewed` flag, and a recommendation line
-with its reasons.
-
-## Testing
-
-Deterministic, hermetic, no model assets in CI — the real-corpus run stays a local command, matching
-the existing harness:
-- **Metric math** against hand-built ranked lists with known answers: recall@k, MRR, nDCG (including
-  tie handling), ROC-AUC (including the degenerate all-same-score case → 0.5), threshold search
-  (including the no-viable-threshold branch).
-- **RRF fusion** — ordering under disagreeing input rankings; stability under ties.
-- **Leakage guard** — a query reusing a rare token is caught; a legitimate paraphrase is not.
-- **Gold set** round-trip (de)serialization, including strata and tags.
-- **End-to-end on a tiny fixture corpus** with a **stub embedder and stub LLM** (both already the
-  established pattern in this repo's tests), asserting the report renders and the recommendation
-  follows the decision rule.
-
-Kit-only, so `./scripts/test.sh` covers all of it. Baseline is **524 tests**.
+- **Transcript-passage chunking** — its own spec. Explicitly *not* the cause here: the "background
+  sync" target document is already present and adequately long, and the vector still misses it. A
+  ranking failure on an existing document.
+- **Cloud embeddings** — retrieval stays on-device.
+- **A bundled sentence encoder** — the decision P3 exists to inform, not a commitment.
+- **Suppressing `text == quote` loose ends** — a grounding call, not hygiene (see P1).
+- **The trust gate** — untouched throughout.
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| Generated queries are unnatural / biased, making the instrument itself wrong | leakage guard + `--review` spot-check + per-stratum reporting + recorded generator provenance; cloud opt-in if on-device FM writes poor queries |
-| Small single-user corpus → noisy differences | report n per stratum; require a challenger to beat the incumbent by more than a noise margin, not by any margin |
-| The author's probe biased the roster toward lexical | the negative-query set and the leakage guard both exist to catch exactly this; `vectorSentence` and `vectorCentered` are in the roster specifically to give the vector side its best shot |
-| Eval and production corpora drift apart | `EmbeddableCorpus.gather` is reused verbatim, and the corpus hash is recorded in every scorecard |
-| Measuring becomes a substitute for fixing | scope is deliberately one cycle: harness, numbers, then a fix spec |
-
-## Open question deferred to the fix spec
-
-If no on-device strategy clears the bar on paraphrase queries, the fix spec must choose between
-lexical-primary retrieval (accepting that "find without exact words" is not actually delivered),
-shipping a genuinely better on-device sentence encoder (a bundled model — a real dependency decision),
-or turning semantic recall off. **This spec deliberately does not pre-judge that**; it exists to make
-the choice evidence-based.
+| Same-node gold overstates BM25 (long-query bias) | stated in §Problem; P2 keeps the vector in-tree and off rather than deleting it; P3 measures short queries properly |
+| BM25 fails on genuine paraphrase, so P2 ships a feature that still can't do its headline job | P2's report and code comment say plainly that a rank cap is not a relevance threshold; P3 is the go/no-go on fixing it |
+| P3's n=30–50 is too small for fine distinctions | margin derived from n; scoped as go/no-go, not a ranking |
+| P1 hygiene silently drops something meaningful | `git.checkout` events carry no work content (84 are `checkout HEAD`); de-dup keeps the first occurrence; both covered by Kit tests |
+| The snapshot is private work text in the working tree | `VACUUM INTO` under gitignored `.eval/`; state that it must be cleaned after a run |
