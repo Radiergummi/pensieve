@@ -24,7 +24,10 @@ enum AppDefaults {
       ? true : UserDefaults.standard.bool(forKey: backgroundSyncEnabledKey)
   }
 
-  /// Semantic search is ON by default (matching the @AppStorage default and the Kit reader).
+  /// "Related" results are ON by default (matching the @AppStorage default and the Kit reader).
+  /// The key name is historical — it gated the vector index before the 2026-08-02 retrieval
+  /// remediation, and now gates the BM25 "Related" section and its index. Kept as-is so an
+  /// existing user's explicit choice isn't reset by a rename.
   static var semanticSearchEnabled: Bool {
     UserDefaults.standard.object(forKey: PensieveDefaults.semanticSearchKey) == nil
       ? true : UserDefaults.standard.bool(forKey: PensieveDefaults.semanticSearchKey)

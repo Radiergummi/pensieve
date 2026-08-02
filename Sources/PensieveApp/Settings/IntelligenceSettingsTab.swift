@@ -63,8 +63,8 @@ struct IntelligenceSettingsTab: View {
       Section {
         Toggle("Show “Last Work Done” narration", isOn: $narrationEnabled)
 
-        Toggle("Semantic search (find by meaning)", isOn: $semanticSearchEnabled)
-        Text("Builds an on-device index so ⌘F and Claude Code can find work by meaning, not just exact words. First use downloads a small on-device model.")
+        Toggle("Find related work", isOn: $semanticSearchEnabled)
+        Text("Builds an on-device index so ⌘F and Claude Code can surface related summaries, loose ends and commit messages under “Related”. Matches the words you type.")
           .font(.caption).foregroundStyle(.secondary)
 
         Picker("LLM Provider", selection: provider) {

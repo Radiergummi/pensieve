@@ -251,8 +251,8 @@ final class AppModel {
 
   // MARK: - In-app find
   var searchText: String = ""
-  /// ⌘F search scope. `.all` opts archived nodes into EXACT results (semantic "Related" stays
-  /// active-only — the semantic index holds no archived content). Observable → drives the scope bar.
+  /// ⌘F search scope. `.all` opts archived nodes into BOTH halves — exact results and "Related".
+  /// Observable → drives the scope bar.
   enum SearchScope: Hashable { case active, all }
   var searchScope: SearchScope = .active
   private(set) var searchResults: SearchResults = SearchResults()
@@ -264,10 +264,8 @@ final class AppModel {
   var focusSearchRequested = false
   @ObservationIgnored private var searchTask: Task<Void, Never>?
   @ObservationIgnored private var searchToken = 0
-  // Built once; NLContextualEmbedder resolves dimension from the loaded asset at init.
-  @ObservationIgnored private lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
-  @ObservationIgnored private lazy var semanticStore = SemanticIndexStore(
-    url: PensievePaths.semanticIndexURL(), dimension: embedder.dimension, embedderVersion: embedder.version)
+  // The keyword ("Related") index. Opened lazily once; no embedder, no on-device model asset.
+  @ObservationIgnored private lazy var textStore = TextIndexStore(url: PensievePaths.textIndexURL())
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
   /// site that branches on search (the middle content, the refresh re-run, the detail one-home
@@ -338,12 +336,15 @@ final class AppModel {
     // selected node happens in DetailView (force: on same-node token bump).
     refreshToken += 1
     await SpotlightIndexer.reindex(activeContext: activeFocusContext)   // launch + ⌘R
-    // Best-effort semantic index catch-up (launch + ⌘R cadence, mirroring SpotlightIndexer above).
-    // The sync daemon also runs this periodically; this just keeps ⌘F "Related" fresh sooner after
-    // in-app activity. Detached + toggle-gated so it never blocks the UI refresh.
+    // Best-effort keyword index catch-up (launch + ⌘R cadence, mirroring SpotlightIndexer above).
+    // The sync daemon also rebuilds periodically; this just keeps ⌘F "Related" fresh sooner after
+    // in-app activity. Detached + toggle-gated so it never blocks the UI refresh, and a no-op when
+    // the corpus fingerprint is unchanged.
     if AppDefaults.semanticSearchEnabled, let db {
-      let store = semanticStore, embedder = self.embedder
-      Task.detached { await SemanticIndexer(store: store, embedder: embedder).sync(db) }
+      let store = textStore
+      Task.detached {
+        if let corpus = try? EmbeddableCorpus.gather(db) { store.rebuild(items: corpus) }
+      }
     }
   }
 
@@ -527,10 +528,13 @@ final class AppModel {
 
       guard AppDefaults.semanticSearchEnabled else { self.semanticHits = []; return }
       let exact = Set((results?.nodes.map { $0.id } ?? []) + (results?.looseEnds.map { $0.id } ?? []))
-      let sem = await SemanticQueries.search(
-        query: query, visibleNodeIDs: visible, excludingIDs: exact, k: 8, floor: 0.25,
-        includeArchived: includeArchived,
-        store: self.semanticStore, embedder: self.embedder, db)
+      let store = self.textStore
+      // RelatedQueries is synchronous (no embedding step) — offload it exactly like the exact
+      // search above, so a @MainActor keystroke never runs SQLite reads on the main thread.
+      let sem = await Task.detached {
+        RelatedQueries.search(query: query, visibleNodeIDs: visible, excludingIDs: exact, k: 8,
+                              includeArchived: includeArchived, store: store, db)
+      }.value
       guard self.searchToken == token, !Task.isCancelled else { return }
       self.semanticHits = sem
     }
