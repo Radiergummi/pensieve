@@ -9,6 +9,10 @@ public struct SemanticHit: Identifiable, Sendable, Equatable {
   public let nodeName: String
   public let title: String      // node name / loose-end text / event summary
   public let snippet: Snippet
+  /// Relevance in the producing engine's own units — a BM25 score (positive, unbounded, scaled per
+  /// query) from `RelatedQueries`, or a cosine similarity (0…1) from `SemanticQueries`. Higher is
+  /// better in both. Comparable only WITHIN one result set: never across queries, never across
+  /// engines, and never as an absolute quality threshold.
   public let similarity: Double
   /// The owning node is archived — the view badges the row. Always false unless the caller
   /// opted into archived results.
@@ -24,6 +28,12 @@ public struct SemanticHit: Identifiable, Sendable, Equatable {
 /// an unavailable index or a nil query embedding yields `[]`, never throws/blocks.
 /// Archived items are indexed but excluded by default: `includeArchived` widens BOTH the index
 /// filter and this canonical re-check, in lockstep. `muted` is never returned.
+///
+/// **Not wired to any surface.** ⌘F "Related" and the MCP `search` tool run on `RelatedQueries`
+/// (BM25) since the 2026-08-02 retrieval remediation — mean-pooled contextual embeddings measured
+/// as a ranking failure, not a threshold-calibration problem (P@1 0.250 vs BM25's 0.433). This
+/// path is retained, tested, and reachable for the P3 eval harness that decides whether a real
+/// sentence encoder is worth bundling. See `specs/2026-07-28-retrieval-eval-harness-design.md`.
 public enum SemanticQueries {
   public static func search(query rawQuery: String,
                             visibleNodeIDs: Set<UUID>,
@@ -69,46 +79,11 @@ public enum SemanticQueries {
       guard r.similarity >= floor,
             let nodeID = UUID(uuidString: r.nodeID), visibleNodeIDs.contains(nodeID) else { continue }
       guard let itemID = UUID(uuidString: r.itemID), !excludingIDs.contains(itemID) else { continue }
-      guard let hit = try? resolve(kind: r.kind, itemID: itemID, similarity: r.similarity,
-                                   includeArchived: includeArchived, query: query, db) else { continue }
+      guard let hit = try? RelatedResolver.resolve(kind: r.kind, itemID: itemID, score: r.similarity,
+                                                   includeArchived: includeArchived, query: query, db) else { continue }
       hits.append(hit)
       if hits.count == k { break }
     }
     return hits
-  }
-
-  /// Re-resolve one index row against canonical — the last grounding defense, so a between-sync
-  /// stale row never surfaces a dead hit. The state predicate MUST mirror the `knn` filter: if the
-  /// index widens to archived but this does not, archived rows pass KNN and are then silently
-  /// dropped here. Same predicate shape as `SearchQueries` uses for exact search.
-  private static func resolve(kind: String, itemID: UUID, similarity: Double,
-                              includeArchived: Bool, query: String,
-                              _ db: any DatabaseReader) throws -> SemanticHit? {
-    func eligible(_ n: Node) -> Bool {
-      n.state == .active || (includeArchived && n.state == .archived)
-    }
-    return try db.read { db in
-      switch kind {
-      case "node":
-        guard let n = try Node.where { $0.id.eq(itemID) }.fetchOne(db), eligible(n) else { return nil }
-        return SemanticHit(id: n.id, kind: kind, nodeID: n.id, nodeName: n.name, title: n.name,
-                           snippet: SnippetMaker.make(from: n.description.isEmpty ? n.name : n.description, matching: query),
-                           similarity: similarity, isArchived: n.state == .archived)
-      case "loose_end":
-        guard let le = try LooseEnd.where { $0.id.eq(itemID) && LooseEnd.isOpen($0) }.fetchOne(db),
-              let n = try Node.where { $0.id.eq(le.nodeID) }.fetchOne(db), eligible(n) else { return nil }
-        return SemanticHit(id: le.id, kind: kind, nodeID: le.nodeID, nodeName: n.name, title: le.text,
-                           snippet: SnippetMaker.make(from: le.text, matching: query),
-                           similarity: similarity, isArchived: n.state == .archived)
-      case "event":
-        guard let e = try Event.where { $0.id.eq(itemID) }.fetchOne(db),
-              let n = try Node.where { $0.id.eq(e.nodeID) }.fetchOne(db), eligible(n) else { return nil }
-        let body = (e.workSummary?.isEmpty == false ? e.workSummary! : e.summary)
-        return SemanticHit(id: e.id, kind: kind, nodeID: e.nodeID, nodeName: n.name, title: body,
-                           snippet: SnippetMaker.make(from: body, matching: query),
-                           similarity: similarity, isArchived: n.state == .archived)
-      default: return nil
-      }
-    }
   }
 }
