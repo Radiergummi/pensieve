@@ -37,7 +37,7 @@ struct Mcp: AsyncParsableCommand {
              ]), "required": .array([.string("loose_end_id")])]),
              annotations: .init(readOnlyHint: true, openWorldHint: false)),
         Tool(name: "search",
-             description: "Find across all your work by keyword AND meaning — exact first, related below; each result is a real, cited item.",
+             description: "Find across all your work by keyword — exact matches first, related items below, ranked by relevance; each result is a real, cited item.",
              inputSchema: .object(["type": .string("object"), "properties": .object([
                "query": .object(["type": .string("string"), "description": .string("what to find")]),
                "limit": .object(["type": .string("number"), "description": .string("max results per group (default 8)")]),
@@ -124,14 +124,10 @@ struct Mcp: AsyncParsableCommand {
 enum PensieveMCP {
   static let maxResultSizeMeta = "anthropic/maxResultSizeChars"
 
-  // Built once for the server's lifetime (the MCP process is long-lived): the NL asset load + the
-  // index pool open are otherwise repeated on every `search` call. Both are Sendable. Caveat: a
-  // version bump WHILE the server runs won't reopen the cached store — acceptable, the server is
-  // session-scoped and the app/daemon own rebuilds.
-  private static let semanticEmbedder = NLContextualEmbedder()
-  private static let semanticStore = SemanticIndexStore(
-    url: PensievePaths.semanticIndexURL(),
-    dimension: semanticEmbedder.dimension, embedderVersion: semanticEmbedder.version)
+  // Built once for the server's lifetime (the MCP process is long-lived): the index pool open is
+  // otherwise repeated on every `search` call. Sendable. Caveat: the cached handle isn't reopened
+  // mid-session — acceptable, the server is session-scoped and the app/daemon own rebuilds.
+  private static let textStore = TextIndexStore(url: PensievePaths.textIndexURL())
 
   private static func makeBuilderAndKind() -> (SummaryBuilder, String) {
     let defaults = PensieveDefaults.shared()
@@ -194,10 +190,10 @@ enum PensieveMCP {
   }
 
   /// Unified "find across my work" tool: exact substring match (`SearchQueries`) plus, when the
-  /// semantic-search toggle is on, semantically related items (`SemanticQueries`) over the on-device
-  /// index — excluding anything already surfaced as an exact hit. Scope is all active nodes (MCP has
-  /// no Focus context), widened to archived by `include_archived`, which gates the exact and semantic
-  /// halves alike. Cloud is never used here; the embedder + index are on-device only.
+  /// related-results toggle is on, keyword-ranked related items (`RelatedQueries` over the BM25
+  /// index) — excluding anything already surfaced as an exact hit. Scope is all active nodes (MCP
+  /// has no Focus context), widened to archived by `include_archived`, which gates the exact and
+  /// related halves alike. Everything is local: no model, no network, no cloud.
   static func searchJSON(query: String, limit: Int, includeArchived: Bool = false) async throws -> Data {
     guard let db = try? openCanonicalReadOnly() else {
       return try makeEncoder().encode(SearchPayload(exact: [], related: []))
@@ -216,9 +212,9 @@ enum PensieveMCP {
 
     let related: [SemanticHit]
     if PensieveDefaults.semanticSearchEnabled() {
-      related = await SemanticQueries.search(query: query, visibleNodeIDs: visible, excludingIDs: exactIDs,
-                                             k: limit, floor: 0.25, includeArchived: includeArchived,
-                                             store: semanticStore, embedder: semanticEmbedder, db)
+      related = RelatedQueries.search(query: query, visibleNodeIDs: visible, excludingIDs: exactIDs,
+                                      k: limit, includeArchived: includeArchived,
+                                      store: textStore, db)
     } else {
       related = []
     }
@@ -238,8 +234,10 @@ enum PensieveMCP {
 }
 
 /// The `search` tool's response shape: `{ "exact": [...], "related": [...] }`. `similarity` is
-/// present only on related (semantic) items — `encode(to:)` omits it (not `null`) for exact items,
-/// since exact matches have no similarity score.
+/// present only on related items — `encode(to:)` omits it (not `null`) for exact items, which have
+/// no score. It is a BM25 relevance in unbounded, per-query units where higher is better: rank the
+/// related list by it, but never read it as an absolute quality threshold or compare it across
+/// queries.
 private struct SearchPayload: Encodable {
   var exact: [SearchItem]
   var related: [SearchItem]
