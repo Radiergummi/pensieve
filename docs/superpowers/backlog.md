@@ -208,6 +208,83 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## Competitive scan — ideas worth stealing from Contextify (2026-08-02)
+
+[Contextify](https://contextify.sh) (Perch Innovations; free + $8–15/mo) is the closest thing to
+Pensieve found in the wild: a macOS app that indexes Claude Code **and Codex** transcripts into a
+local SQLite FTS index, shows a live timeline with per-message LLM summaries (Apple Intelligence on
+Tahoe), and feeds search back to the agent. Reviewed: marketing site, docs tree (Total Recall, Live
+Recall, ingestion, CLI), App Store listing + release notes, cloud/teams/pricing.
+
+**The overlap is narrower than it looks.** Contextify indexes *transcripts*; Pensieve reconstructs
+*project state*. They have no loose ends, no trust gate, no typed node/strand tree, no git commits as
+events (they only *anchor by* touched files), no Briefing, no semantic recall. Their "project" is a
+directory — the thing our core principle explicitly rejects. Their thesis is an **ambient flow
+monitor** ("watch the AI work"); ours is **reload context after the session scrolls away**.
+
+Items below are ordered by value×cheapness for *us*. Items 1–3 are one coherent spec; 4–5 a second,
+much smaller one.
+
+- **1. ⭐ Git-anchored search — find sessions by the files they touched.** *Small; the data is
+  already captured.* `Ingester.swift:355` runs `git show --name-only` and stores the changed-file
+  list in `Event.detailJSON["files"]` — we capture it and never search it. "What was I doing last
+  time I touched `SemanticQueries.swift`?" is *exactly* the reload-context question Pensieve exists
+  to answer, and the one query where a file path beats both keywords and embeddings. Wants a `file:`
+  anchor across ⌘F and the MCP `search` tool. *Revisit trigger:* now — it's the cheapest real win on
+  this list.
+- **2. Events are absent from the exact-search corpus.** *Small–medium; found while checking #1, not
+  a Contextify idea.* `SearchQueries.search` covers node name/description + open loose-end
+  text/quote **only** (`SearchQueries.swift:51`). Commit subjects and file lists are invisible to
+  ⌘F; they reach the semantic index alone, via `EmbeddableCorpus`. So the exact and semantic halves
+  of ⌘F search *different corpora* — an asymmetry nothing documents and nobody chose.
+- **3. Real full-text matching (FTS5 + stemming + bm25).** *Medium; touches a load-bearing kernel.*
+  `SearchQueries` does a single whole-string `range(of:options:.caseInsensitive)`, so **multi-word
+  queries are all-or-nothing substrings**: `focus filter spotlight` returns nothing unless that exact
+  phrase exists verbatim. Contextify's pitch is stemming ("matches deploy, deployed, deployment") but
+  **token-based AND matching + bm25 ranking is the bigger win** — substring can't express it at all.
+  Semantic "Related" partly masks this today; note the interaction with the inert-floor defect above
+  (a real lexical signal is also one of that item's candidate remedies — **hybrid retrieval** — so
+  these two should be specced with each other in view).
+- **4. Honest staleness reporting on the retrieval path.** *Small; strongly on-brand.* Before Live
+  Recall blocks, Contextify checks index liveness and **reports the age plus remediation** rather
+  than silently returning nothing. Same value as our trust gate applied to retrieval: an MCP `search`
+  that comes back empty because the daemon last ran 40 min ago should say so. `SystemStatus` already
+  computes this — it just isn't wired into the MCP/CLI answer path.
+- **5. `pensieve doctor`.** *Small.* One command checking the whole install surface — `~/.local/bin`
+  symlink, SessionStart/SessionEnd hooks, MCP registration, SMAppService approval, sync-log age,
+  semantic-index version, Spotlight index. Our surface has more moving parts than theirs and
+  diagnosing it currently means re-reading CLAUDE.md's gotcha list.
+- **6. Entry classes for transcript chunking.** *Folds into an existing deferred item.* Contextify
+  1.7.7 added "command runs and summaries" as distinct indexed entry types. Refinement to our
+  deferred **transcript-passage chunking** spec: don't chunk into undifferentiated text — classify
+  passages (prompt / tool run / assistant summary) so search can filter by kind. *Revisit trigger:*
+  when transcript-passage chunking is specced.
+- **7. Live Recall (`watch` / `tail` / `since`).** *Medium–large; novel but off-axis.* Their most
+  original feature: block until a matching entry appears, stream matches as JSON, or fetch everything
+  since a checkpoint — so one agent session can wait on another worktree's progress. We're
+  technically well placed (FSEvents + `ValueObservation` + the spool all exist). But it is
+  **coordination, not recall** — a different product axis. Parked deliberately. *Revisit trigger:*
+  parallel-worktree sessions become a routine workflow and the hand-off friction is felt.
+- **8. Skill + researcher-subagent alongside MCP.** *Small; complements the shipped MCP server.*
+  Their Total Recall is a **skill** shelling out to the CLI, *not* MCP — zero always-loaded tool
+  schema, invoked deliberately. Plus a `contextify-researcher` agent that fans out multiple queries
+  and synthesizes. A fan-out researcher over `pensieve search` is a pattern our MCP tools can't
+  express today.
+
+**Deliberately NOT stealing.** Cloud / teams / self-hosted / pricing (not a product). **Codex as a
+source type** — would validate the `SourceKind` abstraction, but only worth it if Codex actually
+enters the workflow. **Per-message live summaries + always-on-top monitor window** — their core
+thesis and the opposite of ours; adopting it would blur the north star (the adjacent piece that *is*
+ours is the long-standing per-project **timeline** loose end). **⌘K "family tabs" project switcher** —
+our typed tree is richer and ⌘K was retired deliberately for ⌘F.
+
+**Where we're ahead** (worth remembering when scoping): loose ends with cited provenance + the trust
+gate; git commits as first-class events; the node/strand tree vs flat directories; Briefing; Focus
+filters, App Intents, Spotlight, deep links; semantic/vector recall (they appear FTS-only); MCP
+`recall` returning the surrounding transcript window rather than a pointer.
+
+---
+
 ## Semantic relevance floor is inert — OPEN DEFECT (found 2026-07-19, needs its own spec)
 
 **The `floor: 0.25` similarity cutoff never rejects anything.** Measured against the live store via
