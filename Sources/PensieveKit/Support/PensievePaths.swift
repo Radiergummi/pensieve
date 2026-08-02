@@ -21,6 +21,13 @@ public enum PensievePaths {
   public static func semanticIndexURL() -> URL {
     supportDirectory().appendingPathComponent("semantic-index.sqlite")
   }
+  /// The disposable, device-local, never-synced keyword (FTS5/BM25) index behind ⌘F "Related" and
+  /// the MCP `search` tool, shared across app / CLI / daemon / MCP. Losing it costs only a rebuild
+  /// on the next sync. Deliberately a separate file from `semanticIndexURL()`: that store fails to
+  /// open at all when sqlite-vec can't register, and keyword search must not inherit that.
+  public static func textIndexURL() -> URL {
+    supportDirectory().appendingPathComponent("text-index.sqlite")
+  }
   /// Working directory pinned onto Pensieve's own `claude -p` subprocesses. Inert and empty by
   /// design: the child would otherwise inherit our cwd (`/` under launchd), producing a captured
   /// session at the filesystem root that Pensieve then re-ingests as work. Created on demand;
