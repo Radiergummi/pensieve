@@ -101,25 +101,23 @@ private struct NamingProvider: LLMProvider {
   #expect(Ingester.nameInferred(inMetadata: node.metadataJSON) == true)
 }
 
-/// Proves the injected `semanticIndexer` runs at the end of `run()` and populates the index
+/// Proves the injected `textIndexStore` is rebuilt at the end of `run()` from the live corpus
 /// (an active node is embeddable content per `EmbeddableCorpus.gather`).
-@Test func syncPopulatesSemanticIndexWhenEnabled() async throws {
+@Test func syncPopulatesTextIndexWhenEnabled() async throws {
   let projects = tmp("projects", ext: "d")
   try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
   let spool = try CaptureSpool(at: tmp("sync-spool", ext: "sqlite"))
   let db = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
 
   try await db.write { db in
-    let n = Node(name: "Indexed project", kind: NodeKind.project)
+    let n = Node(name: "Indexed refunds project", kind: NodeKind.project)
     try Node.insert { n }.execute(db)
   }
 
-  let idxURL = tmp("s", ext: "sqlite")
-  let store = SemanticIndexStore(url: idxURL, dimension: 16, embedderVersion: "stub:16")
+  let store = TextIndexStore(url: tmp("t", ext: "sqlite"))
   let runner = SyncRunner(spool: spool, db: db, provider: NoopProvider(), projectsDir: projects,
-                         now: { Date() },
-                         semanticIndexer: SemanticIndexer(store: store, embedder: StubEmbedder(dimension: 16)))
+                          now: { Date() }, textIndexStore: store)
   _ = try await runner.run()
 
-  #expect(!store.existingItems().isEmpty)
+  #expect(!store.search(query: "refunds", k: 5, includeArchived: false).isEmpty)
 }

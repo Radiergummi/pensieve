@@ -12,13 +12,13 @@ public struct SyncRunner {
   let provider: any LLMProvider
   let projectsDir: URL
   let now: @Sendable () -> Date
-  let semanticIndexer: SemanticIndexer?
+  let textIndexStore: TextIndexStore?
 
   public init(spool: CaptureSpool, db: any DatabaseWriter, provider: any LLMProvider,
               projectsDir: URL, now: @escaping @Sendable () -> Date = Date.init,
-              semanticIndexer: SemanticIndexer? = nil) {
+              textIndexStore: TextIndexStore? = nil) {
     self.spool = spool; self.db = db; self.provider = provider
-    self.projectsDir = projectsDir; self.now = now; self.semanticIndexer = semanticIndexer
+    self.projectsDir = projectsDir; self.now = now; self.textIndexStore = textIndexStore
   }
 
   public struct Summary: Sendable {
@@ -47,15 +47,12 @@ public struct SyncRunner {
     let extracted = results.reduce(0) { $0 + $1.inserted }
     Log.sync.info("Sync complete: ingested=\(ingested, privacy: .public) discovered=\(discovered.count, privacy: .public) extracted=\(extracted, privacy: .public)")
 
-    // Semantic index refresh (best-effort, on-device, toggle-gated). Never blocks the sync summary.
-    if let semanticIndexer {
-      await semanticIndexer.sync(db)
-    } else if PensieveDefaults.semanticSearchEnabled() {
-      let embedder = NLContextualEmbedder()
-      let store = SemanticIndexStore(url: PensievePaths.semanticIndexURL(),
-                                     dimension: embedder.dimension, embedderVersion: embedder.version)
-      if store.isAvailable, embedder.dimension > 0 {
-        await SemanticIndexer(store: store, embedder: embedder).sync(db)
+    // Keyword index refresh (best-effort, toggle-gated). Never blocks the sync summary: a rebuild
+    // is a whole-table rewrite of ~2k short rows and short-circuits on an unchanged fingerprint.
+    if PensieveDefaults.semanticSearchEnabled() {
+      let store = textIndexStore ?? TextIndexStore(url: PensievePaths.textIndexURL())
+      if store.isAvailable, let corpus = try? EmbeddableCorpus.gather(db) {
+        store.rebuild(items: corpus)
       }
     }
 
