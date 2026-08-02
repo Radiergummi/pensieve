@@ -360,3 +360,98 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     #expect(!ids.contains(closed.id.uuidString))
   }
 }
+
+/// One Source per node, so several Events can hang off it without tripping
+/// `idx_sources_key_kind` (UNIQUE(key, kind)). Events keep `fingerprint == nil`,
+/// and SQLite treats NULLs as distinct in a UNIQUE index, so duplicates are insertable.
+private func makeSharedSource(_ db: any DatabaseWriter, node: Node) throws -> Source {
+  let s = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/shared/\(node.id)")
+  try db.write { try Source.insert { s }.execute($0) }
+  return s
+}
+
+private func insertEvent(_ db: any DatabaseWriter, node: Node, source: Source,
+                         kind: String, summary: String) throws -> Event {
+  let e = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                kind: kind, summary: summary, detailJSON: "{}")
+  try db.write { try Event.insert { e }.execute($0) }
+  return e
+}
+
+@Suite struct EmbeddableCorpusHygieneTests {
+  /// `git.checkout` events carry no work content — on the real store 261 of 1,686 events were bare
+  /// `checkout <branch>` strings, and they were the actual source of the "gibberish matches
+  /// everything" symptom (its top hit was `checkout feat/pensieve-app-three-pane`).
+  @Test func gatherDropsGitCheckoutEvents() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("corpus-checkout"))
+    let n = Node(name: "Refunds work", kind: NodeKind.project)
+    try await db.write { try Node.insert { n }.execute($0) }
+    let src = try makeSharedSource(db, node: n)
+    let checkout = try insertEvent(db, node: n, source: src,
+                                   kind: CaptureKind.gitCheckout, summary: "checkout main")
+    let commit = try insertEvent(db, node: n, source: src,
+                                 kind: CaptureKind.gitCommit, summary: "fix the refund rounding")
+
+    let ids = Set(try EmbeddableCorpus.gather(db).map { $0.itemID })
+    #expect(!ids.contains(checkout.id.uuidString))
+    #expect(ids.contains(commit.id.uuidString))
+  }
+
+  /// 400 of 2,630 rows on the real store were exact duplicate texts across 111 groups; one string
+  /// could occupy up to 84 top-k slots. First occurrence wins.
+  @Test func gatherDropsExactDuplicateTextsKeepingTheFirst() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("corpus-dupes"))
+    let n = Node(name: "Billing", kind: NodeKind.project)
+    try await db.write { try Node.insert { n }.execute($0) }
+    let src = try makeSharedSource(db, node: n)
+    let first = try insertEvent(db, node: n, source: src,
+                                kind: CaptureKind.gitCommit, summary: "wip")
+    let dupe = try insertEvent(db, node: n, source: src,
+                               kind: CaptureKind.gitCommit, summary: "wip")
+    let spaced = try insertEvent(db, node: n, source: src,
+                                 kind: CaptureKind.gitCommit, summary: "  wip  ")
+
+    let ids = Set(try EmbeddableCorpus.gather(db).map { $0.itemID })
+    #expect(ids.contains(first.id.uuidString))
+    #expect(!ids.contains(dupe.id.uuidString))
+    #expect(!ids.contains(spaced.id.uuidString))   // compared after trimming
+  }
+
+  /// Dedup runs over the gather order (nodes → loose ends → events), so a node can never be
+  /// dropped in favour of an event that happens to repeat its text — losing a node would make it
+  /// permanently unfindable in "Related".
+  @Test func gatherKeepsTheNodeWhenAnEventRepeatsItsText() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("corpus-node-wins"))
+    let n = Node(name: "Pensieve", kind: NodeKind.project)
+    try await db.write { try Node.insert { n }.execute($0) }
+    let src = try makeSharedSource(db, node: n)
+    let echo = try insertEvent(db, node: n, source: src,
+                               kind: CaptureKind.gitCommit, summary: "Pensieve")
+
+    let ids = Set(try EmbeddableCorpus.gather(db).map { $0.itemID })
+    #expect(ids.contains(n.id.uuidString))
+    #expect(!ids.contains(echo.id.uuidString))
+  }
+
+  /// The de-dup key is the item text, not the item id — identical text under DIFFERENT nodes is
+  /// still one row. Pins that the filter is global (matching the measurement), not per-node.
+  @Test func gatherDedupesAcrossNodes() async throws {
+    let db = try openCanonicalDatabase(at: tempURL("corpus-cross-node"))
+    let a = Node(name: "Alpha", kind: NodeKind.project)
+    let b = Node(name: "Beta", kind: NodeKind.project)
+    try await db.write { db in
+      try Node.insert { a }.execute(db)
+      try Node.insert { b }.execute(db)
+    }
+    let srcA = try makeSharedSource(db, node: a)
+    let srcB = try makeSharedSource(db, node: b)
+    let first = try insertEvent(db, node: a, source: srcA,
+                                kind: CaptureKind.gitCommit, summary: "bump deps")
+    let second = try insertEvent(db, node: b, source: srcB,
+                                 kind: CaptureKind.gitCommit, summary: "bump deps")
+
+    let ids = Set(try EmbeddableCorpus.gather(db).map { $0.itemID })
+    #expect(ids.contains(first.id.uuidString))
+    #expect(!ids.contains(second.id.uuidString))
+  }
+}

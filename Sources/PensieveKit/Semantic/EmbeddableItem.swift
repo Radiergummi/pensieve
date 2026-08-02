@@ -48,6 +48,11 @@ public enum EmbeddableCorpus {
       let events = try Event.all.fetchAll(db)
       for e in events {
         guard let state = stateByNodeID[e.nodeID] else { continue }
+        // `git.checkout` carries no work content: on the real store 261 of 1,686 events were bare
+        // `checkout <branch>` strings (84 literally `checkout HEAD`, 72 `checkout main`). They
+        // occupy top-k slots in every retrieval strategy and were the actual source of the
+        // "gibberish matches everything" symptom the semantic defect report opened on.
+        guard e.kind != CaptureKind.gitCheckout else { continue }
         let text: String?
         switch e.kind {
         // LLM-enriched prose — gate it: degenerate model output ("[]", a bare "/") is not content.
@@ -60,7 +65,20 @@ public enum EmbeddableCorpus {
                            state: state, text: text))
         }
       }
-      return out
+      return dedupedByText(out)
+    }
+  }
+
+  /// Drop any item whose text is identical (after trimming) to one already kept — 400 of 2,630 rows
+  /// on the real store were exact duplicates across 111 groups, and a single string could occupy up
+  /// to 84 top-k slots. First-wins over `gather`'s order (nodes → loose ends → events), so a node is
+  /// never dropped in favour of an event repeating its text; losing a node would make that node
+  /// permanently unfindable. Trimmed but NOT case-folded, matching the measurement
+  /// (`measurements/2026-07-28-retrieval-recall/rprobe4.swift:104-111`).
+  static func dedupedByText(_ items: [EmbeddableItem]) -> [EmbeddableItem] {
+    var seen = Set<String>()
+    return items.filter {
+      seen.insert($0.text.trimmingCharacters(in: .whitespacesAndNewlines)).inserted
     }
   }
 }
