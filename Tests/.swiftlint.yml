@@ -1,0 +1,5 @@
+# Test-only relaxations. A force-try in a test is a deliberate assertion that
+# setup cannot fail: if it does, the test should abort loudly at that line.
+disabled_rules:
+  - force_try
+  - force_cast

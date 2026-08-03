@@ -76,6 +76,8 @@ Layout: `Sources/PensieveKit/{Model,Store,Capture,Transcript,Ingest,Intelligence
 
 ## Conventions & gotchas
 
+- **Name things explicitly — no abbreviations, no single letters.** Write `database`/`node`/`looseEnd`/`event`/`payload`, not `db`/`n`/`le`/`ev`/`p`. The terse names presently scattered through the codebase are **historical Claude output, not the project's style**, and are being renamed; do not treat them as a pattern to match, and do not relax SwiftLint's `identifier_name` rule to accommodate them. Genuine wire-format keys (JSON/MCP `snake_case` such as `node_id`, `max_tokens`) are the one exception and belong behind explicit `CodingKeys` so the Swift property stays camelCase.
+- **SwiftLint is enforced in CI (`swiftlint lint --strict`)** with `.swiftlint.yml` at the repo root. Config encodes real conventions; it is not a place to silence findings that should be fixed in code.
 - **SQLiteData 1.6.6 predicates use `.eq(x)`, NOT `== x`** (e.g. `.where { $0.name.eq(name) }`). `==` is `unavailable` and won't compile.
 - Table/column names must match `@Table` property names exactly; tables are `STRICT`; PKs are `UUID` (keeps CloudKit reachable).
 - Kind strings live in `CaptureKind` / `SourceKind` (`CapturePayloads.swift`) — reuse the constants, don't hardcode.

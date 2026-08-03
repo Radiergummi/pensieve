@@ -7,18 +7,41 @@ on:
 
 # A newer push supersedes an in-flight run for the same ref.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  # Pinned rather than trusting the image default, so the compiler cannot change
+  # under the build without the change being visible here. When GitHub retires
+  # this version the select step fails loudly instead of silently drifting.
+  XCODE_VERSION: "26.6"
+
 jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        run: swiftlint lint --strict --reporter github-actions-logging
+
   test:
     name: PensieveKit tests
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
 
       - name: Toolchain versions
         run: |
@@ -33,13 +56,27 @@ jobs:
       - name: Run test suite
         run: |
           set -o pipefail
-          ./scripts/test.sh 2>&1 | ./scripts/swift-test-annotations.sh
+          ./scripts/test.sh 2>&1 | tee "${RUNNER_TEMP}/test.log" | ./scripts/swift-test-annotations.sh
+
+      # A failure that only reproduces on CI is the expensive kind to diagnose;
+      # keep the full log rather than re-running to find out what happened.
+      - name: Upload test log
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-log
+          path: ${{ runner.temp }}/test.log
+          retention-days: 14
 
   build-app:
     name: App + CLI build
     runs-on: macos-26
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
 
       # xcbeautify renders compiler errors and warnings as annotations. It is not
       # used for the test job: its GitHub Actions renderer does not attach filenames
@@ -47,24 +84,27 @@ jobs:
       - name: Install XcodeGen and xcbeautify
         run: brew install xcodegen xcbeautify
 
-      # Non-interactive equivalent of Xcode's "Trust & Enable" prompt for the
-      # SQLiteData macro plugins; without it the first xcodebuild fails.
-      - name: Trust SwiftPM macro plugins
-        run: |
-          defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidation -bool YES
-          defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
-
       # project.yml is the source of truth; the .xcodeproj is generated and gitignored.
       - name: Generate Xcode project
         run: xcodegen generate
 
-      # Signing is ad-hoc (CODE_SIGN_IDENTITY "-", CODE_SIGNING_REQUIRED NO),
-      # so this needs no keychain or certificate. Also builds and embeds the CLI.
+      # Signing is ad-hoc (CODE_SIGN_IDENTITY "-", CODE_SIGNING_REQUIRED NO), so this
+      # needs no keychain or certificate. Also builds and embeds the CLI.
+      #
+      # The -skip*Validation flags are the scoped form of the "Trust & Enable" prompt
+      # Xcode shows for the SQLiteData macro plugins, preferred over `defaults write`
+      # so the trust decision applies to this invocation instead of the whole machine.
+      # NSUnbufferedIO makes xcodebuild flush per line, which it otherwise won't
+      # through a pipe, so xcbeautify can annotate as the build progresses.
       - name: Build app
         run: |
           set -o pipefail
-          xcodebuild -project Pensieve.xcodeproj -scheme Pensieve \
+          env NSUnbufferedIO=YES xcodebuild \
+            -project Pensieve.xcodeproj -scheme Pensieve \
             -configuration Debug -derivedDataPath ./.build-xcode \
+            -destination "platform=macOS,arch=arm64" \
+            -resultBundlePath "${RUNNER_TEMP}/Pensieve.xcresult" \
+            -skipMacroValidation -skipPackagePluginValidation \
             build \
             | xcbeautify --renderer github-actions
 
@@ -73,3 +113,11 @@ jobs:
       - name: Smoke-test the embedded CLI
         run: |
           ./.build-xcode/Build/Products/Debug/Pensieve.app/Contents/Helpers/pensieve --help
+
+      - name: Upload result bundle
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: xcresult
+          path: ${{ runner.temp }}/Pensieve.xcresult
+          retention-days: 14

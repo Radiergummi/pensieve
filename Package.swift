@@ -22,7 +22,9 @@ let package = Package(
       dependencies: [
         .product(name: "SQLiteData", package: "sqlite-data"),
         "CSQLiteVec",
-      ]
+      ],
+      // Documentation that lives next to the code it describes; not a build input.
+      exclude: ["Eval/README.md"]
     ),
     .testTarget(
       name: "PensieveKitTests",

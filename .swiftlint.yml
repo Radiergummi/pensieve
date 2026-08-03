@@ -1,0 +1,35 @@
+# Lint only first-party Swift. Everything else under the repo root is either
+# checked-out dependency source, generated, or vendored C.
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - .build-xcode
+  - .claude
+  - Sources/CSQLiteVec
+
+# Deliberate project conventions, not findings waived to get to green.
+disabled_rules:
+  # Trailing commas in collection literals are wanted here: adding an element
+  # touches one line, which keeps diffs and blame honest.
+  - trailing_comma
+
+# 120 is tight for this codebase's dense explanatory comments; 140 covers all but
+# a handful of lines, which is a real bound rather than a rubber stamp.
+line_length:
+  warning: 140
+  error: 200
+  ignores_urls: true
+  ignores_comments: false
+
+# Names must be explicit — see CLAUDE.md. This rule is intentionally strict, and
+# the short names still in the tree are being renamed rather than accommodated.
+identifier_name:
+  min_length: 3
+  max_length: 50
+
+type_name:
+  min_length: 3
+  max_length: 50

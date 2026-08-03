@@ -90,19 +90,19 @@ public enum SemanticQueries {
     return try db.read { db in
       switch kind {
       case "node":
-        guard let n = try Node.where { $0.id.eq(itemID) }.fetchOne(db), eligible(n) else { return nil }
+        guard let n = try Node.where({ $0.id.eq(itemID) }).fetchOne(db), eligible(n) else { return nil }
         return SemanticHit(id: n.id, kind: kind, nodeID: n.id, nodeName: n.name, title: n.name,
                            snippet: SnippetMaker.make(from: n.description.isEmpty ? n.name : n.description, matching: query),
                            similarity: similarity, isArchived: n.state == .archived)
       case "loose_end":
-        guard let le = try LooseEnd.where { $0.id.eq(itemID) && LooseEnd.isOpen($0) }.fetchOne(db),
-              let n = try Node.where { $0.id.eq(le.nodeID) }.fetchOne(db), eligible(n) else { return nil }
+        guard let le = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) }).fetchOne(db),
+              let n = try Node.where({ $0.id.eq(le.nodeID) }).fetchOne(db), eligible(n) else { return nil }
         return SemanticHit(id: le.id, kind: kind, nodeID: le.nodeID, nodeName: n.name, title: le.text,
                            snippet: SnippetMaker.make(from: le.text, matching: query),
                            similarity: similarity, isArchived: n.state == .archived)
       case "event":
-        guard let e = try Event.where { $0.id.eq(itemID) }.fetchOne(db),
-              let n = try Node.where { $0.id.eq(e.nodeID) }.fetchOne(db), eligible(n) else { return nil }
+        guard let e = try Event.where({ $0.id.eq(itemID) }).fetchOne(db),
+              let n = try Node.where({ $0.id.eq(e.nodeID) }).fetchOne(db), eligible(n) else { return nil }
         let body = (e.workSummary?.isEmpty == false ? e.workSummary! : e.summary)
         return SemanticHit(id: e.id, kind: kind, nodeID: e.nodeID, nodeName: n.name, title: body,
                            snippet: SnippetMaker.make(from: body, matching: query),
