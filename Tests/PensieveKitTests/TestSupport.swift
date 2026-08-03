@@ -12,7 +12,12 @@ func tempURL(_ prefix: String, ext: String? = "sqlite") -> URL {
 func makeCommittedRepo(message: String = "first commit") throws -> (repo: URL, hash: String) {
   let repo = tempURL("repo", ext: nil)
   try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-  _ = Git.run(["init"], in: repo.path)
+  // Pin the branch on both axes Git.defaultBranch consults, so these tests don't
+  // inherit the machine's git configuration: --initial-branch fixes the branch that
+  // actually gets created, and the repo-local init.defaultBranch overrides any
+  // global setting, which defaultBranch checks first.
+  _ = Git.run(["init", "--initial-branch=main"], in: repo.path)
+  _ = Git.run(["config", "init.defaultBranch", "main"], in: repo.path)
   _ = Git.run(["config", "user.email", "t@t.co"], in: repo.path)
   _ = Git.run(["config", "user.name", "T"], in: repo.path)
   try "hello".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
