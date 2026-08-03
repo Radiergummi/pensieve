@@ -21,6 +21,12 @@ public enum PensievePaths {
   public static func semanticIndexURL() -> URL {
     supportDirectory().appendingPathComponent("semantic-index.sqlite")
   }
+  /// The disposable, device-local, never-synced FTS5 search index (shared across app / CLI /
+  /// daemon / MCP). Separate from the semantic index on purpose: that one drops and rebuilds its
+  /// whole database on an embedder-version change, which has nothing to do with search.
+  public static func searchIndexURL() -> URL {
+    supportDirectory().appendingPathComponent("search-index.sqlite")
+  }
   /// Working directory pinned onto Pensieve's own `claude -p` subprocesses. Inert and empty by
   /// design: the child would otherwise inherit our cwd (`/` under launchd), producing a captured
   /// session at the filesystem root that Pensieve then re-ingests as work. Created on demand;
