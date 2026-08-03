@@ -10,11 +10,11 @@ private struct ThrowingProvider: LLMProvider {
   func complete(prompt: String) async throws -> String { throw LLMError.providerFailed("nope") }
 }
 
-private func sampleEvents(_ n: Int) -> [Event] {
+private func sampleEvents(_ numberOfEvents: Int) -> [Event] {
   let node = UUID(), src = UUID()
-  return (0..<n).map { i in
+  return (0..<numberOfEvents).map { index in
     Event(nodeID: node, sourceID: src, occurredAt: Date(), kind: CaptureKind.gitCommit,
-          summary: "commit \(i)", detailJSON: "{}", fingerprint: "f\(i)")
+          summary: "commit \(index)", detailJSON: "{}", fingerprint: "f\(index)")
   }
 }
 

@@ -43,6 +43,7 @@ Acceptance criteria: all tests pass.
 
 @Test func keepsRealAskWrappedAroundAChecklist() {
   // Checklists are handled at candidate level, NOT here (old M4 bug).
-  let m = msg("Please also do these before merge:\n- [ ] fix the flaky auth test\n- [ ] bump the deploy tag\nand don't forget to update the changelog.")
-  #expect(StructuralNoiseFilter.strip([m]).count == 1)
+  let message = msg("Please also do these before merge:\n- [ ] fix the flaky auth test\n- [ ] bump the deploy tag\n" +
+                    "and don't forget to update the changelog.")
+  #expect(StructuralNoiseFilter.strip([message]).count == 1)
 }

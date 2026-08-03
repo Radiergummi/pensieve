@@ -12,11 +12,11 @@ public enum Fingerprint {
   public static func session(sessionID: String) -> String { "session:\(sessionID)" }
 
   /// Checkouts have no natural immutable id; synthesize one (identical toggles may collapse).
-  public static func checkout(repo: String, from: String, to: String, branch: String) -> String {
-    "checkout:\(sha1("\(repo)|\(from)|\(to)|\(branch)"))"
+  public static func checkout(repo: String, from fromRef: String, to toRef: String, branch: String) -> String {
+    "checkout:\(sha1("\(repo)|\(fromRef)|\(toRef)|\(branch)"))"
   }
 
-  private static func sha1(_ s: String) -> String {
-    Insecure.SHA1.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
+  private static func sha1(_ string: String) -> String {
+    Insecure.SHA1.hash(data: Data(string.utf8)).map { String(format: "%02x", $0) }.joined()
   }
 }

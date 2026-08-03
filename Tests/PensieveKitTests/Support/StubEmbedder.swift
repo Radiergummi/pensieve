@@ -11,12 +11,12 @@ struct StubEmbedder: TextEmbedder {
   func embed(_ texts: [String]) async -> [[Float]?]? {
     texts.map { text -> [Float]? in
       var seed = UInt64(bitPattern: Int64(text.hashValue))
-      var v = [Float](repeating: 0, count: dimension)
-      for i in 0..<dimension {                      // xorshift → deterministic pseudo-random
+      var vector = [Float](repeating: 0, count: dimension)
+      for index in 0..<dimension {                      // xorshift → deterministic pseudo-random
         seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17
-        v[i] = Float(seed % 1000) / 1000.0 - 0.5
+        vector[index] = Float(seed % 1000) / 1000.0 - 0.5
       }
-      return EmbeddingMath.normalize(v)
+      return EmbeddingMath.normalize(vector)
     }
   }
 }

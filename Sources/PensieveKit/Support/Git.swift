@@ -12,7 +12,8 @@ public enum Git {
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     guard process.terminationStatus == 0 else { return nil }
-    return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let output = String(bytes: data, encoding: .utf8) else { return nil }
+    return output.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
 
@@ -42,8 +43,8 @@ public extension Git {
 
   /// Pure decision: the branch key worth tagging on an event, or nil for default/detached/empty.
   static func strandBranchKey(branch: String, defaultBranch: String) -> String? {
-    let b = branch.trimmingCharacters(in: .whitespacesAndNewlines)
-    if b.isEmpty || b == "HEAD" || b == defaultBranch { return nil }
-    return b
+    let trimmedBranch = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmedBranch.isEmpty || trimmedBranch == "HEAD" || trimmedBranch == defaultBranch { return nil }
+    return trimmedBranch
   }
 }

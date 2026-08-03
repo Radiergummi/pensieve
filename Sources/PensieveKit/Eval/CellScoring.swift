@@ -1,6 +1,17 @@
 // Sources/PensieveKit/Eval/CellScoring.swift
 import Foundation
 
+/// The two graders a cell is scored against: the frozen `GoldSet` (extraction) and the rubric
+/// `Judge` (narration/description). Constant across a whole sweep, so they travel as one value.
+public struct ScoringReferences {
+  public var gold: GoldSet
+  public var judge: Judge
+  public init(gold: GoldSet, judge: Judge) {
+    self.gold = gold
+    self.judge = judge
+  }
+}
+
 /// Reduces one model's raw run samples into a `CellScore`. Lives in PensieveKit (not the CLI)
 /// so it's unit-testable.
 public enum CellScoring {
@@ -16,10 +27,12 @@ public enum CellScoring {
   /// (it's scored via `GoldSet`, not the rubric judge).
   public static func sourceContext(for item: CorpusItem) -> String {
     switch item {
-    case .narration(let n):
-      return n.events.map { "\($0.kind): \($0.summary)" }.joined(separator: "\n")
-    case .description(let d):
-      return [d.context.dirName, d.context.gitRemote, d.context.manifest, d.context.readmeHead, d.context.claudeMdHead]
+    case .narration(let narrationItem):
+      return narrationItem.events.map { "\($0.kind): \($0.summary)" }.joined(separator: "\n")
+    case .description(let descriptionItem):
+      let context = descriptionItem.context
+      return [context.dirName, context.gitRemote, context.manifest,
+              context.readmeHead, context.claudeMdHead]
         .compactMap { $0 }.joined(separator: "\n")
     case .extraction:
       return ""
@@ -32,7 +45,9 @@ public enum CellScoring {
   /// conflate infra noise with real model failure). If NO sample succeeded, quality/precision/
   /// recall are `nil` (unknown), not 0, so `DecisionEngine` treats the cell as not-clearing.
   public static func score(task: any EvalTask, items: [CorpusItem], samples: [CellSample],
-                           spec: ModelSpec, gold: GoldSet, judge: Judge) async -> CellScore {
+                           spec: ModelSpec, references: ScoringReferences) async -> CellScore {
+    let gold = references.gold
+    let judge = references.judge
     let successfulSamples = samples.filter { $0.outcome == "success" }
     guard !successfulSamples.isEmpty else {
       return CellScore(modelLabel: spec.label, isOnDevice: spec.isOnDevice, quality: nil,
@@ -51,7 +66,7 @@ public enum CellScoring {
       var fabFlags: [Bool] = []
       for sample in successfulSamples {
         let surfaced = sample.looseEndQuotes ?? []
-        if let r = gold.recallScore(itemID: sample.itemID, surfaced: surfaced) { recalls.append(r) }
+        if let recallScore = gold.recallScore(itemID: sample.itemID, surfaced: surfaced) { recalls.append(recallScore) }
         if let labels = gold.grounding[sample.itemID], !labels.isEmpty {
           let groundedSet = Set(labels.filter { $0.grounded }.map { $0.quote })
           let fabricatedSet = Set(labels.filter { !$0.grounded }.map { $0.quote })
@@ -73,7 +88,7 @@ public enum CellScoring {
         guard let item = itemsByID[sample.itemID] else { continue }
         let verdict = await judge.scoreRubric(output: sample.outputText, dimensions: dims,
                                               sourceContext: sourceContext(for: item))
-        if let q = verdict?.quality { qualities.append(q) }
+        if let qualityScore = verdict?.quality { qualities.append(qualityScore) }
       }
       return CellScore(modelLabel: spec.label, isOnDevice: spec.isOnDevice, quality: Aggregate.median(qualities),
                        precision: nil, recall: nil, costUSD: costUSD, latencyP50: latencyP50,

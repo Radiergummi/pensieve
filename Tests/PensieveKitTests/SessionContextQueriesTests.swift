@@ -54,7 +54,7 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   let (node, _) = try seedOneNode(database)
   let bundle = try #require(try await SessionContextQueries.bundle(
     forPath: "/p/one", nodeID: nil, database, now: Date(),
-    summaryBuilder: nil, providerKind: "fm", cache: nil))
+    narration: NarrationOptions(summaryBuilder: nil, providerKind: "fm", cache: nil)))
   #expect(bundle.nodeID == node.id)
   #expect(bundle.openLooseEndCount == 1)
   #expect(bundle.looseEnds.first?.quote == "we must finish the auth flow")
@@ -66,7 +66,7 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   let database = try openCanonicalDatabase(at: tempURL("sc"))
   let bundle = try await SessionContextQueries.bundle(
     forPath: "/nope", nodeID: nil, database, now: Date(),
-    summaryBuilder: nil, providerKind: "fm", cache: nil)
+    narration: NarrationOptions(summaryBuilder: nil, providerKind: "fm", cache: nil))
   #expect(bundle == nil)
 }
 
@@ -79,7 +79,7 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   cache.put(NarrationCacheKey.make(events: events, provider: "fm"), prose: "cached recap")
   let bundle = try #require(try await SessionContextQueries.bundle(
     forPath: "/p/one", nodeID: nil, database, now: Date(),
-    summaryBuilder: nil, providerKind: "fm", cache: cache))
+    narration: NarrationOptions(summaryBuilder: nil, providerKind: "fm", cache: cache)))
   #expect(bundle.prose == "cached recap")
 }
 
@@ -90,7 +90,7 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   let builder = SummaryBuilder(provider: StubProvider(reply: "fresh recap"))
   let bundle = try #require(try await SessionContextQueries.bundle(
     forPath: "/p/one", nodeID: nil, database, now: Date(),
-    summaryBuilder: builder, providerKind: "fm", cache: cache))
+    narration: NarrationOptions(summaryBuilder: builder, providerKind: "fm", cache: cache)))
   #expect(bundle.prose == "fresh recap")
   // Write-through: the key is now populated.
   let events = try ProjectQueries.status(database, node: node, limit: 8).recentEvents
@@ -107,36 +107,36 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   _ = event
   let bundle = try #require(try await SessionContextQueries.bundle(
     forPath: "/p/one", nodeID: nil, database, now: Date(),
-    summaryBuilder: nil, providerKind: "fm", cache: nil))
+    narration: NarrationOptions(summaryBuilder: nil, providerKind: "fm", cache: nil)))
   #expect(bundle.looseEnds.first?.id == seededID)
 }
 
 @Test func rankedContextFiltersSlicesAndCites() throws {
   let database = try openCanonicalDatabase(at: tempURL("sc"))
   let resolver = ProjectResolver(database: database)
-  let (work, ws) = try resolver.resolve(path: "/p/work", kind: SourceKind.claudeCode)
-  let (personal, ps) = try resolver.resolve(path: "/p/personal", kind: SourceKind.claudeCode)
+  let (work, workSource) = try resolver.resolve(path: "/p/work", kind: SourceKind.claudeCode)
+  let (personal, personalSource) = try resolver.resolve(path: "/p/personal", kind: SourceKind.claudeCode)
   let old = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
   try database.write { database in
     try Node.where { $0.id.eq(work.id) }.update { $0.context = #bind(NodeContext.work) }.execute(database)
     try Node.where { $0.id.eq(personal.id) }.update { $0.context = #bind(NodeContext.personal) }.execute(database)
-    let ew = Event(nodeID: work.id, sourceID: ws.id, occurredAt: old, kind: CaptureKind.ccSession,
+    let eventWork = Event(nodeID: work.id, sourceID: workSource.id, occurredAt: old, kind: CaptureKind.ccSession,
                    summary: "s", detailJSON: "{}", fingerprint: "w1")
-    let ep = Event(nodeID: personal.id, sourceID: ps.id, occurredAt: old, kind: CaptureKind.ccSession,
+    let eventPersonal = Event(nodeID: personal.id, sourceID: personalSource.id, occurredAt: old, kind: CaptureKind.ccSession,
                    summary: "s", detailJSON: "{}", fingerprint: "p1")
-    try Event.insert { ew }.execute(database); try Event.insert { ep }.execute(database)
+    try Event.insert { eventWork }.execute(database); try Event.insert { eventPersonal }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: work.id, sourceEventID: ew.id, text: "t",
+      LooseEnd(nodeID: work.id, sourceEventID: eventWork.id, text: "t",
                quote: "ship the work thing", role: "user", sourceMessageIndex: 0)
     }.execute(database)
   }
   // Unfiltered: both nodes present.
   #expect(try SessionContextQueries.rankedContext(limit: 5, context: nil, database, now: Date()).count == 2)
   // Work focus: personal is muted; the work node's top loose end is cited.
-  let work_only = try SessionContextQueries.rankedContext(limit: 5, context: NodeContext.work, database, now: Date())
-  #expect(work_only.count == 1)
-  #expect(work_only.first?.nodeID == work.id)
-  #expect(work_only.first?.topLooseEnd == "ship the work thing")
+  let workOnly = try SessionContextQueries.rankedContext(limit: 5, context: NodeContext.work, database, now: Date())
+  #expect(workOnly.count == 1)
+  #expect(workOnly.first?.nodeID == work.id)
+  #expect(workOnly.first?.topLooseEnd == "ship the work thing")
   // Limit is honored.
   #expect(try SessionContextQueries.rankedContext(limit: 1, context: nil, database, now: Date()).count == 1)
 }
@@ -148,7 +148,8 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
 private func writeRecallTranscript(_ prefix: String, _ lines: [(type: String, text: String)]) throws -> URL {
   let url = tempURL(prefix, ext: "jsonl")
   let jsonl = lines.map { line in
-    #"{"type":"\#(line.type)","cwd":"/p/app","timestamp":"2026-06-29T13:03:43.382Z","message":{"role":"\#(line.type)","content":"\#(line.text)"}}"#
+    #"{"type":"\#(line.type)","cwd":"/p/app","timestamp":"2026-06-29T13:03:43.382Z","# +
+      #""message":{"role":"\#(line.type)","content":"\#(line.text)"}}"#
   }.joined(separator: "\n")
   try jsonl.write(to: url, atomically: true, encoding: .utf8)
   return url

@@ -4,9 +4,9 @@ import Foundation
 @testable import PensieveKit
 
 @Test func goldSetRoundTripsAndScoresRecall() throws {
-  var g = GoldSet(recall: ["x1": ["revisit retries", "call Bob"]], grounding: [:])
+  var goldSet = GoldSet(recall: ["x1": ["revisit retries", "call Bob"]], grounding: [:])
   let url = tempURL("gold", ext: "json")
-  try g.save(to: url)
+  try goldSet.save(to: url)
   let loaded = GoldSet.load(from: url)
   // surfaced hits one of two known → recall 0.5
   #expect(loaded.recallScore(itemID: "x1", surfaced: ["revisit retries"]) == 0.5)
@@ -14,6 +14,6 @@ import Foundation
 }
 
 @Test func goldSetLoadMissingIsEmpty() {
-  let g = GoldSet.load(from: tempURL("nope", ext: "json"))
-  #expect(g.recall.isEmpty && g.grounding.isEmpty)
+  let goldSet = GoldSet.load(from: tempURL("nope", ext: "json"))
+  #expect(goldSet.recall.isEmpty && goldSet.grounding.isEmpty)
 }

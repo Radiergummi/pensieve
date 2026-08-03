@@ -81,8 +81,8 @@ public struct LooseEndExtractor {
     guard let only = fragments.first, only.text.count > 1 else { return [fragments] }
     var mid = only.text.index(only.text.startIndex, offsetBy: only.text.count / 2)
     // Back up to whitespace so the split point isn't mid-word.
-    if let ws = only.text[..<mid].lastIndex(where: { $0.isWhitespace }) {
-      mid = only.text.index(after: ws)
+    if let whitespaceIndex = only.text[..<mid].lastIndex(where: { $0.isWhitespace }) {
+      mid = only.text.index(after: whitespaceIndex)
     }
     return [[PromptFragment(index: only.index, text: String(only.text[..<mid]))],
             [PromptFragment(index: only.index, text: String(only.text[mid...]))]]
@@ -93,8 +93,8 @@ public struct LooseEndExtractor {
   /// `text.count <= budget`, and every chunk's total `text.count <= budget`.
   static func chunkFragments(_ prompts: [TranscriptMessage], budget: Int) -> [[PromptFragment]] {
     var chunks: [[PromptFragment]] = [], current: [PromptFragment] = [], size = 0
-    for p in prompts {
-      for fragment in splitIntoFragments(index: p.index, text: p.text, budget: budget) {
+    for prompt in prompts {
+      for fragment in splitIntoFragments(index: prompt.index, text: prompt.text, budget: budget) {
         if size + fragment.text.count > budget, !current.isEmpty {
           chunks.append(current); current = []; size = 0
         }
@@ -116,8 +116,8 @@ public struct LooseEndExtractor {
       // Back up to the last whitespace in the window so we never cut mid-word (which
       // yields verbatim-but-truncated quotes). If the window is one giant token with no
       // whitespace, keep the hard cut — it can't be avoided.
-      if end < text.endIndex, let ws = text[start..<end].lastIndex(where: { $0.isWhitespace }) {
-        end = text.index(after: ws)
+      if end < text.endIndex, let whitespaceIndex = text[start..<end].lastIndex(where: { $0.isWhitespace }) {
+        end = text.index(after: whitespaceIndex)
       }
       fragments.append(PromptFragment(index: index, text: String(text[start..<end])))
       start = end

@@ -61,6 +61,21 @@ public struct WhatsNextItem: Codable, Sendable {
   public let topLooseEnd: String?
 }
 
+/// How (and whether) a context bundle may produce prose. A nil `summaryBuilder` means
+/// cache-read-only — the `prime` hook never narrates.
+public struct NarrationOptions: Sendable {
+  public var summaryBuilder: SummaryBuilder?
+  public var providerKind: String
+  public var cache: NarrationCache?
+  public var timeout: Double
+  public init(summaryBuilder: SummaryBuilder?, providerKind: String, cache: NarrationCache?, timeout: Double = 3.0) {
+    self.summaryBuilder = summaryBuilder
+    self.providerKind = providerKind
+    self.cache = cache
+    self.timeout = timeout
+  }
+}
+
 public enum SessionContextQueries {
   /// Canonical path → source → node, read-only. Tries the git common-dir first (sources are keyed
   /// on `…/.git`, not the working dir), then the plain canonical path (non-git / claudeCode sources).
@@ -88,12 +103,17 @@ public enum SessionContextQueries {
     forPath path: String?, nodeID explicitID: UUID?,
     _ database: any DatabaseReader, now: Date,
     recentLimit: Int = 8,
-    summaryBuilder: SummaryBuilder?, providerKind: String,
-    cache: NarrationCache?, narrateTimeout: Double = 3.0
+    narration: NarrationOptions
   ) async throws -> ProjectContextBundle? {
     // 1. Resolve the node.
     let resolvedID: UUID?
-    if let explicitID { resolvedID = explicitID } else if let path { resolvedID = try nodeID(forPath: path, database) } else { resolvedID = nil }
+    if let explicitID {
+      resolvedID = explicitID
+    } else if let path {
+      resolvedID = try nodeID(forPath: path, database)
+    } else {
+      resolvedID = nil
+    }
     guard let id = resolvedID else { return nil }
     guard let facts = try NodeFactsQueries.facts(for: [id], database, now: now).first else { return nil }
     let node = facts.node
@@ -104,11 +124,11 @@ public enum SessionContextQueries {
     let score = groundedScore(openLooseEnds: facts.openLooseEnds, daysDormant: facts.daysDormant)
 
     // 3. Prose: cache-first → bounded narrate → nil.
-    let key = NarrationCacheKey.make(events: status.recentEvents, provider: providerKind)
-    var prose = cache?.get(key)
-    if prose == nil, let builder = summaryBuilder {
-      prose = await narrateWithin(narrateTimeout, builder: builder, project: node, events: status.recentEvents)
-      if let prose { cache?.put(key, prose: prose) }
+    let key = NarrationCacheKey.make(events: status.recentEvents, provider: narration.providerKind)
+    var prose = narration.cache?.get(key)
+    if prose == nil, let builder = narration.summaryBuilder {
+      prose = await narrateWithin(narration.timeout, builder: builder, project: node, events: status.recentEvents)
+      if let prose { narration.cache?.put(key, prose: prose) }
     }
 
     return ProjectContextBundle(

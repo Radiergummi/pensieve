@@ -21,7 +21,7 @@ struct Prime: AsyncParsableCommand {
     // both a thrown error and an unbound cwd (nil bundle) emit nothing.
     let result = try? await SessionContextQueries.bundle(
       forPath: cwd, nodeID: nil, database, now: Date(),
-      summaryBuilder: nil, providerKind: providerKind, cache: cache)
+      narration: NarrationOptions(summaryBuilder: nil, providerKind: providerKind, cache: cache))
     guard let bundle = result ?? nil else { return }
     print(SessionContextRender.compact(bundle))
   }

@@ -60,9 +60,9 @@ public struct SalienceSuggester {
         continue
       }
       let dropSet = Set(dropIdx)
-      for (n, it) in batch.enumerated() {
-        let label = dropSet.contains(n) ? LooseEndLabel.noise : LooseEndLabel.salient
-        _ = try? LooseEndCommands.suggest(database, id: it.id, label: label)
+      for (index, item) in batch.enumerated() {
+        let label = dropSet.contains(index) ? LooseEndLabel.noise : LooseEndLabel.salient
+        _ = try? LooseEndCommands.suggest(database, id: item.id, label: label)
         suggested += 1
         if label == LooseEndLabel.salient { salient += 1 } else { noise += 1 }
       }
@@ -83,10 +83,10 @@ public struct SalienceSuggester {
   /// but over pre-rendered items rather than (ends, shared messages).
   private static func batches(_ items: [Item], budget: Int) -> [[Item]] {
     var out: [[Item]] = [], current: [Item] = [], size = 0
-    for it in items {
-      let cost = it.quote.count + it.context.count + 16
+    for item in items {
+      let cost = item.quote.count + item.context.count + 16
       if size + cost > budget, !current.isEmpty { out.append(current); current = []; size = 0 }
-      current.append(it); size += cost
+      current.append(item); size += cost
     }
     if !current.isEmpty { out.append(current) }
     return out

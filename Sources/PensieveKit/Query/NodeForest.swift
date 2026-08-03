@@ -16,21 +16,21 @@ public enum NodeForest {
     let ids = Set(nodes.map(\.id))
     var childrenByParent: [UUID: [Node]] = [:]
     var roots: [Node] = []
-    for n in nodes {
-      if let pid = n.parentID, ids.contains(pid) {
-        childrenByParent[pid, default: []].append(n)
+    for node in nodes {
+      if let pid = node.parentID, ids.contains(pid) {
+        childrenByParent[pid, default: []].append(node)
       } else {
-        roots.append(n)   // nil parent, or parent absent from the set → promote to root
+        roots.append(node)   // nil parent, or parent absent from the set → promote to root
       }
     }
-    func make(_ n: Node, _ visited: Set<UUID>) -> NodeForestNode {
+    func make(_ node: Node, _ visited: Set<UUID>) -> NodeForestNode {
       var visited = visited
-      visited.insert(n.id)
-      let kids = (childrenByParent[n.id] ?? [])
+      visited.insert(node.id)
+      let kids = (childrenByParent[node.id] ?? [])
         .filter { !visited.contains($0.id) }        // cycle guard: can never recurse forever
         .sorted { $0.name < $1.name }
         .map { make($0, visited) }
-      return NodeForestNode(node: n, children: kids)
+      return NodeForestNode(node: node, children: kids)
     }
     return roots.sorted { $0.name < $1.name }.map { make($0, []) }
   }
@@ -39,7 +39,7 @@ public enum NodeForest {
   /// deterministic, and cycle-safe (a visited set guards against any pre-existing bad edge).
   public static func descendantIDs(of id: UUID, in nodes: [Node]) -> Set<UUID> {
     var childrenByParent: [UUID: [UUID]] = [:]
-    for n in nodes { if let p = n.parentID { childrenByParent[p, default: []].append(n.id) } }
+    for node in nodes { if let parentID = node.parentID { childrenByParent[parentID, default: []].append(node.id) } }
     var result: Set<UUID> = []
     var stack = childrenByParent[id] ?? []
     while let next = stack.popLast() {

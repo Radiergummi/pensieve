@@ -8,7 +8,8 @@ import SQLiteData
 private func writeTranscript(_ prefix: String, _ lines: [(type: String, text: String)]) throws -> URL {
   let url = tempURL(prefix, ext: "jsonl")
   let jsonl = lines.map { line in
-    #"{"type":"\#(line.type)","cwd":"/p/app","timestamp":"2026-06-29T13:03:43.382Z","message":{"role":"\#(line.type)","content":"\#(line.text)"}}"#
+    #"{"type":"\#(line.type)","cwd":"/p/app","timestamp":"2026-06-29T13:03:43.382Z","# +
+      #""message":{"role":"\#(line.type)","content":"\#(line.text)"}}"#
   }.joined(separator: "\n")
   try jsonl.write(to: url, atomically: true, encoding: .utf8)
   return url

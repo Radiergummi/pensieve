@@ -10,14 +10,15 @@ private func throwawayDefaults() -> (UserDefaults, String) {
 }
 
 @Test func gatherReportsDisabledSyncAndEmptyStore() throws {
-  let (d, suite) = throwawayDefaults()
-  defer { d.removePersistentDomain(forName: suite) }
+  let (userDefaults, suite) = throwawayDefaults()
+  defer { userDefaults.removePersistentDomain(forName: suite) }
   let database = try openCanonicalDatabase(at: tempURL("status-empty"))
 
-  let status = SystemStatusGatherer.gather(database: database, defaults: d,
-                                           cloudConfig: nil, apiKey: nil,
-                                           backgroundSyncEnabled: false,
-                                           syncLogURL: tempURL("absent", ext: "log"))
+  let status = SystemStatusGatherer.gather(
+    database: database,
+    provider: ProviderInputs(defaults: userDefaults, cloudConfig: nil, apiKey: nil),
+    backgroundSyncEnabled: false,
+    syncLogURL: tempURL("absent", ext: "log"))
 
   #expect(status.backgroundSyncEnabled == false)
   #expect(status.lastSyncAt == nil)
@@ -27,15 +28,16 @@ private func throwawayDefaults() -> (UserDefaults, String) {
 }
 
 @Test func gatherReportsEnabledSyncAndSyncLogMtime() throws {
-  let (d, suite) = throwawayDefaults()
-  defer { d.removePersistentDomain(forName: suite) }
+  let (userDefaults, suite) = throwawayDefaults()
+  defer { userDefaults.removePersistentDomain(forName: suite) }
 
   let log = tempURL("sync", ext: "log")
   try "ran".write(to: log, atomically: true, encoding: .utf8)
 
-  let status = SystemStatusGatherer.gather(database: nil, defaults: d,
-                                           cloudConfig: nil, apiKey: nil,
-                                           backgroundSyncEnabled: true, syncLogURL: log)
+  let status = SystemStatusGatherer.gather(
+    database: nil,
+    provider: ProviderInputs(defaults: userDefaults, cloudConfig: nil, apiKey: nil),
+    backgroundSyncEnabled: true, syncLogURL: log)
 
   #expect(status.backgroundSyncEnabled == true)
   let mtime = try #require(status.lastSyncAt)
@@ -44,8 +46,8 @@ private func throwawayDefaults() -> (UserDefaults, String) {
 }
 
 @Test func gatherReportsMostRecentEventTime() throws {
-  let (d, suite) = throwawayDefaults()
-  defer { d.removePersistentDomain(forName: suite) }
+  let (userDefaults, suite) = throwawayDefaults()
+  defer { userDefaults.removePersistentDomain(forName: suite) }
   let database = try openCanonicalDatabase(at: tempURL("status-events"))
   let resolver = ProjectResolver(database: database)
   let (node, source) = try resolver.resolve(path: "/p/one", kind: SourceKind.claudeCode)
@@ -63,33 +65,36 @@ private func throwawayDefaults() -> (UserDefaults, String) {
     }.execute(database)
   }
 
-  let status = SystemStatusGatherer.gather(database: database, defaults: d,
-                                           cloudConfig: nil, apiKey: nil,
-                                           backgroundSyncEnabled: false,
-                                           syncLogURL: tempURL("absent", ext: "log"))
+  let status = SystemStatusGatherer.gather(
+    database: database,
+    provider: ProviderInputs(defaults: userDefaults, cloudConfig: nil, apiKey: nil),
+    backgroundSyncEnabled: false,
+    syncLogURL: tempURL("absent", ext: "log"))
 
   let last = try #require(status.lastEventAt)
   #expect(abs(last.timeIntervalSince(newest)) < 1)    // the MAX, not the first row
 }
 
 @Test func gatherResolvesCloudKindWhenSelectedAndConfigured() throws {
-  let (d, suite) = throwawayDefaults()
-  defer { d.removePersistentDomain(forName: suite) }
-  d.set(ProviderPreference.cloud.rawValue, forKey: PensieveDefaults.llmProviderKey)
+  let (userDefaults, suite) = throwawayDefaults()
+  defer { userDefaults.removePersistentDomain(forName: suite) }
+  userDefaults.set(ProviderPreference.cloud.rawValue, forKey: PensieveDefaults.llmProviderKey)
   let config = CloudConfig(flavor: .anthropic,
                            baseURL: CloudFlavor.anthropic.defaultBaseURL,
                            model: "claude-sonnet-5")
 
-  let configured = SystemStatusGatherer.gather(database: nil, defaults: d,
-                                               cloudConfig: config, apiKey: "sk-test",
-                                               backgroundSyncEnabled: false,
-                                               syncLogURL: tempURL("absent", ext: "log"))
+  let configured = SystemStatusGatherer.gather(
+    database: nil,
+    provider: ProviderInputs(defaults: userDefaults, cloudConfig: config, apiKey: "sk-test"),
+    backgroundSyncEnabled: false,
+    syncLogURL: tempURL("absent", ext: "log"))
   #expect(configured.providerKind == "cloud")
 
   // Selected but keyless ⇒ falls back to a local kind (never "cloud"), same as the factory.
-  let keyless = SystemStatusGatherer.gather(database: nil, defaults: d,
-                                            cloudConfig: config, apiKey: nil,
-                                            backgroundSyncEnabled: false,
-                                            syncLogURL: tempURL("absent", ext: "log"))
+  let keyless = SystemStatusGatherer.gather(
+    database: nil,
+    provider: ProviderInputs(defaults: userDefaults, cloudConfig: config, apiKey: nil),
+    backgroundSyncEnabled: false,
+    syncLogURL: tempURL("absent", ext: "log"))
   #expect(keyless.providerKind != "cloud")
 }

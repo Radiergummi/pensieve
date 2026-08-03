@@ -85,18 +85,18 @@ struct MenuBarView: View {
   }
 
   private var statusLine: String {
-    var s = model.snapshot.status.label
+    var statusLabel = model.snapshot.status.label
     if let last = model.snapshot.lastCaptureAt {
-      s += String(localized: " · captured \(Self.relativeAge(last))")
+      statusLabel += String(localized: " · captured \(Self.relativeAge(last))")
     }
-    return s
+    return statusLabel
   }
 
   /// Local formatter instance (no shared mutable static — Swift 6 concurrency rule).
   private static func relativeAge(_ date: Date) -> String {
-    let f = RelativeDateTimeFormatter()
-    f.unitsStyle = .abbreviated
-    return f.localizedString(for: date, relativeTo: Date())
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    return formatter.localizedString(for: date, relativeTo: Date())
   }
 }
 

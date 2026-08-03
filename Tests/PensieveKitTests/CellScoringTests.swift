@@ -23,9 +23,9 @@ private func makeSpec(label: String = "m") -> ModelSpec {
                                 estOutputTokens: 0, outcome: "providerError")
 
   let scoreA = await CellScoring.score(task: ExtractionTask(), items: [], samples: [goodSample],
-                                       spec: spec, gold: gold, judge: judge)
+                                       spec: spec, references: ScoringReferences(gold: gold, judge: judge))
   let scoreB = await CellScoring.score(task: ExtractionTask(), items: [], samples: [goodSample, failedSample],
-                                       spec: spec, gold: gold, judge: judge)
+                                       spec: spec, references: ScoringReferences(gold: gold, judge: judge))
 
   #expect(scoreA.recall == 1.0)
   #expect(scoreB.recall == 1.0)
@@ -42,7 +42,7 @@ private func makeSpec(label: String = "m") -> ModelSpec {
                                 estOutputTokens: 0, outcome: "providerError")
 
   let score = await CellScoring.score(task: ExtractionTask(), items: [], samples: [failedSample],
-                                      spec: spec, gold: gold, judge: judge)
+                                      spec: spec, references: ScoringReferences(gold: gold, judge: judge))
 
   #expect(score.precision == nil)
   #expect(score.recall == nil)
@@ -61,7 +61,7 @@ private func makeSpec(label: String = "m") -> ModelSpec {
                                 estOutputTokens: 0, outcome: "providerError")
 
   let score = await CellScoring.score(task: NarrationTask(), items: [], samples: [failedSample],
-                                      spec: spec, gold: gold, judge: judge)
+                                      spec: spec, references: ScoringReferences(gold: gold, judge: judge))
 
   #expect(score.quality == nil)
 }

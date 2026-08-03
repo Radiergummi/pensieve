@@ -25,9 +25,9 @@ public struct SourceScanner {
     let unique = found.filter { seen.insert("\($0.kind)\u{0}\($0.identityKey)").inserted }
 
     return try database.read { database in
-      try unique.map { s in
-        let exists = try Source.where { $0.kind.eq(s.kind) && $0.key.eq(s.identityKey) }.fetchOne(database) != nil
-        return DiscoveryCandidate(source: s, alreadyRegistered: exists)
+      try unique.map { source in
+        let exists = try Source.where { $0.kind.eq(source.kind) && $0.key.eq(source.identityKey) }.fetchOne(database) != nil
+        return DiscoveryCandidate(source: source, alreadyRegistered: exists)
       }
     }
   }
@@ -38,14 +38,14 @@ public struct SourceScanner {
   public func accept(_ candidates: [DiscoveredSource], database: any DatabaseWriter) throws -> AcceptResult {
     var result = AcceptResult()
     let resolver = ProjectResolver(database: database)
-    for c in candidates {
+    for candidate in candidates {
       let existedBefore = try database.read { database in
-        try Source.where { $0.kind.eq(c.kind) && $0.key.eq(c.identityKey) }.fetchOne(database) != nil
+        try Source.where { $0.kind.eq(candidate.kind) && $0.key.eq(candidate.identityKey) }.fetchOne(database) != nil
       }
-      _ = try resolver.resolve(path: c.identityKey, kind: c.kind)   // find-or-create (own write tx)
-      if existedBefore { result.alreadyRegistered.append(c) } else { result.registered.append(c) }
-      if let type = types.first(where: { $0.kind == c.kind }) {
-        do { try type.onRegister(c) } catch { result.setupFailed.append((c, String(describing: error))) }
+      _ = try resolver.resolve(path: candidate.identityKey, kind: candidate.kind)   // find-or-create (own write tx)
+      if existedBefore { result.alreadyRegistered.append(candidate) } else { result.registered.append(candidate) }
+      if let type = types.first(where: { $0.kind == candidate.kind }) {
+        do { try type.onRegister(candidate) } catch { result.setupFailed.append((candidate, String(describing: error))) }
       }
     }
     return result
@@ -54,10 +54,10 @@ public struct SourceScanner {
   private func walk(_ dir: URL, depth: Int, recursive: Bool, into found: inout [DiscoveredSource]) {
     var pruned = false
     for type in types {
-      if let d = type.detect(directory: dir) {
+      if let detection = type.detect(directory: dir) {
         let normalized = DiscoveredSource(
-          kind: d.kind, directory: Self.normalizedDirectory(d.directory),
-          identityKey: d.identityKey, displayName: d.displayName)
+          kind: detection.kind, directory: Self.normalizedDirectory(detection.directory),
+          identityKey: detection.identityKey, displayName: detection.displayName)
         found.append(normalized)
         if type.prunesChildrenWhenDetected { pruned = true }
       }

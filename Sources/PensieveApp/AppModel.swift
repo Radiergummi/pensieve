@@ -7,113 +7,6 @@ import GRDB
 import os
 import PensieveKit
 
-enum SmartListKind: String, CaseIterable, Hashable {
-  case whatsNext, dormant, recentlyActive
-  var title: String {
-    switch self {
-    case .whatsNext: return String(localized: "What's Next")
-    case .dormant: return String(localized: "Dormant")
-    case .recentlyActive: return String(localized: "Recently Active")
-    }
-  }
-  var symbol: String {
-    switch self {
-    case .whatsNext: return "star"
-    case .dormant: return "pause.circle"
-    case .recentlyActive: return "dot.radiowaves.left.and.right"
-    }
-  }
-  var color: Color {
-    switch self {
-    case .whatsNext: return .accentColor
-    case .dormant: return .secondary
-    case .recentlyActive: return .green
-    }
-  }
-  /// Which bucket of `SmartLists` this kind selects.
-  var itemsKeyPath: KeyPath<SmartLists, [NextItem]> {
-    switch self {
-    case .whatsNext: return \.whatsNext
-    case .dormant: return \.dormant
-    case .recentlyActive: return \.recentlyActive
-    }
-  }
-}
-
-enum SidebarSelection: Hashable {
-  case briefing
-  case reviewSuggestions
-  case smartList(SmartListKind)
-  case node(UUID)
-}
-
-/// What the middle column shows for the current sidebar selection. `.looseEndsOf` carries the node id
-/// so the view loads its loose ends off-`body` (via `.task`), never in a `body` DB query.
-enum MiddleKind: Equatable {
-  case nodes([Node])
-  case looseEndsOf(UUID)
-  case reviewSuggestions
-}
-
-/// A New/Edit modal request. Identifiable so it drives `.sheet(item:)`.
-struct NodeEditRequest: Identifiable {
-  enum Mode { case new(parent: UUID?); case edit(Node) }
-  let mode: Mode
-  var id: String {
-    switch mode {
-    case .new(let p): return "new-\(p?.uuidString ?? "root")"
-    case .edit(let n): return "edit-\(n.id.uuidString)"
-    }
-  }
-}
-
-/// A ⌘K jump target. Navigation only — sets the same selection state the sidebar does.
-enum PaletteDestination: Hashable {
-  case node(UUID)
-  case smartList(SmartListKind)
-  case briefing
-
-  @MainActor func apply(to model: AppModel) {
-    switch self {
-    case .node(let id):
-      model.sidebarSelection = .node(id); model.selectedNodeID = id
-    case .smartList(let kind):
-      model.sidebarSelection = .smartList(kind); model.selectedNodeID = nil
-    case .briefing:
-      model.sidebarSelection = .briefing; model.selectedNodeID = nil
-    }
-  }
-}
-
-/// A user-facing failure from an organizing write. Two flavors, both surfaced the same way:
-/// a REFUSAL (the command returned a non-success value — stale/guarded state) and a THROW (a real
-/// DB error). Refusals get honest, non-alarming copy; throws append the underlying description.
-struct AppError: Identifiable {
-  let id = UUID()
-  let title: String
-  let message: String
-
-  /// The node changed under the menu (deleted or re-parented between open and click).
-  static func refusal(_ verb: String, _ name: String) -> AppError {
-    AppError(title: String(localized: "Couldn’t \(verb) “\(name)”"),
-             message: String(localized: "It may have changed since this menu opened. The view has been refreshed — try again."))
-  }
-
-  static func failure(_ verb: String, _ name: String, _ error: Error) -> AppError {
-    AppError(title: String(localized: "Couldn’t \(verb) “\(name)”"),
-             message: error.localizedDescription)
-  }
-
-  /// The new node's parent vanished under the menu. This case does NOT compose a verb into the shared
-  /// refusal title: German needs a past participle in that passive frame, and "add a node under" is an
-  /// infinitive with a trailing preposition — composing it produces an ungrammatical sentence. Its own
-  /// complete key lets each language phrase the whole thing naturally.
-  static func cannotAddUnder(_ parent: String) -> AppError {
-    AppError(title: String(localized: "Couldn’t add a node under “\(parent)”"),
-             message: String(localized: "It may have changed since this menu opened. The view has been refreshed — try again."))
-  }
-}
-
 @MainActor
 @Observable
 final class AppModel {
@@ -155,10 +48,12 @@ final class AppModel {
   // Tracked (NOT @ObservationIgnored): read by view bodies via node(_:) — e.g. RecallWindowView,
   // whose body reads only node(nodeID). Silencing it would leave that body with no observation
   // dependency, so a cold-restored recall window could never recover from its transient nil.
-  private var allNodes: [Node] = []
+  // NOT private: AppModel+Search.swift and AppModel+Organizing.swift also read it.
+  var allNodes: [Node] = []
   /// The active Focus context ("" = no Focus / unfiltered), mirrored from UserDefaults by the
   /// SetFocusFilterIntent. Drives the visible-node filter applied in refresh()/refreshGlance().
-  @ObservationIgnored private var activeFocusContext = ""
+  /// NOT private: AppModel+Search.swift's runSearch() also reads it.
+  @ObservationIgnored var activeFocusContext = ""
   /// Last context the forest was built for — so a context change rebuilds it even when the node set
   /// is unchanged (the `fetched != allNodes` guard alone would skip it).
   @ObservationIgnored private var lastForestContext: String?
@@ -173,77 +68,32 @@ final class AppModel {
   }
   /// Coalesces rapid typing in the .searchable field into one DB read (runSearch), instead of a
   /// full node+loose-end scan per keystroke.
-  @ObservationIgnored private lazy var searchDebouncer = Debouncer(interval: 0.2) { [weak self] in
+  /// NOT private: AppModel+Search.swift's searchTextChanged() schedules it.
+  @ObservationIgnored lazy var searchDebouncer = Debouncer(interval: 0.2) { [weak self] in
     await self?.runSearch()
   }
   @ObservationIgnored private var started = false
   // NOT lazy: rebuilt when the provider preference/config changes (SettingsView), so an in-session
   // switch takes effect on the next narration instead of requiring a relaunch. Bootstrapped cheaply
   // here; `init()` calls rebuildSummaryBuilder() to fold in any configured cloud provider.
-  @ObservationIgnored private var summaryBuilder = SummaryBuilder(provider: ClaudeCLIProvider())
+  // NOT private: rebuildSummaryBuilder()/narration()/describeNode() live in AppModel+Narration.swift
+  // and need to read/write it. Still module-internal — no external exposure change.
+  @ObservationIgnored var summaryBuilder = SummaryBuilder(provider: ClaudeCLIProvider())
   /// The raw narration provider, retained so the manual "describe this node" action can call
   /// `NodeDescriber.describe` directly (SummaryBuilder's provider is private). Rebuilt alongside
   /// `summaryBuilder` on a provider/config change.
-  @ObservationIgnored private var descriptionProvider: any LLMProvider = ClaudeCLIProvider()
+  @ObservationIgnored var descriptionProvider: any LLMProvider = ClaudeCLIProvider()
   /// The provider kind the current `summaryBuilder` uses — folded into the narration cache key so a
   /// provider/model switch invalidates prose cached under the old provider.
-  @ObservationIgnored private var providerKind = "claudeCLI"
+  @ObservationIgnored var providerKind = "claudeCLI"
 
-  /// Reads the app-side cloud inputs: config from UserDefaults (via the tested Kit derivation, which
-  /// defaults an unset flavor to the one the picker shows), key from the Keychain. The config is
-  /// always non-nil — "not configured" is expressed by `isUsable` / a missing key, not by nil.
-  func cloudInputs() -> (CloudConfig?, String?) {
-    let config = CloudConfig.fromDefaults(.standard)
-    let key = KeychainSecretStore().read(
-      account: CloudPresets.keychainAccount(flavor: config.flavor, baseURL: config.baseURL))
-    return (config, key)
-  }
-
-  /// Rebuild the narration provider + its cache kind from the current UserDefaults selection + cloud
-  /// inputs. The kind folds flavor+model in ONLY when the resolved kind is actually "cloud", so a
-  /// not-configured cloud selection keys as the real local kind that runs.
-  func rebuildSummaryBuilder() {
-    let (config, key) = cloudInputs()
-    let provider = makeDefaultLLMProvider(cloudConfig: config, apiKey: key)
-    summaryBuilder = SummaryBuilder(provider: provider)
-    descriptionProvider = provider
-    let kind = resolvedProviderKind(cloudConfig: config, apiKey: key)
-    if kind == "cloud", let config {
-      let account = CloudPresets.keychainAccount(flavor: config.flavor, baseURL: config.baseURL)
-      providerKind = "cloud:\(account):\(config.model)"
-    } else {
-      providerKind = kind
-    }
-    AppLog.app.info("Provider rebuilt: \(self.providerKind, privacy: .public)")
-  }
   /// Persisted narration: prose + the invalidation key it was generated for. Keyed per DB path
   /// (NEW pattern — lastOpenedAt is a single global key today) so throwaway smoke/test stores
   /// don't pollute the real cache. Device-local: narration is a derived, provider-specific
   /// output cache and must not sync.
-  private struct CachedNarration: Codable { let prose: String; let key: String }
-  @ObservationIgnored private var narrationCache: [UUID: CachedNarration] = [:]
+  struct CachedNarration: Codable { let prose: String; let key: String }
+  @ObservationIgnored var narrationCache: [UUID: CachedNarration] = [:]
 
-  private static func narrationCacheDefaultsKey() -> String {
-    "pensieve.narrationCache." + Stores.canonicalURL.path
-  }
-  private func loadNarrationCache() {
-    guard let data = UserDefaults.standard.data(forKey: Self.narrationCacheDefaultsKey()),
-          let decoded = try? JSONDecoder().decode([UUID: CachedNarration].self, from: data)
-    else { return }
-    narrationCache = decoded
-  }
-  private func saveNarrationCache() {
-    guard let data = try? JSONEncoder().encode(narrationCache) else { return }
-    UserDefaults.standard.set(data, forKey: Self.narrationCacheDefaultsKey())
-  }
-  /// Drop entries for nodes that no longer exist (deleted / merged away) so the plist can't grow
-  /// unbounded. Keyed directly by node id, so intersecting with the live set is the whole fix.
-  private func pruneNarrationCache() {
-    let live = Set(allNodes.map(\.id))
-    let before = narrationCache.count
-    narrationCache = narrationCache.filter { live.contains($0.key) }
-    if narrationCache.count != before { saveNarrationCache() }
-  }
   /// Bumped on launch + ⌘R (drainThenRefresh). Views key their reload `.task` on it so the OPEN
   /// detail re-narrates after a refresh. The watch-driven refreshDebouncer calls `refresh()` (not
   /// drainThenRefresh), so this never bumps on background liveness updates.
@@ -255,18 +105,21 @@ final class AppModel {
   /// active-only — the semantic index holds no archived content). Observable → drives the scope bar.
   enum SearchScope: Hashable { case active, all }
   var searchScope: SearchScope = .active
-  private(set) var searchResults: SearchResults = SearchResults()
+  /// NOT private(set): AppModel+Search.swift's runSearch()/clearSearch() write it.
+  var searchResults: SearchResults = SearchResults()
   /// Semantic ("Related") hits, populated after the exact search when the Settings toggle is on.
-  private(set) var semanticHits: [SemanticHit] = []
+  /// NOT private(set): AppModel+Search.swift's runSearch()/clearSearch() write it.
+  var semanticHits: [SemanticHit] = []
   /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
   var expandedLooseEndID: UUID?
   /// Set by the Find command; RootView observes it to move focus into the .searchable field.
   var focusSearchRequested = false
-  @ObservationIgnored private var searchTask: Task<Void, Never>?
-  @ObservationIgnored private var searchToken = 0
+  // NOT private: AppModel+Search.swift's runSearch()/clearSearch() also read/write these.
+  @ObservationIgnored var searchTask: Task<Void, Never>?
+  @ObservationIgnored var searchToken = 0
   // Built once; NLContextualEmbedder resolves dimension from the loaded asset at init.
-  @ObservationIgnored private lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
-  @ObservationIgnored private lazy var semanticStore = SemanticIndexStore(
+  @ObservationIgnored lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
+  @ObservationIgnored lazy var semanticStore = SemanticIndexStore(
     url: PensievePaths.semanticIndexURL(), dimension: embedder.dimension, embedderVersion: embedder.version)
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
@@ -380,11 +233,11 @@ final class AppModel {
   }
 
   /// Filter a freshly-computed SmartLists to the ids visible under the active context.
-  private func filtered(_ l: SmartLists, _ visible: Set<UUID>) -> SmartLists {
+  private func filtered(_ smartLists: SmartLists, _ visible: Set<UUID>) -> SmartLists {
     SmartLists(
-      whatsNext: l.whatsNext.filter { visible.contains($0.project.id) },
-      dormant: l.dormant.filter { visible.contains($0.project.id) },
-      recentlyActive: l.recentlyActive.filter { visible.contains($0.project.id) })
+      whatsNext: smartLists.whatsNext.filter { visible.contains($0.project.id) },
+      dormant: smartLists.dormant.filter { visible.contains($0.project.id) },
+      recentlyActive: smartLists.recentlyActive.filter { visible.contains($0.project.id) })
   }
 
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
@@ -478,7 +331,7 @@ final class AppModel {
   /// The middle column's title: the focused node's name in tree mode, else the app name. The app name
   /// is a proper noun — NOT localized.
   var middleTitle: String {
-    if case .node(let id) = sidebarSelection, let n = node(id) { return n.name }
+    if case .node(let id) = sidebarSelection, let resultNode = node(id) { return resultNode.name }
     return "Pensieve"
   }
 
@@ -494,185 +347,23 @@ final class AppModel {
     return true
   }
 
-  /// The keystroke entry point (from the .searchable field). Coalesces rapid typing into one
-  /// debounced DB read; an empty/whitespace field clears immediately so exiting search stays crisp.
-  func searchTextChanged() {
-    guard isSearching else { runSearch(); return }   // empty → synchronous clear via runSearch's guard
-    Task { await searchDebouncer.schedule() }
-  }
-
-  /// The one entry point for the actual search read (the debounced keystroke path AND the liveness
-  /// refresh). Cancels the prior task; runs the read off-main; assigns results under a monotonic token
-  /// so a stale keystroke can't overwrite a newer result. Below the min length → clears results.
-  func runSearch() {
-    searchTask?.cancel()
-    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard query.count >= SearchQueries.minQueryLength, let database else {
-      searchResults = SearchResults()
-      semanticHits = []
-      expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
-      return
-    }
-    let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
-    let includeArchived = (searchScope == .all)   // pre-Task local: reading self.searchScope off-main is an isolation violation
-    searchToken += 1
-    let token = searchToken
-    searchTask = Task { [weak self] in
-      let results = try? await Task.detached {
-        try SearchQueries.search(query: query, visibleNodeIDs: visible,
-                                 includeArchived: includeArchived, database)
-      }.value
-      guard let self, self.searchToken == token, !Task.isCancelled else { return }
-      self.searchResults = results ?? SearchResults()
-
-      guard AppDefaults.semanticSearchEnabled else { self.semanticHits = []; return }
-      let exact = Set((results?.nodes.map { $0.id } ?? []) + (results?.looseEnds.map { $0.id } ?? []))
-      let sem = await SemanticQueries.search(
-        query: query, visibleNodeIDs: visible, excludingIDs: exact, limit: 8, floor: 0.25,
-        includeArchived: includeArchived,
-        store: self.semanticStore, embedder: self.embedder, database)
-      guard self.searchToken == token, !Task.isCancelled else { return }
-      self.semanticHits = sem
-    }
-  }
-
-  /// A node search hit: drive the detail only (the briefing-card pattern), leaving sidebarSelection
-  /// so clearing the field restores a coherent middle list. Clears any pending loose-end expand.
-  func selectSearchNode(_ id: UUID) {
-    expandedLooseEndID = nil
-    selectedNodeID = id
-  }
-
-  /// A loose-end search hit: select its node and mark the row to auto-expand + scroll to.
-  func selectSearchLooseEnd(_ hit: LooseEndHit) {
-    selectedNodeID = hit.nodeID
-    expandedLooseEndID = hit.id
-  }
-
-  /// A Spotlight/App-Intent loose-end open: resolve the loose end → its node (read-only lookup),
-  /// select the node, and mark the row to auto-expand. Degrades honestly: a deleted loose end (no
-  /// resolution) falls back to the briefing. A since-closed end still resolves → opens its node
-  /// (the closed row simply won't render). Window fronting is done by `applyDeepLink`.
-  func openLooseEnd(_ id: UUID) {
-    guard let database,
-          let facts = try? LooseEndFactsQueries.facts(for: [id], database),
-          let f = facts.first else {
-      sidebarSelection = .briefing
-      selectedNodeID = nil
-      expandedLooseEndID = nil
-      return
-    }
-    sidebarSelection = .node(f.nodeID)
-    selectedNodeID = f.nodeID
-    expandedLooseEndID = f.looseEndID
-  }
-
-  /// A "Related" (semantic) search hit: a loose-end hit auto-expands like an exact loose-end hit;
-  /// node/event hits drive the detail like an exact node hit (an event's home is its node).
-  func selectSemanticHit(_ hit: SemanticHit) {
-    if hit.kind == "loose_end" {
-      selectedNodeID = hit.nodeID
-      expandedLooseEndID = hit.id
-    } else {
-      selectSearchNode(hit.nodeID)
-    }
-  }
-
-  /// Exit search mode (e.g. on sidebar navigation): clear the field, results, and pending expand.
-  func clearSearch() {
-    searchText = ""
-    searchResults = SearchResults()
-    semanticHits = []
-    expandedLooseEndID = nil
-    searchTask?.cancel()
-  }
-
-  func detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView]) {
-    let fallback = ProjectStatus(project: node, recentEvents: [])
-    guard let database else { return (fallback, []) }
-    let now = Date()
-    let status = (try? ProjectQueries.status(database, node: node, limit: 15)) ?? fallback
-    let ends = (try? LooseEndQueries.open(database, nodeID: node.id, now: now)) ?? []
-    return (status, ends)
-  }
-
-  /// The node's recall rendered as shareable English Markdown. Reuses `detail(for:)` for the gather
-  /// and includes the narration only if it's already cached (a share never blocks on an LLM call).
-  func recallMarkdown(for node: Node) -> String {
-    let d = detail(for: node)
-    // Respect the narration display toggle: a disabled recap must not leak into a share/export.
-    let narration = AppDefaults.narrationEnabled ? cachedNarration(for: node, events: d.status.recentEvents) : nil
-    return RecallMarkdown.render(node: node, narration: narration,
-                                 looseEnds: d.looseEnds, events: d.status.recentEvents, now: Date())
-  }
-
-  /// Open loose ends for a node — the inspector's slice of `detail(for:)` (no status query).
-  /// Loaded once per selection via the inspector's `.task`, never in a view `body`.
-  func looseEnds(forNode nodeID: UUID) -> [LooseEndView] {
-    guard let database else { return [] }
-    return (try? LooseEndQueries.open(database, nodeID: nodeID, now: Date())) ?? []
-  }
-
-  /// The cross-node audit queue for the Review Suggestions surface. Loaded off-`body` via `.task`.
-  func reviewItems() -> [LooseEndView] {
-    guard let database else { return [] }
-    return (try? SalienceReviewQueries.pending(database, now: Date())) ?? []
-  }
-
-  /// Confirm a user salience label for a loose end (👍 salient / 👎 noise / "" clears).
-  func setLooseEndLabel(_ looseEndID: UUID, _ label: String) {
-    guard let database else { return }
-    do {
-      let succeeded = try LooseEndCommands.setLabel(database, id: looseEndID, label: label)
-      if !succeeded { refuse(String(localized: "update"), String(localized: "this loose end")) }
-    } catch {
-      fail(String(localized: "update"), String(localized: "this loose end"), error)
-    }
-  }
-
   // MARK: - Organizing writes (metadata only; each calls the op then refreshes explicitly, because
-  // Node-only writes don't change the Event count the liveness ValueObservation tracks).
-
-  /// A refusal: the view was stale, so REFRESH (that's the remedy — the phantom node disappears and
-  /// the "try again" copy becomes true), then surface the alert. Post-write state changes are skipped.
-  private func refuse(_ verb: String, _ name: String) {
-    refresh()
-    presentedError = .refusal(verb, name)
-  }
-
-  /// A throw: a real DB error. Do NOT refresh — an error tells us nothing about staleness.
-  private func fail(_ verb: String, _ name: String, _ error: Error) {
-    presentedError = .failure(verb, name, error)
-  }
-
-  /// The display name for a node id, falling back to a neutral word when it's already gone.
-  private func displayName(_ id: UUID) -> String {
-    node(id)?.name ?? String(localized: "this item")
-  }
-
-  /// Default kind for a new node: a child of a project/domain is a strand; everything else a project.
-  func defaultKind(under parentID: UUID?) -> NodeKind {
-    guard let parentID, let parent = node(parentID) else { return .project }
-    return (parent.kind == .project || parent.kind == .domain) ? .strand : .project
-  }
-
-  /// Open the New Node modal (replaces the old immediate-insert + inline-rename flow → fixes #3).
-  func presentNewNode(under parentID: UUID?) { editingNode = NodeEditRequest(mode: .new(parent: parentID)) }
-  /// Open the Edit modal for an existing node.
-  func presentEditNode(_ node: Node) { editingNode = NodeEditRequest(mode: .edit(node)) }
+  // Node-only writes don't change the Event count the liveness ValueObservation tracks). The
+  // shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers live in
+  // AppModel+Organizing.swift alongside the rest of the organizing writes; commitNewNode/updateNode
+  // stay here.
 
   /// Commit the New Node modal: insert fully-formed, select it.
-  func commitNewNode(parent parentID: UUID?, name: String, kind: NodeKind,
-                     icon: String, colorTag: String, context: String) {
+  func commitNewNode(parent parentID: UUID?, fields: NodeFields) {
     guard let database else { return }
-    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = fields.name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     do {
       // nil ⇒ the parent id didn't resolve (deleted under the menu). Name the PARENT: the new node
       // doesn't exist yet, so its own name would be meaningless in the copy.
-      guard let new = try NodeCommands.add(database, name: trimmed, kind: kind,
+      guard let new = try NodeCommands.add(database, name: trimmed, kind: fields.kind,
                                            parent: parentID?.uuidString, description: "",
-                                           icon: icon, colorTag: colorTag, context: context) else {
+                                           icon: fields.icon, colorTag: fields.colorTag, context: fields.context) else {
         let parentName = parentID.map { displayName($0) } ?? String(localized: "the top level")
         refresh()
         presentedError = .cannotAddUnder(parentName)
@@ -686,184 +377,19 @@ final class AppModel {
   }
 
   /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
-  func updateNode(_ nodeID: UUID, name: String, kind: NodeKind,
-                  icon: String, colorTag: String, context: String) {
+  func updateNode(_ nodeID: UUID, fields: NodeFields) {
     guard let database else { return }
-    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = fields.name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     let label = displayName(nodeID)
     do {
-      let succeeded = try NodeCommands.update(database, nodeID: nodeID, name: trimmed, kind: kind,
-                                       icon: icon, colorTag: colorTag, context: context)
+      var trimmedFields = fields
+      trimmedFields.name = trimmed
+      let succeeded = try NodeCommands.update(database, nodeID: nodeID, fields: trimmedFields)
       if succeeded { refresh() } else { refuse(String(localized: "rename"), label) }
     } catch {
       fail(String(localized: "rename"), label, error)
     }
   }
 
-  /// Whether `nodeID` may be deleted (no live source or auto-birthed strand in its subtree → won't resurrect on sync).
-  func canDelete(_ nodeID: UUID) -> Bool {
-    guard let database else { return false }
-    return (try? NodeCommands.subtreeIsActivityBorn(database, nodeID: nodeID)) == false
-  }
-
-  func move(_ nodeID: UUID, under newParentID: UUID?) {
-    guard let database else { return }
-    let label = displayName(nodeID)
-    do {
-      // false ⇒ cycle guard, unknown node, or unknown parent — all stale-state rejections.
-      let succeeded = try NodeCommands.reparent(database, nodeID: nodeID, newParentID: newParentID)
-      if succeeded { refresh() } else { refuse(String(localized: "move"), label) }
-    } catch {
-      fail(String(localized: "move"), label, error)
-    }
-  }
-
-  func archive(_ nodeID: UUID) {
-    guard let database else { return }
-    let label = displayName(nodeID)
-    // Captured BEFORE the write: after it, the subtree has left the active tree.
-    let subtree = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
-    do {
-      // false ⇒ the node vanished between menu-open and click — a stale-state rejection.
-      let succeeded = try NodeCommands.archive(database, nodeID: nodeID)
-      guard succeeded else { refuse(String(localized: "archive"), label); return }
-      // Selection moves off the whole archived subtree so we don't strand the detail pane on a
-      // node that just left the active tree.
-      if let sel = selectedNodeID, subtree.contains(sel) { selectedNodeID = nil }
-      if case .node(let id) = sidebarSelection, subtree.contains(id) { sidebarSelection = .briefing }
-      refresh()
-    } catch {
-      fail(String(localized: "archive"), label, error)
-    }
-  }
-
-  func unarchive(_ nodeID: UUID) {
-    guard let database else { return }
-    let label = displayName(nodeID)
-    do {
-      let succeeded = try NodeCommands.unarchive(database, nodeID: nodeID)
-      if succeeded { refresh() } else { refuse(String(localized: "unarchive"), label) }
-    } catch {
-      fail(String(localized: "unarchive"), label, error)
-    }
-  }
-
-  /// Merge `sourceID` into `targetID`. `ProjectResolver.group` returns Void and never validates that
-  /// the TARGET still exists: a concurrently-deleted target aborts the whole transaction on an FK
-  /// violation (no data loss — but "FOREIGN KEY constraint failed" is not copy we show a human). So
-  /// pre-check both nodes and emit the normal refusal instead. `group` itself stays untouched.
-  func merge(_ sourceID: UUID, into targetID: UUID) {
-    guard let database, sourceID != targetID else { return }
-    let label = displayName(sourceID)
-
-    let bothExist = (try? database.read { database in
-      try Node.where { $0.id.eq(sourceID) }.fetchOne(database) != nil
-        && Node.where { $0.id.eq(targetID) }.fetchOne(database) != nil
-    }) ?? false
-    guard bothExist else { refuse(String(localized: "merge"), label); return }
-
-    do {
-      try ProjectResolver(database: database).group(targetID, into: [sourceID])
-      // The source node is gone: move any state that referenced it onto the survivor.
-      if selectedNodeID == sourceID { selectedNodeID = targetID }
-      if sidebarSelection == .node(sourceID) { sidebarSelection = .node(targetID) }
-      refresh()
-    } catch {
-      fail(String(localized: "merge"), label, error)
-    }
-  }
-
-  /// Legal Move/Merge targets for `nodeID`: every node except itself, its descendants, and any
-  /// archived node (an active node moved/merged under an archived parent would immediately become
-  /// a phantom top-level root — see Finding 3 of the archive-nodes whole-branch review).
-  func moveTargets(for nodeID: UUID) -> [Node] {
-    let banned = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
-    return allNodes.filter { !banned.contains($0.id) && $0.state != .archived }.sorted { $0.name < $1.name }
-  }
-
-  /// Delete a (source-free) node and its subtree via the Kit cascade. Moves selection off it.
-  func deleteNode(_ nodeID: UUID) {
-    guard let database else { return }
-    let label = displayName(nodeID)
-    do {
-      switch try NodeCommands.delete(database, nodeID: nodeID) {
-      case .deleted:
-        if selectedNodeID == nodeID { selectedNodeID = nil }
-        if sidebarSelection == .node(nodeID) { sidebarSelection = .briefing }
-        refresh()
-      case .blocked:
-        // The subtree is activity-born — it would resurrect on the next sync. `canDelete` already
-        // gates the menu, so this only fires on a stale menu; the copy names the real reason.
-        refresh()
-        presentedError = AppError(
-          title: String(localized: "Can’t delete “\(label)”"),
-          message: String(localized: "It still has captured sources or activity that would return on the next sync."))
-      case .notFound:
-        refuse(String(localized: "delete"), label)
-      }
-    } catch {
-      fail(String(localized: "delete"), label, error)
-    }
-  }
-
-  /// Destructive-confirmation copy for the currently-pending delete. Names the node; warns about
-  /// nested items when the subtree isn't a leaf. (Exact event counts would need a Kit read; the
-  /// subtree shape from the in-memory forest is enough for an honest warning.)
-  func deleteConfirmationText() -> String {
-    guard let id = pendingDeleteNodeID, let n = node(id) else { return "" }
-    let hasChildren = allNodes.contains { $0.parentID == id }
-    if hasChildren {
-      return String(localized: "Delete “\(n.name)” and everything nested under it? Captured activity and loose ends are removed. This can’t be undone.")
-    }
-    return String(localized: "Delete “\(n.name)”? Its captured activity and loose ends are removed. This can’t be undone.")
-  }
-
-  /// Surrounding-transcript provenance for a loose end, resolved off the main actor (file I/O).
-  /// nil only when the source event is missing; a present-but-unavailable transcript returns a
-  /// ProvenanceContext with `transcriptAvailable == false`.
-  func provenance(for looseEnd: LooseEnd) async -> ProvenanceContext? {
-    guard let database else { return nil }
-    return try? await Task.detached { try ProvenanceQueries.context(database, looseEnd: looseEnd) }.value
-  }
-
-  /// Cached narration for `node` IFF the stored key still matches the current events. Synchronous —
-  /// lets the view render a valid cached recap instantly (including across launches).
-  func cachedNarration(for node: Node, events: [Event]) -> String? {
-    guard let entry = narrationCache[node.id],
-          entry.key == NarrationCacheKey.make(events: events, provider: providerKind) else { return nil }
-    return entry.prose
-  }
-
-  /// The "Last Work Done" narration for `node`. Returns the cached result when its key matches and
-  /// `force` is false; otherwise regenerates off-main, stores prose+key, and returns it. `force`
-  /// (⌘R on the selected node) bypasses the cache so the user can always refresh a bad recap.
-  func narration(for node: Node, events: [Event], force: Bool = false) async -> String? {
-    let key = NarrationCacheKey.make(events: events, provider: providerKind)
-    if !force, let entry = narrationCache[node.id], entry.key == key { return entry.prose }
-    let text = await summaryBuilder.narrate(project: node, events: events)
-    if let text {
-      narrationCache[node.id] = CachedNarration(prose: text, key: key)
-      saveNarrationCache()
-    }
-    return text
-  }
-
-  /// True when `node` is a project with exactly one git source — i.e. `NodeDescriber` can act on
-  /// it. Gates the DetailView's describe/refresh button so it never appears where it would no-op.
-  func isDescribable(_ node: Node) -> Bool {
-    guard node.kind == .project, let database else { return false }
-    let key = try? database.read { database in try NodeDescriber.soleGitRepoKey(database, nodeID: node.id) }
-    return (key ?? nil) != nil
-  }
-
-  /// Manual "describe this node" action: force-derive `node`'s description off-main via the retained
-  /// provider, then refresh so the new text renders. Best-effort — a failure/empty leaves the
-  /// existing description untouched. Returns the outcome so the view can show an inline note.
-  func describeNode(_ node: Node) async -> NodeDescriber.Outcome {
-    guard let database else { return .ineligible }
-    let outcome = await NodeDescriber.describe(database, nodeID: node.id, provider: descriptionProvider, force: true)
-    refresh()
-    return outcome
-  }
 }

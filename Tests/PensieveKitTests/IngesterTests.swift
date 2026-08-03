@@ -13,10 +13,10 @@ import SQLiteData
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(payload))
 
   // Act
-  let n = try await Ingester(spool: spool, database: database).drain()
+  let drainedCount = try await Ingester(spool: spool, database: database).drain()
 
   // Assert
-  #expect(n == 1)
+  #expect(drainedCount == 1)
   let events = try await database.read { database in try Event.all.fetchAll(database) }
   #expect(events.count == 1)
   #expect(events.first?.summary == "first commit")
@@ -36,9 +36,9 @@ import SQLiteData
   let payload = GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(payload))
 
-  let n = try await Ingester(spool: spool, database: database).drain()
+  let drainedCount = try await Ingester(spool: spool, database: database).drain()
 
-  #expect(n == 1)   // only the good row ingested
+  #expect(drainedCount == 1)   // only the good row ingested
   let events = try await database.read { database in try Event.all.fetchAll(database) }
   #expect(events.count == 1)
   #expect(events.first?.summary == "first commit")
@@ -56,9 +56,9 @@ import SQLiteData
 
   try spool.append(kind: "bogus.unknown", payload: "{}")
 
-  let n = try await Ingester(spool: spool, database: database).drain()
+  let drainedCount = try await Ingester(spool: spool, database: database).drain()
 
-  #expect(n == 0)                        // dropped row creates no events
+  #expect(drainedCount == 0)                        // dropped row creates no events
   #expect(try spool.pending().isEmpty)   // marked done via default: branch, not retried
   let events = try await database.read { database in try Event.all.fetchAll(database) }
   #expect(events.isEmpty)                // nothing enriched
@@ -72,9 +72,9 @@ import SQLiteData
   let payload = SessionRefPayload(transcriptPath: "/tmp/does-not-exist-\(UUID().uuidString).jsonl")
   try spool.append(kind: CaptureKind.ccSession, payload: try encodeJSON(payload))
 
-  let n = try await Ingester(spool: spool, database: database).drain()
+  let drainedCount = try await Ingester(spool: spool, database: database).drain()
 
-  #expect(n == 0)
+  #expect(drainedCount == 0)
   let pending = try spool.pending()
   #expect(pending.count == 1)
   #expect(pending.first?.kind == CaptureKind.ccSession)
@@ -89,9 +89,9 @@ import SQLiteData
   let payload = GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(payload))
 
-  let n = try await Ingester(spool: spool, database: database).drain()
+  let drainedCount = try await Ingester(spool: spool, database: database).drain()
 
-  #expect(n == 1)                        // only the real commit counts
+  #expect(drainedCount == 1)                        // only the real commit counts
   #expect(try spool.pending().isEmpty)   // both rows marked (unknown dropped, commit ingested)
 }
 
@@ -159,9 +159,9 @@ import SQLiteData
 
 @Test func worktreesOfOneRepoShareCommonDir() throws {
   let (repo, _) = try makeCommittedRepo()
-  guard let wt = try? addWorktree(to: repo, branch: "feature"),
-        FileManager.default.fileExists(atPath: wt.path) else { return }  // worktree unsupported here
-  #expect(Git.commonDir(in: repo.path) == Git.commonDir(in: wt.path))
+  guard let worktree = try? addWorktree(to: repo, branch: "feature"),
+        FileManager.default.fileExists(atPath: worktree.path) else { return }  // worktree unsupported here
+  #expect(Git.commonDir(in: repo.path) == Git.commonDir(in: worktree.path))
   #expect(Git.commonDir(in: repo.path) != nil)
 }
 

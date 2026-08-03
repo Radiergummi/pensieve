@@ -2,8 +2,8 @@ import Testing
 import Foundation
 @testable import PensieveKit
 
-private func tmp(_ n: String, ext: String) -> URL {
-  FileManager.default.temporaryDirectory.appendingPathComponent("\(n)-\(UUID().uuidString)").appendingPathExtension(ext)
+private func tmp(_ name: String, ext: String) -> URL {
+  FileManager.default.temporaryDirectory.appendingPathComponent("\(name)-\(UUID().uuidString)").appendingPathExtension(ext)
 }
 
 /// A provider that returns no loose ends — keeps SyncRunner tests about discovery/ingestion,
@@ -25,8 +25,9 @@ private func writeSession(_ projects: URL, _ sessionID: String, prompts: Int) th
   try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
   let cwd = FileManager.default.temporaryDirectory.path
   var lines: [String] = []
-  for i in 0..<prompts {
-    lines.append(#"{"type":"user","cwd":"\#(cwd)","timestamp":"2026-06-30T10:0\#(i):00Z","message":{"role":"user","content":"prompt \#(i)"}}"#)
+  for index in 0..<prompts {
+    lines.append(#"{"type":"user","cwd":"\#(cwd)","timestamp":"2026-06-30T10:0\#(index):00Z","# +
+                 #""message":{"role":"user","content":"prompt \#(index)"}}"#)
   }
   let url = dir.appendingPathComponent("\(sessionID).jsonl")
   try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
@@ -47,9 +48,9 @@ private func writeSession(_ projects: URL, _ sessionID: String, prompts: Int) th
   }
 
   // Cycle 1: discovers + ingests the session.
-  let s1 = try await runner().run()
-  #expect(s1.discovered == 1)
-  #expect(s1.ingested >= 1)
+  let status1 = try await runner().run()
+  #expect(status1.discovered == 1)
+  #expect(status1.ingested >= 1)
   let ingested = try await database.read { database in
     try Event.where { $0.fingerprint.eq(Fingerprint.session(sessionID: sessionID)) }.fetchOne(database)
   }
@@ -57,12 +58,13 @@ private func writeSession(_ projects: URL, _ sessionID: String, prompts: Int) th
   let sizeAfter1 = ingested?.extractedTranscriptSize ?? -99
 
   // Cycle 2: nothing new — already an event, byte size unchanged.
-  let s2 = try await runner().run()
-  #expect(s2.discovered == 0)
-  #expect(s2.ingested == 0)
+  let status2 = try await runner().run()
+  #expect(status2.discovered == 0)
+  #expect(status2.ingested == 0)
 
   // Grow the transcript, then Cycle 3 re-extracts (watermark size advances).
-  let more = #"{"type":"user","cwd":"\#(FileManager.default.temporaryDirectory.path)","timestamp":"2026-06-30T10:05:00Z","message":{"role":"user","content":"prompt later"}}"# + "\n"
+  let more = #"{"type":"user","cwd":"\#(FileManager.default.temporaryDirectory.path)","# +
+    #""timestamp":"2026-06-30T10:05:00Z","message":{"role":"user","content":"prompt later"}}"# + "\n"
   let handle = try FileHandle(forWritingTo: txURL)
   try handle.seekToEnd(); handle.write(Data(more.utf8)); try handle.close()
 
@@ -110,8 +112,8 @@ private struct NamingProvider: LLMProvider {
   let database = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
 
   try await database.write { database in
-    let n = Node(name: "Indexed project", kind: NodeKind.project)
-    try Node.insert { n }.execute(database)
+    let node = Node(name: "Indexed project", kind: NodeKind.project)
+    try Node.insert { node }.execute(database)
   }
 
   let idxURL = tmp("s", ext: "sqlite")

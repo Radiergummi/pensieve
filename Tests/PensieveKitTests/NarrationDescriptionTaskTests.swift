@@ -24,8 +24,10 @@ private struct EchoProvider: LLMProvider {
 }
 
 @Test func descriptionTaskSanitizesModelOutput() async throws {
-  let ctx = ProjectContextDTO(ProjectContext(dirName: "colibri", gitRemote: nil, readmeHead: "# Colibri", claudeMdHead: nil, manifest: "src/main.swift"))
+  let ctx = ProjectContextDTO(ProjectContext(dirName: "colibri", gitRemote: nil, readmeHead: "# Colibri",
+                                              claudeMdHead: nil, manifest: "src/main.swift"))
   let item = CorpusItem.description(DescriptionCorpusItem(id: "d1", context: ctx))
-  let out = try await DescriptionTask().run(item: item, model: EchoProvider(text: "A native macOS recipe app."), reference: EchoProvider(text: ""))
+  let out = try await DescriptionTask().run(item: item, model: EchoProvider(text: "A native macOS recipe app."),
+                                             reference: EchoProvider(text: ""))
   #expect(out.text == "A native macOS recipe app.")
 }

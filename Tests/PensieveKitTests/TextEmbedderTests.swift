@@ -9,17 +9,17 @@ import Foundation
   }
 
   @Test func normalizeProducesUnitLength() {
-    let n = EmbeddingMath.normalize([3, 4])   // |v| = 5
-    #expect(abs((n[0] * n[0] + n[1] * n[1]) - 1.0) < 1e-6)
+    let normalized = EmbeddingMath.normalize([3, 4])   // |v| = 5
+    #expect(abs((normalized[0] * normalized[0] + normalized[1] * normalized[1]) - 1.0) < 1e-6)
   }
 
   @Test func stubIsDeterministicAndUnit() async throws {
-    let e = StubEmbedder(dimension: 8)
-    let a = await e.embed(["hello"])
-    let b = await e.embed(["hello"])
-    #expect(a == b)
-    let v = try #require(a![0])
-    #expect(abs(v.reduce(0) { $0 + $1 * $1 } - 1.0) < 1e-6)   // unit length
+    let embedder = StubEmbedder(dimension: 8)
+    let embeddingA = await embedder.embed(["hello"])
+    let embeddingB = await embedder.embed(["hello"])
+    #expect(embeddingA == embeddingB)
+    let vector = try #require(embeddingA![0])
+    #expect(abs(vector.reduce(0) { $0 + $1 * $1 } - 1.0) < 1e-6)   // unit length
   }
 
   @Test func cosineFromL2MapsIdenticalAndOrthogonal() {

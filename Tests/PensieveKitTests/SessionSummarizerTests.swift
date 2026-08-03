@@ -13,8 +13,8 @@ private struct FixedReply: LLMProvider {
   func complete(prompt: String) async throws -> String { reply }
 }
 
-private func m(_ i: Int, _ role: String, _ text: String, user: Bool) -> TranscriptMessage {
-  TranscriptMessage(index: i, role: role, text: text, timestamp: nil, isUserPrompt: user)
+private func m(_ index: Int, _ role: String, _ text: String, user: Bool) -> TranscriptMessage {
+  TranscriptMessage(index: index, role: role, text: text, timestamp: nil, isUserPrompt: user)
 }
 
 @Test func summarizerReturnsNilWhenNoRelevantMessages() async {
@@ -68,7 +68,7 @@ private func m(_ i: Int, _ role: String, _ text: String, user: Bool) -> Transcri
 
 @Test func summarizerReduceCallRunsAfterMapping() async {
   // Count map chunks precisely, then assert the reduce call ran (calls == chunks + 1).
-  actor Counter { var n = 0; func bump() { n += 1 }; func value() -> Int { n } }
+  actor Counter { var count = 0; func bump() { count += 1 }; func value() -> Int { count } }
   struct Counting: LLMProvider {
     let counter: Counter
     // Realistic prose: the summarizer now refuses to store non-prose output, and this test is

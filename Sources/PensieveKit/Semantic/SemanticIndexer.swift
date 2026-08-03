@@ -52,5 +52,5 @@ public struct SemanticIndexer: Sendable {
 
   // v1: truncate to a safe character budget for the BERT-class token window. Real chunking rides
   // in with transcripts (a future EmbeddableItem producer).
-  private func truncate(_ s: String) -> String { String(s.prefix(2000)) }
+  private func truncate(_ text: String) -> String { String(text.prefix(2000)) }
 }

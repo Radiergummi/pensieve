@@ -11,9 +11,9 @@ public enum TranscriptSegment: Equatable, Sendable {
   /// The exact source text this segment was parsed from.
   public var raw: String {
     switch self {
-    case .markdown(let s): return s
-    case .callout(let c): return c.raw
-    case .harness(let h): return h.raw
+    case .markdown(let markdownString): return markdownString
+    case .callout(let callout): return callout.raw
+    case .harness(let harnessBlock): return harnessBlock.raw
     }
   }
 }

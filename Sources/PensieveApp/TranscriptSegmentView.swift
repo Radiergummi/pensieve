@@ -122,11 +122,11 @@ extension HarnessKind {
     switch self {
     case .command(let name, let message, let args):
       return [name, message, args].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — ")
-    case .taskNotification(let t):
-      return [t.summary, t.status].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-    case .systemReminder(let s), .commandCaveat(let s), .commandOutput(let s),
-         .toolUses(let s), .toolUseError(let s):
-      return s
+    case .taskNotification(let taskNotification):
+      return [taskNotification.summary, taskNotification.status].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    case .systemReminder(let segment), .commandCaveat(let segment), .commandOutput(let segment),
+         .toolUses(let segment), .toolUseError(let segment):
+      return segment
     case .bashIO(let input, let output):
       return [input, output].compactMap { $0 }.joined(separator: "\n")
     case .skillPreamble(let path):

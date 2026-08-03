@@ -71,9 +71,9 @@ import SQLiteData
   // Spool: write via the normal (WAL) path, then read the same file read-only.
   let spoolURL = tempURL("spool-ro")
   let spool = try CaptureSpool(at: spoolURL)
-  let t = Date(timeIntervalSince1970: 4_000_000)
-  try spool.append(kind: CaptureKind.gitCommit, payload: "{}", at: t)
-  try spool.append(kind: CaptureKind.ccSession, payload: "{}", at: t.addingTimeInterval(60))
+  let timestamp = Date(timeIntervalSince1970: 4_000_000)
+  try spool.append(kind: CaptureKind.gitCommit, payload: "{}", at: timestamp)
+  try spool.append(kind: CaptureKind.ccSession, payload: "{}", at: timestamp.addingTimeInterval(60))
 
   let writePathLast = try spool.lastCaptureAt()
   let writePathPending = try spool.pendingCount()
@@ -110,7 +110,7 @@ import SQLiteData
   let roEventCount = try roDB.read { database in try Event.all.fetchAll(database).count }
   #expect(roEventCount == 1)
 
-  let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: spoolURL, now: t.addingTimeInterval(120))
+  let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: spoolURL, now: timestamp.addingTimeInterval(120))
   #expect(snap.eventCount == 1)
   #expect(snap.spoolPending == 2)
 }

@@ -82,12 +82,11 @@ struct AdvancedSettingsTab: View {
   private func load() {
     syncStatus = BackgroundSyncService.status
     let (config, key) = model.cloudInputs()
-    status = SystemStatusGatherer.gather(database: model.database,
-                                         defaults: .standard,
-                                         cloudConfig: config,
-                                         apiKey: key,
-                                         backgroundSyncEnabled: syncStatus == .enabled,
-                                         syncLogURL: PensievePaths.syncLogURL())
+    status = SystemStatusGatherer.gather(
+      database: model.database,
+      provider: ProviderInputs(defaults: .standard, cloudConfig: config, apiKey: key),
+      backgroundSyncEnabled: syncStatus == .enabled,
+      syncLogURL: PensievePaths.syncLogURL())
   }
 
   /// The RESOLVED kind, in human words. The raw kind strings are never shown and never localized.

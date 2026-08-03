@@ -2,8 +2,8 @@ import Foundation
 
 public enum EvalPaths {
   public static func dir() -> URL {
-    if let o = ProcessInfo.processInfo.environment["PENSIEVE_EVAL_DIR"] {
-      return URL(fileURLWithPath: o)
+    if let envPath = ProcessInfo.processInfo.environment["PENSIEVE_EVAL_DIR"] {
+      return URL(fileURLWithPath: envPath)
     }
     return URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".eval")
   }

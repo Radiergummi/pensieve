@@ -12,18 +12,18 @@ private struct Labeled: Codable { let quote: String; let salient: Bool }
 /// Runs `claude -p --model <model>` with the prompt on stdin; trimmed stdout. Salience prompts are
 /// small (~2KB) so writing stdin before draining stdout can't deadlock the OS pipe buffer here.
 private func claudeRun(_ prompt: String, model: String) throws -> String {
-  let p = Process()
-  p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-  p.arguments = ["claude", "-p", "--model", model]
+  let process = Process()
+  process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+  process.arguments = ["claude", "-p", "--model", model]
   let stdin = Pipe(), stdout = Pipe()
-  p.standardInput = stdin; p.standardOutput = stdout; p.standardError = FileHandle.nullDevice
-  try p.run()
+  process.standardInput = stdin; process.standardOutput = stdout; process.standardError = FileHandle.nullDevice
+  try process.run()
   try? stdin.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
   try? stdin.fileHandleForWriting.close()
   let out = stdout.fileHandleForReading.readDataToEndOfFile()
-  p.waitUntilExit()
-  guard p.terminationStatus == 0 else { throw LLMError.providerFailed("claude -p exit \(p.terminationStatus)") }
-  return String(decoding: out, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+  process.waitUntilExit()
+  guard process.terminationStatus == 0 else { throw LLMError.providerFailed("claude -p exit \(process.terminationStatus)") }
+  return (String(bytes: out, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 /// Review-time eval against the REAL on-device model. Skipped in CI (no deterministic gate for a
@@ -47,7 +47,9 @@ private func claudeRun(_ prompt: String, model: String) throws -> String {
     provider = makeDefaultLLMProvider()
   }
   let ends = labels.map { VerifiedLooseEnd(text: $0.quote, quote: $0.quote, role: "user", sourceMessageIndex: 0) }
-  let msgs = labels.enumerated().map { TranscriptMessage(index: $0.offset, role: "user", text: $0.element.quote, timestamp: nil, isUserPrompt: true) }
+  let msgs = labels.enumerated().map {
+    TranscriptMessage(index: $0.offset, role: "user", text: $0.element.quote, timestamp: nil, isUserPrompt: true)
+  }
   // (sourceMessageIndex is 0 for all here; give each end its own index if you want per-item context.)
   let kept = Set(await SalienceClassifier(provider: provider).filter(ends, messages: msgs).map(\.quote))
 
@@ -61,5 +63,5 @@ private func claudeRun(_ prompt: String, model: String) throws -> String {
   // must be genuinely an in-the-moment request, never deferred/parked/decision work.
   let dropped = labels.map(\.quote).filter { !kept.contains($0) }
   print("SALIENCE EVAL — dropped \(dropped.count)/\(labels.count):")
-  for q in dropped { print("  DROP: \(q)") }
+  for quote in dropped { print("  DROP: \(quote)") }
 }

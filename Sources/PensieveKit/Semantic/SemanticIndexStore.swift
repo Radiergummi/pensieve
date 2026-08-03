@@ -49,10 +49,10 @@ public struct SemanticIndexStore: Sendable {
       var config = Configuration()
       config.busyMode = .timeout(5)   // wait out cross-process writer contention (app/daemon/⌘F), matching CanonicalStore
       config.prepareDatabase { database in
-        let rc = pensieve_sqlite_vec_init_connection(UnsafeMutableRawPointer(database.sqliteConnection))
-        if rc != 0 {
-          Log.semantic.error("SemanticIndexStore: sqlite-vec registration failed, rc=\(rc, privacy: .public)")
-          throw DatabaseError(resultCode: ResultCode(rawValue: rc))
+        let resultCode = pensieve_sqlite_vec_init_connection(UnsafeMutableRawPointer(database.sqliteConnection))
+        if resultCode != 0 {
+          Log.semantic.error("SemanticIndexStore: sqlite-vec registration failed, rc=\(resultCode, privacy: .public)")
+          throw DatabaseError(resultCode: ResultCode(rawValue: resultCode))
         }
       }
       let pool = try DatabasePool(path: url.path, configuration: config)
@@ -142,9 +142,9 @@ public struct SemanticIndexStore: Sendable {
       try Row.fetchAll(database, sql: """
         SELECT item_id, kind, node_id, distance FROM embeddings
         WHERE embedding MATCH ? AND k = ? \(filter) ORDER BY distance
-        """, arguments: [json, limit]).map { r in
-        KNNResult(itemID: r["item_id"], kind: r["kind"], nodeID: r["node_id"],
-                  similarity: EmbeddingMath.cosine(fromL2: r["distance"]))
+        """, arguments: [json, limit]).map { row in
+        KNNResult(itemID: row["item_id"], kind: row["kind"], nodeID: row["node_id"],
+                  similarity: EmbeddingMath.cosine(fromL2: row["distance"]))
       }
     }) ?? []
   }

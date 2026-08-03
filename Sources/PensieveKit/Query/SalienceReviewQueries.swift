@@ -18,11 +18,11 @@ public enum SalienceReviewQueries {
         views.append(LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt, ageDays: days))
       }
       // Suggested-salient first (0 before 1), then oldest source first.
-      return views.sorted { a, b in
-        let aRank = a.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
-        let bRank = b.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
-        if aRank != bRank { return aRank < bRank }
-        return a.occurredAt < b.occurredAt
+      return views.sorted { left, right in
+        let leftRank = left.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
+        let rightRank = right.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
+        if leftRank != rightRank { return leftRank < rightRank }
+        return left.occurredAt < right.occurredAt
       }
     }
   }

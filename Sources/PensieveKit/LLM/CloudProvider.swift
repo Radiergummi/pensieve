@@ -58,13 +58,43 @@ public struct CloudConfig: Sendable, Equatable {
   /// so a user who selects "Cloud (API)" and keeps the default vendor leaves `cloudFlavor` unset;
   /// treating that as "no config" degraded cloud to local while Settings still said "Cloud (API)".
   /// Not usable on its own: `isUsable` still requires a model, and the caller still requires a key.
-  public static func fromDefaults(_ d: UserDefaults) -> CloudConfig {
-    let flavor = (d.string(forKey: PensieveDefaults.cloudFlavorKey)).flatMap(CloudFlavor.init(rawValue:)) ?? .anthropic
-    let stored = d.string(forKey: PensieveDefaults.cloudBaseURLKey) ?? ""
+  public static func fromDefaults(_ defaults: UserDefaults) -> CloudConfig {
+    let flavor = (defaults.string(forKey: PensieveDefaults.cloudFlavorKey)).flatMap(CloudFlavor.init(rawValue:)) ?? .anthropic
+    let stored = defaults.string(forKey: PensieveDefaults.cloudBaseURLKey) ?? ""
     return CloudConfig(flavor: flavor,
                        baseURL: stored.isEmpty ? flavor.defaultBaseURL : stored,
-                       model: d.string(forKey: PensieveDefaults.cloudModelKey) ?? "")
+                       model: defaults.string(forKey: PensieveDefaults.cloudModelKey) ?? "")
   }
+}
+
+private struct Message: Encodable { let role: String; let content: String }
+
+/// Lives at file scope, not nested in `CloudHTTP`, so its `CodingKeys` stays within the one-level
+/// type-nesting limit.
+private struct AnthropicBody: Encodable {
+  let model: String; let maxTokens: Int; let messages: [Message]
+  // `max_tokens` is the Anthropic API's wire key; the Swift property stays camelCase.
+  enum CodingKeys: String, CodingKey { case model, messages, maxTokens = "max_tokens" }
+}
+
+/// Response shapes for `parseCompletion`/`parseModelList`. Lives at file scope, not nested in
+/// `CloudHTTP`, so no type is more than one level deep.
+private struct AnthropicResp: Decodable {
+  struct Block: Decodable { let text: String? }
+  let content: [Block]
+}
+
+/// Lives at file scope for the same reason as `AnthropicResp`. `Choice`/`OpenAIMessage` are hoisted
+/// out too (rather than nested in `OpenAIResp`) so neither exceeds the one-level nesting limit.
+private struct OpenAIMessage: Decodable { let content: String }
+private struct OpenAIChoice: Decodable { let message: OpenAIMessage }
+private struct OpenAIResp: Decodable { let choices: [OpenAIChoice] }
+
+/// Lives at file scope for the same reason as `AnthropicResp`. `ModelEntry` names what it is: one
+/// entry in the `/models` list response. The wire key `data` and field `id` are unchanged.
+private struct ModelsResp: Decodable {
+  struct ModelEntry: Decodable { let id: String }
+  let data: [ModelEntry]
 }
 
 /// Pure HTTP request building + response parsing for the cloud flavors. No I/O — every function
@@ -73,8 +103,6 @@ public enum CloudHTTP {
   static let anthropicVersion = "2023-06-01"
   static let maxTokens = 1024
 
-  private struct Message: Encodable { let role: String; let content: String }
-  private struct AnthropicBody: Encodable { let model: String; let max_tokens: Int; let messages: [Message] }
   private struct OpenAIBody: Encodable { let model: String; let messages: [Message] }
 
   /// Trim exactly one trailing slash so `base + suffix` never doubles the separator.
@@ -106,7 +134,7 @@ public enum CloudHTTP {
     switch config.flavor {
     case .anthropic:
       request.httpBody = try JSONEncoder().encode(
-        AnthropicBody(model: config.model, max_tokens: maxTokens, messages: [message]))
+        AnthropicBody(model: config.model, maxTokens: maxTokens, messages: [message]))
     case .openAICompatible:
       request.httpBody = try JSONEncoder().encode(
         OpenAIBody(model: config.model, messages: [message]))
@@ -121,13 +149,6 @@ public enum CloudHTTP {
     applyAuth(&request, flavor: config.flavor, apiKey: apiKey)
     return request
   }
-
-  private struct AnthropicResp: Decodable { struct Block: Decodable { let text: String? }; let content: [Block] }
-  private struct OpenAIResp: Decodable {
-    struct Choice: Decodable { struct Msg: Decodable { let content: String }; let message: Msg }
-    let choices: [Choice]
-  }
-  private struct ModelsResp: Decodable { struct M: Decodable { let id: String }; let data: [M] }
 
   public static func parseCompletion(flavor: CloudFlavor, _ data: Data) throws -> String {
     switch flavor {
@@ -171,7 +192,8 @@ public struct CloudLLMProvider: LLMProvider {
   }
 
   public func complete(prompt: String) async throws -> String {
-    Log.llm.debug("LLM prompt dispatched (len=\(prompt.count, privacy: .public), provider=cloud/\(self.config.flavor.rawValue, privacy: .public))")
+    let flavorName = config.flavor.rawValue
+    Log.llm.debug("LLM prompt dispatched (len=\(prompt.count, privacy: .public), provider=cloud/\(flavorName, privacy: .public))")
     let request = try CloudHTTP.buildCompletionRequest(config: config, apiKey: apiKey, prompt: prompt)
     let (data, response) = try await transport(request)
     try Self.ensure2xx(response, data)
@@ -191,7 +213,7 @@ public struct CloudLLMProvider: LLMProvider {
 
   private static func ensure2xx(_ response: HTTPURLResponse, _ data: Data) throws {
     guard (200..<300).contains(response.statusCode) else {
-      let snippet = String(decoding: data, as: UTF8.self)
+      let snippet = (String(bytes: data, encoding: .utf8) ?? "")
         .trimmingCharacters(in: .whitespacesAndNewlines).prefix(500)
       Log.llm.error("Cloud HTTP \(response.statusCode, privacy: .public): \(String(snippet), privacy: .public)")
       throw LLMError.providerFailed("HTTP \(response.statusCode): \(snippet)")

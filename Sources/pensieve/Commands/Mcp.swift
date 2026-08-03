@@ -13,78 +13,10 @@ struct Mcp: AsyncParsableCommand {
       name: "pensieve", version: "0.1.0",
       capabilities: .init(resources: .init(), tools: .init(listChanged: false)))
 
-    await server.withMethodHandler(ListTools.self) { _ in
-      .init(tools: [
-        Tool(name: "project_context",
-             description: "Reload where a project stands: facts, cited open loose ends, recent activity, prose recap. Defaults to the current workspace.",
-             inputSchema: .object(["type": .string("object"), "properties": .object([
-               "path": .object(["type": .string("string"), "description": .string("directory to resolve; defaults to the workspace")]),
-               "node_id": .object(["type": .string("string"), "description": .string("resolve a specific node by UUID")]),
-             ])]),
-             annotations: .init(readOnlyHint: true, openWorldHint: false)),
-        Tool(name: "whats_next",
-             description: "Ranked queue of what to pick up across all projects, on grounded signals (open loose ends, dormancy).",
-             inputSchema: .object(["type": .string("object"), "properties": .object([
-               "limit": .object(["type": .string("number"), "description": .string("max rows (default 5)")]),
-               "context": .object(["type": .string("string"), "description": .string("filter: work | personal")]),
-             ])]),
-             annotations: .init(readOnlyHint: true, openWorldHint: false)),
-        Tool(name: "recall",
-             description: "Recall the surrounding transcript conversation around a loose end — reconstruct how a discussion went and how it resolved. Pass a loose_end_id from project_context.",
-             inputSchema: .object(["type": .string("object"), "properties": .object([
-               "loose_end_id": .object(["type": .string("string"), "description": .string("UUID of a loose end from project_context")]),
-               "radius": .object(["type": .string("number"), "description": .string("messages of context each side (default 8)")]),
-             ]), "required": .array([.string("loose_end_id")])]),
-             annotations: .init(readOnlyHint: true, openWorldHint: false)),
-        Tool(name: "search",
-             description: "Find across all your work by keyword AND meaning — exact first, related below; each result is a real, cited item.",
-             inputSchema: .object(["type": .string("object"), "properties": .object([
-               "query": .object(["type": .string("string"), "description": .string("what to find")]),
-               "limit": .object(["type": .string("number"), "description": .string("max results per group (default 8)")]),
-               "include_archived": .object(["type": .string("boolean"), "description": .string("also search archived projects (default false)")]),
-             ]), "required": .array([.string("query")])]),
-             annotations: .init(readOnlyHint: true, openWorldHint: false)),
-      ])
-    }
+    await server.withMethodHandler(ListTools.self) { _ in .init(tools: Self.toolList) }
 
     await server.withMethodHandler(CallTool.self) { params in
-      switch params.name {
-      case "project_context":
-        var path = params.arguments?["path"]?.stringValue
-        let nodeID = (params.arguments?["node_id"]?.stringValue).flatMap { UUID(uuidString: $0) }
-        if path == nil, nodeID == nil {
-          // Zero-arg "reload wherever I am": ask the client for its workspace roots.
-          if let roots = try? await server.listRoots(), let first = roots.first {
-            path = URL(string: first.uri)?.path   // file:// → filesystem path
-          }
-        }
-        let json = try await PensieveMCP.projectContextJSON(path: path, nodeID: nodeID)
-        return PensieveMCP.result(json)
-      case "whats_next":
-        let limit = params.arguments?["limit"]?.intValue ?? 5
-        let context = params.arguments?["context"]?.stringValue
-        let json = try PensieveMCP.whatsNextJSON(limit: limit, context: context)
-        return PensieveMCP.result(json)
-      case "recall":
-        guard let idStr = params.arguments?["loose_end_id"]?.stringValue,
-              let id = UUID(uuidString: idStr) else {
-          return .init(content: [.text(text: "recall requires a valid loose_end_id (UUID)", annotations: nil, _meta: nil)], isError: true)
-        }
-        let radius = params.arguments?["radius"]?.intValue ?? 8
-        let json = try PensieveMCP.recallJSON(looseEndID: id, radius: radius)
-        return PensieveMCP.result(json)
-      case "search":
-        guard let query = params.arguments?["query"]?.stringValue, !query.isEmpty else {
-          return .init(content: [.text(text: "search requires a non-empty query", annotations: nil, _meta: nil)], isError: true)
-        }
-        let limit = params.arguments?["limit"]?.intValue ?? 8
-        let includeArchived = params.arguments?["include_archived"]?.boolValue ?? false
-        let json = try await PensieveMCP.searchJSON(query: query, limit: limit,
-                                                    includeArchived: includeArchived)
-        return PensieveMCP.result(json)
-      default:
-        return .init(content: [.text(text: "unknown tool", annotations: nil, _meta: nil)], isError: true)
-      }
+      try await Self.handleCallTool(params: params, server: server)
     }
 
     await server.withMethodHandler(ListResources.self) { _ in
@@ -99,22 +31,117 @@ struct Mcp: AsyncParsableCommand {
                           description: "One project's grounded context", mimeType: "text/markdown"),
       ])
     }
-    await server.withMethodHandler(ReadResource.self) { params in
-      let uri = params.uri
-      if uri == "pensieve://smartlist/whats-next" {
-        let markdown = try PensieveMCP.whatsNextMarkdown()
-        return .init(contents: [.text(markdown, uri: uri, mimeType: "text/markdown")])
-      }
-      if uri.hasPrefix("pensieve://node/"),
-         let id = UUID(uuidString: String(uri.dropFirst("pensieve://node/".count))),
-         let markdown = try await PensieveMCP.nodeMarkdown(id: id) {
-        return .init(contents: [.text(markdown, uri: uri, mimeType: "text/markdown")])
-      }
-      throw MCPError.invalidParams("unknown resource: \(uri)")
-    }
+    await server.withMethodHandler(ReadResource.self) { params in try await Self.handleReadResource(params: params) }
 
     try await server.start(transport: StdioTransport())
     await server.waitUntilCompleted()
+  }
+
+  private static var toolList: [Tool] {
+    [
+      Tool(name: "project_context",
+           description: "Reload where a project stands: facts, cited open loose ends, recent activity, prose recap. "
+             + "Defaults to the current workspace.",
+           inputSchema: .object(["type": .string("object"), "properties": .object([
+             "path": .object(["type": .string("string"), "description": .string("directory to resolve; defaults to the workspace")]),
+             "node_id": .object(["type": .string("string"), "description": .string("resolve a specific node by UUID")]),
+           ])]),
+           annotations: .init(readOnlyHint: true, openWorldHint: false)),
+      Tool(name: "whats_next",
+           description: "Ranked queue of what to pick up across all projects, on grounded signals (open loose ends, dormancy).",
+           inputSchema: .object(["type": .string("object"), "properties": .object([
+             "limit": .object(["type": .string("number"), "description": .string("max rows (default 5)")]),
+             "context": .object(["type": .string("string"), "description": .string("filter: work | personal")]),
+           ])]),
+           annotations: .init(readOnlyHint: true, openWorldHint: false)),
+      Tool(name: "recall",
+           description: "Recall the surrounding transcript conversation around a loose end — reconstruct how a discussion went "
+             + "and how it resolved. Pass a loose_end_id from project_context.",
+           inputSchema: .object(["type": .string("object"), "properties": .object([
+             "loose_end_id": .object(["type": .string("string"), "description": .string("UUID of a loose end from project_context")]),
+             "radius": .object(["type": .string("number"), "description": .string("messages of context each side (default 8)")]),
+           ]), "required": .array([.string("loose_end_id")])]),
+           annotations: .init(readOnlyHint: true, openWorldHint: false)),
+      Tool(name: "search",
+           description: "Find across all your work by keyword AND meaning — exact first, related below; each result is a real, cited item.",
+           inputSchema: .object(["type": .string("object"), "properties": .object([
+             "query": .object(["type": .string("string"), "description": .string("what to find")]),
+             "limit": .object(["type": .string("number"), "description": .string("max results per group (default 8)")]),
+             "include_archived": .object(["type": .string("boolean"),
+                                          "description": .string("also search archived projects (default false)")]),
+           ]), "required": .array([.string("query")])]),
+           annotations: .init(readOnlyHint: true, openWorldHint: false)),
+    ]
+  }
+
+  private static func handleCallTool(params: CallTool.Parameters, server: Server) async throws -> CallTool.Result {
+    switch params.name {
+    case "project_context":
+      return try await handleProjectContext(params: params, server: server)
+    case "whats_next":
+      return try handleWhatsNext(params: params)
+    case "recall":
+      return try handleRecall(params: params)
+    case "search":
+      return try await handleSearch(params: params)
+    default:
+      return .init(content: [.text(text: "unknown tool", annotations: nil, _meta: nil)], isError: true)
+    }
+  }
+
+  private static func handleProjectContext(params: CallTool.Parameters, server: Server) async throws -> CallTool.Result {
+    var path = params.arguments?["path"]?.stringValue
+    let nodeID = (params.arguments?["node_id"]?.stringValue).flatMap { UUID(uuidString: $0) }
+    if path == nil, nodeID == nil {
+      // Zero-arg "reload wherever I am": ask the client for its workspace roots.
+      if let roots = try? await server.listRoots(), let first = roots.first {
+        path = URL(string: first.uri)?.path   // file:// → filesystem path
+      }
+    }
+    let json = try await PensieveMCP.projectContextJSON(path: path, nodeID: nodeID)
+    return PensieveMCP.result(json)
+  }
+
+  private static func handleWhatsNext(params: CallTool.Parameters) throws -> CallTool.Result {
+    let limit = params.arguments?["limit"]?.intValue ?? 5
+    let context = params.arguments?["context"]?.stringValue
+    let json = try PensieveMCP.whatsNextJSON(limit: limit, context: context)
+    return PensieveMCP.result(json)
+  }
+
+  private static func handleRecall(params: CallTool.Parameters) throws -> CallTool.Result {
+    guard let idStr = params.arguments?["loose_end_id"]?.stringValue,
+          let id = UUID(uuidString: idStr) else {
+      return .init(content: [.text(text: "recall requires a valid loose_end_id (UUID)", annotations: nil, _meta: nil)], isError: true)
+    }
+    let radius = params.arguments?["radius"]?.intValue ?? 8
+    let json = try PensieveMCP.recallJSON(looseEndID: id, radius: radius)
+    return PensieveMCP.result(json)
+  }
+
+  private static func handleSearch(params: CallTool.Parameters) async throws -> CallTool.Result {
+    guard let query = params.arguments?["query"]?.stringValue, !query.isEmpty else {
+      return .init(content: [.text(text: "search requires a non-empty query", annotations: nil, _meta: nil)], isError: true)
+    }
+    let limit = params.arguments?["limit"]?.intValue ?? 8
+    let includeArchived = params.arguments?["include_archived"]?.boolValue ?? false
+    let json = try await PensieveMCP.searchJSON(query: query, limit: limit,
+                                                includeArchived: includeArchived)
+    return PensieveMCP.result(json)
+  }
+
+  private static func handleReadResource(params: ReadResource.Parameters) async throws -> ReadResource.Result {
+    let uri = params.uri
+    if uri == "pensieve://smartlist/whats-next" {
+      let markdown = try PensieveMCP.whatsNextMarkdown()
+      return .init(contents: [.text(markdown, uri: uri, mimeType: "text/markdown")])
+    }
+    if uri.hasPrefix("pensieve://node/"),
+       let id = UUID(uuidString: String(uri.dropFirst("pensieve://node/".count))),
+       let markdown = try await PensieveMCP.nodeMarkdown(id: id) {
+      return .init(contents: [.text(markdown, uri: uri, mimeType: "text/markdown")])
+    }
+    throw MCPError.invalidParams("unknown resource: \(uri)")
   }
 }
 
@@ -153,7 +180,7 @@ enum PensieveMCP {
     let cache = NarrationCache(url: PensievePaths.narrationCacheURL())
     return try await SessionContextQueries.bundle(
       forPath: path, nodeID: nodeID, database, now: Date(),
-      summaryBuilder: builder, providerKind: kind, cache: cache)
+      narration: NarrationOptions(summaryBuilder: builder, providerKind: kind, cache: cache))
   }
 
   static func projectContextJSON(path: String?, nodeID: UUID?) async throws -> Data {
@@ -216,9 +243,11 @@ enum PensieveMCP {
 
     let related: [SemanticHit]
     if PensieveDefaults.semanticSearchEnabled() {
-      related = await SemanticQueries.search(query: query, visibleNodeIDs: visible, excludingIDs: exactIDs,
-                                             limit: limit, floor: 0.25, includeArchived: includeArchived,
-                                             store: semanticStore, embedder: semanticEmbedder, database)
+      related = await SemanticQueries.search(
+        query: query,
+        scope: SemanticSearchScope(visibleNodeIDs: visible, excludingIDs: exactIDs, limit: limit,
+                                   floor: 0.25, includeArchived: includeArchived),
+        store: semanticStore, embedder: semanticEmbedder, database)
     } else {
       related = []
     }
@@ -231,7 +260,9 @@ enum PensieveMCP {
 
   /// A text tool result carrying the JSON payload + the result-size hint Claude Code honors.
   static func result(_ json: Data) -> CallTool.Result {
-    let text = String(decoding: json, as: UTF8.self)
+    // `json` always comes from `JSONEncoder`, which always emits valid UTF-8, so this fallback
+    // is unreachable in practice — it exists only to avoid a force-unwrap of the failable initializer.
+    let text = String(data: json, encoding: .utf8) ?? "<invalid utf8>"
     return .init(content: [.text(text: text, annotations: nil, _meta: nil)],
                  _meta: Metadata(additionalFields: [maxResultSizeMeta: .int(500_000)]))
   }
@@ -248,8 +279,8 @@ private struct SearchPayload: Encodable {
 private struct SearchItem: Encodable {
   var id: String
   var kind: String
-  var node_id: String
-  var node_name: String
+  var nodeID: String
+  var nodeName: String
   var title: String
   var snippet: String
   var similarity: Double?
@@ -258,8 +289,8 @@ private struct SearchItem: Encodable {
   init(node hit: NodeHit) {
     id = hit.id.uuidString
     kind = "node"
-    node_id = hit.id.uuidString
-    node_name = hit.name
+    nodeID = hit.id.uuidString
+    nodeName = hit.name
     title = hit.name
     snippet = Self.text(hit.snippet)
     similarity = nil
@@ -269,8 +300,8 @@ private struct SearchItem: Encodable {
   init(looseEnd hit: LooseEndHit) {
     id = hit.id.uuidString
     kind = "loose_end"
-    node_id = hit.nodeID.uuidString
-    node_name = hit.nodeName
+    nodeID = hit.nodeID.uuidString
+    nodeName = hit.nodeName
     let snippetText = Self.text(hit.snippet)
     title = snippetText
     snippet = snippetText
@@ -281,29 +312,31 @@ private struct SearchItem: Encodable {
   init(semantic hit: SemanticHit) {
     id = hit.id.uuidString
     kind = hit.kind
-    node_id = hit.nodeID.uuidString
-    node_name = hit.nodeName
+    nodeID = hit.nodeID.uuidString
+    nodeName = hit.nodeName
     title = hit.title
     snippet = Self.text(hit.snippet)
     similarity = hit.similarity
     archived = hit.isArchived
   }
 
-  private static func text(_ s: Snippet) -> String { s.leading + s.match + s.trailing }
+  private static func text(_ snippet: Snippet) -> String { snippet.leading + snippet.match + snippet.trailing }
 
   private enum CodingKeys: String, CodingKey {
-    case id, kind, node_id, node_name, title, snippet, similarity, archived
+    case id, kind, title, snippet, similarity, archived
+    case nodeID = "node_id"
+    case nodeName = "node_name"
   }
 
   func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(id, forKey: .id)
-    try c.encode(kind, forKey: .kind)
-    try c.encode(node_id, forKey: .node_id)
-    try c.encode(node_name, forKey: .node_name)
-    try c.encode(title, forKey: .title)
-    try c.encode(snippet, forKey: .snippet)
-    try c.encodeIfPresent(similarity, forKey: .similarity)
-    try c.encode(archived, forKey: .archived)
+    var encoderContainer = encoder.container(keyedBy: CodingKeys.self)
+    try encoderContainer.encode(id, forKey: .id)
+    try encoderContainer.encode(kind, forKey: .kind)
+    try encoderContainer.encode(nodeID, forKey: .nodeID)
+    try encoderContainer.encode(nodeName, forKey: .nodeName)
+    try encoderContainer.encode(title, forKey: .title)
+    try encoderContainer.encode(snippet, forKey: .snippet)
+    try encoderContainer.encodeIfPresent(similarity, forKey: .similarity)
+    try encoderContainer.encode(archived, forKey: .archived)
   }
 }

@@ -21,14 +21,14 @@ public enum NextQueries {
     try database.read { database in
       let projects = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
       var items: [NextItem] = []
-      for p in projects {
-        let latest = try Event.where { $0.nodeID.eq(p.id) }
+      for project in projects {
+        let latest = try Event.where { $0.nodeID.eq(project.id) }
           .order { $0.occurredAt.desc() }.limit(1).fetchOne(database)
         guard let latest else { continue }   // no captured activity → nothing grounded (matches BriefingQueries)
         let dormant = Calendar.current.dateComponents([.day], from: latest.occurredAt, to: now).day ?? 0
-        let open = try LooseEnd.where { $0.nodeID.eq(p.id) && LooseEnd.isOpen($0) }.fetchCount(database)
+        let open = try LooseEnd.where { $0.nodeID.eq(project.id) && LooseEnd.isOpen($0) }.fetchCount(database)
         let score = groundedScore(openLooseEnds: open, daysDormant: dormant)
-        items.append(NextItem(project: p, openLooseEnds: open, daysDormant: dormant, score: score))
+        items.append(NextItem(project: project, openLooseEnds: open, daysDormant: dormant, score: score))
       }
       return items.sorted { $0.score > $1.score }
     }

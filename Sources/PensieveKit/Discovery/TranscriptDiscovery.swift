@@ -7,13 +7,13 @@ public enum TranscriptDiscovery {
   public static func discover(projectsDir: URL, now: Date,
                               ageBound: TimeInterval = 7 * 24 * 60 * 60,
                               alreadyIngested: (String) -> Bool) -> [URL] {
-    let fm = FileManager.default
-    guard let projectDirs = try? fm.contentsOfDirectory(
+    let fileManager = FileManager.default
+    guard let projectDirs = try? fileManager.contentsOfDirectory(
       at: projectsDir, includingPropertiesForKeys: nil) else { return [] }
 
     var out: [URL] = []
     for dir in projectDirs {
-      guard let files = try? fm.contentsOfDirectory(
+      guard let files = try? fileManager.contentsOfDirectory(
         at: dir, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]) else { continue }
       for file in files where file.pathExtension == "jsonl" {
         let sessionID = file.deletingPathExtension().lastPathComponent

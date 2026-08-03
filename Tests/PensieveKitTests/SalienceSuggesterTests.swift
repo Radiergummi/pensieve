@@ -97,7 +97,7 @@ private let noMessages: @Sendable (URL) -> ParsedSession = { _ in
 
 @Test func suggesterRespectsLimit() async throws {
   let database = try openCanonicalDatabase(at: tempURL("sug-limit"))
-  for i in 0..<5 { try seedLE(database, quote: "candidate number \(i) to consider") }
+  for index in 0..<5 { try seedLE(database, quote: "candidate number \(index) to consider") }
   let summary = try await SalienceSuggester(provider: DropSet(drop: []), parse: noMessages)
     .run(database, limit: 2, force: false)
   #expect(summary.candidates == 2)

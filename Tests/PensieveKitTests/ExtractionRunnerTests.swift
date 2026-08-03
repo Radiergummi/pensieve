@@ -30,8 +30,8 @@ private struct SliceAwareProvider: LLMProvider {
 }
 
 /// One JSONL user-message line as Claude Code records it.
-private func userLine(_ text: String, ts: String) -> String {
-  let obj: [String: Any] = ["type": "user", "cwd": "/p/x", "timestamp": ts,
+private func userLine(_ text: String, timestamp: String) -> String {
+  let obj: [String: Any] = ["type": "user", "cwd": "/p/x", "timestamp": timestamp,
                             "message": ["role": "user", "content": text]]
   let data = try! JSONSerialization.data(withJSONObject: obj)
   return String(data: data, encoding: .utf8)!
@@ -41,7 +41,7 @@ private func userLine(_ text: String, ts: String) -> String {
 /// a genuine user prompt at dense index 0,1,2,… in order.
 private func writeTranscript(_ texts: [String]) throws -> URL {
   let url = tempURL("transcript", ext: "jsonl")
-  let lines = texts.enumerated().map { i, t in userLine(t, ts: String(format: "2026-06-30T10:%02d:00Z", i)) }
+  let lines = texts.enumerated().map { index, lineText in userLine(lineText, timestamp: String(format: "2026-06-30T10:%02d:00Z", index)) }
   try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
   return url
 }
@@ -130,7 +130,7 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(ev1.extractedTranscriptSize > 0)
 
   // Append a second genuine user message (index 1) and re-run.
-  try appendRawLine(transcript, userLine(migration, ts: "2026-06-30T10:05:00Z"))
+  try appendRawLine(transcript, userLine(migration, timestamp: "2026-06-30T10:05:00Z"))
   // Provider proposes the NEW loose end (index 1) plus one fabricated candidate that must
   // be dropped by the verifier; it does NOT re-propose the rate-limiting quote.
   let run2 = try await ExtractionRunner(database: database, provider:
@@ -242,7 +242,7 @@ private let migrationQuote = "Also remember to write the migration test before m
 
   // A later append then extracts only the genuinely new content.
   let newQuote = migrationQuote
-  try appendRawLine(transcript, userLine(newQuote, ts: "2026-06-30T10:05:00Z"))
+  try appendRawLine(transcript, userLine(newQuote, timestamp: "2026-06-30T10:05:00Z"))
   let run2 = try await ExtractionRunner(database: database, provider: SliceAwareProvider(genuine: [(newQuote, 1)])).run()
   #expect(run2.first?.inserted == 1)
   let after2 = try await database.read { database in try LooseEnd.all.fetchAll(database) }
@@ -272,7 +272,7 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(ev1.extractedMessageCount == 0)
 
   // The transcript later grows with genuinely new content → it must extract, not swallow.
-  try (userLine(rateLimitingQuote, ts: "2026-06-30T10:00:00Z") + "\n")
+  try (userLine(rateLimitingQuote, timestamp: "2026-06-30T10:00:00Z") + "\n")
     .write(to: transcript, atomically: true, encoding: .utf8)
   let run2 = try await ExtractionRunner(database: database, provider:
     SliceAwareProvider(genuine: [(rateLimitingQuote, 0)])).run()
@@ -370,26 +370,26 @@ private let migrationQuote = "Also remember to write the migration test before m
 
 @Test func partialTrailingLinePicksUpAtCorrectIndexAfterCompletion() async throws {
   let database = try openCanonicalDatabase(at: tempURL("run-partial"))
-  let q0 = rateLimitingQuote
-  let q1 = migrationQuote
-  let transcript = try writeTranscript([q0])
+  let firstMessage = rateLimitingQuote
+  let secondMessage = migrationQuote
+  let transcript = try writeTranscript([firstMessage])
   // Append a half-written (invalid-JSON) trailing line: the parser skips it (1 message).
   try appendRawLine(transcript, "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Als")
   _ = try makeSessionEvent(database: database, transcript: transcript)
 
-  let run1 = try await ExtractionRunner(database: database, provider: SliceAwareProvider(genuine: [(q0, 0)])).run()
+  let run1 = try await ExtractionRunner(database: database, provider: SliceAwareProvider(genuine: [(firstMessage, 0)])).run()
   #expect(run1.first?.inserted == 1)
   let ev1 = try await database.read { database in try Event.all.fetchAll(database) }.first!
   #expect(ev1.extractedMessageCount == 1)   // partial line did not create a phantom message
 
   // "Complete" the record by rewriting the file with both full messages present.
-  try (userLine(q0, ts: "2026-06-30T10:00:00Z") + "\n" + userLine(q1, ts: "2026-06-30T10:05:00Z") + "\n")
+  try (userLine(firstMessage, timestamp: "2026-06-30T10:00:00Z") + "\n" + userLine(secondMessage, timestamp: "2026-06-30T10:05:00Z") + "\n")
     .write(to: transcript, atomically: true, encoding: .utf8)
 
   // The now-complete message is picked up at index 1 with no offset drift.
-  let run2 = try await ExtractionRunner(database: database, provider: SliceAwareProvider(genuine: [(q1, 1)])).run()
+  let run2 = try await ExtractionRunner(database: database, provider: SliceAwareProvider(genuine: [(secondMessage, 1)])).run()
   #expect(run2.first?.inserted == 1)
   let ends = try await database.read { database in try LooseEnd.all.fetchAll(database) }
   #expect(ends.count == 2)
-  #expect(ends.first(where: { $0.quote == q1 })?.sourceMessageIndex == 1)
+  #expect(ends.first(where: { $0.quote == secondMessage })?.sourceMessageIndex == 1)
 }

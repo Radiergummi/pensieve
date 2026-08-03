@@ -29,9 +29,9 @@ func makeCommittedRepo(message: String = "first commit") throws -> (repo: URL, h
 
 /// Adds a linked worktree on a new branch to an existing repo; returns its path.
 func addWorktree(to repo: URL, branch: String) throws -> URL {
-  let wt = tempURL("worktree", ext: nil)
-  _ = Git.run(["worktree", "add", "-b", branch, wt.path], in: repo.path)
-  return wt
+  let worktree = tempURL("worktree", ext: nil)
+  _ = Git.run(["worktree", "add", "-b", branch, worktree.path], in: repo.path)
+  return worktree
 }
 
 /// A fresh empty temp directory (not a repo).

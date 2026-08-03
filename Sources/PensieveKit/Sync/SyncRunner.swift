@@ -45,7 +45,10 @@ public struct SyncRunner {
 
     let results = try await ExtractionRunner(database: database, provider: provider).run()
     let extracted = results.reduce(0) { $0 + $1.inserted }
-    Log.sync.info("Sync complete: ingested=\(ingested, privacy: .public) discovered=\(discovered.count, privacy: .public) extracted=\(extracted, privacy: .public)")
+    Log.sync.info("""
+      Sync complete: ingested=\(ingested, privacy: .public) discovered=\(discovered.count, privacy: .public) \
+      extracted=\(extracted, privacy: .public)
+      """)
 
     // Semantic index refresh (best-effort, on-device, toggle-gated). Never blocks the sync summary.
     if let semanticIndexer {

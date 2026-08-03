@@ -21,13 +21,13 @@ public struct VerifiedLooseEnd: Sendable {
 public enum LooseEndVerifier {
   public static let minQuoteLength = 15
 
-  public static func verify(_ c: LooseEndCandidate, messages: [TranscriptMessage]) -> VerifiedLooseEnd? {
-    let needle = normalizeWhitespace(c.quote)
+  public static func verify(_ candidate: LooseEndCandidate, messages: [TranscriptMessage]) -> VerifiedLooseEnd? {
+    let needle = normalizeWhitespace(candidate.quote)
     guard needle.count >= minQuoteLength else { return nil }
-    guard let m = messages.first(where: { $0.index == c.messageIndex }) else { return nil }
-    guard m.isUserPrompt else { return nil }
-    let haystack = normalizeWhitespace(m.text)
+    guard let message = messages.first(where: { $0.index == candidate.messageIndex }) else { return nil }
+    guard message.isUserPrompt else { return nil }
+    let haystack = normalizeWhitespace(message.text)
     guard haystack.contains(needle) else { return nil }   // needle is already ≥ minQuoteLength, so non-empty
-    return VerifiedLooseEnd(text: c.text, quote: c.quote, role: m.role, sourceMessageIndex: m.index)
+    return VerifiedLooseEnd(text: candidate.text, quote: candidate.quote, role: message.role, sourceMessageIndex: message.index)
   }
 }

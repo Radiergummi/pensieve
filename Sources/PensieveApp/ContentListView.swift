@@ -42,81 +42,90 @@ struct ContentListView: View {
   }
 
   @ViewBuilder private func searchResultsList() -> some View {
-    let r = model.searchResults
+    let results = model.searchResults
     List {
-      // Scope control lives here (not `.searchScopes`) so it exists only while search is on screen.
-      Picker("", selection: Binding(get: { model.searchScope }, set: { model.searchScope = $0 })) {
-        Text("Active").tag(AppModel.SearchScope.active)
-        Text("Include Archived").tag(AppModel.SearchScope.all)
-      }
-      .pickerStyle(.segmented)
-      .labelsHidden()
-      .listRowSeparator(.hidden)
-
-      if !r.nodes.isEmpty {
-        Section(header: Text("Projects")) {
-          ForEach(r.nodes) { hit in
-            Button { model.selectSearchNode(hit.id) } label: {
-              HStack(spacing: 10) {
-                if let n = model.node(hit.id) { NodeBadge(node: n, size: 22) }
-                VStack(alignment: .leading, spacing: 2) {
-                  switch hit.matchedField {
-                  case .name:
-                    // The match is in the name — the snippet IS the highlighted name.
-                    SnippetText(snippet: hit.snippet)
-                    Text(AppearanceStyle.kindLabel(hit.kind)).font(.caption).foregroundStyle(.secondary)
-                  case .description:
-                    // Matched only in the description — lead with the node name so the hit is
-                    // identifiable, and show the description snippet (why it matched) below.
-                    Text(hit.name)
-                    SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
-                  }
-                }
-                if hit.isArchived { Spacer(); ArchivedBadge() }
-              }
-              .rowHitArea()
-            }
-            .buttonStyle(.plain)
-          }
-        }
-      }
-      if !r.looseEnds.isEmpty {
-        Section(header: Text("Loose Ends")) {
-          ForEach(r.looseEnds) { hit in
-            Button { model.selectSearchLooseEnd(hit) } label: {
-              VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                  Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
-                  if hit.isArchived { ArchivedBadge() }
-                }
-                SnippetText(snippet: hit.snippet)
-              }
-              .rowHitArea()
-            }
-            .buttonStyle(.plain)
-          }
-        }
-      }
-      if !model.semanticHits.isEmpty {
-        Section(header: Text("Related")) {
-          ForEach(model.semanticHits) { hit in
-            Button { model.selectSemanticHit(hit) } label: {
-              VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                  Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
-                  if hit.isArchived { ArchivedBadge() }
-                }
-                Text(hit.title).lineLimit(2)
-              }
-              .rowHitArea()
-            }
-            .buttonStyle(.plain)
-          }
-        }
-      }
+      searchScopePicker()
+      if !results.nodes.isEmpty { searchNodesSection(results.nodes) }
+      if !results.looseEnds.isEmpty { searchLooseEndsSection(results.looseEnds) }
+      if !model.semanticHits.isEmpty { searchRelatedSection(model.semanticHits) }
     }
     .overlay {
-      if r.isEmpty && model.semanticHits.isEmpty { ContentUnavailableView.search(text: model.searchText) }
+      if results.isEmpty && model.semanticHits.isEmpty { ContentUnavailableView.search(text: model.searchText) }
+    }
+  }
+
+  // Scope control lives here (not `.searchScopes`) so it exists only while search is on screen.
+  @ViewBuilder private func searchScopePicker() -> some View {
+    Picker("", selection: Binding(get: { model.searchScope }, set: { model.searchScope = $0 })) {
+      Text("Active").tag(AppModel.SearchScope.active)
+      Text("Include Archived").tag(AppModel.SearchScope.all)
+    }
+    .pickerStyle(.segmented)
+    .labelsHidden()
+    .listRowSeparator(.hidden)
+  }
+
+  @ViewBuilder private func searchNodesSection(_ hits: [NodeHit]) -> some View {
+    Section(header: Text("Projects")) {
+      ForEach(hits) { hit in
+        Button { model.selectSearchNode(hit.id) } label: {
+          HStack(spacing: 10) {
+            if let resultNode = model.node(hit.id) { NodeBadge(node: resultNode, size: 22) }
+            VStack(alignment: .leading, spacing: 2) {
+              switch hit.matchedField {
+              case .name:
+                // The match is in the name — the snippet IS the highlighted name.
+                SnippetText(snippet: hit.snippet)
+                Text(AppearanceStyle.kindLabel(hit.kind)).font(.caption).foregroundStyle(.secondary)
+              case .description:
+                // Matched only in the description — lead with the node name so the hit is
+                // identifiable, and show the description snippet (why it matched) below.
+                Text(hit.name)
+                SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
+              }
+            }
+            if hit.isArchived { Spacer(); ArchivedBadge() }
+          }
+          .rowHitArea()
+        }
+        .buttonStyle(.plain)
+      }
+    }
+  }
+
+  @ViewBuilder private func searchLooseEndsSection(_ hits: [LooseEndHit]) -> some View {
+    Section(header: Text("Loose Ends")) {
+      ForEach(hits) { hit in
+        Button { model.selectSearchLooseEnd(hit) } label: {
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+              if hit.isArchived { ArchivedBadge() }
+            }
+            SnippetText(snippet: hit.snippet)
+          }
+          .rowHitArea()
+        }
+        .buttonStyle(.plain)
+      }
+    }
+  }
+
+  @ViewBuilder private func searchRelatedSection(_ hits: [SemanticHit]) -> some View {
+    Section(header: Text("Related")) {
+      ForEach(hits) { hit in
+        Button { model.selectSemanticHit(hit) } label: {
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
+              if hit.isArchived { ArchivedBadge() }
+            }
+            Text(hit.title).lineLimit(2)
+          }
+          .rowHitArea()
+        }
+        .buttonStyle(.plain)
+      }
     }
   }
 

@@ -3,10 +3,16 @@ import Testing
 import SQLiteData
 @testable import PensieveKit
 
+private struct LooseEndFixture {
+  let text: String
+  let quote: String
+  let label: String
+}
+
 /// Insert nodeA node + one event + loose ends; returns the node.
 private func seed(_ database: any DatabaseWriter, name: String, description: String = "",
                   kind: NodeKind = .project,
-                  ends: [(text: String, quote: String, label: String)] = []) throws -> Node {
+                  ends: [LooseEndFixture] = []) throws -> Node {
   let node = Node(name: name, kind: kind, description: description)
   let source = Source(id: UUID(), nodeID: node.id, kind: SourceKind.claudeCode, key: "/p/\(node.id)")
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
@@ -66,8 +72,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 @Test func searchMatchesLooseEndTextAndQuote() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-looseEnd"))
   _ = try seed(database, name: "P", ends: [
-    (text: "finish the deploy pipeline", quote: "irrelevant", label: ""),
-    (text: "unrelated", quote: "remember the deploy vars", label: ""),
+    LooseEndFixture(text: "finish the deploy pipeline", quote: "irrelevant", label: ""),
+    LooseEndFixture(text: "unrelated", quote: "remember the deploy vars", label: ""),
   ])
   let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
   #expect(results.looseEnds.count == 2)
@@ -79,8 +85,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 @Test func searchExcludesResolvedAndNoiseLooseEnds() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-noise"))
   _ = try seed(database, name: "P", ends: [
-    (text: "open deploy item", quote: "q", label: ""),
-    (text: "noisy deploy item", quote: "q", label: LooseEndLabel.noise),
+    LooseEndFixture(text: "open deploy item", quote: "q", label: ""),
+    LooseEndFixture(text: "noisy deploy item", quote: "q", label: LooseEndLabel.noise),
   ])
   let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
   #expect(results.looseEnds.count == 1)
@@ -90,7 +96,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 @Test func searchExcludesNodesOutsideVisibleSet() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-focus"))
   let nodeA = try seed(database, name: "Deploy A")
-  _ = try seed(database, name: "Deploy B", ends: [(text: "deploy end", quote: "q", label: "")])
+  _ = try seed(database, name: "Deploy B", ends: [LooseEndFixture(text: "deploy end", quote: "q", label: "")])
   let visible: Set<UUID> = [nodeA.id]   // only A visible
   let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: visible, database)
   #expect(results.nodes.map(\.id) == [nodeA.id])
@@ -123,8 +129,10 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 
 @Test func searchExcludesArchivedNodesAndLooseEnds() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-archived"))
-  let active = try seed(database, name: "Deploy pipeline", ends: [("deploy the release", "ship it", "todo")])
-  let archived = try seed(database, name: "Deploy legacy", ends: [("deploy old thing", "legacy", "todo")])
+  let active = try seed(database, name: "Deploy pipeline",
+                        ends: [LooseEndFixture(text: "deploy the release", quote: "ship it", label: "todo")])
+  let archived = try seed(database, name: "Deploy legacy",
+                          ends: [LooseEndFixture(text: "deploy old thing", quote: "legacy", label: "todo")])
   #expect(try NodeCommands.archive(database, nodeID: archived.id))
   // allVisible includes the archived node (ProjectQueries.all is unfiltered), proving the
   // exclusion is by state, not by the visible set.
@@ -137,8 +145,10 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 
 @Test func searchIncludesArchivedWhenFlagSet() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-incl-archived"))
-  let active = try seed(database, name: "Deploy pipeline", ends: [("deploy the release", "ship it", "todo")])
-  let archived = try seed(database, name: "Deploy legacy", ends: [("deploy old thing", "legacy", "todo")])
+  let active = try seed(database, name: "Deploy pipeline",
+                        ends: [LooseEndFixture(text: "deploy the release", quote: "ship it", label: "todo")])
+  let archived = try seed(database, name: "Deploy legacy",
+                          ends: [LooseEndFixture(text: "deploy old thing", quote: "legacy", label: "todo")])
   #expect(try NodeCommands.archive(database, nodeID: archived.id))
 
   // Flag OFF (default) → archived excluded (matches the existing exclusion test).

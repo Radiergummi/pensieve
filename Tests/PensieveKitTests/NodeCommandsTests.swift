@@ -165,8 +165,8 @@ import SQLiteData
 @Test func updateEditsAllFieldsAtomically() throws {
   let database = try openCanonicalDatabase(at: tempURL("node-update"))
   let node = try #require(try NodeCommands.add(database, name: "Old", kind: .project, parent: nil, description: "keep"))
-  #expect(try NodeCommands.update(database, nodeID: node.id, name: "New", kind: .strand,
-                                  icon: "sf:flag", colorTag: "pink"))
+  #expect(try NodeCommands.update(database, nodeID: node.id,
+                                  fields: NodeFields(name: "New", kind: .strand, icon: "sf:flag", colorTag: "pink")))
   let stored = try database.read { database in try Node.where { $0.id.eq(node.id) }.fetchOne(database) }
   #expect(stored?.name == "New")
   #expect(stored?.kind == NodeKind.strand)
@@ -174,7 +174,8 @@ import SQLiteData
   #expect(stored?.colorTag == "pink")
   #expect(stored?.description == "keep")   // untouched fields preserved
   // Unknown id → false, nothing written.
-  #expect(try NodeCommands.update(database, nodeID: UUID(), name: "x", kind: .task, icon: "", colorTag: "") == false)
+  #expect(try NodeCommands.update(database, nodeID: UUID(),
+                                  fields: NodeFields(name: "x", kind: .task)) == false)
 }
 
 @Test func addAndUpdateRoundTripContext() throws {
@@ -183,8 +184,8 @@ import SQLiteData
                                                parent: nil, description: "", context: "personal"))
   #expect(proj.context == "personal")
 
-  #expect(try NodeCommands.update(database, nodeID: proj.id, name: "Garden", kind: .project,
-                                  icon: "", colorTag: "", context: "work"))
+  #expect(try NodeCommands.update(database, nodeID: proj.id,
+                                  fields: NodeFields(name: "Garden", kind: .project, context: "work")))
   let reloaded = try database.read { database in try Node.where { $0.id.eq(proj.id) }.fetchOne(database) }
   #expect(reloaded?.context == "work")
 }

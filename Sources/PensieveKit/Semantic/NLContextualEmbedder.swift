@@ -10,14 +10,14 @@ public final class NLContextualEmbedder: TextEmbedder, @unchecked Sendable {
   public let version: String
 
   public init() {
-    let m = NLContextualEmbedding(script: .latin)
-    if let m, !m.hasAvailableAssets {
+    let latinEmbedding = NLContextualEmbedding(script: .latin)
+    if let latinEmbedding, !latinEmbedding.hasAvailableAssets {
       // Kick off the async asset request; until it lands, embed() returns nil (best-effort).
-      m.requestAssets { _, _ in }
+      latinEmbedding.requestAssets { _, _ in }
     }
-    self.model = m
-    self.dimension = m?.dimension ?? 0
-    self.version = "nl-latin:\(m?.dimension ?? 0)"
+    self.model = latinEmbedding
+    self.dimension = latinEmbedding?.dimension ?? 0
+    self.version = "nl-latin:\(latinEmbedding?.dimension ?? 0)"
   }
 
   public func embed(_ texts: [String]) async -> [[Float]?]? {

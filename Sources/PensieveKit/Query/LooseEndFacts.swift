@@ -22,7 +22,7 @@ public enum LooseEndFactsQueries {
   public static func all(_ database: any DatabaseReader) throws -> [LooseEndFacts] {
     try database.read { database in
       let activeNodes = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
-      let nameByID = Dictionary(activeNodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+      let nameByID = Dictionary(activeNodes.map { ($0.id, $0.name) }, uniquingKeysWith: { existingValue, _ in existingValue })
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       return ends.compactMap { looseEnd in
         guard let name = nameByID[looseEnd.nodeID] else { return nil }   // node not active → excluded

@@ -3,9 +3,9 @@ import Testing
 @testable import PensieveKit
 
 private actor Counter {
-  private(set) var n = 0
-  func bump() { n += 1 }
-  func value() -> Int { n }
+  private(set) var count = 0
+  func bump() { count += 1 }
+  func value() -> Int { count }
 }
 
 /// A deterministic stand-in for the Debouncer's sleep. `started` counts sleep() entries
@@ -23,18 +23,18 @@ private actor Gate {
     let id = nextID; nextID &+= 1
     started += 1
     await withTaskCancellationHandler {
-      await withCheckedContinuation { c in waiters.append((id, c)) }
+      await withCheckedContinuation { continuation in waiters.append((id, continuation)) }
     } onCancel: {
       Task { await self.cancel(id) }
     }
   }
   func releaseAll() {
     let current = waiters; waiters.removeAll()
-    for (_, c) in current { c.resume() }
+    for (_, continuation) in current { continuation.resume() }
   }
   private func cancel(_ id: UInt64) {
-    guard let i = waiters.firstIndex(where: { $0.0 == id }) else { return }
-    let (_, c) = waiters.remove(at: i); c.resume()
+    guard let index = waiters.firstIndex(where: { $0.0 == id }) else { return }
+    let (_, continuation) = waiters.remove(at: index); continuation.resume()
   }
 }
 
@@ -51,13 +51,13 @@ private func pollUntil(_ condition: @Sendable () async -> Bool) async throws {
 @Test func debouncerCoalescesRapidSchedulesIntoOneFire() async throws {
   let counter = Counter()
   let gate = Gate()
-  let d = Debouncer(interval: 1, sleep: { _ in await gate.sleep() }) { await counter.bump() }
+  let debouncer = Debouncer(interval: 1, sleep: { _ in await gate.sleep() }, action: { await counter.bump() })
 
-  // Each schedule cancels the previous task; wait until the k-th task has actually entered its
-  // sleep (started >= k) before issuing the next, so only the last task survives uncancelled.
-  for k in 1...3 {
-    await d.schedule()
-    try await pollUntil { await gate.started >= k }
+  // Each schedule cancels the previous task; wait until the iteration-th task has actually entered its
+  // sleep (started >= iteration) before issuing the next, so only the last task survives uncancelled.
+  for iteration in 1...3 {
+    await debouncer.schedule()
+    try await pollUntil { await gate.started >= iteration }
   }
   await gate.releaseAll()                 // resumes the live task (+ any not-yet-removed cancelled ones)
   try await pollUntil { await counter.value() == 1 }
@@ -67,14 +67,14 @@ private func pollUntil(_ condition: @Sendable () async -> Bool) async throws {
 @Test func debouncerFiresAgainAfterEachQuietPeriod() async throws {
   let counter = Counter()
   let gate = Gate()
-  let d = Debouncer(interval: 1, sleep: { _ in await gate.sleep() }) { await counter.bump() }
+  let debouncer = Debouncer(interval: 1, sleep: { _ in await gate.sleep() }, action: { await counter.bump() })
 
-  await d.schedule()
+  await debouncer.schedule()
   try await pollUntil { await gate.started >= 1 }
   await gate.releaseAll()
   try await pollUntil { await counter.value() == 1 }
 
-  await d.schedule()
+  await debouncer.schedule()
   try await pollUntil { await gate.started >= 2 }
   await gate.releaseAll()
   try await pollUntil { await counter.value() == 2 }

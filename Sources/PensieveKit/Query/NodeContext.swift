@@ -13,7 +13,7 @@ public enum NodeContext {
 public enum NodeContextResolver {
   /// The effective context of `nodeID`: its own if set, else the nearest ancestor's; `""` if none.
   public static func resolve(_ nodeID: UUID, in nodes: [Node]) -> String {
-    resolve(nodeID, byID: Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }))
+    resolve(nodeID, byID: Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { existing, _ in existing }))
   }
 
   static func resolve(_ nodeID: UUID, byID: [UUID: Node]) -> String {
@@ -30,7 +30,7 @@ public enum NodeContextResolver {
   /// The ids visible under `active`: resolved context equal to `active` OR unset. `active == ""`
   /// (no Focus) ⇒ every id. Generalizes to more contexts: show active + unset, hide every other.
   public static func visibleNodeIDs(for active: String, in nodes: [Node]) -> Set<UUID> {
-    let byID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    let byID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { existing, _ in existing })
     let allIDs = Set(byID.keys)
     guard !active.isEmpty else { return allIDs }
     return allIDs.filter { id in

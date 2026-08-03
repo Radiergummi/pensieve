@@ -61,23 +61,31 @@ public enum CorpusBuilder {
       guard let files = try? fileManager.contentsOfDirectory(at: taskDir, includingPropertiesForKeys: nil) else { continue }
       for file in files where file.pathExtension == "json" {
         guard let data = try? Data(contentsOf: file) else { continue }
-        switch task {
-        case "extraction":
-          if let extractionItem = try? JSONDecoder().decode(ExtractionCorpusItem.self, from: data) { items.append(.extraction(extractionItem)) }
-        case "narration":
-          if let narrationItem = try? JSONDecoder().decode(NarrationCorpusItem.self, from: data) { items.append(.narration(narrationItem)) }
-        case "description":
-          if let descriptionItem = try? JSONDecoder().decode(DescriptionCorpusItem.self, from: data) { items.append(.description(descriptionItem)) }
-        default: break
-        }
+        if let item = decodeFrozenItem(task: task, data: data) { items.append(item) }
       }
     }
     return items
   }
 
+  private static func decodeFrozenItem(task: String, data: Data) -> CorpusItem? {
+    switch task {
+    case "extraction":
+      guard let extractionItem = try? JSONDecoder().decode(ExtractionCorpusItem.self, from: data) else { return nil }
+      return .extraction(extractionItem)
+    case "narration":
+      guard let narrationItem = try? JSONDecoder().decode(NarrationCorpusItem.self, from: data) else { return nil }
+      return .narration(narrationItem)
+    case "description":
+      guard let descriptionItem = try? JSONDecoder().decode(DescriptionCorpusItem.self, from: data) else { return nil }
+      return .description(descriptionItem)
+    default:
+      return nil
+    }
+  }
+
   // MARK: - Narration pool (active nodes with events; the emptiest node is the stress case)
 
-  private static func buildNarrationPool(database: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
+  private static func buildNarrationPool(database: any DatabaseReader) throws -> [PoolEntry<CorpusItem>] {
     let activeNodes = try database.read { database in try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database) }
     var withEvents: [(node: Node, events: [Event])] = []
     for node in activeNodes {
@@ -94,21 +102,21 @@ public enum CorpusBuilder {
       lhs.events.count != rhs.events.count ? lhs.events.count < rhs.events.count : lhs.node.id.uuidString < rhs.node.id.uuidString
     }
 
-    var pool: [(strata: String, isStress: Bool, item: CorpusItem)] = []
+    var pool: [PoolEntry<CorpusItem>] = []
     for entry in withEvents {
       let isStressEntry = entry.node.id == stress?.node.id
       guard isStressEntry || !entry.events.isEmpty else { continue }   // only the stress slot may carry 0 events
       let item = CorpusItem.narration(NarrationCorpusItem(
         id: entry.node.id.uuidString, nodeName: entry.node.name, events: entry.events.map(EventDTO.init)))
       let strata = isStressEntry ? "narration.stress" : (entry.events.count >= 8 ? "narration.long" : "narration.short")
-      pool.append((strata, isStressEntry, item))
+      pool.append(PoolEntry(strata: strata, isStress: isStressEntry, item: item))
     }
     return pool
   }
 
   // MARK: - Extraction pool (parsed transcripts; longest + one compacted session are stress cases)
 
-  private static func buildExtractionPool(projectsDir: URL) -> [(strata: String, isStress: Bool, item: CorpusItem)] {
+  private static func buildExtractionPool(projectsDir: URL) -> [PoolEntry<CorpusItem>] {
     let files = TranscriptDiscovery.discover(
       projectsDir: projectsDir, now: Date(), ageBound: 3650 * 24 * 60 * 60, alreadyIngested: { _ in false })
 
@@ -133,26 +141,28 @@ public enum CorpusBuilder {
       .extraction(ExtractionCorpusItem(id: candidate.id, shape: shape(candidate), messages: candidate.parsed.messages.map(TranscriptMessageDTO.init)))
     }
 
-    var pool: [(strata: String, isStress: Bool, item: CorpusItem)] = []
+    var pool: [PoolEntry<CorpusItem>] = []
     for candidate in candidates where candidate.id != longest?.id && candidate.id != compacted?.id {
-      pool.append((shape(candidate), false, item(candidate)))
+      pool.append(PoolEntry(strata: shape(candidate), isStress: false, item: item(candidate)))
     }
-    if let longest { pool.append(("extraction.stress", true, item(longest))) }
-    if let compacted, compacted.id != longest?.id { pool.append(("extraction.stress", true, item(compacted))) }
+    if let longest { pool.append(PoolEntry(strata: "extraction.stress", isStress: true, item: item(longest))) }
+    if let compacted, compacted.id != longest?.id {
+      pool.append(PoolEntry(strata: "extraction.stress", isStress: true, item: item(compacted)))
+    }
     return pool
   }
 
   // MARK: - Description pool (nodes whose sole source is lhs git repo)
 
-  private static func buildDescriptionPool(database: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
+  private static func buildDescriptionPool(database: any DatabaseReader) throws -> [PoolEntry<CorpusItem>] {
     let sources = try database.read { database in try Source.all.fetchAll(database) }
     let byNode = Dictionary(grouping: sources, by: { $0.nodeID })
-    var pool: [(strata: String, isStress: Bool, item: CorpusItem)] = []
+    var pool: [PoolEntry<CorpusItem>] = []
     for (nodeID, nodeSources) in byNode {
       guard nodeSources.count == 1, let only = nodeSources.first, only.kind == SourceKind.gitRepo else { continue }
       let ctx = ProjectContext.gather(commonDir: only.key)
       let item = CorpusItem.description(DescriptionCorpusItem(id: nodeID.uuidString, context: ProjectContextDTO(ctx)))
-      pool.append(("description", false, item))
+      pool.append(PoolEntry(strata: "description", isStress: false, item: item))
     }
     return pool
   }

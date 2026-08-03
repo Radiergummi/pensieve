@@ -16,20 +16,28 @@ public struct TaskScorecard: Codable, Sendable {
 }
 
 public enum ReportRenderer {
-  public static func markdown(_ s: Scorecard) -> String {
+  public static func markdown(_ scorecard: Scorecard) -> String {
     var out = "# Pensieve LLM Eval Scorecard\n\n"
-    out += "Corpus: `\(s.corpusHash)` — recommendation valid for work resembling this corpus; re-sample if your workload shifts.\n\n"
+    out += "Corpus: `\(scorecard.corpusHash)` — recommendation valid for work resembling this corpus; "
+    out += "re-sample if your workload shifts.\n\n"
     out += "> Caveats: `$/run` is an **estimate** (chars/4 tokens × config price; judge cost excluded). "
-    out += "Latency is **not like-for-like** (on-device is hardware-bound local compute + multiple calls; cloud is a network round-trip).\n\n"
-    for t in s.tasks {
-      out += "## \(t.task)\n\n"
-      if let a = t.judgeAgreement { out += "Judge-vs-human agreement: **\(String(format: "%.0f%%", a * 100))**\n\n" }
-      out += "| model | quality | precision | recall | $/run (est) | p50 latency | fab? |\n|---|---|---|---|---|---|---|\n"
-      for c in t.cells {
-        func f(_ d: Double?) -> String { d.map { String(format: "%.2f", $0) } ?? "—" }
-        out += "| \(c.modelLabel)\(c.isOnDevice ? " (local)" : "") | \(f(c.quality)) | \(f(c.precision)) | \(f(c.recall)) | $\(String(format: "%.4f", c.costUSD)) | \(Int(c.latencyP50))ms | \(c.reproducedFabrication ? "⚠︎" : "") |\n"
+    out += "Latency is **not like-for-like** (on-device is hardware-bound local compute + multiple calls; "
+    out += "cloud is a network round-trip).\n\n"
+    for taskScorecard in scorecard.tasks {
+      out += "## \(taskScorecard.task)\n\n"
+      if let agreement = taskScorecard.judgeAgreement {
+        out += "Judge-vs-human agreement: **\(String(format: "%.0f%%", agreement * 100))**\n\n"
       }
-      out += "\n**Recommended: \(t.recommendation.winner)** — \(t.recommendation.reason)\n\n"
+      out += "| model | quality | precision | recall | $/run (est) | p50 latency | fab? |\n|---|---|---|---|---|---|---|\n"
+      for cellScore in taskScorecard.cells {
+        func f(_ doubleValue: Double?) -> String { doubleValue.map { String(format: "%.2f", $0) } ?? "—" }
+        let modelName = cellScore.modelLabel + (cellScore.isOnDevice ? " (local)" : "")
+        let costText = String(format: "%.4f", cellScore.costUSD)
+        let fabricationMark = cellScore.reproducedFabrication ? "⚠︎" : ""
+        out += "| \(modelName) | \(f(cellScore.quality)) | \(f(cellScore.precision)) | \(f(cellScore.recall)) | "
+        out += "$\(costText) | \(Int(cellScore.latencyP50))ms | \(fabricationMark) |\n"
+      }
+      out += "\n**Recommended: \(taskScorecard.recommendation.winner)** — \(taskScorecard.recommendation.reason)\n\n"
     }
     return out
   }

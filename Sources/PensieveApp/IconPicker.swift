@@ -55,7 +55,11 @@ struct IconToggleRow: View {
       Button { showEmoji = true } label: {
         ZStack {
           Circle().fill(isEmoji ? tint.opacity(0.25) : Color.secondary.opacity(0.15))
-          if let emojiValue = currentEmoji { Text(emojiValue).font(.system(size: 22)) } else { Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(.secondary) }
+          if let emojiValue = currentEmoji {
+            Text(emojiValue).font(.system(size: 22))
+          } else {
+            Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(.secondary)
+          }
         }.frame(width: 44, height: 44)
       }
       .buttonStyle(.plain)

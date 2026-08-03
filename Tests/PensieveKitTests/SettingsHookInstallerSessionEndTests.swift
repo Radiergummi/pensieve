@@ -13,9 +13,9 @@ private func tmpSettings() -> URL {
   try SettingsHookInstaller.install(settingsURL: url, pensievePath: "/bin/pensieve")
   let seeded = try Data(contentsOf: url)
   var root = try JSONSerialization.jsonObject(with: seeded) as! [String: Any]
-  var hooks = root["hooks"] as! [String: Any]
-  hooks["Stop"] = [["matcher": "x", "hooks": [["type": "command", "command": "/other tool"]]]]
-  root["hooks"] = hooks
+  var seededHooks = root["hooks"] as! [String: Any]
+  seededHooks["Stop"] = [["matcher": "x", "hooks": [["type": "command", "command": "/other tool"]]]]
+  root["hooks"] = seededHooks
   try JSONSerialization.data(withJSONObject: root).write(to: url)
 
   let first = try SettingsHookInstaller.installSessionEnd(settingsURL: url, pensievePath: "/bin/pensieve")
@@ -24,12 +24,12 @@ private func tmpSettings() -> URL {
   #expect(second == false)   // idempotent
 
   let obj = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
-  let h = obj["hooks"] as! [String: Any]
-  let sessionEnd = h["SessionEnd"] as! [[String: Any]]
+  let hooks = obj["hooks"] as! [String: Any]
+  let sessionEnd = hooks["SessionEnd"] as! [[String: Any]]
   #expect(sessionEnd.count == 1)
   #expect(sessionEnd[0]["matcher"] as? String == "")
   let cmd = ((sessionEnd[0]["hooks"] as! [[String: Any]])[0]["command"] as! String)
   #expect(cmd.contains("capture-session-end"))
-  #expect(h["SessionStart"] != nil)   // preserved
-  #expect(h["Stop"] != nil)           // foreign preserved
+  #expect(hooks["SessionStart"] != nil)   // preserved
+  #expect(hooks["Stop"] != nil)           // foreign preserved
 }

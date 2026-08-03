@@ -7,8 +7,8 @@ private struct FixedProvider: LLMProvider {
   func complete(prompt: String) async throws -> String { reply }
 }
 
-private func msg(_ i: Int, _ text: String) -> TranscriptMessage {
-  TranscriptMessage(index: i, role: "user", text: text, timestamp: nil, isUserPrompt: true)
+private func msg(_ index: Int, _ text: String) -> TranscriptMessage {
+  TranscriptMessage(index: index, role: "user", text: text, timestamp: nil, isUserPrompt: true)
 }
 
 @Test func classifierKeepsOnlyReturnedIndices() async {

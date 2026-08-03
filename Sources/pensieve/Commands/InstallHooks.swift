@@ -10,6 +10,6 @@ struct InstallHooks: ParsableCommand {
     let url = URL(fileURLWithPath: repo).standardizedFileURL
     let pensievePath = PensievePaths.installedBinaryURL().path
     let written = try HookInstaller.install(inRepo: url, pensievePath: pensievePath)
-    for w in written { print("installed \(w.path)") }
+    for hookPath in written { print("installed \(hookPath.path)") }
   }
 }

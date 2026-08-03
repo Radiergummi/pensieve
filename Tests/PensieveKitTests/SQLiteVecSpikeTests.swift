@@ -14,8 +14,8 @@ import CSQLiteVec
     // with the raw sqlite3 handle.
     var config = Configuration()
     config.prepareDatabase { database in
-      let rc = pensieve_sqlite_vec_init_connection(UnsafeMutableRawPointer(database.sqliteConnection))
-      #expect(rc == 0)   // SQLITE_OK
+      let returnCode = pensieve_sqlite_vec_init_connection(UnsafeMutableRawPointer(database.sqliteConnection))
+      #expect(returnCode == 0)   // SQLITE_OK
     }
     let queue = try DatabaseQueue(configuration: config)   // in-memory
     try queue.write { database in

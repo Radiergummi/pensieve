@@ -3,6 +3,22 @@ import SQLiteData
 import GRDB
 import os
 
+/// Outcome of the `cc.session` write transaction. A named type instead of a tuple purely to
+/// satisfy `large_tuple` — same three members, same meaning.
+private struct SessionIngestOutcome {
+  let inserted: Bool
+  let born: UUID?
+  let branch: String?
+}
+
+/// `git show` output for a commit. A named type instead of a tuple purely to satisfy
+/// `large_tuple` — same three members, same meaning.
+private struct CommitFields {
+  let subject: String
+  let when: Date
+  let files: String
+}
+
 public struct Ingester: Sendable {
   let spool: CaptureSpool
   let database: any DatabaseWriter
@@ -33,10 +49,10 @@ public struct Ingester: Sendable {
     var created = 0
     for row in rows {
       do {
-        let n = try await ingest(row)
+        let eventCount = try await ingest(row)
         try spool.markIngested([row.id])
-        created += n
-        Log.ingest.debug("Ingested row \(row.id, privacy: .public) kind=\(row.kind, privacy: .public) events=\(n, privacy: .public)")
+        created += eventCount
+        Log.ingest.debug("Ingested row \(row.id, privacy: .public) kind=\(row.kind, privacy: .public) events=\(eventCount, privacy: .public)")
       } catch {
         Log.ingest.error("Spool row \(row.id, privacy: .public) failed: \(error, privacy: .public)")
         continue   // leave unmarked; retry next drain
@@ -51,105 +67,123 @@ public struct Ingester: Sendable {
     let data = Data(row.payload.utf8)
     switch row.kind {
     case CaptureKind.gitCommit:
-      let p = try JSONDecoder().decode(GitCommitPayload.self, from: data)
-      let key = Git.commonDir(in: p.repoPath) ?? ProjectResolver.canonical(p.repoPath)
-      let branchKey = Git.strandBranchKey(branch: p.branch, defaultBranch: Git.defaultBranch(in: p.repoPath))
-      let fields = gitCommitFields(hash: p.hash, repo: p.repoPath, fallbackTime: row.ts)
-      let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
-      let outcome = try writeSync { database -> (inserted: Bool, born: UUID?) in
-        let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.gitRepo)
-        let dup = try eventExists(database, sourceID: source.id, fingerprint: Fingerprint.commit(hash: p.hash))
-        if dup { return (false, nil) }
-        let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.gitCommit)
-        try Event.insert {
-          Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: fields.when,
-                kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
-                fingerprint: Fingerprint.commit(hash: p.hash), branchKey: branchKey)
-        }.execute(database)
-        try resurfaceIfArchived(database, nodeID: attr.nodeID)
-        return (true, attr.bornStrand)
-      }
-      if let born = outcome.born { await nameStrand(born, branchKey: branchKey ?? "") }
-      return outcome.inserted ? 1 : 0
+      return try await ingestGitCommit(data: data, row: row)
 
     case CaptureKind.gitCheckout:
-      let p = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
-      let key = Git.commonDir(in: p.repoPath) ?? ProjectResolver.canonical(p.repoPath)
-      let detail = try encodeJSON(["from": p.from, "to": p.to, "branch": p.branch])
-      let inserted = try writeSync { database -> Bool in
-        let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.gitRepo)
-        return try insertIfNew(database, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.ts,
-              kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail,
-              fingerprint: Fingerprint.checkout(repo: p.repoPath, from: p.from, to: p.to, branch: p.branch)))
-      }
-      return inserted ? 1 : 0
+      return try ingestGitCheckout(data: data, row: row)
 
     case CaptureKind.ccSession:
-      let p = try JSONDecoder().decode(SessionRefPayload.self, from: data)
-      let transcriptURL = URL(fileURLWithPath: p.transcriptPath)
-      let session = TranscriptParser.parse(fileURL: transcriptURL)
-      // No cwd → can't attribute. Distinguish transient from permanent so discovery's
-      // per-cycle re-spool can't loop forever: an empty/unreadable transcript may still fill
-      // later (throw → stays pending, retries next drain); a non-empty transcript that still
-      // has no cwd is corrupt/foreign and will never attribute (drop → drain marks it
-      // ingested, returning 0 events).
-      guard let cwd = session.cwd else {
-        let size = (try? transcriptURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        if size == 0 { throw IngestError.unattributableSession }
-        return 0
-      }
-      // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
-      // so a session launched from a subdirectory lands in the same project as its commits.
-      let key = Git.commonDir(in: cwd) ?? ProjectResolver.canonical(cwd)
-      // A degenerate root is not an area of work. Dropping it here is permanent (return 0 → the
-      // drain marks the row ingested) exactly like the non-empty-transcript-without-cwd case
-      // above: such a session will never become attributable, so retrying it forever is worse.
-      guard !ProjectResolver.isDegenerateRoot(key) else {
-        Log.ingest.info("Dropped session with degenerate cwd \(key, privacy: .public) — not an area of work")
-        return 0
-      }
-      let detail = try encodeJSON(["sessionID": session.sessionID,
-                                   "prompts": String(session.userPromptCount),
-                                   "transcriptPath": p.transcriptPath])
-      let outcome = try writeSync { database -> (inserted: Bool, born: UUID?, branch: String?) in
-        let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.claudeCode)
-        let dup = try eventExists(database, sourceID: source.id, fingerprint: Fingerprint.session(sessionID: session.sessionID))
-        if dup { return (false, nil, nil) }
-        let branchKey: String? = {
-          guard let sb = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(database),
-                let raw = sb.branch else { return nil }
-          return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sb.commonDir))
-        }()
-        let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.ccSession)
-        try Event.insert {
-          Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: session.endedAt ?? row.ts,
-                kind: CaptureKind.ccSession, summary: "session (\(session.userPromptCount) prompts)",
-                detailJSON: detail, fingerprint: Fingerprint.session(sessionID: session.sessionID),
-                branchKey: branchKey)
-        }.execute(database)
-        try resurfaceIfArchived(database, nodeID: attr.nodeID)
-        return (true, attr.bornStrand, branchKey)
-      }
-      if let born = outcome.born { await nameStrand(born, branchKey: outcome.branch ?? "") }
-      return outcome.inserted ? 1 : 0
+      return try await ingestSession(data: data, row: row)
 
     case CaptureKind.ccSessionStart:
-      let p = try JSONDecoder().decode(SessionStartPayload.self, from: data)
-      try writeSync { database in
-        let exists = try SessionBranch.where { $0.sessionID.eq(p.sessionID) }.fetchOne(database) != nil
-        if !exists {
-          try SessionBranch.insert {
-            SessionBranch(sessionID: p.sessionID,
-                          branch: p.branch.isEmpty ? nil : p.branch,
-                          commonDir: p.commonDir)
-          }.execute(database)
-        }
-      }
-      return 0
+      return try ingestSessionStart(data: data)
 
     default:
       return 0   // unknown kind: dropped (still marked ingested by drain), 0 events
     }
+  }
+}
+
+extension Ingester {
+  private func ingestGitCommit(data: Data, row: SpoolRow) async throws -> Int {
+    let payload = try JSONDecoder().decode(GitCommitPayload.self, from: data)
+    let key = Git.commonDir(in: payload.repoPath) ?? ProjectResolver.canonical(payload.repoPath)
+    let branchKey = Git.strandBranchKey(branch: payload.branch, defaultBranch: Git.defaultBranch(in: payload.repoPath))
+    let fields = gitCommitFields(hash: payload.hash, repo: payload.repoPath, fallbackTime: row.timestamp)
+    let detail = try encodeJSON(["hash": payload.hash, "branch": payload.branch, "files": fields.files])
+    let outcome = try writeSync { database -> (inserted: Bool, born: UUID?) in
+      let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.gitRepo)
+      let dup = try eventExists(database, sourceID: source.id, fingerprint: Fingerprint.commit(hash: payload.hash))
+      if dup { return (false, nil) }
+      let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.gitCommit)
+      try Event.insert {
+        Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: fields.when,
+              kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
+              fingerprint: Fingerprint.commit(hash: payload.hash), branchKey: branchKey)
+      }.execute(database)
+      try resurfaceIfArchived(database, nodeID: attr.nodeID)
+      return (true, attr.bornStrand)
+    }
+    if let born = outcome.born { await nameStrand(born, branchKey: branchKey ?? "") }
+    return outcome.inserted ? 1 : 0
+  }
+
+  private func ingestGitCheckout(data: Data, row: SpoolRow) throws -> Int {
+    let payload = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
+    let key = Git.commonDir(in: payload.repoPath) ?? ProjectResolver.canonical(payload.repoPath)
+    let detail = try encodeJSON(["from": payload.fromRef, "to": payload.toRef, "branch": payload.branch])
+    let inserted = try writeSync { database -> Bool in
+      let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.gitRepo)
+      return try insertIfNew(database, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.timestamp,
+            kind: CaptureKind.gitCheckout, summary: "checkout \(payload.branch)", detailJSON: detail,
+            fingerprint: Fingerprint.checkout(repo: payload.repoPath, from: payload.fromRef, to: payload.toRef, branch: payload.branch)))
+    }
+    return inserted ? 1 : 0
+  }
+
+  private func ingestSession(data: Data, row: SpoolRow) async throws -> Int {
+    let payload = try JSONDecoder().decode(SessionRefPayload.self, from: data)
+    let transcriptURL = URL(fileURLWithPath: payload.transcriptPath)
+    let session = TranscriptParser.parse(fileURL: transcriptURL)
+    // No cwd → can't attribute. Distinguish transient from permanent so discovery's
+    // per-cycle re-spool can't loop forever: an empty/unreadable transcript may still fill
+    // later (throw → stays pending, retries next drain); a non-empty transcript that still
+    // has no cwd is corrupt/foreign and will never attribute (drop → drain marks it
+    // ingested, returning 0 events).
+    guard let cwd = session.cwd else {
+      let size = (try? transcriptURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+      if size == 0 { throw IngestError.unattributableSession }
+      return 0
+    }
+    // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
+    // so a session launched from a subdirectory lands in the same project as its commits.
+    let key = Git.commonDir(in: cwd) ?? ProjectResolver.canonical(cwd)
+    // A degenerate root is not an area of work. Dropping it here is permanent (return 0 → the
+    // drain marks the row ingested) exactly like the non-empty-transcript-without-cwd case
+    // above: such a session will never become attributable, so retrying it forever is worse.
+    guard !ProjectResolver.isDegenerateRoot(key) else {
+      Log.ingest.info("Dropped session with degenerate cwd \(key, privacy: .public) — not an area of work")
+      return 0
+    }
+    let detail = try encodeJSON(["sessionID": session.sessionID,
+                                 "prompts": String(session.userPromptCount),
+                                 "transcriptPath": payload.transcriptPath])
+    let outcome = try writeSync { database -> SessionIngestOutcome in
+      let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.claudeCode)
+      let dup = try eventExists(database, sourceID: source.id, fingerprint: Fingerprint.session(sessionID: session.sessionID))
+      if dup { return SessionIngestOutcome(inserted: false, born: nil, branch: nil) }
+      let branchKey: String? = {
+        guard let sessionBranch = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(database),
+              let raw = sessionBranch.branch else { return nil }
+        return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sessionBranch.commonDir))
+      }()
+      let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.ccSession)
+      try Event.insert {
+        Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: session.endedAt ?? row.timestamp,
+              kind: CaptureKind.ccSession, summary: "session (\(session.userPromptCount) prompts)",
+              detailJSON: detail, fingerprint: Fingerprint.session(sessionID: session.sessionID),
+              branchKey: branchKey)
+      }.execute(database)
+      try resurfaceIfArchived(database, nodeID: attr.nodeID)
+      return SessionIngestOutcome(inserted: true, born: attr.bornStrand, branch: branchKey)
+    }
+    if let born = outcome.born { await nameStrand(born, branchKey: outcome.branch ?? "") }
+    return outcome.inserted ? 1 : 0
+  }
+
+  private func ingestSessionStart(data: Data) throws -> Int {
+    let payload = try JSONDecoder().decode(SessionStartPayload.self, from: data)
+    try writeSync { database in
+      let exists = try SessionBranch.where { $0.sessionID.eq(payload.sessionID) }.fetchOne(database) != nil
+      if !exists {
+        try SessionBranch.insert {
+          SessionBranch(sessionID: payload.sessionID,
+                        branch: payload.branch.isEmpty ? nil : payload.branch,
+                        commonDir: payload.commonDir)
+        }.execute(database)
+      }
+    }
+    return 0
   }
 
   /// Whether an event with this (sourceID, fingerprint) already exists — the dedup predicate,
@@ -216,18 +250,18 @@ public struct Ingester: Sendable {
   /// keeps the branch-key fallback name. Deterministic — the namer is outside the trust gate,
   /// but its output still shouldn't read like a numbered list item or a full sentence.
   static func sanitizeStrandName(_ raw: String) -> String? {
-    var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    if let marker = s.range(of: #"^(\d+[.)]|[-*•])\s+"#, options: .regularExpression) {
-      s.removeSubrange(marker)
+    var sanitized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let marker = sanitized.range(of: #"^(\d+[.)]|[-*•])\s+"#, options: .regularExpression) {
+      sanitized.removeSubrange(marker)
     }
-    s = s.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-    s = s.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
-    s = s.trimmingCharacters(in: .whitespaces)
+    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
+    sanitized = sanitized.trimmingCharacters(in: .whitespaces)
     // Enforce the "terse label, not a sentence" contract this doc comment always claimed. Observed
     // failures: a 101-char name and multi-sentence commit-message-shaped output sitting in the
     // sidebar. nil → the caller keeps the deterministic branch-key fallback.
-    guard TextQuality.isTerseLabel(s) else { return nil }
-    return s
+    guard TextQuality.isTerseLabel(sanitized) else { return nil }
+    return sanitized
   }
 
   /// Per-pass cap so a big first run (or a flush-and-reingest) can't stall the sync cycle on N
@@ -250,7 +284,7 @@ public struct Ingester: Sendable {
     obj["nameInferred"] = true
     guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])
     else { return json }
-    return String(decoding: data, as: UTF8.self)
+    return String(bytes: data, encoding: .utf8) ?? json
   }
 
   /// Best-effort, once-per-node display-name inference for git project nodes. Selects untouched,
@@ -350,13 +384,12 @@ public struct Ingester: Sendable {
   }
 
   /// One `git show` yields subject, ISO-8601 commit date, and the changed-file list.
-  private func gitCommitFields(hash: String, repo: String, fallbackTime: Date)
-    -> (subject: String, when: Date, files: String) {
+  private func gitCommitFields(hash: String, repo: String, fallbackTime: Date) -> CommitFields {
     let raw = Git.run(["show", "--name-only", "--format=%s%n%cI", hash], in: repo) ?? ""
     let lines = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     let subject = lines.first.flatMap { $0.isEmpty ? nil : $0 } ?? hash
     let when = (lines.count > 1 ? ISO8601DateFormatter().date(from: lines[1]) : nil) ?? fallbackTime
     let files = lines.dropFirst(2).filter { !$0.isEmpty }.joined(separator: "\n")
-    return (subject, when, files)
+    return CommitFields(subject: subject, when: when, files: files)
   }
 }

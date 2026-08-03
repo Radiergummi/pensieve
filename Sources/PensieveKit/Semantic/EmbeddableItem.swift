@@ -8,9 +8,9 @@ public struct EmbeddableItem: Sendable {
   }
   /// Stable across processes/runs (String.hashValue is per-process salted — do NOT use it here).
   public var contentHash: String {
-    var h: UInt64 = 1469598103934665603            // FNV-1a
-    for b in text.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
-    return String(h, radix: 16)
+    var hashAccumulator: UInt64 = 1469598103934665603            // FNV-1a
+    for byte in text.utf8 { hashAccumulator = (hashAccumulator ^ UInt64(byte)) &* 1099511628211 }
+    return String(hashAccumulator, radix: 16)
   }
 }
 
@@ -34,10 +34,10 @@ public enum EmbeddableCorpus {
       let nodes = try Node.all.fetchAll(database)
         .filter { $0.state == .active || $0.state == .archived }
       let stateByNodeID = Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
-                                     uniquingKeysWith: { a, _ in a })
-      for n in nodes {
-        out.append(.init(itemID: n.id.uuidString, kind: "node", nodeID: n.id.uuidString,
-                         state: n.state.rawValue, text: [n.name, n.description].filter { !$0.isEmpty }.joined(separator: " — ")))
+                                     uniquingKeysWith: { firstState, _ in firstState })
+      for node in nodes {
+        out.append(.init(itemID: node.id.uuidString, kind: "node", nodeID: node.id.uuidString,
+                         state: node.state.rawValue, text: [node.name, node.description].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       for looseEnd in ends {
@@ -46,17 +46,17 @@ public enum EmbeddableCorpus {
                          state: state, text: [looseEnd.text, looseEnd.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
       let events = try Event.all.fetchAll(database)
-      for e in events {
-        guard let state = stateByNodeID[e.nodeID] else { continue }
+      for event in events {
+        guard let state = stateByNodeID[event.nodeID] else { continue }
         let text: String?
-        switch e.kind {
+        switch event.kind {
         // LLM-enriched prose — gate it: degenerate model output ("[]", a bare "/") is not content.
-        case CaptureKind.ccSession: text = e.workSummary.flatMap { isSearchable($0) ? $0 : nil }
+        case CaptureKind.ccSession: text = event.workSummary.flatMap { isSearchable($0) ? $0 : nil }
         // Human-authored (a git commit subject). NOT gated — "wip" and "fix ci" are real, short work.
-        default: text = e.summary.isEmpty ? nil : e.summary
+        default: text = event.summary.isEmpty ? nil : event.summary
         }
         if let text {
-          out.append(.init(itemID: e.id.uuidString, kind: "event", nodeID: e.nodeID.uuidString,
+          out.append(.init(itemID: event.id.uuidString, kind: "event", nodeID: event.nodeID.uuidString,
                            state: state, text: text))
         }
       }

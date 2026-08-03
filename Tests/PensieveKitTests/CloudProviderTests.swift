@@ -25,12 +25,12 @@ private func bodyJSON(_ request: URLRequest) -> [String: Any] {
 
 @Test func anthropicCompletionRequestShape() throws {
   let cfg = CloudConfig(flavor: .anthropic, baseURL: "https://api.anthropic.com", model: "claude-x")
-  let r = try CloudHTTP.buildCompletionRequest(config: cfg, apiKey: "sk-ant", prompt: "hi")
-  #expect(r.url?.absoluteString == "https://api.anthropic.com/v1/messages")
-  #expect(r.httpMethod == "POST")
-  #expect(r.value(forHTTPHeaderField: "x-api-key") == "sk-ant")
-  #expect(r.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
-  let body = bodyJSON(r)
+  let request = try CloudHTTP.buildCompletionRequest(config: cfg, apiKey: "sk-ant", prompt: "hi")
+  #expect(request.url?.absoluteString == "https://api.anthropic.com/v1/messages")
+  #expect(request.httpMethod == "POST")
+  #expect(request.value(forHTTPHeaderField: "x-api-key") == "sk-ant")
+  #expect(request.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
+  let body = bodyJSON(request)
   #expect(body["model"] as? String == "claude-x")
   #expect(body["max_tokens"] as? Int == 1024)
   let messages = body["messages"] as? [[String: Any]]
@@ -40,36 +40,36 @@ private func bodyJSON(_ request: URLRequest) -> [String: Any] {
 
 @Test func openAICompletionRequestShape() throws {
   let cfg = CloudConfig(flavor: .openAICompatible, baseURL: "https://api.openai.com/v1", model: "gpt-x")
-  let r = try CloudHTTP.buildCompletionRequest(config: cfg, apiKey: "sk-oai", prompt: "hi")
-  #expect(r.url?.absoluteString == "https://api.openai.com/v1/chat/completions")
-  #expect(r.value(forHTTPHeaderField: "Authorization") == "Bearer sk-oai")
-  #expect(bodyJSON(r)["model"] as? String == "gpt-x")
+  let request = try CloudHTTP.buildCompletionRequest(config: cfg, apiKey: "sk-oai", prompt: "hi")
+  #expect(request.url?.absoluteString == "https://api.openai.com/v1/chat/completions")
+  #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-oai")
+  #expect(bodyJSON(request)["model"] as? String == "gpt-x")
 }
 
 @Test func modelsRequestPathsAvoidDoubleV1() throws {
-  let a = try CloudHTTP.buildModelsRequest(
+  let anthropicRequest = try CloudHTTP.buildModelsRequest(
     config: CloudConfig(flavor: .anthropic, baseURL: "https://api.anthropic.com", model: "m"), apiKey: "k")
-  #expect(a.url?.absoluteString == "https://api.anthropic.com/v1/models")
-  #expect(a.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
-  #expect(a.httpMethod == "GET")
-  let o = try CloudHTTP.buildModelsRequest(
+  #expect(anthropicRequest.url?.absoluteString == "https://api.anthropic.com/v1/models")
+  #expect(anthropicRequest.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
+  #expect(anthropicRequest.httpMethod == "GET")
+  let openAIRequest = try CloudHTTP.buildModelsRequest(
     config: CloudConfig(flavor: .openAICompatible, baseURL: "https://api.openai.com/v1", model: "m"), apiKey: "k")
-  #expect(o.url?.absoluteString == "https://api.openai.com/v1/models")
-  #expect(o.value(forHTTPHeaderField: "Authorization") == "Bearer k")
+  #expect(openAIRequest.url?.absoluteString == "https://api.openai.com/v1/models")
+  #expect(openAIRequest.value(forHTTPHeaderField: "Authorization") == "Bearer k")
 }
 
 @Test func trailingSlashInBaseIsNotDoubled() throws {
-  let r = try CloudHTTP.buildCompletionRequest(
+  let completionRequest = try CloudHTTP.buildCompletionRequest(
     config: CloudConfig(flavor: .anthropic, baseURL: "https://api.anthropic.com/", model: "m"),
     apiKey: "k", prompt: "hi")
-  #expect(r.url?.absoluteString == "https://api.anthropic.com/v1/messages")
+  #expect(completionRequest.url?.absoluteString == "https://api.anthropic.com/v1/messages")
 }
 
 @Test func parseAnthropicAndOpenAICompletions() throws {
-  let a = Data(#"{"content":[{"type":"text","text":"hello"}]}"#.utf8)
-  #expect(try CloudHTTP.parseCompletion(flavor: .anthropic, a) == "hello")
-  let o = Data(#"{"choices":[{"message":{"role":"assistant","content":"hi there"}}]}"#.utf8)
-  #expect(try CloudHTTP.parseCompletion(flavor: .openAICompatible, o) == "hi there")
+  let anthropicData = Data(#"{"content":[{"type":"text","text":"hello"}]}"#.utf8)
+  #expect(try CloudHTTP.parseCompletion(flavor: .anthropic, anthropicData) == "hello")
+  let openAIData = Data(#"{"choices":[{"message":{"role":"assistant","content":"hi there"}}]}"#.utf8)
+  #expect(try CloudHTTP.parseCompletion(flavor: .openAICompatible, openAIData) == "hi there")
 }
 
 @Test func parseCompletionThrowsOnMalformed() {

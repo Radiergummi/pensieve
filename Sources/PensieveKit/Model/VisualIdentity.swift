@@ -11,10 +11,10 @@ public enum AppearanceIcon: Equatable, Sendable {
   /// back to the kind default).
   public static func parse(_ raw: String) -> AppearanceIcon? {
     if raw.hasPrefix("sf:") {
-      let s = String(raw.dropFirst(3)); return s.isEmpty ? nil : .sfSymbol(s)
+      let symbolString = String(raw.dropFirst(3)); return symbolString.isEmpty ? nil : .sfSymbol(symbolString)
     }
     if raw.hasPrefix("emoji:") {
-      let e = String(raw.dropFirst(6)); return e.isEmpty ? nil : .emoji(e)
+      let emojiString = String(raw.dropFirst(6)); return emojiString.isEmpty ? nil : .emoji(emojiString)
     }
     return nil
   }
@@ -22,8 +22,8 @@ public enum AppearanceIcon: Equatable, Sendable {
   /// The canonical stored form, for writing back to `Node.icon`.
   public var storedString: String {
     switch self {
-    case .sfSymbol(let s): return "sf:\(s)"
-    case .emoji(let e): return "emoji:\(e)"
+    case .sfSymbol(let symbol): return "sf:\(symbol)"
+    case .emoji(let emoji): return "emoji:\(emoji)"
     }
   }
 }

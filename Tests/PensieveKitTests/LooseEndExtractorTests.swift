@@ -162,9 +162,9 @@ private struct StubProvider: LLMProvider {
   let joined = chunks.flatMap { $0 }.map(\.text).joined()
   #expect(joined == text)
   for chunk in chunks {
-    for f in chunk {
-      for w in f.text.split(separator: " ") { #expect(words.contains(String(w))) }
-      #expect(f.text.count <= 12)   // budget invariant preserved
+    for fragment in chunk {
+      for word in fragment.text.split(separator: " ") { #expect(words.contains(String(word))) }
+      #expect(fragment.text.count <= 12)   // budget invariant preserved
     }
   }
 }

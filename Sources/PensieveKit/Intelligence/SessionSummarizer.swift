@@ -42,8 +42,8 @@ public struct SessionSummarizer: Sendable {
       return await completeCapped(chunks.first ?? text)
     }
     var partials: [String] = []
-    for c in chunks {
-      if let s = await completeCapped(c) { partials.append(s) }
+    for chunk in chunks {
+      if let partial = await completeCapped(chunk) { partials.append(partial) }
     }
     guard !partials.isEmpty else { return nil }
     let joined = partials.joined(separator: "\n")
@@ -81,8 +81,8 @@ public struct SessionSummarizer: Sendable {
     var start = text.startIndex
     while start < text.endIndex {
       var end = text.index(start, offsetBy: budget, limitedBy: text.endIndex) ?? text.endIndex
-      if end < text.endIndex, let ws = text[start..<end].lastIndex(where: { $0.isWhitespace }) {
-        end = text.index(after: ws)
+      if end < text.endIndex, let whitespaceIndex = text[start..<end].lastIndex(where: { $0.isWhitespace }) {
+        end = text.index(after: whitespaceIndex)
       }
       out.append(String(text[start..<end]))
       start = end

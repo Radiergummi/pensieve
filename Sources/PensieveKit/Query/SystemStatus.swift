@@ -26,20 +26,32 @@ public struct SystemStatus: Sendable, Equatable {
   }
 }
 
+/// Exactly the three inputs the SHARED `resolvedProviderKind` needs, carried as one value.
+///
+/// `apiKey` is a `String?` (not a Bool) so we can call `resolvedProviderKind` directly rather than
+/// reimplementing the "is cloud configured" test — one source of truth with the factory.
+public struct ProviderInputs {
+  public var defaults: UserDefaults
+  public var cloudConfig: CloudConfig?
+  public var apiKey: String?
+  public init(defaults: UserDefaults, cloudConfig: CloudConfig?, apiKey: String?) {
+    self.defaults = defaults
+    self.cloudConfig = cloudConfig
+    self.apiKey = apiKey
+  }
+}
+
 public enum SystemStatusGatherer {
-  /// Everything is injected (database, defaults, cloud inputs, both file URLs) so this is deterministically
+  /// Everything is injected (database, provider inputs, both file URLs) so this is deterministically
   /// testable against a temp store + temp files. No hidden globals, no `now:` — every field is
   /// present-or-absent, and relative-date formatting belongs to the view.
-  ///
-  /// `apiKey` is a `String?` (not a Bool) so we can call the SHARED `resolvedProviderKind` directly
-  /// rather than reimplementing the "is cloud configured" test — one source of truth with the factory.
   public static func gather(database: (any DatabaseReader)?,
-                           defaults: UserDefaults,
-                           cloudConfig: CloudConfig?,
-                           apiKey: String?,
-                           backgroundSyncEnabled: Bool,
-                           syncLogURL: URL) -> SystemStatus {
-    let kind = resolvedProviderKind(defaults: defaults, cloudConfig: cloudConfig, apiKey: apiKey)
+                            provider: ProviderInputs,
+                            backgroundSyncEnabled: Bool,
+                            syncLogURL: URL) -> SystemStatus {
+    let kind = resolvedProviderKind(defaults: provider.defaults,
+                                    cloudConfig: provider.cloudConfig,
+                                    apiKey: provider.apiKey)
 
     let lastSyncAt = try? syncLogURL
       .resourceValues(forKeys: [.contentModificationDateKey])

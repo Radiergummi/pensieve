@@ -13,8 +13,8 @@ extension PaletteDestination {
       self = .briefing
     case .node(let id):
       self = .node(id)
-    case .smartList(let s):
-      switch s {
+    case .smartList(let smartListKind):
+      switch smartListKind {
       case .whatsNext: self = .smartList(.whatsNext)
       case .dormant: self = .smartList(.dormant)
       case .recentlyActive: self = .smartList(.recentlyActive)

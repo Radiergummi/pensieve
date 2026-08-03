@@ -2,19 +2,19 @@ import Foundation
 import Testing
 @testable import PensieveKit
 
-private func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
+private func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
   // Hour 12 in the current calendar → no midnight rollover in any real timezone, so the
   // yyyy-MM-dd the builder formats (in TimeZone.current) is deterministic across machines.
-  Calendar.current.date(from: DateComponents(year: y, month: m, day: d, hour: 12))!
+  Calendar.current.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
 }
 
-private func looseEnd(_ text: String, quote: String, on d: Date) -> LooseEndView {
+private func looseEnd(_ text: String, quote: String, on occurrenceDate: Date) -> LooseEndView {
   LooseEndView(looseEnd: LooseEnd(nodeID: UUID(), sourceEventID: UUID(), text: text, quote: quote),
-               occurredAt: d, ageDays: 0)
+               occurredAt: occurrenceDate, ageDays: 0)
 }
 
-private func event(_ summary: String, on d: Date) -> Event {
-  Event(nodeID: UUID(), sourceID: UUID(), occurredAt: d, kind: "git.commit",
+private func event(_ summary: String, on occurrenceDate: Date) -> Event {
+  Event(nodeID: UUID(), sourceID: UUID(), occurredAt: occurrenceDate, kind: "git.commit",
         summary: summary, detailJSON: "{}")
 }
 

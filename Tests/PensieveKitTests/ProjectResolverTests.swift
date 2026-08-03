@@ -7,13 +7,13 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: tempURL("resolver"))
   let resolver = ProjectResolver(database: database)
 
-  let a = try resolver.resolve(path: "/Users/moritz/Projects/colibri", kind: "gitRepo")
-  #expect(a.project.name == "colibri")
+  let gitRepoResolution = try resolver.resolve(path: "/Users/moritz/Projects/colibri", kind: "gitRepo")
+  #expect(gitRepoResolution.project.name == "colibri")
 
   // Same path, different source kind → same project, new source.
-  let b = try resolver.resolve(path: "/Users/moritz/Projects/colibri", kind: "claudeCode")
-  #expect(b.project.id == a.project.id)
-  #expect(b.source.id != a.source.id)
+  let claudeCodeResolution = try resolver.resolve(path: "/Users/moritz/Projects/colibri", kind: "claudeCode")
+  #expect(claudeCodeResolution.project.id == gitRepoResolution.project.id)
+  #expect(claudeCodeResolution.source.id != gitRepoResolution.source.id)
 
   let projects = try database.read { database in try Node.all.fetchAll(database) }
   #expect(projects.count == 1)
@@ -31,10 +31,10 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: tempURL("resolver-symlink"))
   let resolver = ProjectResolver(database: database)
 
-  let a = try resolver.resolve(path: real.path, kind: "gitRepo")
-  let b = try resolver.resolve(path: link.path, kind: "gitRepo")
+  let realResolution = try resolver.resolve(path: real.path, kind: "gitRepo")
+  let symlinkResolution = try resolver.resolve(path: link.path, kind: "gitRepo")
 
-  #expect(a.project.id == b.project.id)
+  #expect(realResolution.project.id == symlinkResolution.project.id)
   let projects = try database.read { database in try Node.all.fetchAll(database) }
   #expect(projects.count == 1)
 }
@@ -57,37 +57,37 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: tempURL("group-loose"))
   let resolver = ProjectResolver(database: database)
 
-  let a = try resolver.resolve(path: "/p/primary", kind: "gitRepo")
-  let b = try resolver.resolve(path: "/p/secondary", kind: "gitRepo")
+  let primaryResolution = try resolver.resolve(path: "/p/primary", kind: "gitRepo")
+  let secondaryResolution = try resolver.resolve(path: "/p/secondary", kind: "gitRepo")
 
   let event = Event(
-    nodeID: b.project.id, sourceID: b.source.id, occurredAt: Date(),
+    nodeID: secondaryResolution.project.id, sourceID: secondaryResolution.source.id, occurredAt: Date(),
     kind: "git.commit", summary: "x", detailJSON: "{}")
   try database.write { database in try Event.insert { event }.execute(database) }
 
   let looseEnd = LooseEnd(
-    nodeID: b.project.id, sourceEventID: event.id, text: "todo", quote: "q")
+    nodeID: secondaryResolution.project.id, sourceEventID: event.id, text: "todo", quote: "q")
   try database.write { database in try LooseEnd.insert { looseEnd }.execute(database) }
 
-  let checkpoint = Checkpoint(nodeID: b.project.id, note: "n")
+  let checkpoint = Checkpoint(nodeID: secondaryResolution.project.id, note: "n")
   try database.write { database in try Checkpoint.insert { checkpoint }.execute(database) }
 
   // A child node under B must re-parent to A on merge, not orphan.
-  let child = Node(name: "b-strand", parentID: b.project.id, kind: .strand, branchKey: "feature")
+  let child = Node(name: "b-strand", parentID: secondaryResolution.project.id, kind: .strand, branchKey: "feature")
   try database.write { database in try Node.insert { child }.execute(database) }
 
-  try ProjectResolver(database: database).group(a.project.id, into: [b.project.id])
+  try ProjectResolver(database: database).group(primaryResolution.project.id, into: [secondaryResolution.project.id])
 
   let looseEnds = try database.read { database in try LooseEnd.all.fetchAll(database) }
   #expect(looseEnds.count == 1)
-  #expect(looseEnds.first?.nodeID == a.project.id)
+  #expect(looseEnds.first?.nodeID == primaryResolution.project.id)
 
   let checkpoints = try database.read { database in try Checkpoint.all.fetchAll(database) }
   #expect(checkpoints.count == 1)
-  #expect(checkpoints.first?.nodeID == a.project.id)
+  #expect(checkpoints.first?.nodeID == primaryResolution.project.id)
 
   let reparented = try database.read { database in try Node.where { $0.id.eq(child.id) }.fetchOne(database) }
-  #expect(reparented?.parentID == a.project.id)
+  #expect(reparented?.parentID == primaryResolution.project.id)
 }
 
 @Test func groupMergingParentIntoChildRerootsAtGrandparent() throws {

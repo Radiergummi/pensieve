@@ -31,8 +31,8 @@ private struct ThrowSalience: LLMProvider {
 private func vle(_ quote: String, at index: Int) -> VerifiedLooseEnd {
   VerifiedLooseEnd(text: quote, quote: quote, role: "user", sourceMessageIndex: index)
 }
-private func um(_ i: Int, _ text: String) -> TranscriptMessage {
-  TranscriptMessage(index: i, role: "user", text: text, timestamp: nil, isUserPrompt: true)
+private func um(_ index: Int, _ text: String) -> TranscriptMessage {
+  TranscriptMessage(index: index, role: "user", text: text, timestamp: nil, isUserPrompt: true)
 }
 
 @Test func salienceDropsReturnedIndices() async {
@@ -63,10 +63,10 @@ private func um(_ i: Int, _ text: String) -> TranscriptMessage {
 }
 
 @Test func buildPromptPairsOverloadEmitsQuoteAndContext() {
-  let p = SalienceClassifier.buildPrompt([(quote: "migrate the auth tables later", context: "user: migrate the auth tables later")])
-  #expect(p.contains("[0] QUOTE: migrate the auth tables later"))
-  #expect(p.contains("CONTEXT:\nuser: migrate the auth tables later"))
-  #expect(p.contains("Return ONLY a JSON array"))
+  let prompt = SalienceClassifier.buildPrompt([(quote: "migrate the auth tables later", context: "user: migrate the auth tables later")])
+  #expect(prompt.contains("[0] QUOTE: migrate the auth tables later"))
+  #expect(prompt.contains("CONTEXT:\nuser: migrate the auth tables later"))
+  #expect(prompt.contains("Return ONLY a JSON array"))
 }
 
 @Test func salienceMapsDropIndicesPerBatchNotGlobally() async {

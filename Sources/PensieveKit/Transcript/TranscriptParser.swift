@@ -7,7 +7,9 @@ public enum TranscriptParser {
     let isoFractional = ISO8601DateFormatter()
     isoFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let isoPlain = ISO8601DateFormatter()
-    func parseTimestamp(_ s: String) -> Date? { isoFractional.date(from: s) ?? isoPlain.date(from: s) }
+    func parseTimestamp(_ timestampString: String) -> Date? {
+      isoFractional.date(from: timestampString) ?? isoPlain.date(from: timestampString)
+    }
     let sessionID = fileURL.deletingPathExtension().lastPathComponent
     guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
       return ParsedSession(sessionID: sessionID, cwd: nil, startedAt: nil, endedAt: nil,
@@ -25,7 +27,7 @@ public enum TranscriptParser {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
       else { continue }   // defensive: skip garbage lines
 
-      if cwd == nil, let c = obj["cwd"] as? String { cwd = c }
+      if cwd == nil, let cwdValue = obj["cwd"] as? String { cwd = cwdValue }
       let timestamp = (obj["timestamp"] as? String).flatMap(parseTimestamp)
       if let timestamp { timestamps.append(timestamp) }
 
@@ -57,7 +59,7 @@ public enum TranscriptParser {
 
   /// `content` is either a String or an array of content blocks (`{type:text,text:...}`).
   private static func extractText(_ content: Any?) -> String {
-    if let s = content as? String { return s }
+    if let contentString = content as? String { return contentString }
     if let blocks = content as? [[String: Any]] {
       return blocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
     }

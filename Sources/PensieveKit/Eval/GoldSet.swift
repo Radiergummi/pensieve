@@ -8,8 +8,8 @@ public struct GoldSet: Codable, Sendable {
   }
   public static func load(from url: URL) -> GoldSet {
     guard let data = try? Data(contentsOf: url),
-          let g = try? JSONDecoder().decode(GoldSet.self, from: data) else { return GoldSet(recall: [:], grounding: [:]) }
-    return g
+          let goldSet = try? JSONDecoder().decode(GoldSet.self, from: data) else { return GoldSet(recall: [:], grounding: [:]) }
+    return goldSet
   }
   public func save(to url: URL) throws {
     try EvalPaths.ensureDir(url.deletingLastPathComponent())

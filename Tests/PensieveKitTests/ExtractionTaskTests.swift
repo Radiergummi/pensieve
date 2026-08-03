@@ -19,7 +19,9 @@ private struct OneCandidateExtractor: LLMProvider {
 }
 
 @Test func extractionTaskSurfacesVerifiedLooseEnds() async throws {
-  let msgs = [TranscriptMessageDTO(TranscriptMessage(index: 0, role: "user", text: "we should revisit retries later", timestamp: nil, isUserPrompt: true))]
+  let msgs = [TranscriptMessageDTO(TranscriptMessage(
+    index: 0, role: "user", text: "we should revisit retries later", timestamp: nil, isUserPrompt: true
+  ))]
   let item = CorpusItem.extraction(ExtractionCorpusItem(id: "x1", shape: "short", messages: msgs))
   let out = try await ExtractionTask().run(item: item, model: OneCandidateExtractor(), reference: KeepGenuineClassifier())
   #expect(out.looseEnds?.count == 1)

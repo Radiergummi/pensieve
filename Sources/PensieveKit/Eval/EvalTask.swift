@@ -23,8 +23,8 @@ public enum TaskRegistry {
     var problems: [String] = []
     let taskIDs = Set(tasks.map { $0.id })
     let barTasks = Set(config.bars.map { $0.task })
-    for t in taskIDs where !barTasks.contains(t) { problems.append("task '\(t)' has no bar in eval-config.json") }
-    for b in barTasks where !taskIDs.contains(b) { problems.append("bar '\(b)' has no registered task") }
+    for taskID in taskIDs where !barTasks.contains(taskID) { problems.append("task '\(taskID)' has no bar in eval-config.json") }
+    for barTask in barTasks where !taskIDs.contains(barTask) { problems.append("bar '\(barTask)' has no registered task") }
     return problems
   }
   public static func consistencyProblems(config: EvalConfig) -> [String] { consistency(tasks: all, config: config) }

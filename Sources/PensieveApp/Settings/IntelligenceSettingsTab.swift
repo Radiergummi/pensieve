@@ -40,8 +40,8 @@ struct IntelligenceSettingsTab: View {
             set: { providerRaw = $0.rawValue })
   }
 
-  private func label(for p: ProviderPreference) -> LocalizedStringKey {
-    switch p {
+  private func label(for preference: ProviderPreference) -> LocalizedStringKey {
+    switch preference {
     case .auto: return "Automatic"
     case .foundationModels: return "On-device (Foundation Models)"
     case .claudeCLI: return "Claude CLI (subscription)"
@@ -49,8 +49,8 @@ struct IntelligenceSettingsTab: View {
     }
   }
 
-  private func help(for p: ProviderPreference) -> LocalizedStringKey {
-    switch p {
+  private func help(for preference: ProviderPreference) -> LocalizedStringKey {
+    switch preference {
     case .auto: return "Picks the best on-device option — Foundation Models when available, otherwise the Claude CLI."
     case .foundationModels: return "Runs entirely on-device. Private and free, but noticeably lower quality than a frontier cloud model."
     case .claudeCLI: return "Uses your Claude subscription via the claude command. Good quality, stays on your account."
@@ -64,12 +64,15 @@ struct IntelligenceSettingsTab: View {
         Toggle("Show “Last Work Done” narration", isOn: $narrationEnabled)
 
         Toggle("Semantic search (find by meaning)", isOn: $semanticSearchEnabled)
-        Text("Builds an on-device index so ⌘F and Claude Code can find work by meaning, not just exact words. First use downloads a small on-device model.")
+        Text("""
+          Builds an on-device index so ⌘F and Claude Code can find work by meaning, not just exact words. \
+          First use downloads a small on-device model.
+          """)
           .font(.caption).foregroundStyle(.secondary)
 
         Picker("LLM Provider", selection: provider) {
-          ForEach([ProviderPreference.auto, .foundationModels, .claudeCLI, .cloud], id: \.self) { p in
-            Text(label(for: p)).tag(p)
+          ForEach([ProviderPreference.auto, .foundationModels, .claudeCLI, .cloud], id: \.self) { preference in
+            Text(label(for: preference)).tag(preference)
           }
         }
         .onChange(of: providerRaw) { _, _ in

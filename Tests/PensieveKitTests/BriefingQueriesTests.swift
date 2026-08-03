@@ -6,22 +6,22 @@ import SQLiteData
 @Test func cardsSplitMovedFromQuietAndCarryLooseEnds() throws {
   let database = try openCanonicalDatabase(at: tempURL("briefing"))
   let resolver = ProjectResolver(database: database)
-  let (moved, ms) = try resolver.resolve(path: "/p/moved", kind: SourceKind.claudeCode)
-  let (quiet, qs) = try resolver.resolve(path: "/p/quiet", kind: SourceKind.claudeCode)
+  let (moved, movedSource) = try resolver.resolve(path: "/p/moved", kind: SourceKind.claudeCode)
+  let (quiet, quietSource) = try resolver.resolve(path: "/p/quiet", kind: SourceKind.claudeCode)
   let now = Date()
   let since = Calendar.current.date(byAdding: .day, value: -2, to: now)!   // "last visit" = 2 days ago
   let recent = Calendar.current.date(byAdding: .day, value: -1, to: now)!  // after `since`
   let old = Calendar.current.date(byAdding: .day, value: -10, to: now)!    // before `since`
   try database.write { database in
-    let e1 = Event(nodeID: moved.id, sourceID: ms.id, occurredAt: recent, kind: CaptureKind.ccSession,
+    let recentEvent = Event(nodeID: moved.id, sourceID: movedSource.id, occurredAt: recent, kind: CaptureKind.ccSession,
                    summary: "shipped the thing", detailJSON: "{}", fingerprint: "m1")
-    try Event.insert { e1 }.execute(database)
+    try Event.insert { recentEvent }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: moved.id, sourceEventID: e1.id, text: "rotate CI keys", quote: "set CI vars",
+      LooseEnd(nodeID: moved.id, sourceEventID: recentEvent.id, text: "rotate CI keys", quote: "set CI vars",
                role: "user", sourceMessageIndex: 0)
     }.execute(database)
     try Event.insert {
-      Event(nodeID: quiet.id, sourceID: qs.id, occurredAt: old, kind: CaptureKind.ccSession,
+      Event(nodeID: quiet.id, sourceID: quietSource.id, occurredAt: old, kind: CaptureKind.ccSession,
             summary: "old work", detailJSON: "{}", fingerprint: "q1")
     }.execute(database)
   }

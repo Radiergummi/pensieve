@@ -33,22 +33,22 @@ struct BriefingView: View {
     }
   }
 
-  private func card(for c: BriefingCard) -> some View {
-    Button { model.selectedNodeID = c.node.id } label: {
+  private func card(for briefingCard: BriefingCard) -> some View {
+    Button { model.selectedNodeID = briefingCard.node.id } label: {
       VStack(alignment: .leading, spacing: 4) {
         HStack {
-          Text(c.node.name).font(.headline)
+          Text(briefingCard.node.name).font(.headline)
           Spacer()
-          if c.movedSince > 0 {
-            Text("\(c.movedSince) since last visit").metaText()
+          if briefingCard.movedSince > 0 {
+            Text("\(briefingCard.movedSince) since last visit").metaText()
           } else {
-            Text("dormant \(c.daysDormant)d").font(.system(size: 12)).foregroundStyle(.tertiary)
+            Text("dormant \(briefingCard.daysDormant)d").font(.system(size: 12)).foregroundStyle(.tertiary)
           }
         }
-        if !c.latestSummary.isEmpty {
-          Text(c.latestSummary).prose().foregroundStyle(.secondary).lineLimit(1)
+        if !briefingCard.latestSummary.isEmpty {
+          Text(briefingCard.latestSummary).prose().foregroundStyle(.secondary).lineLimit(1)
         }
-        if let top = c.topLooseEnd {
+        if let top = briefingCard.topLooseEnd {
           Label(top, systemImage: "arrow.right.circle").font(.system(size: 12)).foregroundStyle(.orange).lineLimit(1)
         }
       }

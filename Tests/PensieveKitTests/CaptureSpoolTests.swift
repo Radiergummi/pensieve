@@ -21,16 +21,16 @@ import Testing
   let spool = try CaptureSpool(at: tempURL("spool"))
   #expect(try spool.lastCaptureAt() == nil)                     // empty spool
 
-  let t1 = Date(timeIntervalSince1970: 1_000_000)
-  let t2 = Date(timeIntervalSince1970: 2_000_000)
-  try spool.append(kind: CaptureKind.gitCommit, payload: "{}", at: t1)
-  try spool.append(kind: CaptureKind.ccSession, payload: "{}", at: t2)
-  #expect(abs(try spool.lastCaptureAt()!.timeIntervalSince(t2)) < 1)   // newest wins
+  let timestamp1 = Date(timeIntervalSince1970: 1_000_000)
+  let timestamp2 = Date(timeIntervalSince1970: 2_000_000)
+  try spool.append(kind: CaptureKind.gitCommit, payload: "{}", at: timestamp1)
+  try spool.append(kind: CaptureKind.ccSession, payload: "{}", at: timestamp2)
+  #expect(abs(try spool.lastCaptureAt()!.timeIntervalSince(timestamp2)) < 1)   // newest wins
 
   let ids = try spool.pending().map(\.id)
   try spool.markIngested(ids)
   #expect(try spool.pendingCount() == 0)
-  #expect(abs(try spool.lastCaptureAt()!.timeIntervalSince(t2)) < 1)   // survives ingest
+  #expect(abs(try spool.lastCaptureAt()!.timeIntervalSince(timestamp2)) < 1)   // survives ingest
 }
 
 @Test func pendingCountCountsOnlyUningested() throws {

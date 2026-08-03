@@ -45,11 +45,11 @@ public enum BriefingQueries {
       return result
     }
     var cards: [BriefingCard] = []
-    for a in activity {
-      let ends = try LooseEndQueries.open(database, nodeID: a.node.id, now: now)
+    for nodeActivity in activity {
+      let ends = try LooseEndQueries.open(database, nodeID: nodeActivity.node.id, now: now)
       cards.append(BriefingCard(
-        node: a.node, movedSince: a.movedSince, latestSummary: a.latestSummary,
-        openLooseEnds: ends.count, topLooseEnd: ends.first?.looseEnd.text, daysDormant: a.daysDormant))
+        node: nodeActivity.node, movedSince: nodeActivity.movedSince, latestSummary: nodeActivity.latestSummary,
+        openLooseEnds: ends.count, topLooseEnd: ends.first?.looseEnd.text, daysDormant: nodeActivity.daysDormant))
     }
     // Moved-since-last-visit first (most movement first); then the quiet ones, least-dormant first.
     return cards.sorted {

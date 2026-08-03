@@ -80,12 +80,12 @@ public struct ClaudeCLIProvider: LLMProvider {
     }
     process.waitUntilExit()
     guard process.terminationStatus == 0 else {
-      let errText = String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+      let errText = (String(bytes: errData, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       let suffix = errText.isEmpty ? "" : ": \(errText.prefix(500))"
       Log.llm.error("claude -p exit \(process.terminationStatus, privacy: .public)")
       throw LLMError.providerFailed("claude -p exit \(process.terminationStatus)\(suffix)")
     }
     Log.llm.debug("LLM completion received (len=\(outData.count, privacy: .public))")
-    return String(decoding: outData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    return (String(bytes: outData, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

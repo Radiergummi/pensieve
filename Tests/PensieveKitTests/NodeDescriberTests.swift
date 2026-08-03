@@ -123,17 +123,17 @@ private func describableProjectNode(database: any DatabaseWriter) async throws -
 @Test func describeIsIneligibleWithZeroOrTwoGitSources() async throws {
   let database = try openCanonicalDatabase(at: tempURL("canon"))
   // Zero git sources.
-  let a = Node(name: "a", kind: NodeKind.project)
-  try await database.write { database in try Node.insert { a }.execute(database) }
-  #expect(await NodeDescriber.describe(database, nodeID: a.id, provider: StubLLM(text: "x"), force: false) == .ineligible)
+  let nodeWithoutGitSources = Node(name: "a", kind: NodeKind.project)
+  try await database.write { database in try Node.insert { nodeWithoutGitSources }.execute(database) }
+  #expect(await NodeDescriber.describe(database, nodeID: nodeWithoutGitSources.id, provider: StubLLM(text: "x"), force: false) == .ineligible)
   // Two git sources (merged node).
-  let b = Node(name: "b", kind: NodeKind.project)
+  let nodeWithTwoGitSources = Node(name: "b", kind: NodeKind.project)
   try await database.write { database in
-    try Node.insert { b }.execute(database)
-    try Source.insert { Source(nodeID: b.id, kind: SourceKind.gitRepo, key: "/x/.git") }.execute(database)
-    try Source.insert { Source(nodeID: b.id, kind: SourceKind.gitRepo, key: "/y/.git") }.execute(database)
+    try Node.insert { nodeWithTwoGitSources }.execute(database)
+    try Source.insert { Source(nodeID: nodeWithTwoGitSources.id, kind: SourceKind.gitRepo, key: "/x/.git") }.execute(database)
+    try Source.insert { Source(nodeID: nodeWithTwoGitSources.id, kind: SourceKind.gitRepo, key: "/y/.git") }.execute(database)
   }
-  #expect(await NodeDescriber.describe(database, nodeID: b.id, provider: StubLLM(text: "x"), force: false) == .ineligible)
+  #expect(await NodeDescriber.describe(database, nodeID: nodeWithTwoGitSources.id, provider: StubLLM(text: "x"), force: false) == .ineligible)
 }
 
 @Test func describeSkipsAlreadyDescribedUnlessForced() async throws {
@@ -202,11 +202,11 @@ private func describableProjectNode(database: any DatabaseWriter) async throws -
   // 21 signal-less project nodes (bogus git-source keys → gather finds no worktree → .noSignal,
   // free, no LLM call). This exceeds descriptionRefineCap (20). If the cap counted CANDIDATES
   // instead of invocations, these 21 would exhaust it before the describable node below is reached.
-  for i in 0..<21 {
-    let n = Node(name: "empty-\(i)", kind: NodeKind.project)
+  for index in 0..<21 {
+    let emptyNode = Node(name: "empty-\(index)", kind: NodeKind.project)
     try await database.write { database in
-      try Node.insert { n }.execute(database)
-      try Source.insert { Source(nodeID: n.id, kind: SourceKind.gitRepo, key: "/nonexistent/repo-\(i)/.git") }.execute(database)
+      try Node.insert { emptyNode }.execute(database)
+      try Source.insert { Source(nodeID: emptyNode.id, kind: SourceKind.gitRepo, key: "/nonexistent/repo-\(index)/.git") }.execute(database)
     }
   }
   // One describable node with a substantive README, inserted last (worst case for starvation).

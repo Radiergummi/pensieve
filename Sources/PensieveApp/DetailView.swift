@@ -104,10 +104,10 @@ struct DetailView: View {
       isNarrating = false
       isDescribing = false
       describeNote = nil
-      let d = model.detail(for: node)
+      let detail = model.detail(for: node)
       describable = model.isDescribable(node)
-      recentEvents = d.status.recentEvents
-      looseEnds = d.looseEnds
+      recentEvents = detail.status.recentEvents
+      looseEnds = detail.looseEnds
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       shareMarkdown = RecallMarkdown.render(node: node,
                                             narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
@@ -234,10 +234,10 @@ private struct TimelineRow: View {
     }
   }
 
-  @ViewBuilder private func sourceIcon(_ s: SourceStyle) -> some View {
-    switch AppearanceIcon.parse(s.icon) {
-    case .sfSymbol(let n): Image(systemName: n)
-    case .emoji(let e):    Text(e)
+  @ViewBuilder private func sourceIcon(_ sourceStyle: SourceStyle) -> some View {
+    switch AppearanceIcon.parse(sourceStyle.icon) {
+    case .sfSymbol(let symbolName): Image(systemName: symbolName)
+    case .emoji(let emoji):    Text(emoji)
     case nil:              Image(systemName: "circle.fill")
     }
   }

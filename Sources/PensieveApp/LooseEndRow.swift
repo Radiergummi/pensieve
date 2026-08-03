@@ -54,9 +54,10 @@ struct LooseEndRow: View {
       }
 
       if expanded {
+        let roleText = view.looseEnd.role.isEmpty ? String(localized: "captured") : view.looseEnd.role
         VStack(alignment: .leading, spacing: 8) {
           provenanceBody
-          Text("\(view.looseEnd.role.isEmpty ? String(localized: "captured") : view.looseEnd.role) · \(view.occurredAt, format: .dateTime.year().month().day()) · \(view.ageDays)d ago")
+          Text("\(roleText) · \(view.occurredAt, format: .dateTime.year().month().day()) · \(view.ageDays)d ago")
             .metaText()
         }
         .padding(12)
@@ -186,7 +187,7 @@ struct LooseEndRow: View {
     let all = segments(for: msg)
     let firstProse = all.first { segment in
       switch segment {
-      case .markdown(let t): return !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      case .markdown(let text): return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       case .callout: return true
       case .harness: return false
       }

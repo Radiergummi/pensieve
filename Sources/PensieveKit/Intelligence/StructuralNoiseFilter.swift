@@ -22,12 +22,12 @@ public enum StructuralNoiseFilter {
 
   /// Distinct generated-brief signals present in `text` (max 4).
   static func templateSignals(in text: String) -> Int {
-    var n = 0
-    if hasOpener(text) { n += 1 }
-    if hasMetaInstruction(text) { n += 1 }
-    if text.range(of: #"Task \d+"#, options: .regularExpression) != nil { n += 1 }
-    if sectionHeaderCount(text) >= 2 { n += 1 }
-    return n
+    var signalCount = 0
+    if hasOpener(text) { signalCount += 1 }
+    if hasMetaInstruction(text) { signalCount += 1 }
+    if text.range(of: #"Task \d+"#, options: .regularExpression) != nil { signalCount += 1 }
+    if sectionHeaderCount(text) >= 2 { signalCount += 1 }
+    return signalCount
   }
 
   private static let openers = [
@@ -50,11 +50,11 @@ public enum StructuralNoiseFilter {
   /// Markdown section headers: a line starting with 1-6 `#` + space, or a bold label
   /// line like `**Foo:**`.
   static func sectionHeaderCount(_ text: String) -> Int {
-    text.split(separator: "\n").reduce(0) { acc, line in
-      let l = line.trimmingCharacters(in: .whitespaces)
-      let heading = l.range(of: #"^#{1,6}\s"#, options: .regularExpression) != nil
-        || l.range(of: #"^\*\*.+:\*\*"#, options: .regularExpression) != nil
-      return acc + (heading ? 1 : 0)
+    text.split(separator: "\n").reduce(0) { accumulated, line in
+      let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+      let heading = trimmedLine.range(of: #"^#{1,6}\s"#, options: .regularExpression) != nil
+        || trimmedLine.range(of: #"^\*\*.+:\*\*"#, options: .regularExpression) != nil
+      return accumulated + (heading ? 1 : 0)
     }
   }
 }

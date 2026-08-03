@@ -2,6 +2,24 @@ import Foundation
 import SQLiteData
 import GRDB
 
+/// The user-facing fields of the New/Edit node modal, carried as one value so the write APIs
+/// that all take the same five values share one shape.
+public struct NodeFields: Sendable {
+  public var name: String
+  public var kind: NodeKind
+  public var icon: String
+  public var colorTag: String
+  public var context: String
+
+  public init(name: String, kind: NodeKind, icon: String = "", colorTag: String = "", context: String = "") {
+    self.name = name
+    self.kind = kind
+    self.icon = icon
+    self.colorTag = colorTag
+    self.context = context
+  }
+}
+
 public enum NodeCommands {
   /// Find a node by UUID string (preferred) or exact name. Node names are NOT unique, so the
   /// name fallback returns an arbitrary match among duplicates — pass a UUID when the target is
@@ -19,8 +37,8 @@ public enum NodeCommands {
     try database.write { database in
       var parentID: UUID?
       if let parent {
-        guard let p = try find(database, nameOrID: parent) else { return nil }
-        parentID = p.id
+        guard let parentNode = try find(database, nameOrID: parent) else { return nil }
+        parentID = parentNode.id
       }
       let node = Node(name: name, parentID: parentID, kind: kind, description: description,
                       icon: icon, colorTag: colorTag, context: context)
@@ -65,23 +83,23 @@ public enum NodeCommands {
 
   public static func nest(_ database: any DatabaseWriter, child: String, under parent: String) throws -> Bool {
     try database.write { database in
-      guard let c = try find(database, nameOrID: child), let p = try find(database, nameOrID: parent) else { return false }
-      return try reparent(database, nodeID: c.id, newParentID: p.id)
+      guard let childNode = try find(database, nameOrID: child), let parentNode = try find(database, nameOrID: parent) else { return false }
+      return try reparent(database, nodeID: childNode.id, newParentID: parentNode.id)
     }
   }
 
   public static func rename(_ database: any DatabaseWriter, node: String, to newName: String) throws -> Bool {
     try database.write { database in
-      guard let n = try find(database, nameOrID: node) else { return false }
-      try Node.where { $0.id.eq(n.id) }.update { $0.name = newName }.execute(database)
+      guard let foundNode = try find(database, nameOrID: node) else { return false }
+      try Node.where { $0.id.eq(foundNode.id) }.update { $0.name = newName }.execute(database)
       return true
     }
   }
 
   public static func retype(_ database: any DatabaseWriter, node: String, to newKind: NodeKind) throws -> Bool {
     try database.write { database in
-      guard let n = try find(database, nameOrID: node) else { return false }
-      try Node.where { $0.id.eq(n.id) }.update { $0.kind = newKind }.execute(database)
+      guard let foundNode = try find(database, nameOrID: node) else { return false }
+      try Node.where { $0.id.eq(foundNode.id) }.update { $0.kind = newKind }.execute(database)
       return true
     }
   }
@@ -89,13 +107,12 @@ public enum NodeCommands {
   /// Atomic edit of a node's user-facing fields (the app's Edit modal). Leaves description,
   /// parentID, state, branchKey untouched. Returns false — writing nothing — for an unknown id.
   @discardableResult
-  public static func update(_ database: any DatabaseWriter, nodeID: UUID,
-                            name: String, kind: NodeKind, icon: String, colorTag: String,
-                            context: String = "") throws -> Bool {
+  public static func update(_ database: any DatabaseWriter, nodeID: UUID, fields: NodeFields) throws -> Bool {
     try database.write { database in
       guard try Node.where({ $0.id.eq(nodeID) }).fetchOne(database) != nil else { return false }
       try Node.where { $0.id.eq(nodeID) }.update {
-        $0.name = name; $0.kind = kind; $0.icon = icon; $0.colorTag = colorTag; $0.context = context
+        $0.name = fields.name; $0.kind = fields.kind; $0.icon = fields.icon
+        $0.colorTag = fields.colorTag; $0.context = fields.context
       }.execute(database)
       return true
     }
@@ -142,7 +159,7 @@ public enum NodeCommands {
   /// untouched. In-transaction; shared by `unarchive` and `Ingester.resurfaceIfArchived`.
   static func resurface(_ database: Database, ids: [UUID]) throws {
     for id in ids {
-      guard let n = try Node.where({ $0.id.eq(id) }).fetchOne(database), n.state == .archived else { continue }
+      guard let foundNode = try Node.where({ $0.id.eq(id) }).fetchOne(database), foundNode.state == .archived else { continue }
       try Node.where { $0.id.eq(id) }.update { $0.state = NodeState.active }.execute(database)
     }
   }
@@ -206,11 +223,11 @@ public enum NodeTree {
     let byParent = Dictionary(grouping: nodes, by: { $0.parentID })
     var lines: [String] = []
     func walk(_ parent: UUID?, depth: Int) {
-      for n in (byParent[parent] ?? []).sorted(by: { $0.name < $1.name }) {
+      for node in (byParent[parent] ?? []).sorted(by: { $0.name < $1.name }) {
         let indent = String(repeating: "  ", count: depth)
-        let kindTag = n.kind == .project ? "" : " (\(n.kind.rawValue))"
-        lines.append("\(indent)\(n.name)\(kindTag)  [\(n.state.rawValue)]")
-        walk(n.id, depth: depth + 1)
+        let kindTag = node.kind == .project ? "" : " (\(node.kind.rawValue))"
+        lines.append("\(indent)\(node.name)\(kindTag)  [\(node.state.rawValue)]")
+        walk(node.id, depth: depth + 1)
       }
     }
     walk(nil, depth: 0)

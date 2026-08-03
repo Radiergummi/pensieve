@@ -5,10 +5,10 @@ import CryptoKit
 public enum CorpusHash {
   public static func hash(_ parts: [Data]) -> String {
     var hasher = SHA256()
-    for p in parts {
-      var len = UInt64(p.count).littleEndian
+    for part in parts {
+      var len = UInt64(part.count).littleEndian
       withUnsafeBytes(of: &len) { hasher.update(data: Data($0)) }  // length-prefix → order/boundary sensitive
-      hasher.update(data: p)
+      hasher.update(data: part)
     }
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()
   }

@@ -33,8 +33,8 @@ final class DiagnosticsCollector: NSObject, MXMetricManagerSubscriber {
   }
 
   private func write(_ data: Data, prefix: String) {
-    let ts = ISO8601DateFormatter().string(from: Date())
-    let name = "\(prefix)-\(ts).json"
+    let timestamp = ISO8601DateFormatter().string(from: Date())
+    let name = "\(prefix)-\(timestamp).json"
     let url = outputDir.appendingPathComponent(name)
     try? data.write(to: url, options: .atomic)
     AppLog.app.info("MetricKit payload written: \(name, privacy: .public)")

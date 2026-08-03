@@ -3,8 +3,8 @@ import Foundation
 @testable import PensieveKit
 
 @Test func transcriptMessageRoundTrips() throws {
-  let m = TranscriptMessage(index: 3, role: "user", text: "ship it", timestamp: nil, isUserPrompt: true)
-  let dto = TranscriptMessageDTO(m)
+  let message = TranscriptMessage(index: 3, role: "user", text: "ship it", timestamp: nil, isUserPrompt: true)
+  let dto = TranscriptMessageDTO(message)
   let data = try JSONEncoder().encode(dto)
   let back = try JSONDecoder().decode(TranscriptMessageDTO.self, from: data).toDomain()
   #expect(back.index == 3 && back.role == "user" && back.text == "ship it" && back.isUserPrompt)

@@ -39,9 +39,9 @@ private func write(_ text: String, to url: URL) throws {
 @Test func gatherReadsMainWorktreeFromLinkedWorktreeCommonDir() throws {
   let (repo, _) = try makeCommittedRepo()
   try write("# Main Readme\nfrom the main worktree", to: repo.appendingPathComponent("README.md"))
-  let wt = try addWorktree(to: repo, branch: "feature")
+  let linkedWorktree = try addWorktree(to: repo, branch: "feature")
   // A linked worktree shares the main repo's common-dir; gather must read the MAIN worktree.
-  let ctx = ProjectContext.gather(commonDir: Git.commonDir(in: wt.path)!)
+  let ctx = ProjectContext.gather(commonDir: Git.commonDir(in: linkedWorktree.path)!)
   #expect(ctx.readmeHead?.contains("from the main worktree") == true)
 }
 
@@ -75,11 +75,11 @@ private func write(_ text: String, to url: URL) throws {
 @Test func namePromptIncludesOnlyPresentSignals() {
   let ctx = ProjectContext(dirName: "laravel-rls", gitRemote: "https://x/laravel-rls.git",
                            readmeHead: nil, claudeMdHead: nil, manifest: "acme/laravel-rls — RLS package")
-  let p = ProjectContext.namePrompt(ctx)
-  #expect(p.contains("Directory name: laravel-rls"))
-  #expect(p.contains("Git remote: https://x/laravel-rls.git"))
-  #expect(p.contains("acme/laravel-rls — RLS package"))
-  #expect(!p.contains("README excerpt"))     // nil signal omitted
+  let prompt = ProjectContext.namePrompt(ctx)
+  #expect(prompt.contains("Directory name: laravel-rls"))
+  #expect(prompt.contains("Git remote: https://x/laravel-rls.git"))
+  #expect(prompt.contains("acme/laravel-rls — RLS package"))
+  #expect(!prompt.contains("README excerpt"))     // nil signal omitted
 }
 
 // MARK: describePrompt
@@ -87,12 +87,12 @@ private func write(_ text: String, to url: URL) throws {
 @Test func describePromptIncludesOnlyPresentSignals() {
   let ctx = ProjectContext(dirName: "laravel-rls", gitRemote: "https://x/laravel-rls.git",
                            readmeHead: nil, claudeMdHead: nil, manifest: "acme/laravel-rls — RLS package")
-  let p = ProjectContext.describePrompt(ctx)
-  #expect(p.contains("Directory name: laravel-rls"))
-  #expect(p.contains("Git remote: https://x/laravel-rls.git"))
-  #expect(p.contains("acme/laravel-rls — RLS package"))
-  #expect(!p.contains("README excerpt"))                 // nil signal omitted
-  #expect(p.contains("Summarize what this software project"))   // description instruction, not naming
+  let prompt = ProjectContext.describePrompt(ctx)
+  #expect(prompt.contains("Directory name: laravel-rls"))
+  #expect(prompt.contains("Git remote: https://x/laravel-rls.git"))
+  #expect(prompt.contains("acme/laravel-rls — RLS package"))
+  #expect(!prompt.contains("README excerpt"))                 // nil signal omitted
+  #expect(prompt.contains("Summarize what this software project"))   // description instruction, not naming
 }
 
 // MARK: hasMeaningfulSignal (substance gate)

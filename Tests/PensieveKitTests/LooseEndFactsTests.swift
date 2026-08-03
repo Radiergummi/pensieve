@@ -6,29 +6,29 @@ import SQLiteData
 @Test func looseEndFactsAllReturnsOpenEndsInActiveNodesWithNodeName() throws {
   let database = try openCanonicalDatabase(at: tempURL("lef-all"))
   let resolver = ProjectResolver(database: database)
-  let (a, sa) = try resolver.resolve(path: "/p/lef", kind: SourceKind.claudeCode)
-  let ea = Event(nodeID: a.id, sourceID: sa.id, occurredAt: Date(), kind: CaptureKind.ccSession,
+  let (node, source) = try resolver.resolve(path: "/p/lef", kind: SourceKind.claudeCode)
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(), kind: CaptureKind.ccSession,
                  summary: "s", detailJSON: "{}", fingerprint: "lef1")
   try database.write { database in
-    try Event.insert { ea }.execute(database)
+    try Event.insert { event }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "wire up the retry", quote: "we should retry")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "wire up the retry", quote: "we should retry")
     }.execute(database)
     try LooseEnd.insert {   // resolved → excluded
-      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "done item", quote: "q", status: "resolved")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "done item", quote: "q", status: "resolved")
     }.execute(database)
     try LooseEnd.insert {   // confirmed noise → excluded
-      LooseEnd(nodeID: a.id, sourceEventID: ea.id, text: "noise item", quote: "q2",
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "noise item", quote: "q2",
                label: LooseEndLabel.noise)
     }.execute(database)
   }
   let facts = try LooseEndFactsQueries.all(database)
   #expect(facts.count == 1)
-  let f = try #require(facts.first)
-  #expect(f.text == "wire up the retry")
-  #expect(f.quote == "we should retry")
-  #expect(f.nodeID == a.id)
-  #expect(f.nodeName == a.name)
+  let fact = try #require(facts.first)
+  #expect(fact.text == "wire up the retry")
+  #expect(fact.quote == "we should retry")
+  #expect(fact.nodeID == node.id)
+  #expect(fact.nodeName == node.name)
 }
 
 @Test func looseEndFactsAllExcludesEndsWhoseNodeIsArchived() throws {
@@ -53,22 +53,22 @@ import SQLiteData
 @Test func looseEndFactsForResolvesKnownIDsAndDropsUnknown() throws {
   let database = try openCanonicalDatabase(at: tempURL("lef-byid"))
   let resolver = ProjectResolver(database: database)
-  let (a, sa) = try resolver.resolve(path: "/p/byid", kind: SourceKind.claudeCode)
-  let ea = Event(nodeID: a.id, sourceID: sa.id, occurredAt: Date(), kind: CaptureKind.ccSession,
+  let (node, source) = try resolver.resolve(path: "/p/byid", kind: SourceKind.claudeCode)
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(), kind: CaptureKind.ccSession,
                  summary: "s", detailJSON: "{}", fingerprint: "byid1")
   let openID = UUID(), closedID = UUID()
   try database.write { database in
-    try Event.insert { ea }.execute(database)
+    try Event.insert { event }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(id: openID, nodeID: a.id, sourceEventID: ea.id, text: "open", quote: "q")
+      LooseEnd(id: openID, nodeID: node.id, sourceEventID: event.id, text: "open", quote: "q")
     }.execute(database)
     try LooseEnd.insert {   // a since-closed end STILL resolves by id (degrade: tap opens its node)
-      LooseEnd(id: closedID, nodeID: a.id, sourceEventID: ea.id, text: "closed", quote: "q2",
+      LooseEnd(id: closedID, nodeID: node.id, sourceEventID: event.id, text: "closed", quote: "q2",
                status: "resolved")
     }.execute(database)
   }
   let facts = try LooseEndFactsQueries.facts(for: [openID, closedID, UUID()], database)
   #expect(facts.count == 2)                                   // unknown dropped; closed still resolves
-  #expect(facts.contains { $0.looseEndID == openID && $0.nodeID == a.id && $0.nodeName == a.name })
+  #expect(facts.contains { $0.looseEndID == openID && $0.nodeID == node.id && $0.nodeName == node.name })
   #expect(facts.contains { $0.looseEndID == closedID })
 }

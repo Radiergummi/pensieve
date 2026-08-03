@@ -38,7 +38,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await SemanticIndexer(store: indexStore, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
-      query: "refunds", visibleNodeIDs: [visible.id], excludingIDs: [], limit: 5, floor: -1.0,
+      query: "refunds",
+      scope: SemanticSearchScope(visibleNodeIDs: [visible.id], excludingIDs: [], limit: 5, floor: -1.0),
       store: indexStore, embedder: embedder, database)
     #expect(hits.contains { $0.nodeID == visible.id })
     #expect(!hits.contains { $0.nodeID == muted.id })    // muted node filtered out post-KNN
@@ -70,7 +71,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     // 3 muted nodes tie at cosine 1.0, outranking the visible node for limit=2 — only the over-fetch
     // (kPrime = max(limit*8, 50)) reaches past them to find it.
     let hits = await SemanticQueries.search(
-      query: query, visibleNodeIDs: [visible.id], excludingIDs: [], limit: 2, floor: -1.0,
+      query: query,
+      scope: SemanticSearchScope(visibleNodeIDs: [visible.id], excludingIDs: [], limit: 2, floor: -1.0),
       store: indexStore, embedder: embedder, database)
     #expect(hits.contains { $0.nodeID == visible.id })
   }
@@ -94,7 +96,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await SemanticIndexer(store: indexStore, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
-      query: query, visibleNodeIDs: [visible.id], excludingIDs: [], limit: 2, floor: -1.0,
+      query: query,
+      scope: SemanticSearchScope(visibleNodeIDs: [visible.id], excludingIDs: [], limit: 2, floor: -1.0),
       store: indexStore, embedder: embedder, database)
     #expect(hits.contains { $0.nodeID == visible.id })
   }
@@ -117,7 +120,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     }
 
     let hits = await SemanticQueries.search(
-      query: "refund flow", visibleNodeIDs: [node.id], excludingIDs: [], limit: 5, floor: -1.0,
+      query: "refund flow",
+      scope: SemanticSearchScope(visibleNodeIDs: [node.id], excludingIDs: [], limit: 5, floor: -1.0),
       store: indexStore, embedder: embedder, database)
     #expect(!hits.contains { $0.id == looseEnd.id })           // join re-applies isOpen → dropped
   }
@@ -132,7 +136,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 
     // An impossibly high floor (above the max cosine similarity of 1.0) must drop everything.
     let hits = await SemanticQueries.search(
-      query: "refunds", visibleNodeIDs: [node.id], excludingIDs: [], limit: 5, floor: 1.01,
+      query: "refunds",
+      scope: SemanticSearchScope(visibleNodeIDs: [node.id], excludingIDs: [], limit: 5, floor: 1.01),
       store: indexStore, embedder: embedder, database)
     #expect(hits.isEmpty)
   }
@@ -146,15 +151,23 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await SemanticIndexer(store: indexStore, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
-      query: "refunds", visibleNodeIDs: [node.id], excludingIDs: [node.id], limit: 5, floor: -1.0,
+      query: "refunds",
+      scope: SemanticSearchScope(visibleNodeIDs: [node.id], excludingIDs: [node.id], limit: 5, floor: -1.0),
       store: indexStore, embedder: embedder, database)
     #expect(!hits.contains { $0.id == node.id })
   }
 
+  private struct ArchivedFixture {
+    let database: any DatabaseWriter
+    let store: SemanticIndexStore
+    let embedder: StubEmbedder
+    let active: Node
+    let archived: Node
+  }
+
   /// Indexes one active + one archived node whose names are near-identical, so both are plausible
   /// KNN neighbours of the same query and only the state filter can separate them.
-  private func archivedFixture() async throws -> (database: any DatabaseWriter, store: SemanticIndexStore,
-                                                  embedder: StubEmbedder, active: Node, archived: Node) {
+  private func archivedFixture() async throws -> ArchivedFixture {
     let database = try openCanonicalDatabase(at: tempURL("semq-archived"))
     let active = Node(name: "Refund handling", kind: NodeKind.project)
     let archived = Node(name: "Refund handling legacy", state: .archived, kind: NodeKind.project)
@@ -165,7 +178,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let embedder = StubEmbedder(dimension: 16)
     let indexStore = store()
     await SemanticIndexer(store: indexStore, embedder: embedder).sync(database)
-    return (database, indexStore, embedder, active, archived)
+    return ArchivedFixture(database: database, store: indexStore, embedder: embedder, active: active, archived: archived)
   }
 
   @Test func searchExcludesArchivedByDefault() async throws {
@@ -175,8 +188,9 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     // No includeArchived argument at all — the defaulted-parameter regression guard for every
     // existing call site.
     let hits = await SemanticQueries.search(
-      query: "Refund handling legacy", visibleNodeIDs: visible, excludingIDs: [],
-      limit: 8, floor: -1.0, store: fixture.store, embedder: fixture.embedder, fixture.database)
+      query: "Refund handling legacy",
+      scope: SemanticSearchScope(visibleNodeIDs: visible, excludingIDs: [], limit: 8, floor: -1.0),
+      store: fixture.store, embedder: fixture.embedder, fixture.database)
 
     #expect(!hits.contains { $0.id == fixture.archived.id })
     #expect(hits.allSatisfy { !$0.isArchived })
@@ -187,8 +201,10 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let visible: Set<UUID> = [fixture.active.id, fixture.archived.id]
 
     let hits = await SemanticQueries.search(
-      query: "Refund handling legacy", visibleNodeIDs: visible, excludingIDs: [],
-      limit: 8, floor: -1.0, includeArchived: true, store: fixture.store, embedder: fixture.embedder, fixture.database)
+      query: "Refund handling legacy",
+      scope: SemanticSearchScope(visibleNodeIDs: visible, excludingIDs: [], limit: 8, floor: -1.0,
+                                 includeArchived: true),
+      store: fixture.store, embedder: fixture.embedder, fixture.database)
 
     let archivedHit = hits.first { $0.id == fixture.archived.id }
     #expect(archivedHit != nil)
@@ -211,8 +227,10 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await SemanticIndexer(store: indexStore, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
-      query: "drop the legacy invoice table", visibleNodeIDs: [archived.id], excludingIDs: [],
-      limit: 8, floor: -1.0, includeArchived: true, store: indexStore, embedder: embedder, database)
+      query: "drop the legacy invoice table",
+      scope: SemanticSearchScope(visibleNodeIDs: [archived.id], excludingIDs: [], limit: 8, floor: -1.0,
+                                 includeArchived: true),
+      store: indexStore, embedder: embedder, database)
 
     // All three item kinds under an archived node resolve, and every one is flagged archived.
     #expect(hits.contains { $0.id == looseEnd.id && $0.kind == "loose_end" })

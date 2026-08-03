@@ -3,14 +3,14 @@ import Foundation
 @testable import PensieveKit
 
 private func tmpDir() -> URL {
-  let d = FileManager.default.temporaryDirectory.appendingPathComponent("cli-\(UUID().uuidString)")
-  try! FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
-  return d
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cli-\(UUID().uuidString)")
+  try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  return directory
 }
 
 @Test func bundledCLIURLAppendsContentsHelpers() {
-  let u = CLIToolInstaller.bundledCLIURL(appBundleURL: URL(fileURLWithPath: "/Applications/Pensieve.app"))
-  #expect(u.path == "/Applications/Pensieve.app/Contents/Helpers/pensieve")
+  let bundledURL = CLIToolInstaller.bundledCLIURL(appBundleURL: URL(fileURLWithPath: "/Applications/Pensieve.app"))
+  #expect(bundledURL.path == "/Applications/Pensieve.app/Contents/Helpers/pensieve")
 }
 
 @Test func planIsCreateWhenAbsent() {

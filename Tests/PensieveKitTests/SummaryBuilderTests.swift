@@ -8,15 +8,15 @@ private struct EchoProvider: LLMProvider {
 }
 
 @Test func assembleFactsListsRecentCommitSubjects() {
-  let p = Node(name: "colibri")
-  let s = UUID()
+  let projectNode = Node(name: "colibri")
+  let sourceID = UUID()
   let events = [
-    Event(nodeID: p.id, sourceID: s, occurredAt: Date(), kind: CaptureKind.gitCommit,
+    Event(nodeID: projectNode.id, sourceID: sourceID, occurredAt: Date(), kind: CaptureKind.gitCommit,
           summary: "add auth", detailJSON: "{}", fingerprint: "1"),
-    Event(nodeID: p.id, sourceID: s, occurredAt: Date(), kind: CaptureKind.ccSession,
+    Event(nodeID: projectNode.id, sourceID: sourceID, occurredAt: Date(), kind: CaptureKind.ccSession,
           summary: "session (3 prompts)", detailJSON: "{}", fingerprint: "2"),
   ]
-  let facts = SummaryBuilder.assembleFacts(project: p, events: events)
+  let facts = SummaryBuilder.assembleFacts(project: projectNode, events: events)
   #expect(facts.contains("add auth"))
   #expect(facts.contains("colibri"))
 }
@@ -47,19 +47,19 @@ private struct EchoProvider: LLMProvider {
 
 @Test func assembleFactsPrefersWorkSummaryOverTerseSummary() {
   let node = Node(name: "Pensieve")
-  let e = Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
+  let event = Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
                 kind: CaptureKind.ccSession, summary: "session (9 prompts)", detailJSON: "{}",
                 workSummary: "Wired the sync daemon and fixed the watermark.")
-  let facts = SummaryBuilder.assembleFacts(project: node, events: [e])
+  let facts = SummaryBuilder.assembleFacts(project: node, events: [event])
   #expect(facts.contains("Wired the sync daemon and fixed the watermark."))
   #expect(!facts.contains("session (9 prompts)"))
 }
 
 @Test func assembleFactsFallsBackToTerseSummaryWhenNoWorkSummary() {
   let node = Node(name: "Pensieve")
-  let e = Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
+  let event = Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
                 kind: CaptureKind.gitCommit, summary: "fix: watermark off-by-one", detailJSON: "{}")
-  let facts = SummaryBuilder.assembleFacts(project: node, events: [e])
+  let facts = SummaryBuilder.assembleFacts(project: node, events: [event])
   #expect(facts.contains("fix: watermark off-by-one"))
 }
 

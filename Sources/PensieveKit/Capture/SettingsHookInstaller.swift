@@ -45,8 +45,8 @@ public enum SettingsHookInstaller {
     var hooks = root["hooks"] as? [String: Any] ?? [:]
     var group = hooks[event] as? [[String: Any]] ?? []
 
-    let present = group.contains { g in
-      ((g["hooks"] as? [[String: Any]]) ?? []).contains {
+    let present = group.contains { entry in
+      ((entry["hooks"] as? [[String: Any]]) ?? []).contains {
         ($0["command"] as? String)?.contains(marker) == true
       }
     }

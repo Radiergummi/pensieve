@@ -38,7 +38,7 @@ public enum RecallMarkdown {
     if events.isEmpty {
       out.append("_No captured activity._")
     } else {
-      for e in events { out.append("- \(day(e.occurredAt)) — \(e.summary)") }
+      for event in events { out.append("- \(day(event.occurredAt)) — \(event.summary)") }
     }
 
     out.append("")
@@ -48,16 +48,16 @@ public enum RecallMarkdown {
     return out.joined(separator: "\n") + "\n"
   }
 
-  private static func capitalizedFirst(_ s: String) -> String {
-    s.isEmpty ? s : s.prefix(1).uppercased() + s.dropFirst()
+  private static func capitalizedFirst(_ text: String) -> String {
+    text.isEmpty ? text : text.prefix(1).uppercased() + text.dropFirst()
   }
 
   /// yyyy-MM-dd in the current timezone. A local (non-static) formatter — Swift-6-safe.
   private static func day(_ date: Date) -> String {
-    let f = DateFormatter()
-    f.locale = Locale(identifier: "en_US_POSIX")
-    f.timeZone = TimeZone.current
-    f.dateFormat = "yyyy-MM-dd"
-    return f.string(from: date)
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone.current
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
   }
 }

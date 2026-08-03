@@ -102,7 +102,11 @@ private struct StatusFooter: View {
     .background(.bar)
   }
   private var color: Color {
-    switch snapshot.status { case .active: return .green; case .idle: return .secondary; case .notSetUp: return .orange }
+    switch snapshot.status {
+    case .active: return .green
+    case .idle: return .secondary
+    case .notSetUp: return .orange
+    }
   }
   private var label: String {
     switch snapshot.status {

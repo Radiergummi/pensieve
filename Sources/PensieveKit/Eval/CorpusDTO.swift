@@ -3,8 +3,8 @@ import Foundation
 public struct TranscriptMessageDTO: Codable, Sendable {
   public var index: Int; public var role: String; public var text: String
   public var timestamp: Date?; public var isUserPrompt: Bool
-  public init(_ m: TranscriptMessage) {
-    index = m.index; role = m.role; text = m.text; timestamp = m.timestamp; isUserPrompt = m.isUserPrompt
+  public init(_ message: TranscriptMessage) {
+    index = message.index; role = message.role; text = message.text; timestamp = message.timestamp; isUserPrompt = message.isUserPrompt
   }
   public func toDomain() -> TranscriptMessage {
     TranscriptMessage(index: index, role: role, text: text, timestamp: timestamp, isUserPrompt: isUserPrompt)
@@ -17,11 +17,11 @@ public struct EventDTO: Codable, Sendable {
   public var detailJSON: String; public var fingerprint: String?; public var branchKey: String?
   public var extractedAt: Date?; public var extractedMessageCount: Int; public var extractedTranscriptSize: Int
   public var workSummary: String?; public var createdAt: Date
-  public init(_ e: Event) {
-    id = e.id; nodeID = e.nodeID; sourceID = e.sourceID; occurredAt = e.occurredAt; kind = e.kind
-    summary = e.summary; detailJSON = e.detailJSON; fingerprint = e.fingerprint; branchKey = e.branchKey
-    extractedAt = e.extractedAt; extractedMessageCount = e.extractedMessageCount
-    extractedTranscriptSize = e.extractedTranscriptSize; workSummary = e.workSummary; createdAt = e.createdAt
+  public init(_ event: Event) {
+    id = event.id; nodeID = event.nodeID; sourceID = event.sourceID; occurredAt = event.occurredAt; kind = event.kind
+    summary = event.summary; detailJSON = event.detailJSON; fingerprint = event.fingerprint; branchKey = event.branchKey
+    extractedAt = event.extractedAt; extractedMessageCount = event.extractedMessageCount
+    extractedTranscriptSize = event.extractedTranscriptSize; workSummary = event.workSummary; createdAt = event.createdAt
   }
   public func toDomain() -> Event {
     Event(id: id, nodeID: nodeID, sourceID: sourceID, occurredAt: occurredAt, kind: kind, summary: summary,
@@ -34,9 +34,9 @@ public struct EventDTO: Codable, Sendable {
 public struct ProjectContextDTO: Codable, Sendable {
   public var dirName: String; public var gitRemote: String?; public var readmeHead: String?
   public var claudeMdHead: String?; public var manifest: String?
-  public init(_ c: ProjectContext) {
-    dirName = c.dirName; gitRemote = c.gitRemote; readmeHead = c.readmeHead
-    claudeMdHead = c.claudeMdHead; manifest = c.manifest
+  public init(_ context: ProjectContext) {
+    dirName = context.dirName; gitRemote = context.gitRemote; readmeHead = context.readmeHead
+    claudeMdHead = context.claudeMdHead; manifest = context.manifest
   }
   public func toDomain() -> ProjectContext {
     ProjectContext(dirName: dirName, gitRemote: gitRemote, readmeHead: readmeHead,
@@ -67,9 +67,9 @@ public enum CorpusItem: Sendable {
   case description(DescriptionCorpusItem)
   public var id: String {
     switch self {
-    case .extraction(let i): return i.id
-    case .narration(let i): return i.id
-    case .description(let i): return i.id
+    case .extraction(let item): return item.id
+    case .narration(let item): return item.id
+    case .description(let item): return item.id
     }
   }
 }

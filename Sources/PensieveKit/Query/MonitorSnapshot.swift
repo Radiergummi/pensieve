@@ -32,27 +32,23 @@ public struct MonitorSnapshot: Equatable, Sendable {
                             now: Date = Date(),
                             activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
     // Spool: the real-time capture heartbeat. Only touch it if it already exists.
-    var lastCapture: Date?
-    var pending = 0
+    var totals = Totals()
     if FileManager.default.fileExists(atPath: spoolURL.path),
        let stats = try? CaptureSpool.readOnlyStats(at: spoolURL) {
-      lastCapture = stats.lastCaptureAt
-      pending = stats.pending
+      totals.lastCapture = stats.lastCaptureAt
+      totals.pending = stats.pending
     }
 
     // Canonical store: ingested state. Only open an existing store (read-only, no migrator run).
-    var events = 0
-    var loose = 0
     if FileManager.default.fileExists(atPath: canonicalURL.path),
        let database = try? openCanonicalDatabaseReadOnly(at: canonicalURL) {
-      events = (try? database.read { database in try Event.fetchCount(database) }) ?? 0
-      loose = (try? database.read { database in
+      totals.events = (try? database.read { database in try Event.fetchCount(database) }) ?? 0
+      totals.loose = (try? database.read { database in
         try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
       }) ?? 0
     }
 
-    return classify(lastCapture: lastCapture, pending: pending, events: events, loose: loose,
-                    now: now, activeWithin: activeWithin)
+    return classify(totals, now: now, activeWithin: activeWithin)
   }
 
   /// The same heartbeat computed from ALREADY-OPEN connections — opens nothing. The app must use
@@ -63,35 +59,40 @@ public struct MonitorSnapshot: Equatable, Sendable {
   public static func gather(canonical: (any DatabaseReader)?, spool: CaptureSpool?,
                             now: Date = Date(),
                             activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
-    var lastCapture: Date?
-    var pending = 0
+    var totals = Totals()
     if let spool {
-      lastCapture = try? spool.lastCaptureAt()
-      pending = (try? spool.pendingCount()) ?? 0
+      totals.lastCapture = try? spool.lastCaptureAt()
+      totals.pending = (try? spool.pendingCount()) ?? 0
     }
-    var events = 0
-    var loose = 0
     if let canonical {
-      events = (try? canonical.read { database in try Event.fetchCount(database) }) ?? 0
-      loose = (try? canonical.read { database in
+      totals.events = (try? canonical.read { database in try Event.fetchCount(database) }) ?? 0
+      totals.loose = (try? canonical.read { database in
         try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
       }) ?? 0
     }
-    return classify(lastCapture: lastCapture, pending: pending, events: events, loose: loose,
-                    now: now, activeWithin: activeWithin)
+    return classify(totals, now: now, activeWithin: activeWithin)
   }
 
-  private static func classify(lastCapture: Date?, pending: Int, events: Int, loose: Int,
-                               now: Date, activeWithin: TimeInterval) -> MonitorSnapshot {
+  /// The raw measurements both `gather` overloads collect, before they are classified into a
+  /// `Status`. An absent store leaves its own fields at the zero/nil defaults.
+  private struct Totals {
+    var lastCapture: Date?
+    var pending = 0
+    var events = 0
+    var loose = 0
+  }
+
+  private static func classify(_ totals: Totals, now: Date, activeWithin: TimeInterval) -> MonitorSnapshot {
     let status: Status
-    if lastCapture == nil && pending == 0 && events == 0 {
+    if totals.lastCapture == nil && totals.pending == 0 && totals.events == 0 {
       status = .notSetUp
-    } else if let lastCapture, now.timeIntervalSince(lastCapture) <= activeWithin {
+    } else if let lastCapture = totals.lastCapture, now.timeIntervalSince(lastCapture) <= activeWithin {
       status = .active
     } else {
       status = .idle
     }
-    return MonitorSnapshot(status: status, lastCaptureAt: lastCapture,
-                           spoolPending: pending, eventCount: events, looseEndCount: loose)
+    return MonitorSnapshot(status: status, lastCaptureAt: totals.lastCapture,
+                           spoolPending: totals.pending, eventCount: totals.events,
+                           looseEndCount: totals.loose)
   }
 }

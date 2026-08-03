@@ -5,11 +5,11 @@ import PensieveKit
 /// Resolves store locations the same way the CLI does (honors PENSIEVE_DB / PENSIEVE_CAPTURE_DB).
 enum Stores {
   static var canonicalURL: URL {
-    if let o = ProcessInfo.processInfo.environment["PENSIEVE_DB"] { return URL(fileURLWithPath: o) }
+    if let overridePath = ProcessInfo.processInfo.environment["PENSIEVE_DB"] { return URL(fileURLWithPath: overridePath) }
     return PensievePaths.canonicalURL()
   }
   static var spoolURL: URL {
-    if let o = ProcessInfo.processInfo.environment["PENSIEVE_CAPTURE_DB"] { return URL(fileURLWithPath: o) }
+    if let overridePath = ProcessInfo.processInfo.environment["PENSIEVE_CAPTURE_DB"] { return URL(fileURLWithPath: overridePath) }
     return PensievePaths.captureURL()
   }
 }

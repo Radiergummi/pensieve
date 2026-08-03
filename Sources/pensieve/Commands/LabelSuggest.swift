@@ -33,10 +33,10 @@ struct LabelSuggest: AsyncParsableCommand {
 
     let modelName = model
     let provider = ClaudeCLIProvider(run: { try Self.claudeRun($0, model: modelName) })
-    let s = try await SalienceSuggester(provider: provider).run(database, limit: limit, force: force)
+    let result = try await SalienceSuggester(provider: provider).run(database, limit: limit, force: force)
     print("""
-    Suggested \(s.suggested)/\(s.candidates) candidates: \(s.salient) salient / \(s.noise) noise \
-    (\(s.quoteOnly) quote-only, \(s.skipped) skipped on provider error).
+    Suggested \(result.suggested)/\(result.candidates) candidates: \(result.salient) salient / \(result.noise) noise \
+    (\(result.quoteOnly) quote-only, \(result.skipped) skipped on provider error).
     """)
   }
 
@@ -56,12 +56,12 @@ struct LabelSuggest: AsyncParsableCommand {
   /// Runs `claude -p --model <model>` with the prompt on stdin; trimmed stdout. Mirrors the eval
   /// harness's helper (salience prompts are small, so writing stdin before draining can't deadlock).
   static func claudeRun(_ prompt: String, model: String) throws -> String {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    p.arguments = ["claude", "-p", "--model", model]
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["claude", "-p", "--model", model]
     let stdin = Pipe(), stdout = Pipe()
-    p.standardInput = stdin; p.standardOutput = stdout; p.standardError = FileHandle.nullDevice
-    try p.run()
+    process.standardInput = stdin; process.standardOutput = stdout; process.standardError = FileHandle.nullDevice
+    try process.run()
     DispatchQueue.global().async {
       try? stdin.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
       try? stdin.fileHandleForWriting.close()
@@ -73,12 +73,15 @@ struct LabelSuggest: AsyncParsableCommand {
       outData = stdout.fileHandleForReading.readDataToEndOfFile(); ioGroup.leave()
     }
     if ioGroup.wait(timeout: .now() + timeout) == .timedOut {
-      p.terminate()
+      process.terminate()
       _ = ioGroup.wait(timeout: .now() + 5)
       throw LLMError.providerFailed("claude -p timed out after \(Int(timeout))s")
     }
-    p.waitUntilExit()
-    guard p.terminationStatus == 0 else { throw LLMError.providerFailed("claude -p exit \(p.terminationStatus)") }
-    return String(decoding: outData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { throw LLMError.providerFailed("claude -p exit \(process.terminationStatus)") }
+    guard let output = String(bytes: outData, encoding: .utf8) else {
+      throw LLMError.providerFailed("claude -p returned non-UTF8 output")
+    }
+    return output.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

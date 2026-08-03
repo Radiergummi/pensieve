@@ -8,15 +8,15 @@ private func event(_ id: UUID, extracted: Date? = nil) -> Event {
 }
 
 @Test func keyIsOrderIndependent() {
-  let a = event(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
-  let b = event(UUID(uuidString: "00000000-0000-0000-0000-000000000002")!)
-  #expect(NarrationCacheKey.make(events: [a, b]) == NarrationCacheKey.make(events: [b, a]))
+  let eventFirst = event(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
+  let eventSecond = event(UUID(uuidString: "00000000-0000-0000-0000-000000000002")!)
+  #expect(NarrationCacheKey.make(events: [eventFirst, eventSecond]) == NarrationCacheKey.make(events: [eventSecond, eventFirst]))
 }
 
 @Test func keyChangesWhenEventAddedOrRemoved() {
-  let a = event(UUID())
-  let b = event(UUID())
-  #expect(NarrationCacheKey.make(events: [a]) != NarrationCacheKey.make(events: [a, b]))
+  let eventFirst = event(UUID())
+  let eventSecond = event(UUID())
+  #expect(NarrationCacheKey.make(events: [eventFirst]) != NarrationCacheKey.make(events: [eventFirst, eventSecond]))
 }
 
 @Test func keyChangesWhenExtractedAtMoves() {
@@ -28,14 +28,14 @@ private func event(_ id: UUID, extracted: Date? = nil) -> Event {
 
 @Test func keyStableWithAllNilExtractedAt() {
   let id = UUID()
-  let k1 = NarrationCacheKey.make(events: [event(id)])
-  let k2 = NarrationCacheKey.make(events: [event(id)])
-  #expect(k1 == k2)   // git-only node (no extractedAt) is handled, not crashing/empty
-  #expect(!k1.isEmpty)
+  let keyFirst = NarrationCacheKey.make(events: [event(id)])
+  let keySecond = NarrationCacheKey.make(events: [event(id)])
+  #expect(keyFirst == keySecond)   // git-only node (no extractedAt) is handled, not crashing/empty
+  #expect(!keyFirst.isEmpty)
 }
 
 @Test func keyChangesWhenProviderChanges() {
-  let e = [event(UUID())]
-  #expect(NarrationCacheKey.make(events: e, provider: "claudeCLI")
-          != NarrationCacheKey.make(events: e, provider: "foundationModels"))
+  let events = [event(UUID())]
+  #expect(NarrationCacheKey.make(events: events, provider: "claudeCLI")
+          != NarrationCacheKey.make(events: events, provider: "foundationModels"))
 }

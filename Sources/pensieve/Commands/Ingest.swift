@@ -10,7 +10,8 @@ struct Ingest: AsyncParsableCommand {
     let created = try await Ingester(spool: try openSpool(), database: database, llm: provider).drain()
     print("ingested \(created) event(s)")
     do {
-      let results = try await ExtractionRunner(database: database, provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared())).run()
+      let extractionProvider = makeDefaultLLMProvider(defaults: PensieveDefaults.shared())
+      let results = try await ExtractionRunner(database: database, provider: extractionProvider).run()
       let proposed = results.reduce(0) { $0 + $1.proposed }
       let verified = results.reduce(0) { $0 + $1.verified }
       let inserted = results.reduce(0) { $0 + $1.inserted }

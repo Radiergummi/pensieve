@@ -64,15 +64,15 @@ struct NodeBadge: View {
   var size: CGFloat = 22
 
   var body: some View {
-    let a = node.appearance
+    let appearance = node.appearance
     RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-      .fill(AppearanceStyle.color(a.colorTag))
+      .fill(AppearanceStyle.color(appearance.colorTag))
       .frame(width: size, height: size)
       .overlay {
         Group {
-          switch a.icon {
+          switch appearance.icon {
           case .sfSymbol(let name): Image(systemName: name).foregroundStyle(.white)
-          case .emoji(let e):       Text(e)
+          case .emoji(let emoji):       Text(emoji)
           }
         }
         .font(.system(size: size * 0.55))

@@ -29,8 +29,8 @@ private func candidateDropped(_ quote: String) -> Bool {
   #expect(reals.count >= 15 && noise.count >= 8)   // fixture is populated
 
   // HARD recall guard: not one real loose end may be dropped.
-  for r in reals { #expect(!candidateDropped(r.quote), "dropped a REAL loose end: \(r.quote)") }
+  for realLooseEnd in reals { #expect(!candidateDropped(realLooseEnd.quote), "dropped a REAL loose end: \(realLooseEnd.quote)") }
 
   // Precision: every curated quote-level noise case is removed.
-  for n in noise { #expect(candidateDropped(n.quote), "failed to drop noise: \(n.quote)") }
+  for noiseItem in noise { #expect(candidateDropped(noiseItem.quote), "failed to drop noise: \(noiseItem.quote)") }
 }

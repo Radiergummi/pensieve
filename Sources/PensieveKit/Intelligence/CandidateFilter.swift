@@ -16,10 +16,10 @@ public enum CandidateFilter {
 
   static func isNoise(_ quote: String) -> Bool {
     if isChecklistOrToolOutput(quote) { return true }
-    let q = quote.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    if q.isEmpty { return true }
-    if isPureStatusCheck(q) { return true }
-    if isPureClosure(q) { return true }
+    let normalized = quote.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if normalized.isEmpty { return true }
+    if isPureStatusCheck(normalized) { return true }
+    if isPureClosure(normalized) { return true }
     return false
   }
 

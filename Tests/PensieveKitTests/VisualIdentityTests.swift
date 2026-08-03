@@ -14,10 +14,10 @@ import Testing
 
 @Test func everyNodeKindHasADefaultStyle() {
   for kind in NodeKind.all {
-    let s = NodeKindStyle.style(for: kind)
-    #expect(!s.icon.isEmpty)
-    #expect(!s.colorTag.isEmpty)
-    #expect(AppearanceIcon.parse(s.icon) != nil)   // the default is a parseable icon string
+    let nodeKindStyle = NodeKindStyle.style(for: kind)
+    #expect(!nodeKindStyle.icon.isEmpty)
+    #expect(!nodeKindStyle.colorTag.isEmpty)
+    #expect(AppearanceIcon.parse(nodeKindStyle.icon) != nil)   // the default is a parseable icon string
   }
   // `NodeKind` is now a closed enum — an unknown kind is impossible by construction, so the
   // former string-fallback assertion is gone (the compiler proves exhaustiveness).
@@ -25,9 +25,9 @@ import Testing
 
 @Test func everyCaptureKindHasASourceStyle() {
   for kind in [CaptureKind.gitCommit, CaptureKind.gitCheckout, CaptureKind.ccSession, CaptureKind.ccSessionStart] {
-    let s = EventSourceStyle.style(for: kind)
-    #expect(!s.icon.isEmpty)
-    #expect(!s.colorTag.isEmpty)
+    let eventSourceStyle = EventSourceStyle.style(for: kind)
+    #expect(!eventSourceStyle.icon.isEmpty)
+    #expect(!eventSourceStyle.colorTag.isEmpty)
   }
   #expect(!EventSourceStyle.style(for: "unknown.kind").icon.isEmpty)   // fallback
 }

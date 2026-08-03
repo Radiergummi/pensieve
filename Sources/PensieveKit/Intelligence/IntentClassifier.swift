@@ -45,10 +45,10 @@ public struct IntentClassifier {
   /// `buildPrompt`) stays within `budget`, so a batch prompt never blows the context.
   static func batches(_ messages: [TranscriptMessage], budget: Int) -> [[TranscriptMessage]] {
     var out: [[TranscriptMessage]] = [], current: [TranscriptMessage] = [], size = 0
-    for m in messages {
-      let cost = min(m.text.count, headLimit) + 8   // capped head + the "[n] " tag overhead
+    for message in messages {
+      let cost = min(message.text.count, headLimit) + 8   // capped head + the "[n] " tag overhead
       if size + cost > budget, !current.isEmpty { out.append(current); current = []; size = 0 }
-      current.append(m); size += cost
+      current.append(message); size += cost
     }
     if !current.isEmpty { out.append(current) }
     return out
@@ -59,9 +59,9 @@ public struct IntentClassifier {
   static let headLimit = 400
 
   static func buildPrompt(_ batch: [TranscriptMessage]) -> String {
-    let body = batch.map { m -> String in
-      let head = m.text.count > headLimit ? String(m.text.prefix(headLimit)) + " …" : m.text
-      return "[\(m.index)] \(head)"
+    let body = batch.map { message -> String in
+      let head = message.text.count > headLimit ? String(message.text.prefix(headLimit)) + " …" : message.text
+      return "[\(message.index)] \(head)"
     }.joined(separator: "\n\n")
     return """
     Below are a developer's chat messages, each tagged [n]. Some are the developer's OWN \

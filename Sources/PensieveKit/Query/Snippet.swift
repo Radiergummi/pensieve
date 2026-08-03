@@ -18,15 +18,15 @@ public enum SnippetMaker {
   /// ellipsis when truncated), so `leading + match + trailing` always equals the shown text and
   /// `match` is exactly the matched substring. No match → a head window of the source in `leading`.
   public static func make(from source: String, matching query: String, window: Int = 80) -> Snippet {
-    guard let r = source.range(of: query, options: .caseInsensitive) else {
+    guard let matchRange = source.range(of: query, options: .caseInsensitive) else {
       let head = String(source.prefix(window * 2))
       let lead = head.count < source.count ? head + "…" : head
       return Snippet(leading: lead, match: "", trailing: "")
     }
-    let matched = String(source[r])
-    var lead = String(source[source.startIndex..<r.lowerBound])
+    let matched = String(source[matchRange])
+    var lead = String(source[source.startIndex..<matchRange.lowerBound])
     if lead.count > window { lead = "…" + String(lead.suffix(window)) }
-    var trail = String(source[r.upperBound...])
+    var trail = String(source[matchRange.upperBound...])
     if trail.count > window { trail = String(trail.prefix(window)) + "…" }
     return Snippet(leading: lead, match: matched, trailing: trail)
   }

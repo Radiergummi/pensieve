@@ -18,15 +18,15 @@ struct LooseEnds: ParsableCommand {
     let database = try openCanonical()
     var nodeID: UUID?
     if let project {   // validate() guarantees --all is not also set
-      guard let p = try ProjectQueries.status(database, name: project, limit: 0)?.project else {
+      guard let projectNode = try ProjectQueries.status(database, name: project, limit: 0)?.project else {
         print("no project named '\(project)'"); return
       }
-      nodeID = p.id
+      nodeID = projectNode.id
     }
     let ends = try LooseEndQueries.open(database, nodeID: nodeID, now: Date())
-    for v in ends {
-      print("\u{201C}\(v.looseEnd.quote)\u{201D}")
-      print("  \u{21B3} \(v.looseEnd.text)  [\(v.looseEnd.role), \(v.ageDays)d]")
+    for looseEndView in ends {
+      print("\u{201C}\(looseEndView.looseEnd.quote)\u{201D}")
+      print("  \u{21B3} \(looseEndView.looseEnd.text)  [\(looseEndView.looseEnd.role), \(looseEndView.ageDays)d]")
     }
     print("\n\(ends.count) open loose end(s)")
   }

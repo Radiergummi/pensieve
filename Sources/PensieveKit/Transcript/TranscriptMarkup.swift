@@ -16,6 +16,13 @@ public enum TranscriptMarkup {
   }
 }
 
+/// Parses `<NAME>` or `</NAME>` at commandArgs position: the bare name, whether it was commandArgs close tag, and the index just past `>`.
+struct TagMatch {
+  let name: String
+  let isClose: Bool
+  let end: String.Index
+}
+
 /// The scan state. Prose accumulates into `pending` and is flushed as one `.markdown` segment
 /// whenever commandArgs non-prose construct is emitted, so consecutive prose never fragments.
 struct Scanner {
@@ -165,9 +172,9 @@ struct Scanner {
     return false
   }
 
-  /// Parses `<NAME>` or `</NAME>` at `start`. Returns the bare name, whether it was commandArgs close tag,
-  /// and the index just past `>`. Returns nil for anything that isn't commandArgs well-formed simple tag.
-  func tagName(at start: String.Index) -> (name: String, isClose: Bool, end: String.Index)? {
+  /// Parses `<NAME>` or `</NAME>` at `start`. Returns nil for anything that isn't commandArgs well-formed
+  /// simple tag.
+  func tagName(at start: String.Index) -> TagMatch? {
     guard start < text.endIndex, text[start] == "<" else { return nil }
     var cursor = text.index(after: start)
     guard cursor < text.endIndex else { return nil }
@@ -178,7 +185,7 @@ struct Scanner {
     guard !name.isEmpty,
           name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
     else { return nil }
-    return (name, isClose, text.index(after: closeAngle))
+    return TagMatch(name: name, isClose: isClose, end: text.index(after: closeAngle))
   }
 
   private func isAllCaps(_ name: String) -> Bool {
@@ -234,7 +241,11 @@ struct Scanner {
     let prev = text[text.index(before: scanIndex)]
     return prev.isLetter || prev.isNumber || prev == "_" || prev == "(" || prev == "["
   }
+}
 
+// MARK: - Harness blocks
+
+extension Scanner {
   /// The modelled children of `<task-notification>`, recognised ONLY inside commandArgs matched span.
   private static let taskNotificationChildren = [
     "task-id", "tool-use-id", "output-file", "status", "summary", "note",
@@ -255,46 +266,67 @@ struct Scanner {
     else { return false }
 
     let body = String(text[open.end..<close.lowerBound])
-    var end = close.upperBound
-    let kind: HarnessKind
-
-    switch open.name {
-    case "command-name":
-      // The trio arrives adjacent; absorb the siblings that are actually present.
-      var message: String?, args: String?
-      if let commandMessage = element("command-message", from: end) { message = commandMessage.body; end = commandMessage.end }
-      if let commandArgs = element("command-args", from: end) { args = commandArgs.body; end = commandArgs.end }
-      kind = .command(name: body, message: message, args: args)
-    case "command-message", "command-args":
-      // Orphaned sibling (no preceding command-name): still commandArgs command block, name unknown.
-      kind = .command(name: "", message: open.name == "command-message" ? body : nil,
-                      args: open.name == "command-args" ? body : nil)
-    case "task-notification":
-      kind = .taskNotification(Self.parseTaskNotification(body))
-    case "system-reminder":
-      kind = .systemReminder(body)
-    case "local-command-caveat":
-      kind = .commandCaveat(body)
-    case "local-command-stdout", "local-command-stderr":
-      kind = .commandOutput(body)
-    case "bash-input":
-      var output: String?
-      if let stdoutElement = element("bash-stdout", from: end) { output = stdoutElement.body; end = stdoutElement.end }
-      kind = .bashIO(input: body, output: output)
-    case "bash-stdout":
-      kind = .bashIO(input: nil, output: body)
-    case "tool_uses":
-      kind = .toolUses(body)
-    case "tool_use_error":
-      kind = .toolUseError(body)
-    default:
-      kind = .unknown(tag: open.name, body: body)
-    }
+    let resolved = harnessKind(forTag: open.name, body: body, afterClose: close.upperBound)
 
     flushPending()
-    out.append(.harness(.init(kind: kind, raw: String(text[scanIndex..<end]))))
-    scanIndex = end
+    out.append(.harness(.init(kind: resolved.kind, raw: String(text[scanIndex..<resolved.end]))))
+    scanIndex = resolved.end
     return true
+  }
+
+  /// Resolves the harness payload for an allowlisted tag already matched to its close, absorbing
+  /// any adjacent modelled siblings (the command trio, `bash-input`'s stdout).
+  private func harnessKind(forTag name: String, body: String, afterClose: String.Index) -> (kind: HarnessKind, end: String.Index) {
+    switch name {
+    case "command-name":
+      return commandKind(name: body, afterClose: afterClose)
+    case "command-message", "command-args":
+      // Orphaned sibling (no preceding command-name): still commandArgs command block, name unknown.
+      return (.command(name: "", message: name == "command-message" ? body : nil,
+                       args: name == "command-args" ? body : nil), afterClose)
+    case "task-notification":
+      return (.taskNotification(Self.parseTaskNotification(body)), afterClose)
+    case "bash-input":
+      return bashIOKind(input: body, afterClose: afterClose)
+    case "bash-stdout":
+      return (.bashIO(input: nil, output: body), afterClose)
+    default:
+      return (simpleHarnessKind(forTag: name, body: body), afterClose)
+    }
+  }
+
+  /// The command trio arrives adjacent; absorb the siblings that are actually present.
+  private func commandKind(name: String, afterClose: String.Index) -> (kind: HarnessKind, end: String.Index) {
+    var end = afterClose
+    var message: String?, args: String?
+    if let commandMessage = element("command-message", from: end) { message = commandMessage.body; end = commandMessage.end }
+    if let commandArgs = element("command-args", from: end) { args = commandArgs.body; end = commandArgs.end }
+    return (.command(name: name, message: message, args: args), end)
+  }
+
+  private func bashIOKind(input: String, afterClose: String.Index) -> (kind: HarnessKind, end: String.Index) {
+    var end = afterClose
+    var output: String?
+    if let stdoutElement = element("bash-stdout", from: end) { output = stdoutElement.body; end = stdoutElement.end }
+    return (.bashIO(input: input, output: output), end)
+  }
+
+  /// The harness tags whose payload is commandArgs direct wrap of `body` with no sibling absorption.
+  private func simpleHarnessKind(forTag name: String, body: String) -> HarnessKind {
+    switch name {
+    case "system-reminder":
+      return .systemReminder(body)
+    case "local-command-caveat":
+      return .commandCaveat(body)
+    case "local-command-stdout", "local-command-stderr":
+      return .commandOutput(body)
+    case "tool_uses":
+      return .toolUses(body)
+    case "tool_use_error":
+      return .toolUseError(body)
+    default:
+      return .unknown(tag: name, body: body)
+    }
   }
 
   /// Splits commandArgs task-notification's interior into modelled fields; anything else is preserved in

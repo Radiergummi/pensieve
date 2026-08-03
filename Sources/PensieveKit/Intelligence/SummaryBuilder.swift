@@ -22,9 +22,9 @@ public struct SummaryBuilder: Sendable {
   public static func assembleFacts(project: Node, events: [Event]) -> String {
     var lines: [String] = []
     var used = 0
-    for e in events.prefix(15) {
-      let content = (e.workSummary.map { !$0.isEmpty } ?? false) ? e.workSummary! : e.summary
-      let line = "- \(e.kind): \(content)"
+    for event in events.prefix(15) {
+      let content = (event.workSummary.map { !$0.isEmpty } ?? false) ? event.workSummary! : event.summary
+      let line = "- \(event.kind): \(content)"
       if used + line.count > factSheetBudget, !lines.isEmpty { break }
       lines.append(line)
       used += line.count

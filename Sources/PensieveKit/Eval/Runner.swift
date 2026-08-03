@@ -5,7 +5,8 @@ public enum RunOutcome {
   public static func classify(_ error: Error?) -> String {
     guard let error else { return "success" }
     if case LLMError.providerFailed(let msg) = error,
-       msg.localizedCaseInsensitiveContains("parseable") || msg.localizedCaseInsensitiveContains("parse") || msg.localizedCaseInsensitiveContains("json") {
+       msg.localizedCaseInsensitiveContains("parseable") || msg.localizedCaseInsensitiveContains("parse")
+         || msg.localizedCaseInsensitiveContains("json") {
       return "parseFail"
     }
     return "providerError"
@@ -52,7 +53,7 @@ public struct Runner {
   private func measure(_ clock: ContinuousClock, _ body: () async -> Void) async -> Double {
     let start = clock.now
     await body()
-    let d = start.duration(to: clock.now).components            // (seconds, attoseconds)
-    return Double(d.seconds) * 1000 + Double(d.attoseconds) / 1e15   // → ms (seconds included!)
+    let durationComponents = start.duration(to: clock.now).components            // (seconds, attoseconds)
+    return Double(durationComponents.seconds) * 1000 + Double(durationComponents.attoseconds) / 1e15   // → ms (seconds included!)
   }
 }

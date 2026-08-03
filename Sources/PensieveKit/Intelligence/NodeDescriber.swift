@@ -23,16 +23,16 @@ public enum NodeDescriber {
   /// leading list/heading marker; strips surrounding quotes. Returns nil when nothing is left.
   /// Brevity is left to the prompt (no sentence truncation — YAGNI, matching `narrate`).
   public static func sanitize(_ raw: String) -> String? {
-    var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    if s.hasPrefix("```") {
-      s = s.replacingOccurrences(of: "```", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+    var sanitized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if sanitized.hasPrefix("```") {
+      sanitized = sanitized.replacingOccurrences(of: "```", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    if let marker = s.range(of: #"^(\d+[.)]|[-*•#]+)\s+"#, options: .regularExpression) {
-      s.removeSubrange(marker)
+    if let marker = sanitized.range(of: #"^(\d+[.)]|[-*•#]+)\s+"#, options: .regularExpression) {
+      sanitized.removeSubrange(marker)
     }
-    s = s.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-    s = s.trimmingCharacters(in: .whitespacesAndNewlines)
-    return s.isEmpty ? nil : s
+    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+    sanitized = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+    return sanitized.isEmpty ? nil : sanitized
   }
 
   /// Derive and write `nodeID`'s description. Eligible only for a `project` node with exactly one

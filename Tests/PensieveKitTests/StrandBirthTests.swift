@@ -13,12 +13,12 @@ private struct FailingLLM: LLMProvider {
 }
 
 /// Appends N commits on `branch` to `repo` and spools them; returns nothing.
-private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: CaptureSpool) throws {
+private func spoolCommits(_ numberOfCommits: Int, on branch: String, repo: URL, spool: CaptureSpool) throws {
   _ = Git.run(["checkout", "-B", branch], in: repo.path)
-  for i in 0..<n {
-    try "\(branch)-\(i)".write(to: repo.appendingPathComponent("f\(branch)\(i).txt"), atomically: true, encoding: .utf8)
+  for index in 0..<numberOfCommits {
+    try "\(branch)-\(index)".write(to: repo.appendingPathComponent("f\(branch)\(index).txt"), atomically: true, encoding: .utf8)
     _ = Git.run(["add", "-A"], in: repo.path)
-    _ = Git.run(["commit", "-m", "\(branch) commit \(i)"], in: repo.path)
+    _ = Git.run(["commit", "-m", "\(branch) commit \(index)"], in: repo.path)
     let hash = Git.run(["rev-parse", "HEAD"], in: repo.path)!
     try spool.append(kind: CaptureKind.gitCommit,
                      payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: branch)))

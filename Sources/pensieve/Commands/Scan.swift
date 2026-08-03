@@ -21,8 +21,9 @@ struct Scan: ParsableCommand {
 
     if !accept {
       print("discovered \(candidates.count) source(s):")
-      for c in candidates {
-        print("  \(c.source.kind)  \(c.source.displayName)  \(c.source.directory.path)\(c.alreadyRegistered ? "  [registered]" : "")")
+      for candidate in candidates {
+        let registeredSuffix = candidate.alreadyRegistered ? "  [registered]" : ""
+        print("  \(candidate.source.kind)  \(candidate.source.displayName)  \(candidate.source.directory.path)\(registeredSuffix)")
       }
       print("\nre-run with --accept to register + install hooks.")
       return
@@ -32,6 +33,6 @@ struct Scan: ParsableCommand {
     let result = try scanner.accept(fresh, database: database)
     let already = candidates.count - fresh.count
     print("registered \(result.registered.count), already \(already), setup-failed \(result.setupFailed.count)")
-    for (s, why) in result.setupFailed { print("  ! \(s.displayName): \(why)") }
+    for (source, why) in result.setupFailed { print("  ! \(source.displayName): \(why)") }
   }
 }

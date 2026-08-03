@@ -23,8 +23,8 @@ struct GeneralSettingsTab: View {
 
       Section("Background sync") {
         Toggle("Keep Pensieve synced in the background", isOn: $backgroundSyncEnabled)
-          .onChange(of: backgroundSyncEnabled) { _, on in
-            if on { BackgroundSyncService.registerIfNeeded() } else { BackgroundSyncService.unregister() }
+          .onChange(of: backgroundSyncEnabled) { _, newEnabled in
+            if newEnabled { BackgroundSyncService.registerIfNeeded() } else { BackgroundSyncService.unregister() }
             syncStatus = BackgroundSyncService.status
           }
         LabeledContent("Status") { Text(statusText) }

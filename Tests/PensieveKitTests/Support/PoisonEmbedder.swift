@@ -14,9 +14,9 @@ struct PoisonEmbedder: TextEmbedder {
   func embed(_ texts: [String]) async -> [[Float]?]? {
     let good = StubEmbedder(dimension: dimension, version: version)
     var out: [[Float]?] = []
-    for t in texts {
-      if t.contains(poison) { out.append(nil); continue }
-      out.append(await good.embed([t])?.first ?? nil)
+    for text in texts {
+      if text.contains(poison) { out.append(nil); continue }
+      out.append(await good.embed([text])?.first ?? nil)
     }
     return out
   }

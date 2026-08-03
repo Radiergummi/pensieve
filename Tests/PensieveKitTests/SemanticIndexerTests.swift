@@ -18,13 +18,13 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
   return event
 }
 
-@Suite struct SemanticIndexerTests {
-  private func store() -> SemanticIndexStore {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("semidx-\(UUID().uuidString).sqlite")
-    return SemanticIndexStore(url: url, dimension: 16, embedderVersion: "stub:16")
-  }
+private func store() -> SemanticIndexStore {
+  let url = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("semidx-\(UUID().uuidString).sqlite")
+  return SemanticIndexStore(url: url, dimension: 16, embedderVersion: "stub:16")
+}
 
+@Suite struct SemanticIndexerTests {
   @Test func indexesActiveNodesOpenLooseEndsAndEnrichedEvents() async throws {
     let database = try openCanonicalDatabase(at: tempURL("semidx-add"))
     let node = Node(name: "Payments", kind: NodeKind.project)
@@ -158,7 +158,11 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await idx.sync(database)
     #expect(!indexStore.existingItems().keys.contains(looseEnd.id.uuidString))
   }
+}
 
+/// Archive/unarchive lifecycle, repointing, re-embedding, retry, and corpus-gathering behavior —
+/// split from `SemanticIndexerTests` to keep each suite's body under the type-body-length limit.
+@Suite struct SemanticIndexerLifecycleTests {
   /// Superseded contract: archiving used to prune nodeA node'indexStore items from the index entirely. Task 1
   /// widens the corpus producer to include archived nodes (tagged with their real state), so
   /// archiving now re-tags instead of pruning — the items stay recallable, just no longer surfaced

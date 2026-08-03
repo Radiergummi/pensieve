@@ -12,22 +12,22 @@ import Foundation
 enum TextQuality {
   /// Real prose: has some length and contains letters. Rejects "[]", "/", "...", "42".
   static func isProse(_ text: String) -> Bool {
-    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    return t.count >= 8 && t.contains { $0.isLetter }
+    let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmedText.count >= 8 && trimmedText.contains { $0.isLetter }
   }
 
   /// `isProse`, plus a reject for structured output wearing a prose costume: a JSON array/object,
   /// either bare or inside a code fence. Use for text a model was asked to write as prose.
   static func isProseNotStructured(_ text: String) -> Bool {
-    var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    if t.hasPrefix("```") {
+    var trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmedText.hasPrefix("```") {
       // Strip the fence (and any language tag) so `["```json\n[1,2]\n```"]` is judged on its body.
-      t = t.replacingOccurrences(of: #"^```[a-zA-Z]*"#, with: "", options: .regularExpression)
-      t = t.replacingOccurrences(of: "```", with: "")
-      t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+      trimmedText = trimmedText.replacingOccurrences(of: #"^```[a-zA-Z]*"#, with: "", options: .regularExpression)
+      trimmedText = trimmedText.replacingOccurrences(of: "```", with: "")
+      trimmedText = trimmedText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    guard !t.hasPrefix("["), !t.hasPrefix("{") else { return false }
-    return isProse(t)
+    guard !trimmedText.hasPrefix("["), !trimmedText.hasPrefix("{") else { return false }
+    return isProse(trimmedText)
   }
 
   /// A terse organizational label — a sidebar name, not a sentence or a paragraph. Rejects
@@ -35,8 +35,8 @@ enum TextQuality {
   /// internal dots that aren't sentence boundaries ("v3.1 migration", "Fix auth.middleware").
   static let labelLengthCap = 60
   static func isTerseLabel(_ text: String) -> Bool {
-    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !t.isEmpty, t.count <= labelLengthCap else { return false }
-    return t.range(of: #"[.!?]\s+\p{Lu}"#, options: .regularExpression) == nil
+    let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedText.isEmpty, trimmedText.count <= labelLengthCap else { return false }
+    return trimmedText.range(of: #"[.!?]\s+\p{Lu}"#, options: .regularExpression) == nil
   }
 }

@@ -32,7 +32,7 @@ public struct SalienceClassifier {
       } else {
         drop = []                             // hard error: fail open, keep all
       }
-      for (n, e) in batch.enumerated() where !drop.contains(n) { kept.append(e) }
+      for (index, end) in batch.enumerated() where !drop.contains(index) { kept.append(end) }
     }
     return kept
   }
@@ -40,10 +40,10 @@ public struct SalienceClassifier {
   /// Groups ends into batches whose per-item prompt cost (quote + capped context) stays within budget.
   static func batches(_ ends: [VerifiedLooseEnd], messages: [TranscriptMessage], budget: Int) -> [[VerifiedLooseEnd]] {
     var out: [[VerifiedLooseEnd]] = [], current: [VerifiedLooseEnd] = [], size = 0
-    for e in ends {
-      let cost = e.quote.count + contextWindow(for: e, messages: messages).count + 16
+    for end in ends {
+      let cost = end.quote.count + contextWindow(for: end, messages: messages).count + 16
       if size + cost > budget, !current.isEmpty { out.append(current); current = []; size = 0 }
-      current.append(e); size += cost
+      current.append(end); size += cost
     }
     if !current.isEmpty { out.append(current) }
     return out
@@ -52,11 +52,11 @@ public struct SalienceClassifier {
   /// The cited message ± `contextNeighbors`, each capped, joined — the framing signal.
   static func contextWindow(for end: VerifiedLooseEnd, messages: [TranscriptMessage]) -> String {
     guard let pos = messages.firstIndex(where: { $0.index == end.sourceMessageIndex }) else { return "" }
-    let lo = max(0, pos - contextNeighbors)
-    let hi = min(messages.count - 1, pos + contextNeighbors)
-    return messages[lo...hi].map { m in
-      let head = m.text.count > messageHeadLimit ? String(m.text.prefix(messageHeadLimit)) + " …" : m.text
-      return "\(m.role): \(head)"
+    let lowerBound = max(0, pos - contextNeighbors)
+    let upperBound = min(messages.count - 1, pos + contextNeighbors)
+    return messages[lowerBound...upperBound].map { message in
+      let head = message.text.count > messageHeadLimit ? String(message.text.prefix(messageHeadLimit)) + " …" : message.text
+      return "\(message.role): \(head)"
     }.joined(separator: "\n")
   }
 
@@ -67,8 +67,8 @@ public struct SalienceClassifier {
   /// The salience prompt over pre-rendered (quote, context) pairs. Kept as ONE definition so the
   /// live `filter` path and the offline `SalienceSuggester` never drift.
   static func buildPrompt(_ items: [(quote: String, context: String)]) -> String {
-    let body = items.enumerated().map { (n, it) in
-      "[\(n)] QUOTE: \(it.quote)\nCONTEXT:\n\(it.context)"
+    let body = items.enumerated().map { (index, item) in
+      "[\(index)] QUOTE: \(item.quote)\nCONTEXT:\n\(item.context)"
     }.joined(separator: "\n\n")
     return """
     Each item below is a candidate LOOSE END quoted from a developer's message, with surrounding \

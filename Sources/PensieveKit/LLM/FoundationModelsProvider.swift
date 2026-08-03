@@ -37,10 +37,10 @@ public struct FoundationModelsProvider: LLMProvider {
       guard case .structure(let root, _) = content.kind,
             case .array(let items)? = root["candidates"]?.kind else { return [] }
       return items.compactMap { item in
-        guard case .structure(let f, _) = item.kind,
-              case .string(let text)? = f["text"]?.kind,
-              case .string(let quote)? = f["quote"]?.kind,
-              case .number(let idx)? = f["messageIndex"]?.kind else { return nil }
+        guard case .structure(let fields, _) = item.kind,
+              case .string(let text)? = fields["text"]?.kind,
+              case .string(let quote)? = fields["quote"]?.kind,
+              case .number(let idx)? = fields["messageIndex"]?.kind else { return nil }
         return LooseEndCandidate(text: text, quote: quote, messageIndex: Int(idx))
       }
     } catch {
@@ -56,7 +56,7 @@ public struct FoundationModelsProvider: LLMProvider {
       let content = try await session.respond(to: prompt, schema: Self.genuineIndicesSchema()).content
       guard case .structure(let root, _) = content.kind,
             case .array(let items)? = root["indices"]?.kind else { return [] }
-      return items.compactMap { if case .number(let n) = $0.kind { return Int(n) } else { return nil } }
+      return items.compactMap { if case .number(let numberValue) = $0.kind { return Int(numberValue) } else { return nil } }
     } catch {
       Log.llm.error("FoundationModels classifyGenuineIndices failed: \(error, privacy: .public)")
       throw LLMError.providerFailed("FoundationModels: \(error)")
@@ -69,7 +69,7 @@ public struct FoundationModelsProvider: LLMProvider {
       let content = try await session.respond(to: prompt, schema: Self.nonSalientIndicesSchema()).content
       guard case .structure(let root, _) = content.kind,
             case .array(let items)? = root["indices"]?.kind else { return [] }
-      return items.compactMap { if case .number(let n) = $0.kind { return Int(n) } else { return nil } }
+      return items.compactMap { if case .number(let numberValue) = $0.kind { return Int(numberValue) } else { return nil } }
     } catch {
       Log.llm.error("FoundationModels classifyNonSalientIndices failed: \(error, privacy: .public)")
       throw LLMError.providerFailed("FoundationModels: \(error)")
@@ -102,7 +102,8 @@ public struct FoundationModelsProvider: LLMProvider {
   private static func genuineIndicesSchema() throws -> GenerationSchema {
     let root = DynamicGenerationSchema(name: "GenuineIndices", properties: [
       .init(name: "indices",
-            description: "The [n] indices of messages that are the developer's OWN conversational intent (a request, question, decision, or note); empty when none qualify",
+            description: "The [n] indices of messages that are the developer's OWN conversational intent " +
+              "(a request, question, decision, or note); empty when none qualify",
             schema: DynamicGenerationSchema(arrayOf: DynamicGenerationSchema(type: Int.self))),
     ])
     return try GenerationSchema(root: root, dependencies: [])
@@ -112,7 +113,9 @@ public struct FoundationModelsProvider: LLMProvider {
   private static func nonSalientIndicesSchema() throws -> GenerationSchema {
     let root = DynamicGenerationSchema(name: "NonSalientIndices", properties: [
       .init(name: "indices",
-            description: "The [n] indices of items that are clearly in-the-moment requests the assistant simply carried out — NOT deferred/parked/decision work left open. These will be dropped. Empty when every item is a genuine loose end; when unsure about an item, do NOT include it.",
+            description: "The [n] indices of items that are clearly in-the-moment requests the assistant simply " +
+              "carried out — NOT deferred/parked/decision work left open. These will be dropped. Empty when every " +
+              "item is a genuine loose end; when unsure about an item, do NOT include it.",
             schema: DynamicGenerationSchema(arrayOf: DynamicGenerationSchema(type: Int.self))),
     ])
     return try GenerationSchema(root: root, dependencies: [])

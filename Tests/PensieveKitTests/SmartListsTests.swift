@@ -6,17 +6,17 @@ import SQLiteData
 @Test func bucketsRankedItemsIntoSmartLists() throws {
   let database = try openCanonicalDatabase(at: tempURL("smartlists"))
   let resolver = ProjectResolver(database: database)
-  let (recentNode, rs) = try resolver.resolve(path: "/p/recent", kind: SourceKind.claudeCode)
-  let (oldNode, os) = try resolver.resolve(path: "/p/old", kind: SourceKind.claudeCode)
+  let (recentNode, recentSource) = try resolver.resolve(path: "/p/recent", kind: SourceKind.claudeCode)
+  let (oldNode, oldSource) = try resolver.resolve(path: "/p/old", kind: SourceKind.claudeCode)
   let now = Date()
   let old = Calendar.current.date(byAdding: .day, value: -30, to: now)!
   try database.write { database in
     try Event.insert {
-      Event(nodeID: recentNode.id, sourceID: rs.id, occurredAt: now, kind: CaptureKind.ccSession,
+      Event(nodeID: recentNode.id, sourceID: recentSource.id, occurredAt: now, kind: CaptureKind.ccSession,
             summary: "s", detailJSON: "{}", fingerprint: "r1")
     }.execute(database)
     try Event.insert {
-      Event(nodeID: oldNode.id, sourceID: os.id, occurredAt: old, kind: CaptureKind.ccSession,
+      Event(nodeID: oldNode.id, sourceID: oldSource.id, occurredAt: old, kind: CaptureKind.ccSession,
             summary: "s", detailJSON: "{}", fingerprint: "o1")
     }.execute(database)
   }

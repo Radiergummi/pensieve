@@ -10,7 +10,8 @@ public struct CellScore: Sendable, Codable, Equatable {
   public var costUSD: Double
   public var latencyP50: Double
   public var reproducedFabrication: Bool
-  public init(modelLabel: String, isOnDevice: Bool, quality: Double?, precision: Double?, recall: Double?, costUSD: Double, latencyP50: Double, reproducedFabrication: Bool) {
+  public init(modelLabel: String, isOnDevice: Bool, quality: Double?, precision: Double?, recall: Double?,
+              costUSD: Double, latencyP50: Double, reproducedFabrication: Bool) {
     self.modelLabel = modelLabel; self.isOnDevice = isOnDevice; self.quality = quality; self.precision = precision
     self.recall = recall; self.costUSD = costUSD; self.latencyP50 = latencyP50; self.reproducedFabrication = reproducedFabrication
   }
@@ -18,7 +19,9 @@ public struct CellScore: Sendable, Codable, Equatable {
 
 public struct EffectiveBar: Sendable, Equatable {
   public var precision: Double?; public var recall: Double?; public var quality: Double?
-  public init(precision: Double?, recall: Double?, quality: Double?) { self.precision = precision; self.recall = recall; self.quality = quality }
+  public init(precision: Double?, recall: Double?, quality: Double?) {
+    self.precision = precision; self.recall = recall; self.quality = quality
+  }
 }
 
 public struct Recommendation: Sendable, Codable, Equatable {

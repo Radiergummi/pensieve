@@ -19,8 +19,8 @@ import Foundation
 
   // Fill well past a tiny cap, then confirm the file was cut to the newest half,
   // starts on a line boundary, and still ends with the newest line.
-  for i in 0..<100 {
-    SyncLog.append("line \(i) padded to be reasonably long for the test\n", to: url, cap: 1024)
+  for index in 0..<100 {
+    SyncLog.append("line \(index) padded to be reasonably long for the test\n", to: url, cap: 1024)
   }
 
   let data = try Data(contentsOf: url)

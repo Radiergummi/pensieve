@@ -51,9 +51,9 @@ public enum ProvenanceQueries {
           normalizeWhitespace(citedMessage.text).contains(normalizeWhitespace(looseEnd.quote))
     else { return unavailable() }
 
-    let lo = max(0, citedPos - radius)
-    let hi = min(session.messages.count - 1, citedPos + radius)
-    let window = session.messages[lo...hi].map {
+    let lowerIndex = max(0, citedPos - radius)
+    let upperIndex = min(session.messages.count - 1, citedPos + radius)
+    let window = session.messages[lowerIndex...upperIndex].map {
       ProvenanceMessage(index: $0.index, role: $0.role, text: $0.text,
                         isCited: $0.index == looseEnd.sourceMessageIndex, isUserPrompt: $0.isUserPrompt)
     }

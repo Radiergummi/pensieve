@@ -27,7 +27,7 @@ struct NodeEditor: View {
           Form {
             TextField("Name", text: $name)
             Picker("Type", selection: $kind) {
-              ForEach(NodeKind.all, id: \.self) { k in Text(AppearanceStyle.kindLabel(k)).tag(k) }
+              ForEach(NodeKind.all, id: \.self) { nodeKind in Text(AppearanceStyle.kindLabel(nodeKind)).tag(nodeKind) }
             }
             Picker("Context", selection: $context) {
               Text("Unset").tag("")
@@ -77,8 +77,8 @@ struct NodeEditor: View {
       .overlay {
         Group {
           switch AppearanceIcon.parse(icon) {
-          case .sfSymbol(let n): Image(systemName: n).foregroundStyle(.white)
-          case .emoji(let e):    Text(e)
+          case .sfSymbol(let symbolName): Image(systemName: symbolName).foregroundStyle(.white)
+          case .emoji(let emoji):    Text(emoji)
           case nil:              Image(systemName: "questionmark").foregroundStyle(.white)
           }
         }.font(.system(size: 34))
@@ -88,9 +88,9 @@ struct NodeEditor: View {
   private func load() {
     switch request.mode {
     case .new(let parent):
-      let k = model.defaultKind(under: parent)
-      kind = k
-      let style = NodeKindStyle.style(for: k)
+      let defaultKind = model.defaultKind(under: parent)
+      kind = defaultKind
+      let style = NodeKindStyle.style(for: defaultKind)
       colorTag = style.colorTag
       icon = style.icon
       name = ""
@@ -98,19 +98,20 @@ struct NodeEditor: View {
     case .edit(let node):
       name = node.name
       kind = node.kind
-      let a = node.appearance
-      colorTag = a.colorTag
-      icon = a.icon.storedString
+      let appearance = node.appearance
+      colorTag = appearance.colorTag
+      icon = appearance.icon.storedString
       context = node.context
     }
   }
 
   private func commit() {
+    let fields = NodeFields(name: name, kind: kind, icon: icon, colorTag: colorTag, context: context)
     switch request.mode {
     case .new(let parent):
-      model.commitNewNode(parent: parent, name: name, kind: kind, icon: icon, colorTag: colorTag, context: context)
+      model.commitNewNode(parent: parent, fields: fields)
     case .edit(let node):
-      model.updateNode(node.id, name: name, kind: kind, icon: icon, colorTag: colorTag, context: context)
+      model.updateNode(node.id, fields: fields)
     }
     dismiss()
   }
@@ -189,7 +190,7 @@ struct MergePicker: View {
       titleVisibility: .visible
     ) {
       Button("Merge", role: .destructive) {
-        if let t = pendingTarget { model.merge(nodeID, into: t.id) }
+        if let targetNode = pendingTarget { model.merge(nodeID, into: targetNode.id) }
         dismiss()
       }
       Button("Cancel", role: .cancel) { pendingTarget = nil }
@@ -199,6 +200,9 @@ struct MergePicker: View {
   private var confirmMessage: String {
     let source = model.node(nodeID)?.name ?? ""
     let target = pendingTarget?.name ?? ""
-    return String(localized: "Merge “\(source)” into “\(target)”? Its sources, activity, and loose ends move to the target, and the original is deleted. This can’t be undone.")
+    return String(localized: """
+      Merge “\(source)” into “\(target)”? Its sources, activity, and loose ends move to the target, and \
+      the original is deleted. This can’t be undone.
+      """)
   }
 }

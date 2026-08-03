@@ -6,20 +6,20 @@ import Testing
 
 @Test func selectionAbsentAndUnknownReadAsAuto() {
   let suite = "pensieve-test-\(UUID().uuidString)"
-  let d = UserDefaults(suiteName: suite)!
-  defer { d.removePersistentDomain(forName: suite) }
-  #expect(ProviderSettings.selection(from: d) == .auto)                 // absent
-  d.set("bogus", forKey: PensieveDefaults.llmProviderKey)
-  #expect(ProviderSettings.selection(from: d) == .auto)                 // unknown value
+  let defaults = UserDefaults(suiteName: suite)!
+  defer { defaults.removePersistentDomain(forName: suite) }
+  #expect(ProviderSettings.selection(from: defaults) == .auto)                 // absent
+  defaults.set("bogus", forKey: PensieveDefaults.llmProviderKey)
+  #expect(ProviderSettings.selection(from: defaults) == .auto)                 // unknown value
 }
 
 @Test func selectionReadsKnownValues() {
   let suite = "pensieve-test-\(UUID().uuidString)"
-  let d = UserDefaults(suiteName: suite)!
-  defer { d.removePersistentDomain(forName: suite) }
+  let defaults = UserDefaults(suiteName: suite)!
+  defer { defaults.removePersistentDomain(forName: suite) }
   for pref in [ProviderPreference.foundationModels, .claudeCLI, .cloud, .auto] {
-    d.set(pref.rawValue, forKey: PensieveDefaults.llmProviderKey)
-    #expect(ProviderSettings.selection(from: d) == pref)
+    defaults.set(pref.rawValue, forKey: PensieveDefaults.llmProviderKey)
+    #expect(ProviderSettings.selection(from: defaults) == pref)
   }
 }
 

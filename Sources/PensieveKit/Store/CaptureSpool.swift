@@ -4,7 +4,7 @@ import GRDB
 
 public struct SpoolRow: Sendable {
   public let id: Int64
-  public let ts: Date
+  public let timestamp: Date
   public let kind: String
   public let payload: String
 }
@@ -31,11 +31,11 @@ public final class CaptureSpool: Sendable {
     }
   }
 
-  public func append(kind: String, payload: String, at: Date = Date()) throws {
+  public func append(kind: String, payload: String, at timestamp: Date = Date()) throws {
     try dbQueue.write { database in
       try database.execute(
         sql: "INSERT INTO captures(ts, kind, payload) VALUES(?, ?, ?)",
-        arguments: [at.ISO8601Format(), kind, payload])
+        arguments: [timestamp.ISO8601Format(), kind, payload])
     }
   }
 
@@ -45,7 +45,7 @@ public final class CaptureSpool: Sendable {
         .map { row in
           SpoolRow(
             id: row["id"],
-            ts: (try? Date(row["ts"] as String, strategy: .iso8601)) ?? Date(),
+            timestamp: (try? Date(row["ts"] as String, strategy: .iso8601)) ?? Date(),
             kind: row["kind"],
             payload: row["payload"])
         }

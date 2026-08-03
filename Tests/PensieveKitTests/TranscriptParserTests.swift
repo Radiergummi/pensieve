@@ -4,12 +4,12 @@ import Testing
 
 @Test func parsesSessionDefensively() throws {
   let url = Bundle.module.url(forResource: "session", withExtension: "jsonl", subdirectory: "Fixtures")!
-  let s = TranscriptParser.parse(fileURL: url)
+  let session = TranscriptParser.parse(fileURL: url)
 
-  #expect(s.cwd == "/Users/moritz/Projects/colibri")
-  #expect(s.userPromptCount == 2)                       // bad line skipped, not counted
-  #expect(s.messages.contains { $0.text.contains("rate limiting") })
-  #expect(s.startedAt != nil && s.endedAt != nil)
+  #expect(session.cwd == "/Users/moritz/Projects/colibri")
+  #expect(session.userPromptCount == 2)                       // bad line skipped, not counted
+  #expect(session.messages.contains { $0.text.contains("rate limiting") })
+  #expect(session.startedAt != nil && session.endedAt != nil)
 }
 
 @Test func parsesFractionalSecondTimestamps() throws {
@@ -22,8 +22,8 @@ import Testing
     {"type":"user","cwd":"/p/app","timestamp":"2026-06-29T13:05:10Z","message":{"role":"user","content":"bye"}}
     """
   try lines.write(to: url, atomically: true, encoding: .utf8)
-  let s = TranscriptParser.parse(fileURL: url)
-  #expect(s.startedAt != nil)                            // fractional-second line parsed
-  #expect(s.endedAt != nil)
-  #expect(s.startedAt != s.endedAt)                      // both timestamps parsed, min < max
+  let session = TranscriptParser.parse(fileURL: url)
+  #expect(session.startedAt != nil)                            // fractional-second line parsed
+  #expect(session.endedAt != nil)
+  #expect(session.startedAt != session.endedAt)                      // both timestamps parsed, min < max
 }

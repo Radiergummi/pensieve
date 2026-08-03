@@ -15,6 +15,25 @@ public struct SemanticHit: Identifiable, Sendable, Equatable {
   public let isArchived: Bool
 }
 
+/// The filter knobs a semantic search applies AFTER the KNN fetch: which nodes are visible under
+/// the active Focus, which item ids are already covered by exact search, how many hits to keep,
+/// the similarity floor, and whether archived content is eligible.
+public struct SemanticSearchScope: Sendable {
+  public var visibleNodeIDs: Set<UUID>
+  public var excludingIDs: Set<UUID>
+  public var limit: Int
+  public var floor: Double
+  public var includeArchived: Bool
+  public init(visibleNodeIDs: Set<UUID>, excludingIDs: Set<UUID>, limit: Int, floor: Double,
+              includeArchived: Bool = false) {
+    self.visibleNodeIDs = visibleNodeIDs
+    self.excludingIDs = excludingIDs
+    self.limit = limit
+    self.floor = floor
+    self.includeArchived = includeArchived
+  }
+}
+
 /// Semantic ("find similar") recall over the sqlite-vec index, joined back to the live canonical
 /// corpus. KNN alone is fixed-limit and pre-filter — a fixed limit could return only Focus-muted rows, so
 /// this over-fetches from the store before applying `visibleNodeIDs`/`excludingIDs`/`floor`, then
@@ -26,11 +45,7 @@ public struct SemanticHit: Identifiable, Sendable, Equatable {
 /// filter and this canonical re-check, in lockstep. `muted` is never returned.
 public enum SemanticQueries {
   public static func search(query rawQuery: String,
-                            visibleNodeIDs: Set<UUID>,
-                            excludingIDs: Set<UUID>,
-                            limit: Int,
-                            floor: Double,
-                            includeArchived: Bool = false,
+                            scope: SemanticSearchScope,
                             store: SemanticIndexStore,
                             embedder: any TextEmbedder,
                             _ database: any DatabaseReader) async -> [SemanticHit] {
@@ -44,15 +59,13 @@ public enum SemanticQueries {
     // result below limit. A floor-aware exit keeps ordinary sparse queries (few above-floor items) at
     // one fetch: similarity is monotonically non-increasing across `raw`, so once the farthest
     // fetched neighbor is below `floor`, no deeper neighbor can ever become a hit.
-    var kFetch = max(limit * 8, 50)
+    var kFetch = max(scope.limit * 8, 50)
     let maxFetch = 2000
     while true {
-      let raw = store.knn(query: qvec, limit: kFetch, includeArchived: includeArchived)
-      let hits = buildHits(raw, limit: limit, floor: floor, visibleNodeIDs: visibleNodeIDs,
-                           excludingIDs: excludingIDs, includeArchived: includeArchived,
-                           query: query, database)
-      if hits.count >= limit || raw.count < kFetch || kFetch >= maxFetch { return hits }
-      if let last = raw.last, last.similarity < floor { return hits }
+      let raw = store.knn(query: qvec, limit: kFetch, includeArchived: scope.includeArchived)
+      let hits = buildHits(raw, scope: scope, query: query, database)
+      if hits.count >= scope.limit || raw.count < kFetch || kFetch >= maxFetch { return hits }
+      if let last = raw.last, last.similarity < scope.floor { return hits }
       kFetch = min(kFetch * 4, maxFetch)
     }
   }
@@ -60,19 +73,17 @@ public enum SemanticQueries {
   /// Filter one KNN page down to at most `limit` grounded, visible, above-floor, non-excluded hits,
   /// re-resolving each survivor against canonical (the last grounding defense). Deterministic KNN
   /// ordering makes each larger fetch a superset prefix, so rebuilding from the top is correct.
-  private static func buildHits(_ raw: [KNNResult], limit: Int, floor: Double,
-                                visibleNodeIDs: Set<UUID>, excludingIDs: Set<UUID>,
-                                includeArchived: Bool,
+  private static func buildHits(_ raw: [KNNResult], scope: SemanticSearchScope,
                                 query: String, _ database: any DatabaseReader) -> [SemanticHit] {
     var hits: [SemanticHit] = []
     for result in raw {
-      guard result.similarity >= floor,
-            let nodeID = UUID(uuidString: result.nodeID), visibleNodeIDs.contains(nodeID) else { continue }
-      guard let itemID = UUID(uuidString: result.itemID), !excludingIDs.contains(itemID) else { continue }
-      guard let hit = try? resolve(kind: result.kind, itemID: itemID, similarity: result.similarity,
-                                   includeArchived: includeArchived, query: query, database) else { continue }
+      guard result.similarity >= scope.floor,
+            let nodeID = UUID(uuidString: result.nodeID), scope.visibleNodeIDs.contains(nodeID) else { continue }
+      guard let itemID = UUID(uuidString: result.itemID), !scope.excludingIDs.contains(itemID) else { continue }
+      guard let hit = try? resolve(result, itemID: itemID, includeArchived: scope.includeArchived,
+                                   query: query, database) else { continue }
       hits.append(hit)
-      if hits.count == limit { break }
+      if hits.count == scope.limit { break }
     }
     return hits
   }
@@ -81,9 +92,10 @@ public enum SemanticQueries {
   /// stale row never surfaces a dead hit. The state predicate MUST mirror the `knn` filter: if the
   /// index widens to archived but this does not, archived rows pass KNN and are then silently
   /// dropped here. Same predicate shape as `SearchQueries` uses for exact search.
-  private static func resolve(kind: String, itemID: UUID, similarity: Double,
-                              includeArchived: Bool, query: String,
+  private static func resolve(_ result: KNNResult, itemID: UUID, includeArchived: Bool, query: String,
                               _ database: any DatabaseReader) throws -> SemanticHit? {
+    let kind = result.kind
+    let similarity = result.similarity
     func eligible(_ node: Node) -> Bool {
       node.state == .active || (includeArchived && node.state == .archived)
     }

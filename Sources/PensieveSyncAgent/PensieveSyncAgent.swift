@@ -14,12 +14,13 @@ enum PensieveSyncAgent {
     let line: String
     let now = Date().ISO8601Format()
     do {
-      let s = try await SyncRunner(
+      let syncResult = try await SyncRunner(
         spool: try openSpool(),
         database: try openCanonical(),
         provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()),
         projectsDir: PensievePaths.claudeProjectsURL()).run()
-      line = "\(now) sync: ingested \(s.ingested) event(s), discovered \(s.discovered) session(s), extracted \(s.extracted) loose end(s)\n"
+      line = "\(now) sync: ingested \(syncResult.ingested) event(s), discovered \(syncResult.discovered) session(s), "
+        + "extracted \(syncResult.extracted) loose end(s)\n"
     } catch {
       line = "\(now) sync FAILED: \(error)\n"
     }

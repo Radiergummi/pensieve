@@ -22,6 +22,15 @@ public func openCanonicalDatabaseReadOnly(at url: URL) throws -> any DatabaseRea
 
 func migrateCanonical(_ database: any DatabaseWriter) throws {
   var migrator = DatabaseMigrator()
+  registerV1Migration(on: &migrator)
+  registerV2Migration(on: &migrator)
+  registerV3Migration(on: &migrator)
+  registerTreeMigrations(on: &migrator)
+  registerRecentMigrations(on: &migrator)
+  try migrator.migrate(database)
+}
+
+private func registerV1Migration(on migrator: inout DatabaseMigrator) {
   migrator.registerMigration("v1-projects") { database in
     try #sql("""
       CREATE TABLE "projects"(
@@ -32,6 +41,9 @@ func migrateCanonical(_ database: any DatabaseWriter) throws {
       ) STRICT
       """).execute(database)
   }
+}
+
+private func registerV2Migration(on migrator: inout DatabaseMigrator) {
   migrator.registerMigration("v2-sources-events-looseends-checkpoints") { database in
     try #sql("""
       CREATE TABLE "sources"(
@@ -76,14 +88,23 @@ func migrateCanonical(_ database: any DatabaseWriter) throws {
     try #sql(#"CREATE INDEX "idx_events_project" ON "events"("projectID", "occurredAt")"#).execute(database)
     try #sql(#"CREATE UNIQUE INDEX "idx_sources_key_kind" ON "sources"("key", "kind")"#).execute(database)
   }
+}
+
+private func registerV3Migration(on migrator: inout DatabaseMigrator) {
   migrator.registerMigration("v3-fingerprint-extraction-provenance") { database in
     try #sql(#"ALTER TABLE "events" ADD COLUMN "fingerprint" TEXT"#).execute(database)
     try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedAt" TEXT"#).execute(database)
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "role" TEXT NOT NULL DEFAULT ''"#).execute(database)
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "sourceMessageIndex" INTEGER NOT NULL DEFAULT 0"#).execute(database)
     // Backfill fingerprints for already-captured rows so the unique index is meaningful.
-    try #sql(#"UPDATE "events" SET "fingerprint" = 'commit:' || json_extract("detailJSON", '$.hash') WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL"#).execute(database)
-    try #sql(#"UPDATE "events" SET "fingerprint" = 'session:' || json_extract("detailJSON", '$.sessionID') WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL"#).execute(database)
+    try #sql(#"""
+      UPDATE "events" SET "fingerprint" = 'commit:' || json_extract("detailJSON", '$.hash')
+        WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL
+      """#).execute(database)
+    try #sql(#"""
+      UPDATE "events" SET "fingerprint" = 'session:' || json_extract("detailJSON", '$.sessionID')
+        WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL
+      """#).execute(database)
     // An upgraded 1A DB may already contain two events with the same commit hash / sessionID
     // under one source (1A had no dedup), which would now backfill to identical fingerprints
     // and make the unique index below fail. Collapse those, keeping the earliest row. Pre-1B
@@ -95,6 +116,9 @@ func migrateCanonical(_ database: any DatabaseWriter) throws {
     // NULLs are distinct in a SQLite unique index, so unbackfilled rows (e.g. checkouts) don't collide.
     try #sql(#"CREATE UNIQUE INDEX "idx_events_source_fingerprint" ON "events"("sourceID", "fingerprint")"#).execute(database)
   }
+}
+
+private func registerTreeMigrations(on migrator: inout DatabaseMigrator) {
   // .immediate: keeps foreign-key enforcement ON during this migration so SQLite's
   // ALTER TABLE RENAME TO / RENAME COLUMN auto-rewrites the FK clauses in "sources",
   // "events", "looseEnds", "checkpoints" (the default .deferred disables FK checks
@@ -126,6 +150,9 @@ func migrateCanonical(_ database: any DatabaseWriter) throws {
       """).execute(database)
     try #sql(#"CREATE UNIQUE INDEX "idx_sessionbranches_sessionid" ON "sessionBranches"("sessionID")"#).execute(database)
   }
+}
+
+private func registerRecentMigrations(on migrator: inout DatabaseMigrator) {
   migrator.registerMigration("v7-incremental-extraction") { database in
     try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedMessageCount" INTEGER NOT NULL DEFAULT 0"#).execute(database)
     // -1 = "never watermarked" (unambiguous sentinel that can't collide with a real byte size,
@@ -152,5 +179,4 @@ func migrateCanonical(_ database: any DatabaseWriter) throws {
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "label" TEXT NOT NULL DEFAULT ''"#).execute(database)
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "labelSuggestion" TEXT NOT NULL DEFAULT ''"#).execute(database)
   }
-  try migrator.migrate(database)
 }

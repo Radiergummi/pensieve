@@ -12,13 +12,13 @@ import SQLiteData
 
 @Test func narrationCacheMissesOnChangedKey() {
   // Two different event sets / providers → different keys → the old prose does not leak.
-  let e1 = Event(nodeID: UUID(), sourceID: UUID(), occurredAt: Date(), kind: CaptureKind.ccSession,
+  let event1 = Event(nodeID: UUID(), sourceID: UUID(), occurredAt: Date(), kind: CaptureKind.ccSession,
                  summary: "s", detailJSON: "{}")
-  let e2 = Event(nodeID: UUID(), sourceID: UUID(), occurredAt: Date(), kind: CaptureKind.ccSession,
+  let event2 = Event(nodeID: UUID(), sourceID: UUID(), occurredAt: Date(), kind: CaptureKind.ccSession,
                  summary: "s", detailJSON: "{}")
-  let kOne = NarrationCacheKey.make(events: [e1], provider: "fm")
-  let kTwo = NarrationCacheKey.make(events: [e1, e2], provider: "fm")
-  let kProv = NarrationCacheKey.make(events: [e1], provider: "cloud")
+  let kOne = NarrationCacheKey.make(events: [event1], provider: "fm")
+  let kTwo = NarrationCacheKey.make(events: [event1, event2], provider: "fm")
+  let kProv = NarrationCacheKey.make(events: [event1], provider: "cloud")
   let cache = NarrationCache(url: tempURL("narr"))
   cache.put(kOne, prose: "one")
   #expect(cache.get(kOne) == "one")

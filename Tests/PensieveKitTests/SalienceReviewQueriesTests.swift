@@ -5,7 +5,7 @@ import SQLiteData
 
 @discardableResult
 private func seed(_ database: any DatabaseWriter, quote: String, label: String, suggestion: String,
-                 status: String = "open", daysAgo: Int = 0) throws -> UUID {
+                  status: String = "open", daysAgo: Int = 0) throws -> UUID {
   let node = Node(name: "N")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
   let when = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
