@@ -63,8 +63,14 @@ func renorm(_ v: [Float]) -> [Float] { var n: Float = 0; for x in v { n += x*x }
 let centred = vecs.map { v in renorm((0..<dim).map { v[$0] - mean[$0] }) }
 func cosf(_ a: [Float], _ b: [Float]) -> Double { var s: Float = 0; for i in 0..<dim { s += a[i]*b[i] }; return Double(s) }
 
+// Matches the shipped FTS5 tokenizer: `unicode61 remove_diacritics 2`, unstemmed.
+// The ≥2-char filter is a probe-only divergence (FTS5 indexes 1-char tokens); immaterial to ranking.
 func tok(_ s: String) -> [String] {
-  s.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count >= 2 }
+  s.folding(options: [.diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    .lowercased()
+    .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+    .map(String.init)
+    .filter { $0.count >= 2 }
 }
 let docToks = kept.map { tok($0.text) }
 var df: [String: Int] = [:]
@@ -101,13 +107,15 @@ func rrf(_ a: [(Int, Double)], _ b: [(Int, Double)], k: Double = 60) -> [(Int, D
   return s.map { ($0.key, $0.value) }.sorted { $0.1 > $1.1 }
 }
 
-// ---- CORPUS HYGIENE: drop bare `checkout <branch>` events + exact-duplicate texts ----
+// ---- CORPUS HYGIENE: drop bare `checkout <branch>` events + exact-duplicate texts WITHIN a node
+// (shipped rule: per-node de-dup, not global — see spec §P1) ----
 var seen = Set<String>(); var keepIdx: [Int] = []
 for (i, d) in kept.enumerated() {
   if d.kind == "event" && d.text.hasPrefix("checkout ") { continue }
   let norm = d.text.trimmingCharacters(in: .whitespacesAndNewlines)
-  if seen.contains(norm) { continue }
-  seen.insert(norm); keepIdx.append(i)
+  let key = "\(d.nodeID)\u{0}\(norm)"
+  if seen.contains(key) { continue }
+  seen.insert(key); keepIdx.append(i)
 }
 print("== corpus hygiene ==")
 print("before: \(kept.count) docs   after dropping checkout events + exact dupes: \(keepIdx.count)")

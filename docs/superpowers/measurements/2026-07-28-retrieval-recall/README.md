@@ -42,7 +42,24 @@ numbers, so a changed corpus is never mistaken for a changed result:
 | event | 1,686 |
 | **total** | **2,630** |
 
-After the spec's P1 hygiene (drop `git.checkout` events + exact-duplicate texts): **2,264**.
+After the spec's P1 hygiene (drop `git.checkout` events + exact-duplicate texts, *global* de-dup at
+the time): **2,264**.
+
+**Post-P1, per-node de-dup (shipped rule) — 2026-08-04 re-baseline.** `EmbeddableCorpus.gather` now
+applies the P1 hygiene itself (per-node de-dup, not global — see spec §P1), so this composition is
+already post-hygiene; `rprobe4`'s own hygiene pass on top drops 0 further items (2,624 → 2,624):
+
+| kind | count |
+|---|---|
+| node | 266 |
+| loose_end | 799 |
+| event | 1,559 |
+| **total** | **2,624** |
+
+Measured (`rprobe4`, same-node relatedness gold, n=300): **BM25 P@1 = 0.403** (vector P@1 = 0.180).
+Below the historical 0.433 as expected — per-node de-dup keeps cross-node duplicate texts that global
+de-dup removed, and on a same-node gold set those duplicates are pure distractors. This is the figure
+§Verification gate's step 2 (post-P2′) is held to, not 0.433.
 
 ## What each number means, and the one bias that matters
 

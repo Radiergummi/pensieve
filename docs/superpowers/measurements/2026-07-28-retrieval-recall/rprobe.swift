@@ -94,8 +94,14 @@ print("raw      \(stats(raws))")
 print("centred  \(stats(cens))")
 
 // ---------- lexical: BM25 over the same corpus ----------
+// Matches the shipped FTS5 tokenizer: `unicode61 remove_diacritics 2`, unstemmed.
+// The ≥2-char filter is a probe-only divergence (FTS5 indexes 1-char tokens); immaterial to ranking.
 func tok(_ s: String) -> [String] {
-  s.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count >= 2 }
+  s.folding(options: [.diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    .lowercased()
+    .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+    .map(String.init)
+    .filter { $0.count >= 2 }
 }
 let docToks = kept.map { tok($0.text) }
 var df: [String: Int] = [:]

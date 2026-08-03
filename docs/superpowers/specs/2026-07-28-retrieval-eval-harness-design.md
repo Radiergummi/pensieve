@@ -169,8 +169,10 @@ The corpus contains junk that occupies top-k slots and pollutes every strategy:
 - 155 of 704 loose ends (22%) have `text == quote` (bare prompt echo).
 
 **Change:** `EmbeddableCorpus.gather` skips `git.checkout` events and de-duplicates identical texts
-**within a node**. Measured effect (under *global* de-dup — see the caveat below): 2,630 → 2,264
-items, BM25 P@1 0.387 → **0.433**.
+**within a node**. Measured effect (under *global* de-dup, historical — see the caveat below): 2,630 →
+2,264 items, BM25 P@1 0.387 → **0.433**. Re-measured under the **shipped per-node de-dup**
+(2026-08-04, §Verification gate step 1): 2,624 items, BM25 P@1 = **0.403** — the figure P2′ is
+actually held to.
 
 **De-dup is per-node, not global, and it is ordered.** Global de-dup would collapse a commit subject
 like `fix ci` occurring in three projects down to one searchable row, so a hit points at one project
@@ -401,7 +403,11 @@ measured under global de-dup and is no longer the shipped rule (§P1):
 
 1. **After P1**, re-run `rprobe4` with the shipped per-node de-dup on a fresh `VACUUM INTO` snapshot.
    Record the result. That figure — not `0.433` — is the post-P1 baseline, and it goes into this
-   document and the measurements README.
+   document and the measurements README. **Done (2026-08-04): BM25 P@1 = 0.433 → 0.403**, on a
+   post-hygiene corpus of 2,624 items (266 node / 799 loose_end / 1,559 event), n=300 same-node
+   relatedness gold. Below 0.433 as expected — per-node de-dup keeps cross-node duplicate texts
+   global de-dup removed, and those are pure distractors on a same-node gold set. **0.403 is the
+   step-2 gate value**, not 0.433.
 2. **After P2′**, re-run `rprobe` with the same snapshot, the diacritic-folded tokenizer (§Matching)
    and the `files` column present. **P@1 must be ≥ the step-1 baseline.**
 
