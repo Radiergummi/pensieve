@@ -51,17 +51,26 @@ import SQLiteData
     try await database.write { database in try Node.insert { node }.execute(database) }
     let store = tempStore()
     let indexer = SearchIndexer(store: store)
+
     indexer.sync(database)
-    let firstHash = store.storedCorpusHash()
+    #expect(store.search(FTSQueryBuilder.build("alpha ")!, limit: 10,
+                         includeArchived: false).count == 1)
 
-    indexer.sync(database)   // nothing changed
-    #expect(store.storedCorpusHash() == firstHash)
+    // Poison the index out of band, but store the hash the LIVE corpus produces. A guarded sync
+    // sees a matching hash and skips, leaving the index empty; an unguarded one rebuilds and
+    // brings "Alpha" back. Asserting the emptiness survives is what actually pins the guard —
+    // re-reading storedCorpusHash() cannot, since an unconditional rebuild rewrites the same value.
+    let liveHash = SearchIndexer.corpusHash(try EmbeddableCorpus.gather(database))
+    store.rebuild(items: [], corpusHash: liveHash)
+    indexer.sync(database)
+    #expect(store.search(FTSQueryBuilder.build("alpha ")!, limit: 10,
+                         includeArchived: false).isEmpty)
 
+    // …and a real corpus change still rebuilds, so the guard cannot be satisfied by never syncing.
     try await database.write { database in
       try Node.insert { Node(name: "Beta", kind: NodeKind.project) }.execute(database)
     }
     indexer.sync(database)
-    #expect(store.storedCorpusHash() != firstHash)
     #expect(store.search(FTSQueryBuilder.build("beta ")!, limit: 10, includeArchived: false).count == 1)
   }
 
