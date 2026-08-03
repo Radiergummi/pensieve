@@ -9,42 +9,29 @@ It captures my git commits and Claude Code sessions automatically, then surfaces
 
 ---
 
-## What this is not
-
-This repository is public because a few people asked to see it. That is the whole reason.
-
-- **It is not a product.** It is a single-user tool I built for myself, and every design decision assumes exactly one user with my habits.
-- **It is not an open-source project.** There is no license (see [License](#license)), no versioning policy, no changelog, and no roadmap I am accountable to.
-- **There is no support.** I will likely not answer issues, review pull requests, or help with setup. Nothing personal — I am not running this as a project.
-- **It will not work cleanly on your machine.** It hardcodes assumptions about my setup: an ad-hoc code-signing identity, an app installed at `/Applications/Pensieve.app`, `~/.local/bin` on `PATH`, and my Claude Code configuration. Getting it running elsewhere is possible but is your problem, not mine.
-
-Read it, learn from it, steal ideas from it. Just don't expect a project.
+> [!IMPORTANT]
+> **What this is**  
+> Pensieve is an app I've written for myself and my way of working. It was not inteded to becoming a product, or an open source project. For now, there is no [license](#license), no changelog, and no public roadmap, and I won't offer support for running it beyond what this Readme provides.  
+> Also note that it will probably not work cleanly on your machine, since Pensieve hardcodes some assumptions about my setup: An ad-hoc code-signing identity, the app installed at `/Applications/Pensieve.app`, `~/.local/bin` on `PATH`, and my Claude Code configuration.  
+> Read it, learn from it, steal ideas from it. Just don't expect a project.
 
 ## The problem
 
-I run many efforts in parallel — side projects, work threads, half-finished experiments. The expensive part is never the work itself. It's the reload: coming back to something after two weeks and spending an hour reconstructing what I'd decided, what I'd half-finished, and what the next move was.
+I run many efforts in parallel - side projects, work threads, half-finished experiments. The expensive part is never the work itself. It's the reload: Coming back to something after two weeks and spending an hour reconstructing what I'd decided, what I'd half-finished, and what the next move was.
 
 I have ADHD. That reload cost is not a mild annoyance; it's the thing that kills projects. Notes don't help, because keeping them current is itself the task I can't reliably do.
 
-So Pensieve doesn't ask me to write anything. It watches what I already do — commit code, talk to Claude Code — and reconstructs the state of each effort from that.
+So Pensieve doesn't ask me to write anything. It watches what I already do, like committing code, talking to Claude Code, and so on, and reconstructs the state of each effort from that.
 
 ## What it does
 
-**Captures, automatically.** Git hooks record commits. Claude Code `SessionStart`/`SessionEnd` hooks record sessions, and a background agent ingests the transcripts. I never type anything into Pensieve to keep it current.
+- **Captures, automatically.** Git hooks record commits. Claude Code `SessionStart`/`SessionEnd` hooks record sessions, and a background agent ingests the transcripts. I never type anything into Pensieve to keep it current.
+- **Organizes into a tree of work.** A project is an area of work, not a directory. Git repos are one *source type*; Claude Code sessions are another. Many sources bind to one node, and nodes nest into a typed tree. Long-running sub-efforts ("strands") get born automatically when the same kind of activity recurs.
+- **Surfaces loose ends.** The thing I actually need: the open threads I left behind. "You said you'd investigate sqlite-vec." "You decided to defer the fork backend." Each one cites the exact sentence it came from.
+- **Answers "where was I?"** A briefing of what changed since I last looked, per project, plus a ranked queue of what to pick up next.
 
-**Organizes into a tree of work.** A project is an area of work, not a directory. Git repos are one *source type*; Claude Code sessions are another. Many sources bind to one node, and nodes nest into a typed tree. Long-running sub-efforts ("strands") get born automatically when the same kind of activity recurs.
-
-**Surfaces loose ends.** The thing I actually need: the open threads I left behind. "You said you'd investigate sqlite-vec." "You decided to defer the fork backend." Each one cites the exact sentence it came from.
-
-**Answers "where was I?"** A briefing of what changed since I last looked, per project, plus a ranked queue of what to pick up next.
-
-## The principle that matters
-
-**Grounded with provenance.** Every loose end Pensieve shows me cites real captured text — a verbatim quote from a transcript or commit — or it does not appear at all. This is enforced by a trust gate in the extraction path, and it is the single constraint I refuse to relax. A tool that reminds me of things I never said is worse than no tool, because I'd have to verify everything it tells me, and then I'm doing the work again.
-
-LLM-written prose (the "last work done" recap, strand naming) sits deliberately **outside** that gate, and is best-effort: when the model has nothing grounded to say, the code returns *nothing* rather than a plausible summary. There is no fallback that invents.
-
-The make-or-break precision gate passed on real transcripts with zero noise and zero fabrication across three on-device acceptance runs. That result is what made the rest of the project worth building.
+Every loose end Pensieve shows me cites real captured text (say, a verbatim quote from a transcript or commit) or it does not appear at all. This is enforced by a trust gate in the extraction path, and it is the core provenance grounding constraint. A tool that reminds me of things I never said is worse than no tool, because I'd have to verify everything it tells me, and then I'm doing the work again.  
+LLM-written prose (the "last work done" recap, strand naming) sits deliberately *outside* that gate, and is best-effort: when the model has nothing grounded to say, the code returns *nothing* rather than a plausible summary. There is no fallback that invents.
 
 ## How it works
 
@@ -75,7 +62,7 @@ Attribution runs by canonicalized filesystem path → source → node, keyed on 
 
 ## Building it
 
-This is how *I* build it, not an install guide. See [What this is not](#what-this-is-not).
+This is how *I* build it, not an install guide — see the note at the top.
 
 **Requirements:** macOS 15+, Xcode 26.6, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (2.45+).
 

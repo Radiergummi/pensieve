@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PensieveKit tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Toolchain versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # PensieveKit and its tests are SwiftPM; the app and CLI are Xcode targets
+      # and are covered by the build job instead.
+      - name: Run test suite
+        run: ./scripts/test.sh
+
+  build-app:
+    name: App + CLI build
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # Non-interactive equivalent of Xcode's "Trust & Enable" prompt for the
+      # SQLiteData macro plugins; without it the first xcodebuild fails.
+      - name: Trust SwiftPM macro plugins
+        run: |
+          defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidation -bool YES
+          defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+
+      # project.yml is the source of truth; the .xcodeproj is generated and gitignored.
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      # Signing is ad-hoc (CODE_SIGN_IDENTITY "-", CODE_SIGNING_REQUIRED NO),
+      # so this needs no keychain or certificate. Also builds and embeds the CLI.
+      - name: Build app
+        run: |
+          xcodebuild -project Pensieve.xcodeproj -scheme Pensieve \
+            -configuration Debug -derivedDataPath ./.build-xcode \
+            build
+
+      # Proves the CLI was actually embedded and can launch — the app target has
+      # no unit tests, so this build job is its only automated signal.
+      - name: Smoke-test the embedded CLI
+        run: |
+          ./.build-xcode/Build/Products/Debug/Pensieve.app/Contents/Helpers/pensieve --help
