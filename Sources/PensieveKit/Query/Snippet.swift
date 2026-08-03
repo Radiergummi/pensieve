@@ -30,4 +30,18 @@ public enum SnippetMaker {
     if trail.count > window { trail = String(trail.prefix(window)) + "…" }
     return Snippet(leading: lead, match: matched, trailing: trail)
   }
+
+  /// Highlights the first of `terms` that occurs in `source`, scanning terms in order. BM25 is
+  /// unstemmed, so a matched region is always a query term or a word it prefixes — substring
+  /// highlighting stays correct without parsing FTS5's own `snippet()` marker string, and the
+  /// displayed text keeps coming from the canonical store rather than the index.
+  public static func make(from source: String, matchingAny terms: [String],
+                          window: Int = 80) -> Snippet {
+    for term in terms where !term.isEmpty {
+      if source.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil {
+        return make(from: source, matching: term, window: window)
+      }
+    }
+    return make(from: source, matching: "", window: window)
+  }
 }

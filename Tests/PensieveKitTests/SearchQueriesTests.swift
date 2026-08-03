@@ -3,182 +3,235 @@ import Testing
 import SQLiteData
 @testable import PensieveKit
 
-private struct LooseEndFixture {
-  let text: String
-  let quote: String
-  let label: String
-}
+@Suite struct SearchQueriesTests {
+  private func tempStore() -> SearchIndexStore {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("searchq-\(UUID().uuidString).sqlite")
+    return SearchIndexStore(url: url)
+  }
 
-/// Insert nodeA node + one event + loose ends; returns the node.
-private func seed(_ database: any DatabaseWriter, name: String, description: String = "",
-                  kind: NodeKind = .project,
-                  ends: [LooseEndFixture] = []) throws -> Node {
-  let node = Node(name: name, kind: kind, description: description)
-  let source = Source(id: UUID(), nodeID: node.id, kind: SourceKind.claudeCode, key: "/p/\(node.id)")
-  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
-                    kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}", fingerprint: name)
-  try database.write { database in
-    try Node.insert { node }.execute(database)
-    try Source.insert { source }.execute(database)
-    try Event.insert { event }.execute(database)
-    for looseEnd in ends {
-      try LooseEnd.insert {
-        LooseEnd(nodeID: node.id, sourceEventID: event.id, text: looseEnd.text, quote: looseEnd.quote,
-                 role: "user", label: looseEnd.label)
-      }.execute(database)
+  private func indexed(_ database: any DatabaseWriter) -> SearchIndexStore {
+    let store = tempStore()
+    SearchIndexer(store: store).sync(database)
+    return store
+  }
+
+  private func makeEvent(_ database: any DatabaseWriter, node: Node, summary: String,
+                         files: String = "") throws -> Event {
+    let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)-\(UUID())")
+    let detail = files.isEmpty ? "{}"
+      : String(data: try JSONSerialization.data(withJSONObject: ["files": files]), encoding: .utf8)!
+    let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                      kind: CaptureKind.gitCommit, summary: summary, detailJSON: detail,
+                      fingerprint: UUID().uuidString)
+    try database.write { database in
+      try Source.insert { source }.execute(database)
+      try Event.insert { event }.execute(database)
     }
+    return event
   }
-  return node
-}
 
-private func allVisible(_ database: any DatabaseReader) throws -> Set<UUID> {
-  Set(try ProjectQueries.all(database).map(\.id))
-}
-
-private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String = CaptureKind.gitCommit,
-                       summary: String = "did nodeA thing", workSummary: String? = nil) throws -> Event {
-  let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
-  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(), kind: kind,
-                    summary: summary, detailJSON: "{}", workSummary: workSummary)
-  try database.write { database in
-    try Source.insert { source }.execute(database)
-    try Event.insert { event }.execute(database)
+  @Test func shortCircuitsBelowMinLength() throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-short"))
+    let store = indexed(database)
+    #expect(SearchQueries.search(query: "a", scope: SearchScope(visibleNodeIDs: []),
+                                 store: store, database).isEmpty)
   }
-  return event
-}
 
-@Test func searchShortCircuitsBelowMinLength() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-min"))
-  _ = try seed(database, name: "Auth")
-  #expect(try SearchQueries.search(query: "a", visibleNodeIDs: allVisible(database), database).isEmpty)
-  #expect(try SearchQueries.search(query: "  ", visibleNodeIDs: allVisible(database), database).isEmpty)
-  #expect(try SearchQueries.search(query: "🚀", visibleNodeIDs: allVisible(database), database).isEmpty) // 1 grapheme
-}
-
-@Test func searchMatchesNodeNameAndDescription() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-node"))
-  _ = try seed(database, name: "Authentication")
-  _ = try seed(database, name: "Sync daemon", description: "handles authentication tokens")
-  let results = try SearchQueries.search(query: "authentication", visibleNodeIDs: allVisible(database), database)
-  #expect(results.nodes.count == 2)
-  // name-match ("Authentication") ranks before description-only ("Sync daemon")
-  #expect(results.nodes.first?.name == "Authentication")
-  // matchedField drives the row layout: name hit first, description-only hit second.
-  #expect(results.nodes.first?.matchedField == .name)
-  #expect(results.nodes.last?.name == "Sync daemon")
-  #expect(results.nodes.last?.matchedField == .description)
-}
-
-@Test func searchMatchesLooseEndTextAndQuote() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-looseEnd"))
-  _ = try seed(database, name: "P", ends: [
-    LooseEndFixture(text: "finish the deploy pipeline", quote: "irrelevant", label: ""),
-    LooseEndFixture(text: "unrelated", quote: "remember the deploy vars", label: ""),
-  ])
-  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(results.looseEnds.count == 2)
-  // text-match ranks before quote-only match
-  #expect(results.looseEnds.first?.snippet.match == "deploy")
-  #expect(results.looseEnds.first?.nodeName == "P")
-}
-
-@Test func searchExcludesResolvedAndNoiseLooseEnds() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-noise"))
-  _ = try seed(database, name: "P", ends: [
-    LooseEndFixture(text: "open deploy item", quote: "q", label: ""),
-    LooseEndFixture(text: "noisy deploy item", quote: "q", label: LooseEndLabel.noise),
-  ])
-  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(results.looseEnds.count == 1)
-  #expect(results.looseEnds.first?.snippet.match == "deploy")
-}
-
-@Test func searchExcludesNodesOutsideVisibleSet() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-focus"))
-  let nodeA = try seed(database, name: "Deploy A")
-  _ = try seed(database, name: "Deploy B", ends: [LooseEndFixture(text: "deploy end", quote: "q", label: "")])
-  let visible: Set<UUID> = [nodeA.id]   // only A visible
-  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: visible, database)
-  #expect(results.nodes.map(\.id) == [nodeA.id])
-  #expect(results.looseEnds.isEmpty)      // B's loose end excluded with B
-}
-
-@Test func searchIsDeterministicOnTiedKeys() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-tie"))
-  // Two nodes with identical names → tiebreak withArchived id.uuidString, stable across runs.
-  _ = try seed(database, name: "Dup deploy")
-  _ = try seed(database, name: "Dup deploy")
-  let firstRun = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  let secondRun = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(firstRun.nodes.map(\.id) == secondRun.nodes.map(\.id))
-  #expect(firstRun.nodes.map(\.id) == firstRun.nodes.map(\.id).sorted { $0.uuidString < $1.uuidString })
-}
-
-@Test func searchCapsAtFiftyButReportsPreCapTotal() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-cap"))
-  for index in 0..<60 { _ = try seed(database, name: "deploy \(index)") }
-  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(results.nodes.count == 50)
-  #expect(results.totalNodeMatches == 60)
-}
-
-@Test func searchEmptyDBReturnsEmpty() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-empty"))
-  #expect(try SearchQueries.search(query: "deploy", visibleNodeIDs: [], database).isEmpty)
-}
-
-@Test func searchExcludesArchivedNodesAndLooseEnds() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-archived"))
-  let active = try seed(database, name: "Deploy pipeline",
-                        ends: [LooseEndFixture(text: "deploy the release", quote: "ship it", label: "todo")])
-  let archived = try seed(database, name: "Deploy legacy",
-                          ends: [LooseEndFixture(text: "deploy old thing", quote: "legacy", label: "todo")])
-  #expect(try NodeCommands.archive(database, nodeID: archived.id))
-  // allVisible includes the archived node (ProjectQueries.all is unfiltered), proving the
-  // exclusion is by state, not by the visible set.
-  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(results.nodes.count == 1)
-  #expect(results.nodes.first?.id == active.id)
-  #expect(results.looseEnds.count == 1)
-  #expect(results.looseEnds.first?.nodeID == active.id)
-}
-
-@Test func searchIncludesArchivedWhenFlagSet() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-incl-archived"))
-  let active = try seed(database, name: "Deploy pipeline",
-                        ends: [LooseEndFixture(text: "deploy the release", quote: "ship it", label: "todo")])
-  let archived = try seed(database, name: "Deploy legacy",
-                          ends: [LooseEndFixture(text: "deploy old thing", quote: "legacy", label: "todo")])
-  #expect(try NodeCommands.archive(database, nodeID: archived.id))
-
-  // Flag OFF (default) → archived excluded (matches the existing exclusion test).
-  let off = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(off.nodes.map(\.id) == [active.id])
-
-  // Flag ON → both the active AND the archived node + their open loose ends surface.
-  let withArchived = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database),
-                                    includeArchived: true, database)
-  #expect(Set(withArchived.nodes.map(\.id)) == [active.id, archived.id])
-  #expect(Set(withArchived.looseEnds.map(\.nodeID)) == [active.id, archived.id])
-}
-
-@Test func hitsCarryTheOwningNodesArchivedFlag() async throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-archived-flag"))
-  let active = Node(name: "Refund handling", kind: NodeKind.project)
-  let archived = Node(name: "Refund handling legacy", state: .archived, kind: NodeKind.project)
-  try await database.write { database in
-    try Node.insert { active }.execute(database)
-    try Node.insert { archived }.execute(database)
+  @Test func findsANodeByName() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-node"))
+    let node = Node(name: "Background sync agent", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let store = indexed(database)
+    let hits = SearchQueries.search(query: "background sync ",
+                                    scope: SearchScope(visibleNodeIDs: [node.id]),
+                                    store: store, database)
+    #expect(hits.map(\.id) == [node.id])
+    #expect(hits[0].kind == "node")
+    #expect((hits[0].score ?? 0) > 0)
   }
-  let event = try makeEvent(database, node: archived)
-  let looseEnd = LooseEnd(nodeID: archived.id, sourceEventID: event.id,
-                    text: "refund the last batch", quote: "TODO refund")
-  try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
-  let results = try SearchQueries.search(query: "refund", visibleNodeIDs: [active.id, archived.id],
-                                   includeArchived: true, database)
+  @Test func findsAnEventTheOldSubstringMatcherCouldNotSee() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-event"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let event = try makeEvent(database, node: node, summary: "wire the focus filter intent")
+    let store = indexed(database)
+    // Multi-word, non-contiguous: the substring matcher returned nothing for this.
+    let hits = SearchQueries.search(query: "focus intent ",
+                                    scope: SearchScope(visibleNodeIDs: [node.id]),
+                                    store: store, database)
+    #expect(hits.contains { $0.id == event.id })
+  }
 
-  #expect(results.nodes.first { $0.id == active.id }?.isArchived == false)
-  #expect(results.nodes.first { $0.id == archived.id }?.isArchived == true)
-  #expect(results.looseEnds.first { $0.id == looseEnd.id }?.isArchived == true)
+  @Test func findsWorkByTheFilesItTouched() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-files"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let event = try makeEvent(database, node: node, summary: "unrelated subject",
+                              files: "Sources/PensieveKit/Query/SemanticQueries.swift")
+    let store = indexed(database)
+    let bare = SearchQueries.search(query: "semanticqueries ",
+                                    scope: SearchScope(visibleNodeIDs: [node.id]),
+                                    store: store, database)
+    #expect(bare.contains { $0.id == event.id })
+    let structured = SearchQueries.search(query: "", file: "SemanticQueries.swift",
+                                          scope: SearchScope(visibleNodeIDs: [node.id]),
+                                          store: store, database)
+    #expect(structured.contains { $0.id == event.id })
+  }
+
+  @Test func focusMutedNodesAreNeverReturned() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-mute"))
+    let visible = Node(name: "Visible refunds work", kind: NodeKind.project)
+    let muted = Node(name: "Muted refunds work", kind: NodeKind.project, context: "personal")
+    try await database.write { database in
+      try Node.insert { visible }.execute(database)
+      try Node.insert { muted }.execute(database)
+    }
+    let store = indexed(database)
+    let hits = SearchQueries.search(query: "refunds ",
+                                    scope: SearchScope(visibleNodeIDs: [visible.id]),
+                                    store: store, database)
+    #expect(hits.map(\.nodeID) == [visible.id])
+  }
+
+  @Test func archivedIsExcludedByDefaultAndIncludedOnRequest() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-arch"))
+    let live = Node(name: "Alpha refunds", kind: NodeKind.project)
+    let old = Node(name: "Beta refunds", state: .archived, kind: NodeKind.project)
+    try await database.write { database in
+      try Node.insert { live }.execute(database)
+      try Node.insert { old }.execute(database)
+    }
+    let store = indexed(database)
+    let visible: Set<UUID> = [live.id, old.id]
+    #expect(SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: visible),
+                                 store: store, database).map(\.nodeID) == [live.id])
+    let widened = SearchQueries.search(
+      query: "refunds ", scope: SearchScope(visibleNodeIDs: visible, includeArchived: true),
+      store: store, database)
+    #expect(Set(widened.map(\.nodeID)) == visible)
+    #expect(widened.first { $0.nodeID == old.id }?.isArchived == true)
+    #expect(widened.first { $0.nodeID == live.id }?.isArchived == false)
+  }
+
+  @Test func excludingIDsAreDropped() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-exclude"))
+    let node = Node(name: "Refunds work", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let store = indexed(database)
+    let hits = SearchQueries.search(
+      query: "refunds ", scope: SearchScope(visibleNodeIDs: [node.id], excludingIDs: [node.id]),
+      store: store, database)
+    #expect(hits.isEmpty)
+  }
+
+  /// The last grounding defense: an index row whose canonical row is gone must never surface.
+  @Test func staleIndexRowsAreDroppedByTheCanonicalReResolve() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-stale"))
+    let node = Node(name: "Doomed refunds project", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let store = indexed(database)                       // index knows about it…
+    try await database.write { database in              // …canonical no longer does
+      try Node.delete().where { $0.id.eq(node.id) }.execute(database)
+    }
+    let hits = SearchQueries.search(query: "refunds ",
+                                    scope: SearchScope(visibleNodeIDs: [node.id]),
+                                    store: store, database)
+    #expect(hits.isEmpty)
+  }
+
+  /// The same defense on the STATE axis, which the delete case above cannot reach: the canonical
+  /// row still exists, so only the `eligible(node)` re-check can drop it. The index still holds the
+  /// row as `active` (it was synced before the archive), so the store's own filter lets it through.
+  @Test func nodesArchivedSinceTheLastSyncAreDroppedByTheCanonicalReResolve() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-archived-since"))
+    let node = Node(name: "Refunds project", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let store = indexed(database)                       // indexed while active…
+    try await database.write { database in              // …archived afterwards
+      try Node.where { $0.id.eq(node.id) }.update { $0.state = NodeState.archived }.execute(database)
+    }
+    #expect(SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: [node.id]),
+                                 store: store, database).isEmpty)
+  }
+
+  @Test func closedLooseEndsAreDroppedByTheCanonicalReResolve() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-closed"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let event = try makeEvent(database, node: node, summary: "session")
+    let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id,
+                            text: "revisit the refunds flow", quote: "revisit the refunds flow",
+                            role: "user")
+    try await database.write { database in try LooseEnd.insert { looseEnd }.execute(database) }
+    let store = indexed(database)
+    #expect(SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: [node.id]),
+                                 store: store, database).contains { $0.id == looseEnd.id })
+    try await database.write { database in
+      try LooseEnd.where { $0.id.eq(looseEnd.id) }.update { $0.status = "resolved" }
+        .execute(database)
+    }
+    #expect(!SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: [node.id]),
+                                  store: store, database).contains { $0.id == looseEnd.id })
+  }
+
+  @Test func resultsAreCappedAtFifty() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-cap"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    for index in 0..<60 { _ = try makeEvent(database, node: node, summary: "refunds change \(index)") }
+    let store = indexed(database)
+    #expect(SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: [node.id]),
+                                 store: store, database).count == SearchQueries.resultCap)
+  }
+
+  // MARK: - Top Hit
+
+  @Test func topHitMatchesAWordPrefixCaseAndDiacriticInsensitively() {
+    let nodes = [Node(name: "Pensieve", kind: NodeKind.project),
+                 Node(name: "Lösung Tracker", kind: NodeKind.project)]
+    #expect(SearchQueries.topHit(query: "pens", in: nodes)?.nodeID == nodes[0].id)
+    #expect(SearchQueries.topHit(query: "losung", in: nodes)?.nodeID == nodes[1].id)
+    #expect(SearchQueries.topHit(query: "Tracker", in: nodes)?.nodeID == nodes[1].id)  // inner word
+    #expect(SearchQueries.topHit(query: "racker", in: nodes) == nil)                   // mid-word: no
+  }
+
+  @Test func topHitCarriesNoScoreBecauseItDidNotComeFromTheRanking() {
+    let nodes = [Node(name: "Pensieve", kind: NodeKind.project)]
+    #expect(SearchQueries.topHit(query: "pens", in: nodes)?.score == nil)
+  }
+
+  @Test func topHitIsDeterministicAcrossEquallyGoodCandidates() {
+    let nodes = [Node(name: "Refunds beta", kind: NodeKind.project),
+                 Node(name: "Refunds alpha", kind: NodeKind.project)]
+    #expect(SearchQueries.topHit(query: "refunds", in: nodes)?.title == "Refunds alpha")
+  }
+
+  /// The guarantee the pin exists for: a node ranked out of the capped result list is STILL
+  /// offered for navigation, because topHit scans the node set rather than the returned hits.
+  ///
+  /// The crowding-out is asserted, not assumed. Note BM25's length normalisation favours SHORT
+  /// documents, so a bare node name would actually OUTRANK 60 two-token event texts — the long
+  /// description is what genuinely sinks this node below all of them and out of the 50-result cap.
+  @Test func topHitSurvivesANodeRankedOutOfTheResultCap() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-tophit"))
+    let filler = Array(repeating: "context", count: 300).joined(separator: " ")
+    let target = Node(name: "Refunds", kind: NodeKind.project, description: filler)
+    let noisy = Node(name: "Noise", kind: NodeKind.project)
+    try await database.write { database in
+      try Node.insert { target }.execute(database)
+      try Node.insert { noisy }.execute(database)
+    }
+    for index in 0..<60 { _ = try makeEvent(database, node: noisy, summary: "refunds \(index)") }
+    let store = indexed(database)
+    let visible: Set<UUID> = [target.id, noisy.id]
+    let hits = SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: visible),
+                                    store: store, database)
+    #expect(hits.count == SearchQueries.resultCap)
+    #expect(!hits.contains { $0.nodeID == target.id })   // genuinely crowded out of the ranking…
+    let pinned = SearchQueries.topHit(query: "refunds", in: [target, noisy])
+    #expect(pinned?.nodeID == target.id)                 // …and still offered for navigation.
+  }
 }
