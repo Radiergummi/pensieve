@@ -16,7 +16,7 @@ struct LooseEnds: ParsableCommand {
 
   func run() throws {
     let db = try openCanonical()
-    var nodeID: UUID? = nil
+    var nodeID: UUID?
     if let project {   // validate() guarantees --all is not also set
       guard let p = try ProjectQueries.status(db, name: project, limit: 0)?.project else {
         print("no project named '\(project)'"); return

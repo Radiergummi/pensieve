@@ -17,7 +17,7 @@ public enum NodeCommands {
                          parent: String?, description: String,
                          icon: String = "", colorTag: String = "", context: String = "") throws -> Node? {
     try db.write { db in
-      var parentID: UUID? = nil
+      var parentID: UUID?
       if let parent {
         guard let p = try find(db, nameOrID: parent) else { return nil }
         parentID = p.id

@@ -15,9 +15,7 @@ func firstJSONArray(in raw: String) -> String? {
   while i < raw.endIndex {
     let c = raw[i]
     if inString {
-      if escaped { escaped = false }
-      else if c == "\\" { escaped = true }
-      else if c == "\"" { inString = false }
+      if escaped { escaped = false } else if c == "\\" { escaped = true } else if c == "\"" { inString = false }
     } else {
       switch c {
       case "\"": inString = true

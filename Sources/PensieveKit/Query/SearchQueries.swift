@@ -68,8 +68,7 @@ public enum SearchQueries {
       var nodeScored: [(rank: Int, node: Node)] = []
       for n in nodes {
         let nameHit = hit(n.name)
-        if nameHit { nodeScored.append((0, n)) }
-        else if hit(n.description) { nodeScored.append((1, n)) }
+        if nameHit { nodeScored.append((0, n)) } else if hit(n.description) { nodeScored.append((1, n)) }
       }
       let sortedNodes = nodeScored.sorted {
         ($0.rank, $0.node.name, $0.node.id.uuidString) < ($1.rank, $1.node.name, $1.node.id.uuidString)
@@ -90,8 +89,7 @@ public enum SearchQueries {
       var leScored: [(rank: Int, le: LooseEnd)] = []
       for le in ends {
         let textHit = hit(le.text)
-        if textHit { leScored.append((0, le)) }
-        else if hit(le.quote) { leScored.append((1, le)) }
+        if textHit { leScored.append((0, le)) } else if hit(le.quote) { leScored.append((1, le)) }
       }
       let sortedEnds = leScored.sorted { a, b in
         if a.rank != b.rank { return a.rank < b.rank }

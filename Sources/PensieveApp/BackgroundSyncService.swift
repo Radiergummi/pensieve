@@ -28,13 +28,11 @@ enum BackgroundSyncService {
   static func registerIfNeeded() {
     Task.detached {
       try? await agent.unregister()   // throws when nothing is registered — fine, ignore
-      do { try agent.register() }
-      catch { AppLog.app.error("SMAppService register failed: \(error, privacy: .public)") }
+      do { try agent.register() } catch { AppLog.app.error("SMAppService register failed: \(error, privacy: .public)") }
     }
   }
 
   static func unregister() {
-    do { try agent.unregister() }
-    catch { AppLog.app.error("SMAppService unregister failed: \(error, privacy: .public)") }
+    do { try agent.unregister() } catch { AppLog.app.error("SMAppService unregister failed: \(error, privacy: .public)") }
   }
 }

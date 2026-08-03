@@ -93,9 +93,7 @@ public enum SessionContextQueries {
   ) async throws -> ProjectContextBundle? {
     // 1. Resolve the node.
     let resolvedID: UUID?
-    if let explicitID { resolvedID = explicitID }
-    else if let path { resolvedID = try nodeID(forPath: path, db) }
-    else { resolvedID = nil }
+    if let explicitID { resolvedID = explicitID } else if let path { resolvedID = try nodeID(forPath: path, db) } else { resolvedID = nil }
     guard let id = resolvedID else { return nil }
     guard let facts = try NodeFactsQueries.facts(for: [id], db, now: now).first else { return nil }
     let node = facts.node

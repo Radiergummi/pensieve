@@ -15,7 +15,7 @@ struct LooseEndRow: View {
   /// `model.setLooseEndLabel`.
   let onLabel: (UUID, String) -> Void
   /// When this equals the row's loose end, the row starts/auto-expands (a search hit landing here).
-  var expandedLooseEndID: UUID? = nil
+  var expandedLooseEndID: UUID?
   /// True in the middle column, where ~180pt is usable. Drops bubbles and tightens the type scale.
   var compact: Bool = false
 

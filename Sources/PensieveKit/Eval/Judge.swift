@@ -17,7 +17,7 @@ public enum JudgeDecode {
   public static func object<T: Decodable>(_ raw: String, as type: T.Type) -> T? {
     guard let start = raw.firstIndex(where: { $0 == "{" || $0 == "[" }) else { return nil }
     let open = raw[start], close: Character = (open == "{") ? "}" : "]"
-    var depth = 0, end: String.Index? = nil
+    var depth = 0, end: String.Index?
     var inString = false, escaped = false
     var i = start
     while i < raw.endIndex {

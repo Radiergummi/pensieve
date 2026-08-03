@@ -65,7 +65,7 @@ private struct EchoProvider: LLMProvider {
 
 @Test func assembleFactsRespectsCharBudget() {
   let node = Node(name: "Pensieve")
-  let events = (0..<15).map { i in
+  let events = (0..<15).map { _ in
     Event(nodeID: node.id, sourceID: UUID(), occurredAt: Date(),
           kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}",
           workSummary: String(repeating: "x", count: 400))

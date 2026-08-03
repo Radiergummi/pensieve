@@ -8,7 +8,7 @@ private struct StubTask: EvalTask {
 
 @Test func consistencyFlagsTaskWithoutBar() {
   let cfg = EvalConfig(roster: [], referenceProvider: "r",
-                       judge: ModelSpec(label:"j",kind:"cloud",flavor:.anthropic,baseURL:"b",model:"m",inputPricePerM:1,outputPricePerM:1),
+                       judge: ModelSpec(label: "j", kind: "cloud", flavor: .anthropic, baseURL: "b", model: "m", inputPricePerM: 1, outputPricePerM: 1),
                        bars: [TaskBar(task: "narration", inheritFromIncumbent: true, precision: nil, recall: nil, quality: nil)],
                        corpusSize: 10, corpusSeed: 1, noiseMargin: 0.03)
   let problems = TaskRegistry.consistency(tasks: [StubTask(id: "extraction"), StubTask(id: "narration")], config: cfg)
@@ -17,7 +17,7 @@ private struct StubTask: EvalTask {
 
 @Test func consistencyFlagsBarWithoutTask() {
   let cfg = EvalConfig(roster: [], referenceProvider: "r",
-                       judge: ModelSpec(label:"j",kind:"cloud",flavor:.anthropic,baseURL:"b",model:"m",inputPricePerM:1,outputPricePerM:1),
+                       judge: ModelSpec(label: "j", kind: "cloud", flavor: .anthropic, baseURL: "b", model: "m", inputPricePerM: 1, outputPricePerM: 1),
                        bars: [TaskBar(task: "ghost-task", inheritFromIncumbent: true, precision: nil, recall: nil, quality: nil)],
                        corpusSize: 10, corpusSeed: 1, noiseMargin: 0.03)
   let problems = TaskRegistry.consistency(tasks: [StubTask(id: "narration")], config: cfg)

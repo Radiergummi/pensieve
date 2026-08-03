@@ -45,8 +45,7 @@ public struct SourceScanner {
       _ = try resolver.resolve(path: c.identityKey, kind: c.kind)   // find-or-create (own write tx)
       if existedBefore { result.alreadyRegistered.append(c) } else { result.registered.append(c) }
       if let type = types.first(where: { $0.kind == c.kind }) {
-        do { try type.onRegister(c) }
-        catch { result.setupFailed.append((c, String(describing: error))) }
+        do { try type.onRegister(c) } catch { result.setupFailed.append((c, String(describing: error))) }
       }
     }
     return result

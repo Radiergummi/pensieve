@@ -3,7 +3,7 @@ import Testing
 @testable import PensieveKit
 
 private func pool() -> [(strata: String, isStress: Bool, item: Int)] {
-  (0..<40).map { (strata: ["short","long","compacted"][$0 % 3], isStress: $0 == 7, item: $0) }
+  (0..<40).map { (strata: ["short", "long", "compacted"][$0 % 3], isStress: $0 == 7, item: $0) }
 }
 
 @Test func sameSeedSameSelection() {

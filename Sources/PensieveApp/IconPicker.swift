@@ -21,13 +21,13 @@ enum EmojiCatalog {
 
   static let categories: [Category] = [
     Category(id: "smileys", symbol: "face.smiling", emoji: build([0x1F600...0x1F64F, 0x1F910...0x1F92F, 0x1F970...0x1F97A])),
-    Category(id: "people",  symbol: "person",       emoji: build([0x1F464...0x1F487, 0x1F9D0...0x1F9DF])),
-    Category(id: "nature",  symbol: "leaf",          emoji: build([0x1F400...0x1F43E, 0x1F980...0x1F9AE, 0x1F330...0x1F344])),
-    Category(id: "food",    symbol: "fork.knife",    emoji: build([0x1F345...0x1F37F, 0x1F950...0x1F96F])),
-    Category(id: "activity",symbol: "soccerball",    emoji: build([0x1F3A0...0x1F3CA, 0x1F93C...0x1F93E])),
-    Category(id: "travel",  symbol: "car",           emoji: build([0x1F680...0x1F6C5, 0x1F3E0...0x1F3F0])),
-    Category(id: "objects", symbol: "lightbulb",     emoji: build([0x1F4A1...0x1F4FF, 0x1F526...0x1F52F])),
-    Category(id: "symbols", symbol: "heart",         emoji: build([0x2600...0x26FF, 0x1F532...0x1F53D])),
+    Category(id: "people", symbol: "person", emoji: build([0x1F464...0x1F487, 0x1F9D0...0x1F9DF])),
+    Category(id: "nature", symbol: "leaf", emoji: build([0x1F400...0x1F43E, 0x1F980...0x1F9AE, 0x1F330...0x1F344])),
+    Category(id: "food", symbol: "fork.knife", emoji: build([0x1F345...0x1F37F, 0x1F950...0x1F96F])),
+    Category(id: "activity", symbol: "soccerball", emoji: build([0x1F3A0...0x1F3CA, 0x1F93C...0x1F93E])),
+    Category(id: "travel", symbol: "car", emoji: build([0x1F680...0x1F6C5, 0x1F3E0...0x1F3F0])),
+    Category(id: "objects", symbol: "lightbulb", emoji: build([0x1F4A1...0x1F4FF, 0x1F526...0x1F52F])),
+    Category(id: "symbols", symbol: "heart", emoji: build([0x2600...0x26FF, 0x1F532...0x1F53D])),
   ]
 
   /// A lowercase Unicode name for search, e.g. "😀" → "grinning face". Uses the system transform.
@@ -55,8 +55,7 @@ struct IconToggleRow: View {
       Button { showEmoji = true } label: {
         ZStack {
           Circle().fill(isEmoji ? tint.opacity(0.25) : Color.secondary.opacity(0.15))
-          if let e = currentEmoji { Text(e).font(.system(size: 22)) }
-          else { Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(.secondary) }
+          if let e = currentEmoji { Text(e).font(.system(size: 22)) } else { Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(.secondary) }
         }.frame(width: 44, height: 44)
       }
       .buttonStyle(.plain)

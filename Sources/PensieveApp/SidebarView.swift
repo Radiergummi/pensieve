@@ -15,8 +15,7 @@ struct SidebarView: View {
         model.sidebarSelection = newValue
         // Selecting a smart list clears the detail until a middle-column row is picked;
         // selecting a tree node jumps detail straight to it.
-        if case .node(let id) = newValue { model.selectedNodeID = id }
-        else { model.selectedNodeID = nil }
+        if case .node(let id) = newValue { model.selectedNodeID = id } else { model.selectedNodeID = nil }
       })) {
       Label("Briefing", systemImage: "sun.max")
         .tag(SidebarSelection.briefing)

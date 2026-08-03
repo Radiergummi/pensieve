@@ -46,7 +46,7 @@ public enum SystemStatusGatherer {
       .contentModificationDate
 
     // Best-effort: an empty store, a read error, or a nil connection all degrade to nil.
-    var lastEventAt: Date? = nil
+    var lastEventAt: Date?
     if let db {
       lastEventAt = try? db.read { db in
         try Event.order { $0.occurredAt.desc() }.limit(1).fetchOne(db)?.occurredAt

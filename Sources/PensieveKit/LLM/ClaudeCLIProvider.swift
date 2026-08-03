@@ -16,8 +16,7 @@ public struct ClaudeCLIProvider: LLMProvider {
     let run = self.run
     return try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global().async {
-        do { continuation.resume(returning: try run(prompt)) }
-        catch { continuation.resume(throwing: error) }
+        do { continuation.resume(returning: try run(prompt)) } catch { continuation.resume(throwing: error) }
       }
     }
   }

@@ -8,7 +8,7 @@ private struct JSONProvider: LLMProvider {
 
 @Test func judgeDecodesRubricFromFencedJSON() async {
   let p = JSONProvider(json: "```json\n{\"dimensionScores\":{\"grounded\":1.0,\"concise\":0.5},\"quality\":0.75}\n```")
-  let v = await Judge(provider: p).scoreRubric(output: "prose", dimensions: ["grounded","concise"], sourceContext: "ctx")
+  let v = await Judge(provider: p).scoreRubric(output: "prose", dimensions: ["grounded", "concise"], sourceContext: "ctx")
   #expect(v?.quality == 0.75)
   #expect(v?.dimensionScores?["grounded"] == 1.0)
 }

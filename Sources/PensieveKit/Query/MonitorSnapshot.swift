@@ -32,7 +32,7 @@ public struct MonitorSnapshot: Equatable, Sendable {
                             now: Date = Date(),
                             activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
     // Spool: the real-time capture heartbeat. Only touch it if it already exists.
-    var lastCapture: Date? = nil
+    var lastCapture: Date?
     var pending = 0
     if FileManager.default.fileExists(atPath: spoolURL.path),
        let stats = try? CaptureSpool.readOnlyStats(at: spoolURL) {
@@ -63,7 +63,7 @@ public struct MonitorSnapshot: Equatable, Sendable {
   public static func gather(canonical: (any DatabaseReader)?, spool: CaptureSpool?,
                             now: Date = Date(),
                             activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
-    var lastCapture: Date? = nil
+    var lastCapture: Date?
     var pending = 0
     if let spool {
       lastCapture = try? spool.lastCaptureAt()
