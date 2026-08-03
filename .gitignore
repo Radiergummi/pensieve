@@ -12,3 +12,6 @@ Sources/PensieveApp/Info.plist
 .eval/
 
 .worktrees/
+
+# Claude Code worktree checkouts
+.claude/
