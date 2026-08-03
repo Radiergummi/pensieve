@@ -74,4 +74,38 @@ import SQLiteData
     let events = try EmbeddableCorpus.gather(database).filter { $0.kind == "event" }
     #expect(events.count == 2)   // cross-node duplicates are NOT collapsed
   }
+
+  @Test func gatherCarriesChangedFilePathsOnCommitEvents() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("gather-files"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
+    let detail = #"{"hash":"abc","branch":"main","files":"Sources/A.swift\nSources/B.swift"}"#
+    try await database.write { database in
+      try Node.insert { node }.execute(database)
+      try Source.insert { source }.execute(database)
+      try Event.insert {
+        Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+              kind: CaptureKind.gitCommit, summary: "add the parser",
+              detailJSON: detail, fingerprint: "c1")
+      }.execute(database)
+      try Event.insert {
+        Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+              kind: CaptureKind.ccSession, summary: "session",
+              detailJSON: "{}", fingerprint: "s1", workSummary: "worked on the parser for a while")
+      }.execute(database)
+    }
+    let corpus = try EmbeddableCorpus.gather(database)
+    let commit = corpus.first { $0.text == "add the parser" }
+    #expect(commit?.files == "Sources/A.swift\nSources/B.swift")
+    #expect(corpus.first { $0.kind == "node" }?.files == "")
+    #expect(corpus.first { $0.text.contains("worked on the parser") }?.files == "")
+  }
+
+  @Test func contentHashIgnoresFilesSoPathsNeverForceAReEmbed() {
+    let withoutFiles = EmbeddableItem(itemID: "i", kind: "event", nodeID: "n", state: "active",
+                                      text: "same text")
+    let withFiles = EmbeddableItem(itemID: "i", kind: "event", nodeID: "n", state: "active",
+                                   text: "same text", files: "Sources/A.swift")
+    #expect(withoutFiles.contentHash == withFiles.contentHash)
+  }
 }

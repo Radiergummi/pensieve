@@ -3,10 +3,18 @@ import SQLiteData
 
 public struct EmbeddableItem: Sendable {
   public let itemID: String, kind: String, nodeID: String, state: String, text: String
-  public init(itemID: String, kind: String, nodeID: String, state: String, text: String) {
-    self.itemID = itemID; self.kind = kind; self.nodeID = nodeID; self.state = state; self.text = text
+  /// Newline-joined changed-file paths. Events only; "" everywhere else. Indexed by the FTS5
+  /// search index at weight 0.1 — the SEMANTIC path ignores this field entirely, because file
+  /// paths must not enter embedded text.
+  public let files: String
+  public init(itemID: String, kind: String, nodeID: String, state: String, text: String,
+              files: String = "") {
+    self.itemID = itemID; self.kind = kind; self.nodeID = nodeID
+    self.state = state; self.text = text; self.files = files
   }
   /// Stable across processes/runs (String.hashValue is per-process salted — do NOT use it here).
+  /// Hashes `text` ONLY: `files` is deliberately excluded so adding path indexing does not
+  /// invalidate every embedding. The search index tracks paths through its own corpus hash.
   public var contentHash: String {
     var hashAccumulator: UInt64 = 1469598103934665603            // FNV-1a
     for byte in text.utf8 { hashAccumulator = (hashAccumulator ^ UInt64(byte)) &* 1099511628211 }
@@ -69,9 +77,18 @@ public enum EmbeddableCorpus {
         guard let text else { continue }
         guard seenTextsByNode[event.nodeID, default: []].insert(text).inserted else { continue }
         out.append(.init(itemID: event.id.uuidString, kind: "event", nodeID: event.nodeID.uuidString,
-                         state: state, text: text))
+                         state: state, text: text, files: Self.changedFiles(in: event.detailJSON)))
       }
       return out
     }
+  }
+
+  /// The ingester writes {"hash","branch","files"} for a commit, with `files` newline-joined.
+  /// Anything else (a session's detail, malformed JSON, an absent key) yields "".
+  static func changedFiles(in detailJSON: String) -> String {
+    guard let data = detailJSON.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let files = object["files"] as? String else { return "" }
+    return files
   }
 }
