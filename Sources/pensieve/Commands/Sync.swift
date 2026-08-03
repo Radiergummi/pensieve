@@ -9,7 +9,7 @@ struct Sync: AsyncParsableCommand {
   func run() async throws {
     let summary = try await SyncRunner(
       spool: try openSpool(),
-      db: try openCanonical(),
+      database: try openCanonical(),
       provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()),
       projectsDir: PensievePaths.claudeProjectsURL()).run()
     // ISO-timestamped so a silent daemon failure can be correlated to a time.

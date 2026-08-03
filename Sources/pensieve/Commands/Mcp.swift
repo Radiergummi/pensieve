@@ -148,48 +148,48 @@ enum PensieveMCP {
   /// Resolve one node's grounded bundle against an already-open read handle (on-device narration,
   /// write-through cache). Shared by the `project_context` tool and the `pensieve://node/{id}` resource.
   private static func resolveBundle(path: String?, nodeID: UUID?,
-                                    _ db: any DatabaseReader) async throws -> ProjectContextBundle? {
+                                    _ database: any DatabaseReader) async throws -> ProjectContextBundle? {
     let (builder, kind) = makeBuilderAndKind()
     let cache = NarrationCache(url: PensievePaths.narrationCacheURL())
     return try await SessionContextQueries.bundle(
-      forPath: path, nodeID: nodeID, db, now: Date(),
+      forPath: path, nodeID: nodeID, database, now: Date(),
       summaryBuilder: builder, providerKind: kind, cache: cache)
   }
 
   static func projectContextJSON(path: String?, nodeID: UUID?) async throws -> Data {
-    guard let db = try? openCanonicalReadOnly() else {
+    guard let database = try? openCanonicalReadOnly() else {
       return try makeEncoder().encode(Optional<ProjectContextBundle>.none)   // "null"
     }
     let effectivePath = path ?? FileManager.default.currentDirectoryPath
-    let bundle = try await resolveBundle(path: effectivePath, nodeID: nodeID, db)
+    let bundle = try await resolveBundle(path: effectivePath, nodeID: nodeID, database)
     return try makeEncoder().encode(bundle)   // encodes `null` for an unbound path
   }
 
   static func nodeMarkdown(id: UUID) async throws -> String? {
-    guard let db = try? openCanonicalReadOnly() else { return nil }
-    guard let bundle = try await resolveBundle(path: nil, nodeID: id, db) else { return nil }
+    guard let database = try? openCanonicalReadOnly() else { return nil }
+    guard let bundle = try await resolveBundle(path: nil, nodeID: id, database) else { return nil }
     return SessionContextRender.markdown(bundle)
   }
 
   static func whatsNextMarkdown() throws -> String {
-    guard let db = try? openCanonicalReadOnly() else { return SessionContextRender.whatsNext([]) }
-    let items = try SessionContextQueries.rankedContext(limit: 10, context: nil, db, now: Date())
+    guard let database = try? openCanonicalReadOnly() else { return SessionContextRender.whatsNext([]) }
+    let items = try SessionContextQueries.rankedContext(limit: 10, context: nil, database, now: Date())
     return SessionContextRender.whatsNext(items)
   }
 
   static func whatsNextJSON(limit: Int, context: String?) throws -> Data {
-    guard let db = try? openCanonicalReadOnly() else {
+    guard let database = try? openCanonicalReadOnly() else {
       return try makeEncoder().encode([WhatsNextItem]())   // "[]"
     }
-    let items = try SessionContextQueries.rankedContext(limit: limit, context: context, db, now: Date())
+    let items = try SessionContextQueries.rankedContext(limit: limit, context: context, database, now: Date())
     return try makeEncoder().encode(items)
   }
 
   static func recallJSON(looseEndID: UUID, radius: Int) throws -> Data {
-    guard let db = try? openCanonicalReadOnly() else {
+    guard let database = try? openCanonicalReadOnly() else {
       return try makeEncoder().encode(Optional<RecallBundle>.none)   // "null"
     }
-    let bundle = try SessionContextQueries.recall(looseEndID: looseEndID, radius: radius, db)
+    let bundle = try SessionContextQueries.recall(looseEndID: looseEndID, radius: radius, database)
     return try makeEncoder().encode(bundle)   // encodes `null` for an unknown id
   }
 
@@ -199,26 +199,26 @@ enum PensieveMCP {
   /// no Focus context), widened to archived by `include_archived`, which gates the exact and semantic
   /// halves alike. Cloud is never used here; the embedder + index are on-device only.
   static func searchJSON(query: String, limit: Int, includeArchived: Bool = false) async throws -> Data {
-    guard let db = try? openCanonicalReadOnly() else {
+    guard let database = try? openCanonicalReadOnly() else {
       return try makeEncoder().encode(SearchPayload(exact: [], related: []))
     }
     // The visible set must widen with the flag: it gates BOTH halves, so leaving it active-only
     // would filter archived hits back out after the query layer allowed them through.
-    let visible = try await db.read { db -> Set<UUID> in
-      let nodes = try Node.all.fetchAll(db)
+    let visible = try await database.read { database -> Set<UUID> in
+      let nodes = try Node.all.fetchAll(database)
       return Set(nodes.filter {
         $0.state == .active || (includeArchived && $0.state == .archived)
       }.map { $0.id })
     }
     let exact = try SearchQueries.search(query: query, visibleNodeIDs: visible,
-                                         includeArchived: includeArchived, db)
+                                         includeArchived: includeArchived, database)
     let exactIDs = Set(exact.nodes.map { $0.id } + exact.looseEnds.map { $0.id })
 
     let related: [SemanticHit]
     if PensieveDefaults.semanticSearchEnabled() {
       related = await SemanticQueries.search(query: query, visibleNodeIDs: visible, excludingIDs: exactIDs,
                                              k: limit, floor: 0.25, includeArchived: includeArchived,
-                                             store: semanticStore, embedder: semanticEmbedder, db)
+                                             store: semanticStore, embedder: semanticEmbedder, database)
     } else {
       related = []
     }

@@ -27,13 +27,13 @@ public struct SystemStatus: Sendable, Equatable {
 }
 
 public enum SystemStatusGatherer {
-  /// Everything is injected (db, defaults, cloud inputs, both file URLs) so this is deterministically
+  /// Everything is injected (database, defaults, cloud inputs, both file URLs) so this is deterministically
   /// testable against a temp store + temp files. No hidden globals, no `now:` — every field is
   /// present-or-absent, and relative-date formatting belongs to the view.
   ///
   /// `apiKey` is a `String?` (not a Bool) so we can call the SHARED `resolvedProviderKind` directly
   /// rather than reimplementing the "is cloud configured" test — one source of truth with the factory.
-  public static func gather(db: (any DatabaseReader)?,
+  public static func gather(database: (any DatabaseReader)?,
                            defaults: UserDefaults,
                            cloudConfig: CloudConfig?,
                            apiKey: String?,
@@ -47,9 +47,9 @@ public enum SystemStatusGatherer {
 
     // Best-effort: an empty store, a read error, or a nil connection all degrade to nil.
     var lastEventAt: Date?
-    if let db {
-      lastEventAt = try? db.read { db in
-        try Event.order { $0.occurredAt.desc() }.limit(1).fetchOne(db)?.occurredAt
+    if let database {
+      lastEventAt = try? database.read { database in
+        try Event.order { $0.occurredAt.desc() }.limit(1).fetchOne(database)?.occurredAt
       }
     }
 

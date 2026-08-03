@@ -25,11 +25,11 @@ public struct SalienceSuggester {
 
   private struct Item { let id: UUID; let quote: String; let context: String }
 
-  public func run(_ db: any DatabaseWriter, limit: Int?, force: Bool) async throws -> Summary {
+  public func run(_ database: any DatabaseWriter, limit: Int?, force: Bool) async throws -> Summary {
     // 1. Candidates: open + unlabeled; skip already-suggested unless `force`. Deterministic order
     //    (createdAt) so `--limit` is reproducible.
-    let candidates: [LooseEnd] = try await db.read { db in
-      let rows = try LooseEnd.where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) }.fetchAll(db)
+    let candidates: [LooseEnd] = try await database.read { database in
+      let rows = try LooseEnd.where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) }.fetchAll(database)
       return rows.filter { force || $0.labelSuggestion.isEmpty }
                  .sorted { $0.createdAt < $1.createdAt }
     }
@@ -41,7 +41,7 @@ public struct SalienceSuggester {
     var quoteOnly = 0
     let byEvent = Dictionary(grouping: capped, by: { $0.sourceEventID })
     for (eventID, group) in byEvent {
-      let messages = try messages(db, eventID: eventID)
+      let messages = try messages(database, eventID: eventID)
       for le in group {
         let vle = VerifiedLooseEnd(text: le.text, quote: le.quote, role: le.role,
                                    sourceMessageIndex: le.sourceMessageIndex)
@@ -62,7 +62,7 @@ public struct SalienceSuggester {
       let dropSet = Set(dropIdx)
       for (n, it) in batch.enumerated() {
         let label = dropSet.contains(n) ? LooseEndLabel.noise : LooseEndLabel.salient
-        _ = try? LooseEndCommands.suggest(db, id: it.id, label: label)
+        _ = try? LooseEndCommands.suggest(database, id: it.id, label: label)
         suggested += 1
         if label == LooseEndLabel.salient { salient += 1 } else { noise += 1 }
       }
@@ -72,8 +72,8 @@ public struct SalienceSuggester {
   }
 
   /// Parse the event's transcript (best-effort). Returns [] on missing event / no path / empty parse.
-  private func messages(_ db: any DatabaseWriter, eventID: UUID) throws -> [TranscriptMessage] {
-    guard let ev = try db.read({ db in try Event.where { $0.id.eq(eventID) }.fetchOne(db) }) else { return [] }
+  private func messages(_ database: any DatabaseWriter, eventID: UUID) throws -> [TranscriptMessage] {
+    guard let ev = try database.read({ database in try Event.where { $0.id.eq(eventID) }.fetchOne(database) }) else { return [] }
     let detail = (try? JSONDecoder().decode([String: String].self, from: Data(ev.detailJSON.utf8))) ?? [:]
     guard let path = detail["transcriptPath"], !path.isEmpty else { return [] }
     return parse(URL(fileURLWithPath: path)).messages

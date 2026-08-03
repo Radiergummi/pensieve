@@ -13,10 +13,10 @@ public struct SmartLists: Sendable {
     self.whatsNext = whatsNext; self.dormant = dormant; self.recentlyActive = recentlyActive
   }
 
-  public static func compute(_ db: any DatabaseWriter, now: Date,
+  public static func compute(_ database: any DatabaseWriter, now: Date,
                              dormantAfterDays: Int = 14,
                              activeWithinDays: Int = 3) throws -> SmartLists {
-    let ranked = try NextQueries.ranked(db, now: now)
+    let ranked = try NextQueries.ranked(database, now: now)
     let dormant = ranked
       .filter { $0.daysDormant >= dormantAfterDays }
       .sorted { $0.daysDormant > $1.daysDormant }

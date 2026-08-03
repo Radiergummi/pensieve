@@ -5,14 +5,14 @@ import SQLiteData
 
 @Test func drainPersistsSessionBranch() async throws {
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   let payload = SessionStartPayload(sessionID: "S1", cwd: "/p/app",
     branch: "feature-x", commonDir: "/p/app/.git", transcriptPath: "/t.jsonl")
   try spool.append(kind: CaptureKind.ccSessionStart, payload: try encodeJSON(payload))
 
-  let n = try await Ingester(spool: spool, db: db).drain()
+  let n = try await Ingester(spool: spool, database: database).drain()
   #expect(n == 0)                                    // metadata, not an event
-  let sb = try await db.read { db in try SessionBranch.all.fetchAll(db) }.first
+  let sb = try await database.read { database in try SessionBranch.all.fetchAll(database) }.first
   #expect(sb?.sessionID == "S1")
   #expect(sb?.branch == "feature-x")
   #expect(try spool.pending().isEmpty)               // marked ingested

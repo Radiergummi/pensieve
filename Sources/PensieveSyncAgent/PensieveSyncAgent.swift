@@ -16,7 +16,7 @@ enum PensieveSyncAgent {
     do {
       let s = try await SyncRunner(
         spool: try openSpool(),
-        db: try openCanonical(),
+        database: try openCanonical(),
         provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()),
         projectsDir: PensievePaths.claudeProjectsURL()).run()
       line = "\(now) sync: ingested \(s.ingested) event(s), discovered \(s.discovered) session(s), extracted \(s.extracted) loose end(s)\n"

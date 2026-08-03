@@ -23,7 +23,7 @@ struct NodeEntityQuery: EntityQuery, EntityStringQuery {
   }
 
   private func read(_ body: (any DatabaseReader) throws -> [NodeFacts]) -> [NodeFacts] {
-    guard let db = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL) else { return [] }
-    return (try? body(db)) ?? []
+    guard let database = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL) else { return [] }
+    return (try? body(database)) ?? []
   }
 }

@@ -15,15 +15,15 @@ struct LooseEnds: ParsableCommand {
   }
 
   func run() throws {
-    let db = try openCanonical()
+    let database = try openCanonical()
     var nodeID: UUID?
     if let project {   // validate() guarantees --all is not also set
-      guard let p = try ProjectQueries.status(db, name: project, limit: 0)?.project else {
+      guard let p = try ProjectQueries.status(database, name: project, limit: 0)?.project else {
         print("no project named '\(project)'"); return
       }
       nodeID = p.id
     }
-    let ends = try LooseEndQueries.open(db, nodeID: nodeID, now: Date())
+    let ends = try LooseEndQueries.open(database, nodeID: nodeID, now: Date())
     for v in ends {
       print("\u{201C}\(v.looseEnd.quote)\u{201D}")
       print("  \u{21B3} \(v.looseEnd.text)  [\(v.looseEnd.role), \(v.ageDays)d]")

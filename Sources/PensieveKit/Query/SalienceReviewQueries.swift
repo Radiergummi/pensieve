@@ -6,14 +6,14 @@ import SQLiteData
 /// — Haiku's high recall puts nearly all true positives in its salient bucket) then oldest source
 /// first. Read-only; reuses `LooseEndView`.
 public enum SalienceReviewQueries {
-  public static func pending(_ db: any DatabaseReader, now: Date) throws -> [LooseEndView] {
-    try db.read { db in
+  public static func pending(_ database: any DatabaseReader, now: Date) throws -> [LooseEndView] {
+    try database.read { database in
       let ends = try LooseEnd
         .where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) && $0.labelSuggestion.neq("") }
-        .fetchAll(db)
+        .fetchAll(database)
       var views: [LooseEndView] = []
       for le in ends {
-        guard let event = try Event.where({ $0.id.eq(le.sourceEventID) }).fetchOne(db) else { continue }
+        guard let event = try Event.where({ $0.id.eq(le.sourceEventID) }).fetchOne(database) else { continue }
         let days = Calendar.current.dateComponents([.day], from: event.occurredAt, to: now).day ?? 0
         views.append(LooseEndView(looseEnd: le, occurredAt: event.occurredAt, ageDays: days))
       }
@@ -27,9 +27,9 @@ public enum SalienceReviewQueries {
     }
   }
 
-  public static func pendingCount(_ db: any DatabaseReader) throws -> Int {
-    try db.read { db in
-      try LooseEnd.where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) && $0.labelSuggestion.neq("") }.fetchCount(db)
+  public static func pendingCount(_ database: any DatabaseReader) throws -> Int {
+    try database.read { database in
+      try LooseEnd.where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) && $0.labelSuggestion.neq("") }.fetchCount(database)
     }
   }
 }

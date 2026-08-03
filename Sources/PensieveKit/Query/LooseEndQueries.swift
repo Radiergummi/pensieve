@@ -8,17 +8,17 @@ public struct LooseEndView: Sendable {
 }
 
 public enum LooseEndQueries {
-  public static func open(_ db: any DatabaseReader, nodeID: UUID?, now: Date) throws -> [LooseEndView] {
-    try db.read { db in
+  public static func open(_ database: any DatabaseReader, nodeID: UUID?, now: Date) throws -> [LooseEndView] {
+    try database.read { database in
       let ends: [LooseEnd]
       if let nodeID {
-        ends = try LooseEnd.where { $0.nodeID.eq(nodeID) && LooseEnd.isOpen($0) }.fetchAll(db)
+        ends = try LooseEnd.where { $0.nodeID.eq(nodeID) && LooseEnd.isOpen($0) }.fetchAll(database)
       } else {
-        ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
+        ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       }
       var views: [LooseEndView] = []
       for le in ends {
-        guard let event = try Event.where({ $0.id.eq(le.sourceEventID) }).fetchOne(db) else { continue }
+        guard let event = try Event.where({ $0.id.eq(le.sourceEventID) }).fetchOne(database) else { continue }
         let days = Calendar.current.dateComponents([.day], from: event.occurredAt, to: now).day ?? 0
         views.append(LooseEndView(looseEnd: le, occurredAt: event.occurredAt, ageDays: days))
       }

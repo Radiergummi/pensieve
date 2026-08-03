@@ -44,10 +44,10 @@ public struct MonitorSnapshot: Equatable, Sendable {
     var events = 0
     var loose = 0
     if FileManager.default.fileExists(atPath: canonicalURL.path),
-       let db = try? openCanonicalDatabaseReadOnly(at: canonicalURL) {
-      events = (try? db.read { db in try Event.fetchCount(db) }) ?? 0
-      loose = (try? db.read { db in
-        try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(db)
+       let database = try? openCanonicalDatabaseReadOnly(at: canonicalURL) {
+      events = (try? database.read { database in try Event.fetchCount(database) }) ?? 0
+      loose = (try? database.read { database in
+        try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
       }) ?? 0
     }
 
@@ -72,9 +72,9 @@ public struct MonitorSnapshot: Equatable, Sendable {
     var events = 0
     var loose = 0
     if let canonical {
-      events = (try? canonical.read { db in try Event.fetchCount(db) }) ?? 0
-      loose = (try? canonical.read { db in
-        try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(db)
+      events = (try? canonical.read { database in try Event.fetchCount(database) }) ?? 0
+      loose = (try? canonical.read { database in
+        try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
       }) ?? 0
     }
     return classify(lastCapture: lastCapture, pending: pending, events: events, loose: loose,

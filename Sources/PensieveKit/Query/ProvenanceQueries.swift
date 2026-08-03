@@ -21,9 +21,9 @@ public struct ProvenanceContext: Sendable {
 /// stored verbatim quote + an honest "gone" note). Never fabricates; never highlights a wrong
 /// message (two-part guard: the cited message must be a user prompt AND still contain the quote).
 public enum ProvenanceQueries {
-  public static func context(_ db: any DatabaseReader, looseEnd: LooseEnd, radius: Int = 4) throws -> ProvenanceContext {
-    let event = try db.read { db in
-      try Event.where { $0.id.eq(looseEnd.sourceEventID) }.fetchOne(db)
+  public static func context(_ database: any DatabaseReader, looseEnd: LooseEnd, radius: Int = 4) throws -> ProvenanceContext {
+    let event = try database.read { database in
+      try Event.where { $0.id.eq(looseEnd.sourceEventID) }.fetchOne(database)
     }
     guard let event else { throw ProvenanceError.missingSourceEvent }
 

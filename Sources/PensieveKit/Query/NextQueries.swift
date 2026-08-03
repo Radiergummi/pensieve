@@ -17,16 +17,16 @@ public func groundedScore(openLooseEnds: Int, daysDormant: Int) -> Double {
 
 public enum NextQueries {
   /// Deterministic ranking on grounded signals only. No model, no invented scores.
-  public static func ranked(_ db: any DatabaseReader, now: Date) throws -> [NextItem] {
-    try db.read { db in
-      let projects = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
+  public static func ranked(_ database: any DatabaseReader, now: Date) throws -> [NextItem] {
+    try database.read { database in
+      let projects = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
       var items: [NextItem] = []
       for p in projects {
         let latest = try Event.where { $0.nodeID.eq(p.id) }
-          .order { $0.occurredAt.desc() }.limit(1).fetchOne(db)
+          .order { $0.occurredAt.desc() }.limit(1).fetchOne(database)
         guard let latest else { continue }   // no captured activity → nothing grounded (matches BriefingQueries)
         let dormant = Calendar.current.dateComponents([.day], from: latest.occurredAt, to: now).day ?? 0
-        let open = try LooseEnd.where { $0.nodeID.eq(p.id) && LooseEnd.isOpen($0) }.fetchCount(db)
+        let open = try LooseEnd.where { $0.nodeID.eq(p.id) && LooseEnd.isOpen($0) }.fetchCount(database)
         let score = groundedScore(openLooseEnds: open, daysDormant: dormant)
         items.append(NextItem(project: p, openLooseEnds: open, daysDormant: dormant, score: score))
       }

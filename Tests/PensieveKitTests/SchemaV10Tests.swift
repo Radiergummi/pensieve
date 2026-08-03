@@ -4,25 +4,25 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func v10AddsWorkSummaryColumnNullableByDefault() throws {
-  let db = try openCanonicalDatabase(at: tempURL("v10"))
+  let database = try openCanonicalDatabase(at: tempURL("v10"))
   let node = Node(name: "Pensieve")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/tmp/pensieve")
-  try db.write { db in
-    try Node.insert { node }.execute(db)
-    try Source.insert { source }.execute(db)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { source }.execute(database)
   }
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                     kind: CaptureKind.ccSession, summary: "session (3 prompts)", detailJSON: "{}")
-  try db.write { db in try Event.insert { event }.execute(db) }
+  try database.write { database in try Event.insert { event }.execute(database) }
 
   // New rows read nil (never enriched yet).
-  let stored = try db.read { db in try Event.where { $0.id.eq(event.id) }.fetchOne(db) }
+  let stored = try database.read { database in try Event.where { $0.id.eq(event.id) }.fetchOne(database) }
   #expect(stored?.workSummary == nil)
 
   // A value round-trips through the nullable column.
-  try db.write { db in
-    try Event.where { $0.id.eq(event.id) }.update { $0.workSummary = #bind("Built the sync daemon.") }.execute(db)
+  try database.write { database in
+    try Event.where { $0.id.eq(event.id) }.update { $0.workSummary = #bind("Built the sync daemon.") }.execute(database)
   }
-  let updated = try db.read { db in try Event.where { $0.id.eq(event.id) }.fetchOne(db) }
+  let updated = try database.read { database in try Event.where { $0.id.eq(event.id) }.fetchOne(database) }
   #expect(updated?.workSummary == "Built the sync daemon.")
 }

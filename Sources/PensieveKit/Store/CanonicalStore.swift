@@ -5,9 +5,9 @@ public func openCanonicalDatabase(at url: URL) throws -> any DatabaseWriter {
   try PensievePaths.ensureParentDirectory(of: url)
   var configuration = Configuration()
   configuration.busyMode = .timeout(5)   // wait, don't throw SQLITE_BUSY, under writer contention
-  let db = try DatabasePool(path: url.path, configuration: configuration)  // WAL, multi-process
-  try migrateCanonical(db)
-  return db
+  let database = try DatabasePool(path: url.path, configuration: configuration)  // WAL, multi-process
+  try migrateCanonical(database)
+  return database
 }
 
 /// Opens an EXISTING canonical store strictly read-only (no migrator run, cannot create the file).
@@ -20,9 +20,9 @@ public func openCanonicalDatabaseReadOnly(at url: URL) throws -> any DatabaseRea
   return try DatabasePool(path: url.path, configuration: configuration)
 }
 
-func migrateCanonical(_ db: any DatabaseWriter) throws {
+func migrateCanonical(_ database: any DatabaseWriter) throws {
   var migrator = DatabaseMigrator()
-  migrator.registerMigration("v1-projects") { db in
+  migrator.registerMigration("v1-projects") { database in
     try #sql("""
       CREATE TABLE "projects"(
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -30,9 +30,9 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
         "state" TEXT NOT NULL DEFAULT 'active',
         "createdAt" TEXT NOT NULL
       ) STRICT
-      """).execute(db)
+      """).execute(database)
   }
-  migrator.registerMigration("v2-sources-events-looseends-checkpoints") { db in
+  migrator.registerMigration("v2-sources-events-looseends-checkpoints") { database in
     try #sql("""
       CREATE TABLE "sources"(
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -41,7 +41,7 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
         "key" TEXT NOT NULL,
         "createdAt" TEXT NOT NULL
       ) STRICT
-      """).execute(db)
+      """).execute(database)
     try #sql("""
       CREATE TABLE "events"(
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -53,7 +53,7 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
         "detailJSON" TEXT NOT NULL,
         "createdAt" TEXT NOT NULL
       ) STRICT
-      """).execute(db)
+      """).execute(database)
     try #sql("""
       CREATE TABLE "looseEnds"(
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -64,7 +64,7 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
         "status" TEXT NOT NULL DEFAULT 'open',
         "createdAt" TEXT NOT NULL
       ) STRICT
-      """).execute(db)
+      """).execute(database)
     try #sql("""
       CREATE TABLE "checkpoints"(
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -72,18 +72,18 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
         "note" TEXT NOT NULL,
         "createdAt" TEXT NOT NULL
       ) STRICT
-      """).execute(db)
-    try #sql(#"CREATE INDEX "idx_events_project" ON "events"("projectID", "occurredAt")"#).execute(db)
-    try #sql(#"CREATE UNIQUE INDEX "idx_sources_key_kind" ON "sources"("key", "kind")"#).execute(db)
+      """).execute(database)
+    try #sql(#"CREATE INDEX "idx_events_project" ON "events"("projectID", "occurredAt")"#).execute(database)
+    try #sql(#"CREATE UNIQUE INDEX "idx_sources_key_kind" ON "sources"("key", "kind")"#).execute(database)
   }
-  migrator.registerMigration("v3-fingerprint-extraction-provenance") { db in
-    try #sql(#"ALTER TABLE "events" ADD COLUMN "fingerprint" TEXT"#).execute(db)
-    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedAt" TEXT"#).execute(db)
-    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "role" TEXT NOT NULL DEFAULT ''"#).execute(db)
-    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "sourceMessageIndex" INTEGER NOT NULL DEFAULT 0"#).execute(db)
+  migrator.registerMigration("v3-fingerprint-extraction-provenance") { database in
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "fingerprint" TEXT"#).execute(database)
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedAt" TEXT"#).execute(database)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "role" TEXT NOT NULL DEFAULT ''"#).execute(database)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "sourceMessageIndex" INTEGER NOT NULL DEFAULT 0"#).execute(database)
     // Backfill fingerprints for already-captured rows so the unique index is meaningful.
-    try #sql(#"UPDATE "events" SET "fingerprint" = 'commit:' || json_extract("detailJSON", '$.hash') WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL"#).execute(db)
-    try #sql(#"UPDATE "events" SET "fingerprint" = 'session:' || json_extract("detailJSON", '$.sessionID') WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL"#).execute(db)
+    try #sql(#"UPDATE "events" SET "fingerprint" = 'commit:' || json_extract("detailJSON", '$.hash') WHERE "kind" = 'git.commit' AND "fingerprint" IS NULL"#).execute(database)
+    try #sql(#"UPDATE "events" SET "fingerprint" = 'session:' || json_extract("detailJSON", '$.sessionID') WHERE "kind" = 'cc.session' AND "fingerprint" IS NULL"#).execute(database)
     // An upgraded 1A DB may already contain two events with the same commit hash / sessionID
     // under one source (1A had no dedup), which would now backfill to identical fingerprints
     // and make the unique index below fail. Collapse those, keeping the earliest row. Pre-1B
@@ -91,30 +91,30 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
     try #sql(#"""
       DELETE FROM "events" WHERE "fingerprint" IS NOT NULL AND "rowid" NOT IN
         (SELECT MIN("rowid") FROM "events" WHERE "fingerprint" IS NOT NULL GROUP BY "sourceID", "fingerprint")
-      """#).execute(db)
+      """#).execute(database)
     // NULLs are distinct in a SQLite unique index, so unbackfilled rows (e.g. checkouts) don't collide.
-    try #sql(#"CREATE UNIQUE INDEX "idx_events_source_fingerprint" ON "events"("sourceID", "fingerprint")"#).execute(db)
+    try #sql(#"CREATE UNIQUE INDEX "idx_events_source_fingerprint" ON "events"("sourceID", "fingerprint")"#).execute(database)
   }
   // .immediate: keeps foreign-key enforcement ON during this migration so SQLite's
   // ALTER TABLE RENAME TO / RENAME COLUMN auto-rewrites the FK clauses in "sources",
   // "events", "looseEnds", "checkpoints" (the default .deferred disables FK checks
   // first, which suppresses that auto-rewrite and leaves them pointing at "projects").
-  migrator.registerMigration("v4-nodes-tree", foreignKeyChecks: .immediate) { db in
-    try #sql(#"ALTER TABLE "projects" RENAME TO "nodes""#).execute(db)
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "parentID" TEXT REFERENCES "nodes"("id") ON DELETE SET NULL"#).execute(db)
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'project'"#).execute(db)
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "description" TEXT NOT NULL DEFAULT ''"#).execute(db)
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "metadataJSON" TEXT NOT NULL DEFAULT '{}'"#).execute(db)
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "branchKey" TEXT"#).execute(db)
-    try #sql(#"ALTER TABLE "sources" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
-    try #sql(#"ALTER TABLE "events" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
-    try #sql(#"ALTER TABLE "looseEnds" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
-    try #sql(#"ALTER TABLE "checkpoints" RENAME COLUMN "projectID" TO "nodeID""#).execute(db)
+  migrator.registerMigration("v4-nodes-tree", foreignKeyChecks: .immediate) { database in
+    try #sql(#"ALTER TABLE "projects" RENAME TO "nodes""#).execute(database)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "parentID" TEXT REFERENCES "nodes"("id") ON DELETE SET NULL"#).execute(database)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'project'"#).execute(database)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "description" TEXT NOT NULL DEFAULT ''"#).execute(database)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "metadataJSON" TEXT NOT NULL DEFAULT '{}'"#).execute(database)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "branchKey" TEXT"#).execute(database)
+    try #sql(#"ALTER TABLE "sources" RENAME COLUMN "projectID" TO "nodeID""#).execute(database)
+    try #sql(#"ALTER TABLE "events" RENAME COLUMN "projectID" TO "nodeID""#).execute(database)
+    try #sql(#"ALTER TABLE "looseEnds" RENAME COLUMN "projectID" TO "nodeID""#).execute(database)
+    try #sql(#"ALTER TABLE "checkpoints" RENAME COLUMN "projectID" TO "nodeID""#).execute(database)
   }
-  migrator.registerMigration("v5-event-branchkey") { db in
-    try #sql(#"ALTER TABLE "events" ADD COLUMN "branchKey" TEXT"#).execute(db)
+  migrator.registerMigration("v5-event-branchkey") { database in
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "branchKey" TEXT"#).execute(database)
   }
-  migrator.registerMigration("v6-session-branches") { db in
+  migrator.registerMigration("v6-session-branches") { database in
     try #sql("""
       CREATE TABLE "sessionBranches"(
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -123,34 +123,34 @@ func migrateCanonical(_ db: any DatabaseWriter) throws {
         "commonDir" TEXT NOT NULL,
         "createdAt" TEXT NOT NULL
       ) STRICT
-      """).execute(db)
-    try #sql(#"CREATE UNIQUE INDEX "idx_sessionbranches_sessionid" ON "sessionBranches"("sessionID")"#).execute(db)
+      """).execute(database)
+    try #sql(#"CREATE UNIQUE INDEX "idx_sessionbranches_sessionid" ON "sessionBranches"("sessionID")"#).execute(database)
   }
-  migrator.registerMigration("v7-incremental-extraction") { db in
-    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedMessageCount" INTEGER NOT NULL DEFAULT 0"#).execute(db)
+  migrator.registerMigration("v7-incremental-extraction") { database in
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedMessageCount" INTEGER NOT NULL DEFAULT 0"#).execute(database)
     // -1 = "never watermarked" (unambiguous sentinel that can't collide with a real byte size,
     // including a genuine 0-byte transcript). Existing rows backfill to -1; the runner's legacy-init
     // then initializes them once without extracting (see ExtractionRunner.run()).
-    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedTranscriptSize" INTEGER NOT NULL DEFAULT -1"#).execute(db)
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "extractedTranscriptSize" INTEGER NOT NULL DEFAULT -1"#).execute(database)
   }
-  migrator.registerMigration("v8-node-appearance") { db in
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "icon" TEXT NOT NULL DEFAULT ''"#).execute(db)
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "colorTag" TEXT NOT NULL DEFAULT ''"#).execute(db)
+  migrator.registerMigration("v8-node-appearance") { database in
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "icon" TEXT NOT NULL DEFAULT ''"#).execute(database)
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "colorTag" TEXT NOT NULL DEFAULT ''"#).execute(database)
   }
-  migrator.registerMigration("v9-node-context") { db in
-    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "context" TEXT NOT NULL DEFAULT ''"#).execute(db)
+  migrator.registerMigration("v9-node-context") { database in
+    try #sql(#"ALTER TABLE "nodes" ADD COLUMN "context" TEXT NOT NULL DEFAULT ''"#).execute(database)
   }
-  migrator.registerMigration("v10-event-worksummary") { db in
+  migrator.registerMigration("v10-event-worksummary") { database in
     // Nullable: existing rows read NULL (un-enriched) and re-enrich on their next
     // size-changed extraction. Never gates anything — best-effort narration input.
-    try #sql(#"ALTER TABLE "events" ADD COLUMN "workSummary" TEXT"#).execute(db)
+    try #sql(#"ALTER TABLE "events" ADD COLUMN "workSummary" TEXT"#).execute(database)
   }
-  migrator.registerMigration("v11-looseend-label") { db in
+  migrator.registerMigration("v11-looseend-label") { database in
     // Human-confirmed + machine-suggested salience labels. NOT NULL DEFAULT '' (like v9 context)
     // so `.neq("noise")` filters correctly (a nullable column would drop NULL rows under SQL
     // three-valued logic). Additive; nothing gates on it — Phase 1 stays lossless.
-    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "label" TEXT NOT NULL DEFAULT ''"#).execute(db)
-    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "labelSuggestion" TEXT NOT NULL DEFAULT ''"#).execute(db)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "label" TEXT NOT NULL DEFAULT ''"#).execute(database)
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "labelSuggestion" TEXT NOT NULL DEFAULT ''"#).execute(database)
   }
-  try migrator.migrate(db)
+  try migrator.migrate(database)
 }

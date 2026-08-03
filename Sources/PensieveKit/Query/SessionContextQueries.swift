@@ -65,13 +65,13 @@ public enum SessionContextQueries {
   /// Canonical path → source → node, read-only. Tries the git common-dir first (sources are keyed
   /// on `…/.git`, not the working dir), then the plain canonical path (non-git / claudeCode sources).
   /// Returns nil if the path binds to no node.
-  public static func nodeID(forPath path: String, _ db: any DatabaseReader) throws -> UUID? {
+  public static func nodeID(forPath path: String, _ database: any DatabaseReader) throws -> UUID? {
     var candidates: [String] = []
     if let common = Git.commonDir(in: path) { candidates.append(common) }  // already symlink-resolved
     candidates.append(ProjectResolver.canonical(path))
-    return try db.read { db in
+    return try database.read { database in
       for key in candidates {
-        if let source = try Source.where({ $0.key.eq(key) }).fetchOne(db) {
+        if let source = try Source.where({ $0.key.eq(key) }).fetchOne(database) {
           return source.nodeID
         }
       }
@@ -86,21 +86,21 @@ public enum SessionContextQueries {
   ///     through on success; `nil` on no-events/failure/timeout (never a facts-dump).
   public static func bundle(
     forPath path: String?, nodeID explicitID: UUID?,
-    _ db: any DatabaseReader, now: Date,
+    _ database: any DatabaseReader, now: Date,
     recentLimit: Int = 8,
     summaryBuilder: SummaryBuilder?, providerKind: String,
     cache: NarrationCache?, narrateTimeout: Double = 3.0
   ) async throws -> ProjectContextBundle? {
     // 1. Resolve the node.
     let resolvedID: UUID?
-    if let explicitID { resolvedID = explicitID } else if let path { resolvedID = try nodeID(forPath: path, db) } else { resolvedID = nil }
+    if let explicitID { resolvedID = explicitID } else if let path { resolvedID = try nodeID(forPath: path, database) } else { resolvedID = nil }
     guard let id = resolvedID else { return nil }
-    guard let facts = try NodeFactsQueries.facts(for: [id], db, now: now).first else { return nil }
+    guard let facts = try NodeFactsQueries.facts(for: [id], database, now: now).first else { return nil }
     let node = facts.node
 
     // 2. Grounded pieces (pure queries).
-    let ends = try LooseEndQueries.open(db, nodeID: id, now: now)
-    let status = try ProjectQueries.status(db, node: node, limit: recentLimit)
+    let ends = try LooseEndQueries.open(database, nodeID: id, now: now)
+    let status = try ProjectQueries.status(database, node: node, limit: recentLimit)
     let score = groundedScore(openLooseEnds: facts.openLooseEnds, daysDormant: facts.daysDormant)
 
     // 3. Prose: cache-first → bounded narrate → nil.
@@ -126,18 +126,18 @@ public enum SessionContextQueries {
   /// context (unset nodes always show; the opposite explicit context is muted), sliced to
   /// `limit`, each carrying its oldest open loose end's verbatim quote.
   public static func rankedContext(limit: Int, context: String?,
-                                   _ db: any DatabaseReader, now: Date) throws -> [WhatsNextItem] {
-    let items = try NextQueries.ranked(db, now: now)
+                                   _ database: any DatabaseReader, now: Date) throws -> [WhatsNextItem] {
+    let items = try NextQueries.ranked(database, now: now)
     var filtered = items
     if let context, !context.isEmpty {
-      let all = try ProjectQueries.all(db)
+      let all = try ProjectQueries.all(database)
       let visible = NodeContextResolver.visibleNodeIDs(for: context, in: all)
       filtered = items.filter { visible.contains($0.project.id) }
     }
-    return try db.read { db in
+    return try database.read { database in
       try filtered.prefix(limit).map { item in
         let top = try LooseEnd.where { $0.nodeID.eq(item.project.id) && LooseEnd.isOpen($0) }
-          .order { $0.createdAt }.limit(1).fetchOne(db)
+          .order { $0.createdAt }.limit(1).fetchOne(database)
         return WhatsNextItem(
           nodeID: item.project.id, name: item.project.name, kind: item.project.kind,
           openLooseEnds: item.openLooseEnds, daysDormant: item.daysDormant, score: item.score,
@@ -151,11 +151,11 @@ public enum SessionContextQueries {
   /// the trust gate. Returns nil if the id resolves to no loose end; a bundle with
   /// `transcriptAvailable == false` (+ the stored quote) if the transcript is gone.
   public static func recall(looseEndID: UUID, radius: Int,
-                            _ db: any DatabaseReader) throws -> RecallBundle? {
-    guard let le = try db.read({ db in
-      try LooseEnd.where { $0.id.eq(looseEndID) }.fetchOne(db)
+                            _ database: any DatabaseReader) throws -> RecallBundle? {
+    guard let le = try database.read({ database in
+      try LooseEnd.where { $0.id.eq(looseEndID) }.fetchOne(database)
     }) else { return nil }
-    let ctx = try ProvenanceQueries.context(db, looseEnd: le, radius: radius)
+    let ctx = try ProvenanceQueries.context(database, looseEnd: le, radius: radius)
     return RecallBundle(
       looseEndText: le.text, quote: le.quote,
       transcriptAvailable: ctx.transcriptAvailable,

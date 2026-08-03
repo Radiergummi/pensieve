@@ -17,9 +17,9 @@ public struct SemanticIndexer: Sendable {
     self.store = store; self.embedder = embedder
   }
 
-  public func sync(_ db: any DatabaseReader) async {
+  public func sync(_ database: any DatabaseReader) async {
     guard store.isAvailable else { return }
-    guard let corpus = try? EmbeddableCorpus.gather(db) else { return }
+    guard let corpus = try? EmbeddableCorpus.gather(database) else { return }
     let existing = store.existingItems()                 // item_id -> content_hash
     let liveIDs = Set(corpus.map { $0.itemID })
 

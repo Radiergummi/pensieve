@@ -8,7 +8,7 @@ struct Track: ParsableCommand {
   @Argument var path: String
   func run() throws {
     let abs = URL(fileURLWithPath: path).path
-    let r = try ProjectResolver(db: try openCanonical()).resolve(path: abs, kind: SourceKind.gitRepo)
+    let r = try ProjectResolver(database: try openCanonical()).resolve(path: abs, kind: SourceKind.gitRepo)
     print("tracking \(r.project.name)")
   }
 }

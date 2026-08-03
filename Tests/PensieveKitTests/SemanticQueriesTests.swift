@@ -6,14 +6,14 @@ import SQLiteData
 /// Inserts a Source + Event under `node` so a LooseEnd's sourceEventID FK is satisfiable
 /// (looseEnds.sourceEventID REFERENCES events(id), and GRDB enforces foreign keys by default).
 /// Mirrors the helper in SemanticIndexerTests.swift.
-private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = CaptureKind.gitCommit,
+private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String = CaptureKind.gitCommit,
                        summary: String = "did a thing", workSummary: String? = nil) throws -> Event {
   let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(), kind: kind,
                     summary: summary, detailJSON: "{}", workSummary: workSummary)
-  try db.write { db in
-    try Source.insert { source }.execute(db)
-    try Event.insert { event }.execute(db)
+  try database.write { database in
+    try Source.insert { source }.execute(database)
+    try Event.insert { event }.execute(database)
   }
   return event
 }
@@ -26,20 +26,20 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
   }
 
   @Test func focusMutingDoesNotZeroOutVisibleHits() async throws {
-    let db = try openCanonicalDatabase(at: tempURL("semq-mute"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-mute"))
     let visible = Node(name: "Visible refunds work", kind: NodeKind.project)
     let muted = Node(name: "Muted refunds work", kind: NodeKind.project, context: "personal")
-    try await db.write { db in
-      try Node.insert { visible }.execute(db)
-      try Node.insert { muted }.execute(db)
+    try await database.write { database in
+      try Node.insert { visible }.execute(database)
+      try Node.insert { muted }.execute(database)
     }
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
       query: "refunds", visibleNodeIDs: [visible.id], excludingIDs: [], k: 5, floor: -1.0,
-      store: s, embedder: embedder, db)
+      store: s, embedder: embedder, database)
     #expect(hits.contains { $0.nodeID == visible.id })
     #expect(!hits.contains { $0.nodeID == muted.id })    // muted node filtered out post-KNN
   }
@@ -51,27 +51,27 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
   /// vector (cosine ~1.0), guaranteeing it ranks above the visible node's (different-text, lower
   /// cosine) hit for any k <= the muted count.
   @Test func overFetchSurfacesVisibleHitRankedBelowMutedTop() async throws {
-    let db = try openCanonicalDatabase(at: tempURL("semq-overfetch"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-overfetch"))
     let query = "refunds pipeline overhaul"
     let visible = Node(name: "Something entirely different", kind: NodeKind.project)
     let mutedA = Node(name: query, kind: NodeKind.project, context: "personal")
     let mutedB = Node(name: query, kind: NodeKind.project, context: "personal")
     let mutedC = Node(name: query, kind: NodeKind.project, context: "personal")
-    try await db.write { db in
-      try Node.insert { visible }.execute(db)
-      try Node.insert { mutedA }.execute(db)
-      try Node.insert { mutedB }.execute(db)
-      try Node.insert { mutedC }.execute(db)
+    try await database.write { database in
+      try Node.insert { visible }.execute(database)
+      try Node.insert { mutedA }.execute(database)
+      try Node.insert { mutedB }.execute(database)
+      try Node.insert { mutedC }.execute(database)
     }
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
 
     // 3 muted nodes tie at cosine 1.0, outranking the visible node for k=2 — only the over-fetch
     // (kPrime = max(k*8, 50)) reaches past them to find it.
     let hits = await SemanticQueries.search(
       query: query, visibleNodeIDs: [visible.id], excludingIDs: [], k: 2, floor: -1.0,
-      store: s, embedder: embedder, db)
+      store: s, embedder: embedder, database)
     #expect(hits.contains { $0.nodeID == visible.id })
   }
 
@@ -80,92 +80,92 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
   /// different text (lower cosine) and ranks ~56th — only the expand-and-retry loop (kFetch grows
   /// 50 → 200) reaches past the muted block to surface it. A single fetch would return [].
   @Test func expandAndRetrySurfacesVisibleHitBeyondInitialOverFetch() async throws {
-    let db = try openCanonicalDatabase(at: tempURL("semq-retry"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-retry"))
     let query = "refunds pipeline overhaul"
     let visible = Node(name: "Something entirely different", kind: NodeKind.project)
-    try await db.write { db in
-      try Node.insert { visible }.execute(db)
+    try await database.write { database in
+      try Node.insert { visible }.execute(database)
       for _ in 0..<55 {
-        try Node.insert { Node(name: query, kind: NodeKind.project, context: "personal") }.execute(db)
+        try Node.insert { Node(name: query, kind: NodeKind.project, context: "personal") }.execute(database)
       }
     }
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
       query: query, visibleNodeIDs: [visible.id], excludingIDs: [], k: 2, floor: -1.0,
-      store: s, embedder: embedder, db)
+      store: s, embedder: embedder, database)
     #expect(hits.contains { $0.nodeID == visible.id })
   }
 
   @Test func staleIndexRowDroppedByJoin() async throws {
-    let db = try openCanonicalDatabase(at: tempURL("semq-stale"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-stale"))
     let n = Node(name: "N", kind: NodeKind.project)
-    try await db.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(db, node: n)
+    try await database.write { try Node.insert { n }.execute($0) }
+    let ev = try makeEvent(database, node: n)
     let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "refund flow", quote: "q")
-    try await db.write { try LooseEnd.insert { le }.execute($0) }
+    try await database.write { try LooseEnd.insert { le }.execute($0) }
 
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
 
     // Simulate between-sync drift: noise-label the loose end in canonical WITHOUT re-syncing the index.
-    try await db.write { db in
-      try LooseEnd.where { $0.id.eq(le.id) }.update { $0.label = "noise" }.execute(db)
+    try await database.write { database in
+      try LooseEnd.where { $0.id.eq(le.id) }.update { $0.label = "noise" }.execute(database)
     }
 
     let hits = await SemanticQueries.search(
       query: "refund flow", visibleNodeIDs: [n.id], excludingIDs: [], k: 5, floor: -1.0,
-      store: s, embedder: embedder, db)
+      store: s, embedder: embedder, database)
     #expect(!hits.contains { $0.id == le.id })           // join re-applies isOpen → dropped
   }
 
   @Test func floorDropsWeakMatches() async throws {
-    let db = try openCanonicalDatabase(at: tempURL("semq-floor"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-floor"))
     let n = Node(name: "Refunds pipeline work", kind: NodeKind.project)
-    try await db.write { try Node.insert { n }.execute($0) }
+    try await database.write { try Node.insert { n }.execute($0) }
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
 
     // An impossibly high floor (above the max cosine similarity of 1.0) must drop everything.
     let hits = await SemanticQueries.search(
       query: "refunds", visibleNodeIDs: [n.id], excludingIDs: [], k: 5, floor: 1.01,
-      store: s, embedder: embedder, db)
+      store: s, embedder: embedder, database)
     #expect(hits.isEmpty)
   }
 
   @Test func excludingIDsDedupesAgainstExactHits() async throws {
-    let db = try openCanonicalDatabase(at: tempURL("semq-exclude"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-exclude"))
     let n = Node(name: "Refunds pipeline work", kind: NodeKind.project)
-    try await db.write { try Node.insert { n }.execute($0) }
+    try await database.write { try Node.insert { n }.execute($0) }
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
       query: "refunds", visibleNodeIDs: [n.id], excludingIDs: [n.id], k: 5, floor: -1.0,
-      store: s, embedder: embedder, db)
+      store: s, embedder: embedder, database)
     #expect(!hits.contains { $0.id == n.id })
   }
 
   /// Indexes one active + one archived node whose names are near-identical, so both are plausible
   /// KNN neighbours of the same query and only the state filter can separate them.
-  private func archivedFixture() async throws -> (db: any DatabaseWriter, store: SemanticIndexStore,
+  private func archivedFixture() async throws -> (database: any DatabaseWriter, store: SemanticIndexStore,
                                                   embedder: StubEmbedder, active: Node, archived: Node) {
-    let db = try openCanonicalDatabase(at: tempURL("semq-archived"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-archived"))
     let active = Node(name: "Refund handling", kind: NodeKind.project)
     let archived = Node(name: "Refund handling legacy", state: .archived, kind: NodeKind.project)
-    try await db.write { db in
-      try Node.insert { active }.execute(db)
-      try Node.insert { archived }.execute(db)
+    try await database.write { database in
+      try Node.insert { active }.execute(database)
+      try Node.insert { archived }.execute(database)
     }
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
-    return (db, s, embedder, active, archived)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
+    return (database, s, embedder, active, archived)
   }
 
   @Test func searchExcludesArchivedByDefault() async throws {
@@ -176,7 +176,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
     // existing call site.
     let hits = await SemanticQueries.search(
       query: "Refund handling legacy", visibleNodeIDs: visible, excludingIDs: [],
-      k: 8, floor: -1.0, store: f.store, embedder: f.embedder, f.db)
+      k: 8, floor: -1.0, store: f.store, embedder: f.embedder, f.database)
 
     #expect(!hits.contains { $0.id == f.archived.id })
     #expect(hits.allSatisfy { !$0.isArchived })
@@ -188,7 +188,7 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
 
     let hits = await SemanticQueries.search(
       query: "Refund handling legacy", visibleNodeIDs: visible, excludingIDs: [],
-      k: 8, floor: -1.0, includeArchived: true, store: f.store, embedder: f.embedder, f.db)
+      k: 8, floor: -1.0, includeArchived: true, store: f.store, embedder: f.embedder, f.database)
 
     let archivedHit = hits.first { $0.id == f.archived.id }
     #expect(archivedHit != nil)
@@ -197,22 +197,22 @@ private func makeEvent(_ db: any DatabaseWriter, node: Node, kind: String = Capt
   }
 
   @Test func archivedLooseEndsAndEventsAlsoResolveWhenAsked() async throws {
-    let db = try openCanonicalDatabase(at: tempURL("semq-archived-children"))
+    let database = try openCanonicalDatabase(at: tempURL("semq-archived-children"))
     let archived = Node(name: "Legacy billing", state: .archived, kind: NodeKind.project)
-    try await db.write { try Node.insert { archived }.execute($0) }
-    let ev = try makeEvent(db, node: archived, kind: CaptureKind.ccSession,
+    try await database.write { try Node.insert { archived }.execute($0) }
+    let ev = try makeEvent(database, node: archived, kind: CaptureKind.ccSession,
                            workSummary: "migrated the old invoices")
     let le = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
                       text: "drop the legacy invoice table", quote: "TODO drop invoices")
-    try await db.write { try LooseEnd.insert { le }.execute($0) }
+    try await database.write { try LooseEnd.insert { le }.execute($0) }
 
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
-    await SemanticIndexer(store: s, embedder: embedder).sync(db)
+    await SemanticIndexer(store: s, embedder: embedder).sync(database)
 
     let hits = await SemanticQueries.search(
       query: "drop the legacy invoice table", visibleNodeIDs: [archived.id], excludingIDs: [],
-      k: 8, floor: -1.0, includeArchived: true, store: s, embedder: embedder, db)
+      k: 8, floor: -1.0, includeArchived: true, store: s, embedder: embedder, database)
 
     // All three item kinds under an archived node resolve, and every one is flagged archived.
     #expect(hits.contains { $0.id == le.id && $0.kind == "loose_end" })

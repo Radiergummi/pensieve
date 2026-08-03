@@ -4,29 +4,29 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func cardsSplitMovedFromQuietAndCarryLooseEnds() throws {
-  let db = try openCanonicalDatabase(at: tempURL("briefing"))
-  let resolver = ProjectResolver(db: db)
+  let database = try openCanonicalDatabase(at: tempURL("briefing"))
+  let resolver = ProjectResolver(database: database)
   let (moved, ms) = try resolver.resolve(path: "/p/moved", kind: SourceKind.claudeCode)
   let (quiet, qs) = try resolver.resolve(path: "/p/quiet", kind: SourceKind.claudeCode)
   let now = Date()
   let since = Calendar.current.date(byAdding: .day, value: -2, to: now)!   // "last visit" = 2 days ago
   let recent = Calendar.current.date(byAdding: .day, value: -1, to: now)!  // after `since`
   let old = Calendar.current.date(byAdding: .day, value: -10, to: now)!    // before `since`
-  try db.write { db in
+  try database.write { database in
     let e1 = Event(nodeID: moved.id, sourceID: ms.id, occurredAt: recent, kind: CaptureKind.ccSession,
                    summary: "shipped the thing", detailJSON: "{}", fingerprint: "m1")
-    try Event.insert { e1 }.execute(db)
+    try Event.insert { e1 }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: moved.id, sourceEventID: e1.id, text: "rotate CI keys", quote: "set CI vars",
                role: "user", sourceMessageIndex: 0)
-    }.execute(db)
+    }.execute(database)
     try Event.insert {
       Event(nodeID: quiet.id, sourceID: qs.id, occurredAt: old, kind: CaptureKind.ccSession,
             summary: "old work", detailJSON: "{}", fingerprint: "q1")
-    }.execute(db)
+    }.execute(database)
   }
 
-  let cards = try BriefingQueries.cards(db, since: since, now: now)
+  let cards = try BriefingQueries.cards(database, since: since, now: now)
 
   #expect(cards.count == 2)
   #expect(cards.first?.node.id == moved.id)            // moved sorts before quiet
@@ -41,9 +41,9 @@ import SQLiteData
 }
 
 @Test func nodeWithNoEventsIsSkipped() throws {
-  let db = try openCanonicalDatabase(at: tempURL("briefing-empty"))
-  let resolver = ProjectResolver(db: db)
+  let database = try openCanonicalDatabase(at: tempURL("briefing-empty"))
+  let resolver = ProjectResolver(database: database)
   _ = try resolver.resolve(path: "/p/untouched", kind: SourceKind.claudeCode)
-  let cards = try BriefingQueries.cards(db, since: Date.distantPast, now: Date())
+  let cards = try BriefingQueries.cards(database, since: Date.distantPast, now: Date())
   #expect(cards.isEmpty)
 }

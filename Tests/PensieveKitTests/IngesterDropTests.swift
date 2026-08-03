@@ -9,7 +9,7 @@ private func tmp(_ name: String, ext: String) -> URL {
 
 @Test func drainDropsNonEmptyCwdlessSessionButRetriesEmpty() async throws {
   let spool = try CaptureSpool(at: tmp("drop-spool", ext: "sqlite"))
-  let db = try openCanonicalDatabase(at: tmp("drop-canon", ext: "sqlite"))
+  let database = try openCanonicalDatabase(at: tmp("drop-canon", ext: "sqlite"))
 
   // (a) A non-empty transcript with NO cwd anywhere → permanently unattributable → drop.
   let noCwd = tmp("nocwd", ext: "jsonl")
@@ -24,7 +24,7 @@ private func tmp(_ name: String, ext: String) -> URL {
                      payload: try encodeJSON(SessionRefPayload(transcriptPath: url.path)))
   }
 
-  let created = try await Ingester(spool: spool, db: db).drain()
+  let created = try await Ingester(spool: spool, database: database).drain()
   #expect(created == 0)                       // neither produced an event
   #expect(try spool.pendingCount() == 1)      // only the 0-byte row remains pending
   let remaining = try spool.pending()

@@ -6,13 +6,13 @@ struct Status: ParsableCommand {
   static let configuration = CommandConfiguration(commandName: "status")
   @Argument var project: String
   func run() throws {
-    let db = try openCanonical()
-    guard let s = try ProjectQueries.status(db, name: project, limit: 20) else {
+    let database = try openCanonical()
+    guard let s = try ProjectQueries.status(database, name: project, limit: 20) else {
       print("no project named '\(project)'"); return
     }
     print("# \(s.project.name)")
     for e in s.recentEvents { print("  \(e.occurredAt) \(e.kind)  \(e.summary)") }
-    let ends = try LooseEndQueries.open(db, nodeID: s.project.id, now: Date())
+    let ends = try LooseEndQueries.open(database, nodeID: s.project.id, now: Date())
     guard !ends.isEmpty else { return }
     print("\n## Open loose ends (\(ends.count))")
     for v in ends {

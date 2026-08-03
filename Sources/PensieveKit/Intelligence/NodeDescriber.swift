@@ -14,8 +14,8 @@ public enum NodeDescriber {
   /// The lone `gitRepo` source key for `nodeID`, or nil unless it has exactly one. Describe
   /// eligibility pairs this with a `project`-kind check on the node; shared so the daemon pass,
   /// the manual action, and the DetailView button gate resolve the git source identically.
-  public static func soleGitRepoKey(_ db: Database, nodeID: UUID) throws -> String? {
-    let git = try Source.where { $0.nodeID.eq(nodeID) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(db)
+  public static func soleGitRepoKey(_ database: Database, nodeID: UUID) throws -> String? {
+    let git = try Source.where { $0.nodeID.eq(nodeID) && $0.kind.eq(SourceKind.gitRepo) }.fetchAll(database)
     return git.count == 1 ? git.first?.key : nil
   }
 
@@ -39,12 +39,12 @@ public enum NodeDescriber {
   /// `gitRepo` source; `force` allows overwriting a non-empty description (the manual refresh) but
   /// never bypasses the single-git-source or meaningful-signal guards. Never throws — a provider
   /// failure or empty output is `.attemptedEmpty` (nothing written).
-  public static func describe(_ db: any DatabaseWriter, nodeID: UUID,
+  public static func describe(_ database: any DatabaseWriter, nodeID: UUID,
                               provider: any LLMProvider, force: Bool) async -> Outcome {
-    let resolved: (node: Node, key: String)? = (try? await db.read { db -> (Node, String)? in
-      guard let node = try Node.where({ $0.id.eq(nodeID) }).fetchOne(db),
+    let resolved: (node: Node, key: String)? = (try? await database.read { database -> (Node, String)? in
+      guard let node = try Node.where({ $0.id.eq(nodeID) }).fetchOne(database),
             node.kind == NodeKind.project,
-            let key = try soleGitRepoKey(db, nodeID: nodeID) else { return nil }
+            let key = try soleGitRepoKey(database, nodeID: nodeID) else { return nil }
       return (node, key)
     }) ?? nil
     guard let resolved else { return .ineligible }
@@ -56,8 +56,8 @@ public enum NodeDescriber {
     guard let raw = try? await provider.complete(prompt: ProjectContext.describePrompt(ctx)),
           let desc = sanitize(raw) else { return .attemptedEmpty }
 
-    try? await db.write { db in
-      try Node.where { $0.id.eq(nodeID) }.update { $0.description = desc }.execute(db)
+    try? await database.write { database in
+      try Node.where { $0.id.eq(nodeID) }.update { $0.description = desc }.execute(database)
     }
     return .wrote
   }

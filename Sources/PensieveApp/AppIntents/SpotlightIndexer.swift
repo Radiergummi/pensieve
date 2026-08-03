@@ -7,12 +7,12 @@ import PensieveKit
 /// best-effort; never fatal.
 enum SpotlightIndexer {
   static func reindex(activeContext: String = "") async {
-    guard let db = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL) else { return }
-    let facts = (try? NodeFactsQueries.all(db, now: Date())) ?? []
-    let allNodes = (try? ProjectQueries.all(db)) ?? []
+    guard let database = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL) else { return }
+    let facts = (try? NodeFactsQueries.all(database, now: Date())) ?? []
+    let allNodes = (try? ProjectQueries.all(database)) ?? []
     let visible = NodeContextResolver.visibleNodeIDs(for: activeContext, in: allNodes)
     let nodeEntities = facts.filter { visible.contains($0.node.id) }.map(NodeEntity.init(facts:))
-    let looseEndEntities = ((try? LooseEndFactsQueries.all(db)) ?? [])
+    let looseEndEntities = ((try? LooseEndFactsQueries.all(database)) ?? [])
       .filter { visible.contains($0.nodeID) }
       .map(LooseEndEntity.init(facts:))
     let index = CSSearchableIndex.default()

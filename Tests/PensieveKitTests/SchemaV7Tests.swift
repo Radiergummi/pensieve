@@ -4,30 +4,30 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func v7AddsWatermarkColumnsWithDefaults() throws {
-  let db = try openCanonicalDatabase(at: tempURL("v7"))
+  let database = try openCanonicalDatabase(at: tempURL("v7"))
   let node = Node(name: "Colibri")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/p/colibri")
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                     kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}",
                     fingerprint: "fp-v7")
-  try db.write { db in
-    try Node.insert { node }.execute(db)
-    try Source.insert { source }.execute(db)
-    try Event.insert { event }.execute(db)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { source }.execute(database)
+    try Event.insert { event }.execute(database)
   }
   // New rows default to 0 messages and the -1 "never watermarked" sentinel for the size.
-  let ev = try db.read { db in try Event.all.fetchAll(db) }.first
+  let ev = try database.read { database in try Event.all.fetchAll(database) }.first
   #expect(ev?.extractedMessageCount == 0)
   #expect(ev?.extractedTranscriptSize == -1)
 
   // Non-zero values round-trip through the STRICT columns.
-  try db.write { db in
+  try database.write { database in
     try Event.where { $0.id.eq(event.id) }.update {
       $0.extractedMessageCount = 5
       $0.extractedTranscriptSize = 1234
-    }.execute(db)
+    }.execute(database)
   }
-  let updated = try db.read { db in try Event.all.fetchAll(db) }.first
+  let updated = try database.read { database in try Event.all.fetchAll(database) }.first
   #expect(updated?.extractedMessageCount == 5)
   #expect(updated?.extractedTranscriptSize == 1234)
 }

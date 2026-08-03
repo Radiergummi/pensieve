@@ -82,7 +82,7 @@ struct AdvancedSettingsTab: View {
   private func load() {
     syncStatus = BackgroundSyncService.status
     let (config, key) = model.cloudInputs()
-    status = SystemStatusGatherer.gather(db: model.db,
+    status = SystemStatusGatherer.gather(database: model.database,
                                          defaults: .standard,
                                          cloudConfig: config,
                                          apiKey: key,

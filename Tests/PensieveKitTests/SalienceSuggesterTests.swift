@@ -17,7 +17,7 @@ private struct AlwaysThrows: LLMProvider {
 
 /// Seeds one node+source+event and a loose end on it. Returns (looseEndID, eventID).
 @discardableResult
-private func seedLE(_ db: any DatabaseWriter, quote: String, label: String = "",
+private func seedLE(_ database: any DatabaseWriter, quote: String, label: String = "",
                     suggestion: String = "", status: String = "open",
                     messageIndex: Int = 0) throws -> (UUID, UUID) {
   let node = Node(name: "N")
@@ -28,17 +28,17 @@ private func seedLE(_ db: any DatabaseWriter, quote: String, label: String = "",
   let le = LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: quote, quote: quote,
                     status: status, sourceMessageIndex: messageIndex,
                     label: label, labelSuggestion: suggestion)
-  try db.write { db in
-    try Node.insert { node }.execute(db)
-    try Source.insert { source }.execute(db)
-    try Event.insert { ev }.execute(db)
-    try LooseEnd.insert { le }.execute(db)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { source }.execute(database)
+    try Event.insert { ev }.execute(database)
+    try LooseEnd.insert { le }.execute(database)
   }
   return (le.id, ev.id)
 }
 
-private func labelOf(_ db: any DatabaseWriter, _ id: UUID) throws -> (label: String, suggestion: String) {
-  let row = try db.read { db in try LooseEnd.where { $0.id.eq(id) }.fetchOne(db) }!
+private func labelOf(_ database: any DatabaseWriter, _ id: UUID) throws -> (label: String, suggestion: String) {
+  let row = try database.read { database in try LooseEnd.where { $0.id.eq(id) }.fetchOne(database) }!
   return (row.label, row.labelSuggestion)
 }
 
@@ -48,58 +48,58 @@ private let noMessages: @Sendable (URL) -> ParsedSession = { _ in
 }
 
 @Test func suggesterWritesSuggestionMatchingDropSet() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sug-drop"))
-  let (keep, _) = try seedLE(db, quote: "we should migrate the auth tables later")
-  let (drop, _) = try seedLE(db, quote: "please read the spec right now")
+  let database = try openCanonicalDatabase(at: tempURL("sug-drop"))
+  let (keep, _) = try seedLE(database, quote: "we should migrate the auth tables later")
+  let (drop, _) = try seedLE(database, quote: "please read the spec right now")
   // Drop index 1 within the (single) batch. Both share one batch under the default budget.
   let summary = try await SalienceSuggester(provider: DropSet(drop: [1]), parse: noMessages)
-    .run(db, limit: nil, force: false)
+    .run(database, limit: nil, force: false)
   // The suggester classifies in stored order; assert by resulting suggestion, not index.
-  let all = [keep, drop].map { try! labelOf(db, $0) }
+  let all = [keep, drop].map { try! labelOf(database, $0) }
   #expect(all.contains { $0.suggestion == "salient" })
   #expect(all.contains { $0.suggestion == "noise" })
   #expect(summary.suggested == 2)
   #expect(summary.quoteOnly == 2)   // both had no transcript
-  #expect(try labelOf(db, keep).label == "")   // never writes the human label
+  #expect(try labelOf(database, keep).label == "")   // never writes the human label
 }
 
 @Test func suggesterWritesNothingWhenProviderFails() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sug-throw"))
-  let (id, _) = try seedLE(db, quote: "a genuinely deferred item to revisit later")
+  let database = try openCanonicalDatabase(at: tempURL("sug-throw"))
+  let (id, _) = try seedLE(database, quote: "a genuinely deferred item to revisit later")
   let summary = try await SalienceSuggester(provider: AlwaysThrows(), parse: noMessages)
-    .run(db, limit: nil, force: false)
-  #expect(try labelOf(db, id).suggestion == "")   // untouched → a re-run retries
+    .run(database, limit: nil, force: false)
+  #expect(try labelOf(database, id).suggestion == "")   // untouched → a re-run retries
   #expect(summary.suggested == 0)
   #expect(summary.skipped >= 1)
 }
 
 @Test func suggesterSkipsLabeledAndAlreadySuggested() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sug-skip"))
-  let (labeled, _) = try seedLE(db, quote: "already human labeled here", label: LooseEndLabel.salient)
-  let (suggested, _) = try seedLE(db, quote: "already machine suggested here", suggestion: LooseEndLabel.noise)
-  let (fresh, _) = try seedLE(db, quote: "fresh unlabeled candidate here")
+  let database = try openCanonicalDatabase(at: tempURL("sug-skip"))
+  let (labeled, _) = try seedLE(database, quote: "already human labeled here", label: LooseEndLabel.salient)
+  let (suggested, _) = try seedLE(database, quote: "already machine suggested here", suggestion: LooseEndLabel.noise)
+  let (fresh, _) = try seedLE(database, quote: "fresh unlabeled candidate here")
   let summary = try await SalienceSuggester(provider: DropSet(drop: []), parse: noMessages)
-    .run(db, limit: nil, force: false)
+    .run(database, limit: nil, force: false)
   #expect(summary.candidates == 1)                      // only `fresh`
-  #expect(try labelOf(db, labeled).label == "salient")  // untouched
-  #expect(try labelOf(db, suggested).suggestion == "noise")   // untouched
-  #expect(try labelOf(db, fresh).suggestion == "salient")     // empty drop set → salient
+  #expect(try labelOf(database, labeled).label == "salient")  // untouched
+  #expect(try labelOf(database, suggested).suggestion == "noise")   // untouched
+  #expect(try labelOf(database, fresh).suggestion == "salient")     // empty drop set → salient
 }
 
 @Test func suggesterForceReincludesAlreadySuggested() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sug-force"))
-  let (suggested, _) = try seedLE(db, quote: "already machine suggested here", suggestion: LooseEndLabel.salient)
+  let database = try openCanonicalDatabase(at: tempURL("sug-force"))
+  let (suggested, _) = try seedLE(database, quote: "already machine suggested here", suggestion: LooseEndLabel.salient)
   let summary = try await SalienceSuggester(provider: DropSet(drop: [0]), parse: noMessages)
-    .run(db, limit: nil, force: true)
+    .run(database, limit: nil, force: true)
   #expect(summary.candidates == 1)
-  #expect(try labelOf(db, suggested).suggestion == "noise")   // re-suggested (drop [0] → noise)
+  #expect(try labelOf(database, suggested).suggestion == "noise")   // re-suggested (drop [0] → noise)
 }
 
 @Test func suggesterRespectsLimit() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sug-limit"))
-  for i in 0..<5 { try seedLE(db, quote: "candidate number \(i) to consider") }
+  let database = try openCanonicalDatabase(at: tempURL("sug-limit"))
+  for i in 0..<5 { try seedLE(database, quote: "candidate number \(i) to consider") }
   let summary = try await SalienceSuggester(provider: DropSet(drop: []), parse: noMessages)
-    .run(db, limit: 2, force: false)
+    .run(database, limit: 2, force: false)
   #expect(summary.candidates == 2)
   #expect(summary.suggested == 2)
 }

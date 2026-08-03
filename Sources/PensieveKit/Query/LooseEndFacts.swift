@@ -19,11 +19,11 @@ public struct LooseEndFacts: Sendable {
 public enum LooseEndFactsQueries {
   /// Every open loose end (`LooseEnd.isOpen`) whose node is `active`, joined to its node name.
   /// Focus scoping is applied by the app-side indexer against this set (Kit stays Focus-agnostic).
-  public static func all(_ db: any DatabaseReader) throws -> [LooseEndFacts] {
-    try db.read { db in
-      let activeNodes = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
+  public static func all(_ database: any DatabaseReader) throws -> [LooseEndFacts] {
+    try database.read { database in
+      let activeNodes = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
       let nameByID = Dictionary(activeNodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
+      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       return ends.compactMap { le in
         guard let name = nameByID[le.nodeID] else { return nil }   // node not active → excluded
         return LooseEndFacts(looseEndID: le.id, nodeID: le.nodeID, nodeName: name,
@@ -34,11 +34,11 @@ public enum LooseEndFactsQueries {
 
   /// By-id resolution for a Spotlight tap — **any status/label/node-state**, so a since-closed or
   /// archived-node loose end still resolves (a tap opens its node). Unknown id → dropped.
-  public static func facts(for ids: [UUID], _ db: any DatabaseReader) throws -> [LooseEndFacts] {
-    try db.read { db in
+  public static func facts(for ids: [UUID], _ database: any DatabaseReader) throws -> [LooseEndFacts] {
+    try database.read { database in
       try ids.compactMap { id in
-        guard let le = try LooseEnd.where({ $0.id.eq(id) }).fetchOne(db) else { return nil }
-        let name = try Node.where({ $0.id.eq(le.nodeID) }).fetchOne(db)?.name ?? ""
+        guard let le = try LooseEnd.where({ $0.id.eq(id) }).fetchOne(database) else { return nil }
+        let name = try Node.where({ $0.id.eq(le.nodeID) }).fetchOne(database)?.name ?? ""
         return LooseEndFacts(looseEndID: le.id, nodeID: le.nodeID, nodeName: name,
                              text: le.text, quote: le.quote)
       }

@@ -28,42 +28,42 @@ private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: Capture
 @Test func twoCommitsOnBranchBirthAStrand() async throws {
   let (repo, _) = try makeCommittedRepo()   // default "main"
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spoolCommits(2, on: "feature-x", repo: repo, spool: spool)
 
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
+  let strands = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }
   #expect(strands.count == 1)
   #expect(strands.first?.branchKey == "feature-x")
   // Both commits on the branch are repointed to the strand.
-  let evs = try await db.read { db in try Event.where { $0.nodeID.eq(strands.first!.id) }.fetchAll(db) }
+  let evs = try await database.read { database in try Event.where { $0.nodeID.eq(strands.first!.id) }.fetchAll(database) }
   #expect(evs.count == 2)
 }
 
 @Test func oneCommitStaysTaggedNoStrand() async throws {
   let (repo, _) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spoolCommits(1, on: "feature-y", repo: repo, spool: spool)
 
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
+  let strands = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }
   #expect(strands.isEmpty)                              // tagged, not materialized
-  let ev = try await db.read { db in try Event.all.fetchAll(db) }.first { $0.kind == CaptureKind.gitCommit }
+  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first { $0.kind == CaptureKind.gitCommit }
   #expect(ev?.branchKey == "feature-y")                // branch is still recorded on the event
 }
 
 @Test func materializedStrandGetsLLMName() async throws {
   let (repo, _) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spoolCommits(2, on: "auth", repo: repo, spool: spool)
 
-  _ = try await Ingester(spool: spool, db: db, llm: StubLLM(text: "Auth refactor\nReworking the login flow.")).drain()
+  _ = try await Ingester(spool: spool, database: database, llm: StubLLM(text: "Auth refactor\nReworking the login flow.")).drain()
 
-  let strand = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }.first
+  let strand = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }.first
   #expect(strand?.name == "Auth refactor")
   #expect(strand?.description == "Reworking the login flow.")
 }
@@ -71,12 +71,12 @@ private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: Capture
 @Test func strandNamingFailureLeavesBranchName() async throws {
   let (repo, _) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spoolCommits(2, on: "billing", repo: repo, spool: spool)
 
-  _ = try await Ingester(spool: spool, db: db, llm: FailingLLM()).drain()
+  _ = try await Ingester(spool: spool, database: database, llm: FailingLLM()).drain()
 
-  let strand = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }.first
+  let strand = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }.first
   #expect(strand?.name == "billing")                   // falls back to branch name
   #expect(strand?.description == "")
 }
@@ -101,13 +101,13 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   let (repo, _) = try makeCommittedRepo()
   _ = Git.run(["checkout", "-B", "feature-s"], in: repo.path)
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spoolSession(id: "S1", on: "feature-s", repo: repo, spool: spool)
   try spoolSession(id: "S2", on: "feature-s", repo: repo, spool: spool)
 
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
+  let strands = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }
   #expect(strands.count == 1)
   #expect(strands.first?.branchKey == "feature-s")
 }
@@ -115,13 +115,13 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
 @Test func oneCommitPlusOneSessionDoesNotBirthStrand() async throws {
   let (repo, _) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spoolCommits(1, on: "mixed", repo: repo, spool: spool)   // leaves repo on branch "mixed"
   try spoolSession(id: "S9", on: "mixed", repo: repo, spool: spool)
 
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let strands = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }
+  let strands = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }
   #expect(strands.isEmpty)                                     // threshold is 2 of the SAME kind
 }
 
@@ -130,19 +130,19 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
 @Test func strandBirthRepointsLooseEndsFromEarlierDrain() async throws {
   let (repo, _) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   // First drain: single commit on the feature branch — stays tagged at the project node.
   try spoolCommits(1, on: "feature-z", repo: repo, spool: spool)
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let firstEvent = try await db.read { db in
-    try Event.where { $0.kind.eq(CaptureKind.gitCommit) && $0.branchKey.eq("feature-z") }.fetchAll(db)
+  let firstEvent = try await database.read { database in
+    try Event.where { $0.kind.eq(CaptureKind.gitCommit) && $0.branchKey.eq("feature-z") }.fetchAll(database)
   }.first
   let projectNodeID = try #require(firstEvent?.nodeID)
   let looseEnd = LooseEnd(nodeID: projectNodeID, sourceEventID: try #require(firstEvent?.id),
                           text: "x", quote: "some verbatim quote")
-  try await db.write { db in try LooseEnd.insert { looseEnd }.execute(db) }
+  try await database.write { database in try LooseEnd.insert { looseEnd }.execute(database) }
 
   // Second drain: another (distinct) commit on the same branch — crosses the threshold,
   // strand is born. Written inline (not via spoolCommits, which always writes index `0` and
@@ -153,11 +153,11 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   let secondHash = Git.run(["rev-parse", "HEAD"], in: repo.path)!
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: secondHash, branch: "feature-z")))
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let strand = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(db) }.first
+  let strand = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }.first
   let strandID = try #require(strand?.id)
-  let updated = try await db.read { db in try LooseEnd.where { $0.id.eq(looseEnd.id) }.fetchOne(db) }
+  let updated = try await database.read { database in try LooseEnd.where { $0.id.eq(looseEnd.id) }.fetchOne(database) }
   #expect(updated?.nodeID == strandID)
 }
 

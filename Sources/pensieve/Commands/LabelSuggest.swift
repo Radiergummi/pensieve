@@ -22,18 +22,18 @@ struct LabelSuggest: AsyncParsableCommand {
   var model: String = "claude-haiku-4-5-20251001"
 
   func run() async throws {
-    let db = try openCanonical()
+    let database = try openCanonical()
 
     if let path = `import` {
       let entries = try Self.decodeLabels(at: path)
-      let result = try LooseEndCommands.importLabels(db, entries)
+      let result = try LooseEndCommands.importLabels(database, entries)
       print("Imported: \(result.matched) matched, \(result.skipped) skipped (no matching quote).")
       return
     }
 
     let modelName = model
     let provider = ClaudeCLIProvider(run: { try Self.claudeRun($0, model: modelName) })
-    let s = try await SalienceSuggester(provider: provider).run(db, limit: limit, force: force)
+    let s = try await SalienceSuggester(provider: provider).run(database, limit: limit, force: force)
     print("""
     Suggested \(s.suggested)/\(s.candidates) candidates: \(s.salient) salient / \(s.noise) noise \
     (\(s.quoteOnly) quote-only, \(s.skipped) skipped on provider error).

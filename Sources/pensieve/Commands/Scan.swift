@@ -11,12 +11,12 @@ struct Scan: ParsableCommand {
   @Flag(name: .long, help: "Register discovered sources and install their capture setup.") var accept = false
 
   func run() throws {
-    let db = try openCanonical()
+    let database = try openCanonical()
     let pensievePath = PensievePaths.installedBinaryURL().path
     let scanner = SourceScanner(types: [GitSource(pensievePath: pensievePath)])
     let root = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath).resolvingSymlinksInPath()
 
-    let candidates = try scanner.discover(root: root, recursive: recursive, db: db)
+    let candidates = try scanner.discover(root: root, recursive: recursive, database: database)
     guard !candidates.isEmpty else { print("no sources found under \(root.path)"); return }
 
     if !accept {
@@ -29,7 +29,7 @@ struct Scan: ParsableCommand {
     }
 
     let fresh = candidates.filter { !$0.alreadyRegistered }.map(\.source)
-    let result = try scanner.accept(fresh, db: db)
+    let result = try scanner.accept(fresh, database: database)
     let already = candidates.count - fresh.count
     print("registered \(result.registered.count), already \(already), setup-failed \(result.setupFailed.count)")
     for (s, why) in result.setupFailed { print("  ! \(s.displayName): \(why)") }

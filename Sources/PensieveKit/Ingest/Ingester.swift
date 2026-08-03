@@ -5,22 +5,22 @@ import os
 
 public struct Ingester: Sendable {
   let spool: CaptureSpool
-  let db: any DatabaseWriter
+  let database: any DatabaseWriter
   let resolver: ProjectResolver
   let llm: (any LLMProvider)?
 
-  public init(spool: CaptureSpool, db: any DatabaseWriter, llm: (any LLMProvider)? = nil) {
-    self.spool = spool; self.db = db; self.resolver = ProjectResolver(db: db); self.llm = llm
+  public init(spool: CaptureSpool, database: any DatabaseWriter, llm: (any LLMProvider)? = nil) {
+    self.spool = spool; self.database = database; self.resolver = ProjectResolver(database: database); self.llm = llm
   }
 
   enum IngestError: Error { case unattributableSession }
 
-  /// Non-async wrappers so `db.write`/`db.read` resolve to GRDB's synchronous overload even
+  /// Non-async wrappers so `database.write`/`database.read` resolve to GRDB's synchronous overload even
   /// when called from an `async` context (`ingest`/`nameStrand`) — a bare trailing closure
   /// there is ambiguous with GRDB's `async` `write`/`read` overloads and triggers spurious
   /// Sendable diagnostics.
-  private func writeSync<T>(_ updates: (Database) throws -> T) throws -> T { try db.write(updates) }
-  private func readSync<T>(_ value: (Database) throws -> T) throws -> T { try db.read(value) }
+  private func writeSync<T>(_ updates: (Database) throws -> T) throws -> T { try database.write(updates) }
+  private func readSync<T>(_ value: (Database) throws -> T) throws -> T { try database.read(value) }
 
   /// Drains all pending spool rows. Returns the number of canonical events CREATED
   /// (not rows processed — a dropped unknown-kind row counts 0). A row that throws is
@@ -56,17 +56,17 @@ public struct Ingester: Sendable {
       let branchKey = Git.strandBranchKey(branch: p.branch, defaultBranch: Git.defaultBranch(in: p.repoPath))
       let fields = gitCommitFields(hash: p.hash, repo: p.repoPath, fallbackTime: row.ts)
       let detail = try encodeJSON(["hash": p.hash, "branch": p.branch, "files": fields.files])
-      let outcome = try writeSync { db -> (inserted: Bool, born: UUID?) in
-        let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.gitRepo)
-        let dup = try eventExists(db, sourceID: source.id, fingerprint: Fingerprint.commit(hash: p.hash))
+      let outcome = try writeSync { database -> (inserted: Bool, born: UUID?) in
+        let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.gitRepo)
+        let dup = try eventExists(database, sourceID: source.id, fingerprint: Fingerprint.commit(hash: p.hash))
         if dup { return (false, nil) }
-        let attr = try attributeToNode(db, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.gitCommit)
+        let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.gitCommit)
         try Event.insert {
           Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: fields.when,
                 kind: CaptureKind.gitCommit, summary: fields.subject, detailJSON: detail,
                 fingerprint: Fingerprint.commit(hash: p.hash), branchKey: branchKey)
-        }.execute(db)
-        try resurfaceIfArchived(db, nodeID: attr.nodeID)
+        }.execute(database)
+        try resurfaceIfArchived(database, nodeID: attr.nodeID)
         return (true, attr.bornStrand)
       }
       if let born = outcome.born { await nameStrand(born, branchKey: branchKey ?? "") }
@@ -76,9 +76,9 @@ public struct Ingester: Sendable {
       let p = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
       let key = Git.commonDir(in: p.repoPath) ?? ProjectResolver.canonical(p.repoPath)
       let detail = try encodeJSON(["from": p.from, "to": p.to, "branch": p.branch])
-      let inserted = try writeSync { db -> Bool in
-        let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.gitRepo)
-        return try insertIfNew(db, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.ts,
+      let inserted = try writeSync { database -> Bool in
+        let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.gitRepo)
+        return try insertIfNew(database, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.ts,
               kind: CaptureKind.gitCheckout, summary: "checkout \(p.branch)", detailJSON: detail,
               fingerprint: Fingerprint.checkout(repo: p.repoPath, from: p.from, to: p.to, branch: p.branch)))
       }
@@ -111,23 +111,23 @@ public struct Ingester: Sendable {
       let detail = try encodeJSON(["sessionID": session.sessionID,
                                    "prompts": String(session.userPromptCount),
                                    "transcriptPath": p.transcriptPath])
-      let outcome = try writeSync { db -> (inserted: Bool, born: UUID?, branch: String?) in
-        let (project, source) = try resolver.resolve(db, path: key, kind: SourceKind.claudeCode)
-        let dup = try eventExists(db, sourceID: source.id, fingerprint: Fingerprint.session(sessionID: session.sessionID))
+      let outcome = try writeSync { database -> (inserted: Bool, born: UUID?, branch: String?) in
+        let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.claudeCode)
+        let dup = try eventExists(database, sourceID: source.id, fingerprint: Fingerprint.session(sessionID: session.sessionID))
         if dup { return (false, nil, nil) }
         let branchKey: String? = {
-          guard let sb = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(db),
+          guard let sb = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(database),
                 let raw = sb.branch else { return nil }
           return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sb.commonDir))
         }()
-        let attr = try attributeToNode(db, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.ccSession)
+        let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.ccSession)
         try Event.insert {
           Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: session.endedAt ?? row.ts,
                 kind: CaptureKind.ccSession, summary: "session (\(session.userPromptCount) prompts)",
                 detailJSON: detail, fingerprint: Fingerprint.session(sessionID: session.sessionID),
                 branchKey: branchKey)
-        }.execute(db)
-        try resurfaceIfArchived(db, nodeID: attr.nodeID)
+        }.execute(database)
+        try resurfaceIfArchived(database, nodeID: attr.nodeID)
         return (true, attr.bornStrand, branchKey)
       }
       if let born = outcome.born { await nameStrand(born, branchKey: outcome.branch ?? "") }
@@ -135,14 +135,14 @@ public struct Ingester: Sendable {
 
     case CaptureKind.ccSessionStart:
       let p = try JSONDecoder().decode(SessionStartPayload.self, from: data)
-      try writeSync { db in
-        let exists = try SessionBranch.where { $0.sessionID.eq(p.sessionID) }.fetchOne(db) != nil
+      try writeSync { database in
+        let exists = try SessionBranch.where { $0.sessionID.eq(p.sessionID) }.fetchOne(database) != nil
         if !exists {
           try SessionBranch.insert {
             SessionBranch(sessionID: p.sessionID,
                           branch: p.branch.isEmpty ? nil : p.branch,
                           commonDir: p.commonDir)
-          }.execute(db)
+          }.execute(database)
         }
       }
       return 0
@@ -154,15 +154,15 @@ public struct Ingester: Sendable {
 
   /// Whether an event with this (sourceID, fingerprint) already exists — the dedup predicate,
   /// shared by `insertIfNew` and the git.commit/cc.session branches that dedup before extra work.
-  private func eventExists(_ db: Database, sourceID: UUID, fingerprint: String?) throws -> Bool {
-    try Event.where { $0.sourceID.eq(sourceID) && $0.fingerprint.eq(fingerprint) }.fetchCount(db) > 0
+  private func eventExists(_ database: Database, sourceID: UUID, fingerprint: String?) throws -> Bool {
+    try Event.where { $0.sourceID.eq(sourceID) && $0.fingerprint.eq(fingerprint) }.fetchCount(database) > 0
   }
 
   /// Inserts the event only if no event with the same (sourceID, fingerprint) exists.
   /// Returns whether an insert actually happened (false when deduped).
-  private func insertIfNew(_ db: Database, _ event: Event) throws -> Bool {
-    if try eventExists(db, sourceID: event.sourceID, fingerprint: event.fingerprint) { return false }
-    try Event.insert { event }.execute(db)
+  private func insertIfNew(_ database: Database, _ event: Event) throws -> Bool {
+    if try eventExists(database, sourceID: event.sourceID, fingerprint: event.fingerprint) { return false }
+    try Event.insert { event }.execute(database)
     return true
   }
 
@@ -170,34 +170,34 @@ public struct Ingester: Sendable {
   /// ≥2-same-kind-events threshold. Runs inside the write transaction. Returns the nodeID to
   /// stamp on the event, plus the id of a strand *born on this call* (for post-transaction
   /// naming) or nil.
-  private func attributeToNode(_ db: Database, projectNodeID: UUID,
+  private func attributeToNode(_ database: Database, projectNodeID: UUID,
                                branchKey: String?, kind: String)
     throws -> (nodeID: UUID, bornStrand: UUID?) {
     guard let branchKey else { return (projectNodeID, nil) }
 
     if let strand = try Node
       .where({ $0.parentID.eq(projectNodeID) && $0.branchKey.eq(branchKey) && $0.kind.eq(NodeKind.strand) })
-      .fetchOne(db) {
+      .fetchOne(database) {
       return (strand.id, nil)                          // strand already exists → attribute directly
     }
 
     // Count same-kind events already tagged with this branch at the project node.
     let sameKind = try Event
       .where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) && $0.kind.eq(kind) }
-      .fetchCount(db)
+      .fetchCount(database)
     guard sameKind + 1 >= 2 else { return (projectNodeID, nil) }   // not yet — stay tagged
 
     let strand = Node(name: branchKey, parentID: projectNodeID, kind: NodeKind.strand, branchKey: branchKey)
-    try Node.insert { strand }.execute(db)
+    try Node.insert { strand }.execute(database)
     let repointedEventIDs = try Event.where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) }
-      .fetchAll(db).map(\.id)
+      .fetchAll(database).map(\.id)
     try Event.where { $0.nodeID.eq(projectNodeID) && $0.branchKey.eq(branchKey) }
-      .update { $0.nodeID = strand.id }.execute(db)   // repoint every tagged event (all kinds)
+      .update { $0.nodeID = strand.id }.execute(database)   // repoint every tagged event (all kinds)
     // Loose ends already extracted from those events (by a prior drain) live on the project
     // node too — repoint them so LooseEndQueries.open(nodeID: strand) doesn't miss them.
     for eventID in repointedEventIDs {
       try LooseEnd.where { $0.sourceEventID.eq(eventID) }
-        .update { $0.nodeID = strand.id }.execute(db)
+        .update { $0.nodeID = strand.id }.execute(database)
     }
     return (strand.id, strand.id)
   }
@@ -205,9 +205,9 @@ public struct Ingester: Sendable {
   /// After attributing an event, bring an archived node (and its ancestor chain) back to
   /// "active" so it reappears in place. Muted nodes are sticky and left untouched. Runs inside
   /// the write transaction that inserted the event.
-  private func resurfaceIfArchived(_ db: Database, nodeID: UUID) throws {
-    let chain = try [nodeID] + NodeCommands.ancestorIDs(db, of: nodeID)
-    try NodeCommands.resurface(db, ids: chain)
+  private func resurfaceIfArchived(_ database: Database, nodeID: UUID) throws {
+    let chain = try [nodeID] + NodeCommands.ancestorIDs(database, of: nodeID)
+    try NodeCommands.resurface(database, ids: chain)
   }
 
   /// Cleans an on-device-proposed strand name into a terse organizational label: strips a
@@ -262,12 +262,12 @@ public struct Ingester: Sendable {
     guard let llm else { return }
 
     struct Candidate { let id: UUID; let commonDir: String; let metadataJSON: String }
-    let candidates: [Candidate] = (try? readSync { db -> [Candidate] in
-      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db)
+    let candidates: [Candidate] = (try? readSync { database -> [Candidate] in
+      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(database)
       var out: [Candidate] = []
       for node in projects {
         if Self.nameInferred(inMetadata: node.metadataJSON) { continue }
-        guard let key = try NodeDescriber.soleGitRepoKey(db, nodeID: node.id) else { continue }
+        guard let key = try NodeDescriber.soleGitRepoKey(database, nodeID: node.id) else { continue }
         guard node.name == ProjectResolver.displayName(forKey: key) else { continue }
         out.append(Candidate(id: node.id, commonDir: key, metadataJSON: node.metadataJSON))
       }
@@ -282,13 +282,13 @@ public struct Ingester: Sendable {
         .first.map(String.init) ?? ""
       let name = Self.sanitizeStrandName(firstLine)
       let newMeta = Self.settingNameInferred(in: candidate.metadataJSON)
-      try? writeSync { db in
+      try? writeSync { database in
         if let name {
           try Node.where { $0.id.eq(candidate.id) }
-            .update { $0.name = name; $0.metadataJSON = newMeta }.execute(db)
+            .update { $0.name = name; $0.metadataJSON = newMeta }.execute(database)
         } else {
           try Node.where { $0.id.eq(candidate.id) }
-            .update { $0.metadataJSON = newMeta }.execute(db)
+            .update { $0.metadataJSON = newMeta }.execute(database)
         }
       }
     }
@@ -303,11 +303,11 @@ public struct Ingester: Sendable {
   func describeProjectNodes() async {
     guard let llm else { return }
 
-    let candidates: [UUID] = (try? readSync { db -> [UUID] in
-      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db)
+    let candidates: [UUID] = (try? readSync { database -> [UUID] in
+      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(database)
       var out: [UUID] = []
       for node in projects where node.description.isEmpty {
-        if try NodeDescriber.soleGitRepoKey(db, nodeID: node.id) != nil { out.append(node.id) }
+        if try NodeDescriber.soleGitRepoKey(database, nodeID: node.id) != nil { out.append(node.id) }
       }
       return out
     }) ?? []
@@ -316,7 +316,7 @@ public struct Ingester: Sendable {
     var invocations = 0
     for id in candidates {
       if invocations >= Self.descriptionRefineCap { break }
-      let outcome = await NodeDescriber.describe(db, nodeID: id, provider: llm, force: false)
+      let outcome = await NodeDescriber.describe(database, nodeID: id, provider: llm, force: false)
       if outcome == .wrote || outcome == .attemptedEmpty { invocations += 1 }
     }
   }
@@ -326,9 +326,9 @@ public struct Ingester: Sendable {
   /// surfaced claim — outside the verbatim gate by design.
   private func nameStrand(_ strandID: UUID, branchKey: String) async {
     guard let llm else { return }
-    let summaries: [String] = (try? readSync { db in
+    let summaries: [String] = (try? readSync { database in
       try Event.where { $0.nodeID.eq(strandID) }
-        .order { $0.occurredAt.desc() }.limit(20).fetchAll(db).map(\.summary)
+        .order { $0.occurredAt.desc() }.limit(20).fetchAll(database).map(\.summary)
     }) ?? []
     guard !summaries.isEmpty else { return }
     let prompt = """
@@ -343,8 +343,8 @@ public struct Ingester: Sendable {
       .map { $0.trimmingCharacters(in: .whitespaces) }
     guard let first = lines.first, let name = Self.sanitizeStrandName(first) else { return }
     let desc = lines.count > 1 ? lines[1] : ""
-    try? writeSync { db in
-      try Node.where { $0.id.eq(strandID) }.update { $0.name = name; $0.description = desc }.execute(db)
+    try? writeSync { database in
+      try Node.where { $0.id.eq(strandID) }.update { $0.name = name; $0.description = desc }.execute(database)
     }
     Log.ingest.info("Strand named: \(name, privacy: .public) (id=\(strandID, privacy: .public))")
   }

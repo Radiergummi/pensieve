@@ -27,16 +27,16 @@ private struct NodeActivity {
 }
 
 public enum BriefingQueries {
-  public static func cards(_ db: any DatabaseReader, since: Date, now: Date) throws -> [BriefingCard] {
-    // Collect per-node activity inside one `db.read`, then fetch loose ends afterward — `LooseEndQueries.open`
-    // opens its own `db.read`, which can't be called with the `Database` handed to a closure already
+  public static func cards(_ database: any DatabaseReader, since: Date, now: Date) throws -> [BriefingCard] {
+    // Collect per-node activity inside one `database.read`, then fetch loose ends afterward — `LooseEndQueries.open`
+    // opens its own `database.read`, which can't be called with the `Database` handed to a closure already
     // inside a read transaction.
-    let activity: [NodeActivity] = try db.read { db in
-      let actives = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db)
+    let activity: [NodeActivity] = try database.read { database in
+      let actives = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
       var result: [NodeActivity] = []
       for node in actives {
         let events = try Event.where { $0.nodeID.eq(node.id) }
-          .order { $0.occurredAt.desc() }.fetchAll(db)
+          .order { $0.occurredAt.desc() }.fetchAll(database)
         guard let latest = events.first else { continue }   // no captured activity → nothing grounded
         let moved = events.filter { $0.occurredAt > since }.count
         let dormant = Calendar.current.dateComponents([.day], from: latest.occurredAt, to: now).day ?? 0
@@ -46,7 +46,7 @@ public enum BriefingQueries {
     }
     var cards: [BriefingCard] = []
     for a in activity {
-      let ends = try LooseEndQueries.open(db, nodeID: a.node.id, now: now)
+      let ends = try LooseEndQueries.open(database, nodeID: a.node.id, now: now)
       cards.append(BriefingCard(
         node: a.node, movedSince: a.movedSince, latestSummary: a.latestSummary,
         openLooseEnds: ends.count, topLooseEnd: ends.first?.looseEnd.text, daysDormant: a.daysDormant))

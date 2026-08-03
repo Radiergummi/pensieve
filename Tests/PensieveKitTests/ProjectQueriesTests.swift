@@ -4,15 +4,15 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func statusReturnsRecentEvents() throws {
-  let db = try openCanonicalDatabase(at: tempURL("q"))
-  let (project, source) = try ProjectResolver(db: db).resolve(path: "/p/colibri", kind: "gitRepo")
-  try db.write { db in
+  let database = try openCanonicalDatabase(at: tempURL("q"))
+  let (project, source) = try ProjectResolver(database: database).resolve(path: "/p/colibri", kind: "gitRepo")
+  try database.write { database in
     try Event.insert {
       Event(nodeID: project.id, sourceID: source.id, occurredAt: Date(),
             kind: "git.commit", summary: "did a thing", detailJSON: "{}")
-    }.execute(db)
+    }.execute(database)
   }
 
-  let status = try ProjectQueries.status(db, name: "colibri", limit: 10)
+  let status = try ProjectQueries.status(database, name: "colibri", limit: 10)
   #expect(status?.recentEvents.first?.summary == "did a thing")
 }

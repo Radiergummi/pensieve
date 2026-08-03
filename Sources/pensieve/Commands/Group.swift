@@ -11,13 +11,13 @@ struct Group: ParsableCommand {
       print("group needs at least two project names: the target followed by one or more to merge into it")
       return
     }
-    let db = try openCanonical()
-    let projects = try ProjectQueries.all(db)
+    let database = try openCanonical()
+    let projects = try ProjectQueries.all(database)
     let ids = names.compactMap { name in projects.first { $0.name == name }?.id }
     guard let primary = ids.first, ids.count == names.count else {
       print("unknown project name(s)"); return
     }
-    try ProjectResolver(db: db).group(primary, into: Array(ids.dropFirst()))
+    try ProjectResolver(database: database).group(primary, into: Array(ids.dropFirst()))
     print("grouped \(names.dropFirst().joined(separator: ", ")) into \(names[0])")
   }
 }

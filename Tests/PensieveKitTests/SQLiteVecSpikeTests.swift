@@ -13,20 +13,20 @@ import CSQLiteVec
     // Configuration.prepareDatabase, calling pensieve_sqlite_vec_init_connection
     // with the raw sqlite3 handle.
     var config = Configuration()
-    config.prepareDatabase { db in
-      let rc = pensieve_sqlite_vec_init_connection(UnsafeMutableRawPointer(db.sqliteConnection))
+    config.prepareDatabase { database in
+      let rc = pensieve_sqlite_vec_init_connection(UnsafeMutableRawPointer(database.sqliteConnection))
       #expect(rc == 0)   // SQLITE_OK
     }
     let queue = try DatabaseQueue(configuration: config)   // in-memory
-    try queue.write { db in
-      try db.execute(sql: "CREATE VIRTUAL TABLE vt USING vec0(item_id TEXT PRIMARY KEY, embedding float[3])")
-      try db.execute(sql: "INSERT INTO vt(item_id, embedding) VALUES (?, ?)",
+    try queue.write { database in
+      try database.execute(sql: "CREATE VIRTUAL TABLE vt USING vec0(item_id TEXT PRIMARY KEY, embedding float[3])")
+      try database.execute(sql: "INSERT INTO vt(item_id, embedding) VALUES (?, ?)",
                      arguments: ["a", "[1.0, 0.0, 0.0]"])
-      try db.execute(sql: "INSERT INTO vt(item_id, embedding) VALUES (?, ?)",
+      try database.execute(sql: "INSERT INTO vt(item_id, embedding) VALUES (?, ?)",
                      arguments: ["b", "[0.0, 1.0, 0.0]"])
     }
-    let ids = try queue.read { db in
-      try String.fetchAll(db, sql: """
+    let ids = try queue.read { database in
+      try String.fetchAll(database, sql: """
         SELECT item_id FROM vt WHERE embedding MATCH ? AND k = 2 ORDER BY distance
         """, arguments: ["[0.9, 0.1, 0.0]"])
     }

@@ -24,19 +24,19 @@ private func repo(in parent: URL, _ name: String) throws -> URL {
   _ = try repo(in: root, "beta")
   let plain = root.appendingPathComponent("plain"); try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
   _ = try repo(in: plain, "deep")                        // depth-2 repo under a plain dir
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
-  let flat = try scanner().discover(root: root, recursive: false, db: db)
+  let flat = try scanner().discover(root: root, recursive: false, database: database)
   #expect(Set(flat.map { $0.source.directory.lastPathComponent }) == ["alpha", "beta"])
-  let deep = try scanner().discover(root: root, recursive: true, db: db)
+  let deep = try scanner().discover(root: root, recursive: true, database: database)
   #expect(Set(deep.map { $0.source.directory.lastPathComponent }) == ["alpha", "beta", "deep"])
 }
 
 @Test func rootItselfARepoYieldsOneCandidateNoChildInspection() throws {
   let (repoRoot, _) = try makeCommittedRepo()
   _ = try repo(in: repoRoot, "nested")                   // a repo inside the repo's working tree
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
-  let found = try scanner().discover(root: repoRoot, recursive: true, db: db)
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
+  let found = try scanner().discover(root: repoRoot, recursive: true, database: database)
   #expect(found.count == 1)                              // prune-on-detect: interior not scanned
   #expect(found.first?.source.directory == repoRoot)
 }
@@ -46,8 +46,8 @@ private func repo(in parent: URL, _ name: String) throws -> URL {
   let nm = root.appendingPathComponent("node_modules")
   try FileManager.default.createDirectory(at: nm, withIntermediateDirectories: true)
   _ = try repo(in: nm, "buried")                         // repo inside node_modules
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
-  let found = try scanner().discover(root: root, recursive: true, db: db)
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
+  let found = try scanner().discover(root: root, recursive: true, database: database)
   #expect(found.isEmpty)
 }
 
@@ -59,8 +59,8 @@ private func repo(in parent: URL, _ name: String) throws -> URL {
   // make one inside root to exercise the walk:
   let wtInside = root.appendingPathComponent("main-wt")
   _ = Git.run(["worktree", "add", "-b", "inside", wtInside.path], in: main.path)
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
-  let found = try scanner().discover(root: root, recursive: true, db: db)
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
+  let found = try scanner().discover(root: root, recursive: true, database: database)
   #expect(found.filter { $0.source.kind == SourceKind.gitRepo }.count == 1)   // only the main tree
   #expect(found.first?.source.directory == main)
 }
@@ -69,10 +69,10 @@ private func repo(in parent: URL, _ name: String) throws -> URL {
   let root = try makePlainDir("root")
   let a = try repo(in: root, "alpha")
   _ = try repo(in: root, "beta")
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   // Pre-register alpha exactly as accept/resolve would key it.
-  _ = try ProjectResolver(db: db).resolve(path: ProjectResolver.canonical(Git.commonDir(in: a.path)!), kind: SourceKind.gitRepo)
-  let found = try scanner().discover(root: root, recursive: false, db: db)
+  _ = try ProjectResolver(database: database).resolve(path: ProjectResolver.canonical(Git.commonDir(in: a.path)!), kind: SourceKind.gitRepo)
+  let found = try scanner().discover(root: root, recursive: false, database: database)
   let byName = Dictionary(uniqueKeysWithValues: found.map { ($0.source.directory.lastPathComponent, $0.alreadyRegistered) })
   #expect(byName["alpha"] == true)
   #expect(byName["beta"] == false)
@@ -82,53 +82,53 @@ private func repo(in parent: URL, _ name: String) throws -> URL {
   let root = try makePlainDir("root")
   _ = try repo(in: root, "alpha")
   try makeSymlink(at: root.appendingPathComponent("loop"), to: root)   // self-cycle
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
-  let found = try scanner().discover(root: root, recursive: true, db: db)   // must not hang
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
+  let found = try scanner().discover(root: root, recursive: true, database: database)   // must not hang
   #expect(found.map { $0.source.directory.lastPathComponent } == ["alpha"])
 }
 
 @Test func acceptRegistersAndHooksThenIsIdempotent() throws {
   let root = try makePlainDir("root")
   let a = try repo(in: root, "alpha")
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
-  let cands = try scanner().discover(root: root, recursive: false, db: db).map(\.source)
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
+  let cands = try scanner().discover(root: root, recursive: false, database: database).map(\.source)
 
-  let r1 = try scanner().accept(cands, db: db)
+  let r1 = try scanner().accept(cands, database: database)
   #expect(r1.registered.count == 1)
   #expect(r1.setupFailed.isEmpty)
-  #expect(try db.read { db in try Source.all.fetchAll(db).count } == 1)
+  #expect(try database.read { database in try Source.all.fetchAll(database).count } == 1)
   // hook installed with our marker
   let hook = try String(contentsOf: a.appendingPathComponent(".git/hooks/post-commit"), encoding: .utf8)
   #expect(hook.contains("pensieve-managed-hook"))
 
-  let r2 = try scanner().accept(cands, db: db)           // re-accept: clean no-op
+  let r2 = try scanner().accept(cands, database: database)           // re-accept: clean no-op
   #expect(r2.alreadyRegistered.count == 1)
   #expect(r2.registered.isEmpty)
-  #expect(try db.read { db in try Source.all.fetchAll(db).count } == 1)   // no duplicate
+  #expect(try database.read { database in try Source.all.fetchAll(database).count } == 1)   // no duplicate
 }
 
 @Test func acceptForeignHookRepoRecordsFailureButKeepsSourceAndContinues() throws {
   let root = try makePlainDir("root")
   let bad = try repo(in: root, "bad"); try writeForeignHook(in: bad)
   _ = try repo(in: root, "good")
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
-  let cands = try scanner().discover(root: root, recursive: false, db: db).map(\.source)
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
+  let cands = try scanner().discover(root: root, recursive: false, database: database).map(\.source)
 
-  let r = try scanner().accept(cands, db: db)
+  let r = try scanner().accept(cands, database: database)
   #expect(r.registered.count == 2)                        // BOTH sources created (batch not aborted)
   #expect(r.setupFailed.count == 1)                       // bad repo's hook install refused
   #expect(r.setupFailed.first?.0.directory.lastPathComponent == "bad")
-  #expect(try db.read { db in try Source.all.fetchAll(db).count } == 2)  // bad still tracked
+  #expect(try database.read { database in try Source.all.fetchAll(database).count } == 2)  // bad still tracked
 }
 
 @Test func acceptOnWorktreeTreeDoesNotThrowAndHooksOnlyMain() throws {
   let root = try makePlainDir("root")
   let main = try repo(in: root, "main")
   _ = Git.run(["worktree", "add", "-b", "inside", root.appendingPathComponent("main-wt").path], in: main.path)
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
-  let cands = try scanner().discover(root: root, recursive: true, db: db).map(\.source)
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
+  let cands = try scanner().discover(root: root, recursive: true, database: database).map(\.source)
 
-  let r = try scanner().accept(cands, db: db)             // must NOT throw
+  let r = try scanner().accept(cands, database: database)             // must NOT throw
   #expect(r.registered.count == 1)
   #expect(r.setupFailed.isEmpty)
   // worktree's .git is still a file (never hooked)

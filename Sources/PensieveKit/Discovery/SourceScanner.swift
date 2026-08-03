@@ -17,16 +17,16 @@ public struct SourceScanner {
   /// Write-free: walks `root`, detects sources, dedups by (kind, identityKey), and annotates
   /// whether each is already registered (read-only DB query). Never follows directory symlinks;
   /// skips unreadable directories rather than aborting.
-  public func discover(root: URL, recursive: Bool, db: any DatabaseWriter) throws -> [DiscoveryCandidate] {
+  public func discover(root: URL, recursive: Bool, database: any DatabaseWriter) throws -> [DiscoveryCandidate] {
     var found: [DiscoveredSource] = []
     walk(root, depth: 0, recursive: recursive, into: &found)
 
     var seen = Set<String>()
     let unique = found.filter { seen.insert("\($0.kind)\u{0}\($0.identityKey)").inserted }
 
-    return try db.read { db in
+    return try database.read { database in
       try unique.map { s in
-        let exists = try Source.where { $0.kind.eq(s.kind) && $0.key.eq(s.identityKey) }.fetchOne(db) != nil
+        let exists = try Source.where { $0.kind.eq(s.kind) && $0.key.eq(s.identityKey) }.fetchOne(database) != nil
         return DiscoveryCandidate(source: s, alreadyRegistered: exists)
       }
     }
@@ -35,12 +35,12 @@ public struct SourceScanner {
   /// Best-effort per candidate: find-or-create the Source(+Node), then run the type's capture
   /// setup. An onRegister failure (e.g. foreign hooks) is recorded and the Source is kept; the
   /// batch never aborts on it. Rethrows only on a catastrophic DB failure.
-  public func accept(_ candidates: [DiscoveredSource], db: any DatabaseWriter) throws -> AcceptResult {
+  public func accept(_ candidates: [DiscoveredSource], database: any DatabaseWriter) throws -> AcceptResult {
     var result = AcceptResult()
-    let resolver = ProjectResolver(db: db)
+    let resolver = ProjectResolver(database: database)
     for c in candidates {
-      let existedBefore = try db.read { db in
-        try Source.where { $0.kind.eq(c.kind) && $0.key.eq(c.identityKey) }.fetchOne(db) != nil
+      let existedBefore = try database.read { database in
+        try Source.where { $0.kind.eq(c.kind) && $0.key.eq(c.identityKey) }.fetchOne(database) != nil
       }
       _ = try resolver.resolve(path: c.identityKey, kind: c.kind)   // find-or-create (own write tx)
       if existedBefore { result.alreadyRegistered.append(c) } else { result.registered.append(c) }

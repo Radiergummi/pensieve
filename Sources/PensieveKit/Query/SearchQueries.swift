@@ -51,13 +51,13 @@ public enum SearchQueries {
   public static func search(query rawQuery: String,
                             visibleNodeIDs: Set<UUID>,
                             includeArchived: Bool = false,
-                            _ db: any DatabaseReader) throws -> SearchResults {
+                            _ database: any DatabaseReader) throws -> SearchResults {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= minQueryLength else { return SearchResults() }
     func hit(_ s: String) -> Bool { s.range(of: query, options: .caseInsensitive) != nil }
 
-    return try db.read { db in
-      let nodes = try Node.order { $0.name }.fetchAll(db)
+    return try database.read { database in
+      let nodes = try Node.order { $0.name }.fetchAll(database)
         .filter { n -> Bool in
           guard visibleNodeIDs.contains(n.id) else { return false }
           return n.state == .active || (includeArchived && n.state == .archived)
@@ -84,7 +84,7 @@ public enum SearchQueries {
       // LOOSE ENDS — open + not-noise, visible nodes only. rank 0 = text match, 1 = quote-only.
       let nameByID = Dictionary(nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
       let archivedNodeIDs = Set(nodes.filter { $0.state == .archived }.map { $0.id })
-      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
+      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
         .filter { matchedNodeIDs.contains($0.nodeID) }
       var leScored: [(rank: Int, le: LooseEnd)] = []
       for le in ends {

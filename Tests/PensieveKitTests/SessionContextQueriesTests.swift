@@ -4,28 +4,28 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func nodeIDResolvesABoundNonGitPath() throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
   let dir = try makePlainDir()   // not a git repo
-  let (node, _) = try ProjectResolver(db: db).resolve(path: dir.path, kind: SourceKind.claudeCode)
-  let resolved = try SessionContextQueries.nodeID(forPath: dir.path, db)
+  let (node, _) = try ProjectResolver(database: database).resolve(path: dir.path, kind: SourceKind.claudeCode)
+  let resolved = try SessionContextQueries.nodeID(forPath: dir.path, database)
   #expect(resolved == node.id)
 }
 
 @Test func nodeIDResolvesAGitCwdViaCommonDir() throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
   let (repo, _) = try makeCommittedRepo()
   // Seed the source the way capture does: keyed on the git common-dir, not the working dir.
   let common = Git.commonDir(in: repo.path)!
-  let (node, _) = try ProjectResolver(db: db).resolve(path: common, kind: SourceKind.gitRepo)
+  let (node, _) = try ProjectResolver(database: database).resolve(path: common, kind: SourceKind.gitRepo)
   // Resolve from the WORKING directory — must map through the common-dir to the same node.
-  let resolved = try SessionContextQueries.nodeID(forPath: repo.path, db)
+  let resolved = try SessionContextQueries.nodeID(forPath: repo.path, database)
   #expect(resolved == node.id)
 }
 
 @Test func nodeIDReturnsNilForUnboundPath() throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
   let dir = try makePlainDir()
-  #expect(try SessionContextQueries.nodeID(forPath: dir.path, db) == nil)
+  #expect(try SessionContextQueries.nodeID(forPath: dir.path, database) == nil)
 }
 
 /// A canned provider: `complete` returns a fixed string so narration is deterministic and offline.
@@ -35,25 +35,25 @@ private struct StubProvider: LLMProvider {
 }
 
 /// Seeds one node with one event + one loose end; returns the node and the event.
-private func seedOneNode(_ db: any DatabaseWriter) throws -> (node: Node, event: Event) {
-  let (node, source) = try ProjectResolver(db: db).resolve(path: "/p/one", kind: SourceKind.claudeCode)
+private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, event: Event) {
+  let (node, source) = try ProjectResolver(database: database).resolve(path: "/p/one", kind: SourceKind.claudeCode)
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                     kind: CaptureKind.ccSession, summary: "did the thing", detailJSON: "{}", fingerprint: "f1")
-  try db.write { db in
-    try Event.insert { event }.execute(db)
+  try database.write { database in
+    try Event.insert { event }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "finish auth",
                quote: "we must finish the auth flow", role: "user", sourceMessageIndex: 0)
-    }.execute(db)
+    }.execute(database)
   }
   return (node, event)
 }
 
 @Test func bundleComposesGroundedState() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
-  let (node, _) = try seedOneNode(db)
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
+  let (node, _) = try seedOneNode(database)
   let bundle = try #require(try await SessionContextQueries.bundle(
-    forPath: "/p/one", nodeID: nil, db, now: Date(),
+    forPath: "/p/one", nodeID: nil, database, now: Date(),
     summaryBuilder: nil, providerKind: "fm", cache: nil))
   #expect(bundle.nodeID == node.id)
   #expect(bundle.openLooseEndCount == 1)
@@ -63,82 +63,82 @@ private func seedOneNode(_ db: any DatabaseWriter) throws -> (node: Node, event:
 }
 
 @Test func bundleReturnsNilForUnboundPath() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
   let bundle = try await SessionContextQueries.bundle(
-    forPath: "/nope", nodeID: nil, db, now: Date(),
+    forPath: "/nope", nodeID: nil, database, now: Date(),
     summaryBuilder: nil, providerKind: "fm", cache: nil)
   #expect(bundle == nil)
 }
 
 @Test func bundleServesCachedProseWithoutABuilder() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
-  let (node, _) = try seedOneNode(db)
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
+  let (node, _) = try seedOneNode(database)
   let cache = NarrationCache(url: tempURL("narr"))
   // Pre-warm the cache with the exact key bundle() will compute (top recentLimit events, same provider).
-  let events = try ProjectQueries.status(db, node: node, limit: 8).recentEvents
+  let events = try ProjectQueries.status(database, node: node, limit: 8).recentEvents
   cache.put(NarrationCacheKey.make(events: events, provider: "fm"), prose: "cached recap")
   let bundle = try #require(try await SessionContextQueries.bundle(
-    forPath: "/p/one", nodeID: nil, db, now: Date(),
+    forPath: "/p/one", nodeID: nil, database, now: Date(),
     summaryBuilder: nil, providerKind: "fm", cache: cache))
   #expect(bundle.prose == "cached recap")
 }
 
 @Test func bundleNarratesOnMissAndWritesThrough() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
-  let (node, _) = try seedOneNode(db)
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
+  let (node, _) = try seedOneNode(database)
   let cache = NarrationCache(url: tempURL("narr"))
   let builder = SummaryBuilder(provider: StubProvider(reply: "fresh recap"))
   let bundle = try #require(try await SessionContextQueries.bundle(
-    forPath: "/p/one", nodeID: nil, db, now: Date(),
+    forPath: "/p/one", nodeID: nil, database, now: Date(),
     summaryBuilder: builder, providerKind: "fm", cache: cache))
   #expect(bundle.prose == "fresh recap")
   // Write-through: the key is now populated.
-  let events = try ProjectQueries.status(db, node: node, limit: 8).recentEvents
+  let events = try ProjectQueries.status(database, node: node, limit: 8).recentEvents
   #expect(cache.get(NarrationCacheKey.make(events: events, provider: "fm")) == "fresh recap")
 }
 
 @Test func bundleLooseEndCarriesItsID() async throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
-  let (node, event) = try seedOneNode(db)
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
+  let (node, event) = try seedOneNode(database)
   // The one loose end seeded by seedOneNode — read its id back for the assertion.
-  let seededID = try #require(try await db.read { db in
-    try LooseEnd.where { $0.nodeID.eq(node.id) }.fetchOne(db)?.id
+  let seededID = try #require(try await database.read { database in
+    try LooseEnd.where { $0.nodeID.eq(node.id) }.fetchOne(database)?.id
   })
   _ = event
   let bundle = try #require(try await SessionContextQueries.bundle(
-    forPath: "/p/one", nodeID: nil, db, now: Date(),
+    forPath: "/p/one", nodeID: nil, database, now: Date(),
     summaryBuilder: nil, providerKind: "fm", cache: nil))
   #expect(bundle.looseEnds.first?.id == seededID)
 }
 
 @Test func rankedContextFiltersSlicesAndCites() throws {
-  let db = try openCanonicalDatabase(at: tempURL("sc"))
-  let resolver = ProjectResolver(db: db)
+  let database = try openCanonicalDatabase(at: tempURL("sc"))
+  let resolver = ProjectResolver(database: database)
   let (work, ws) = try resolver.resolve(path: "/p/work", kind: SourceKind.claudeCode)
   let (personal, ps) = try resolver.resolve(path: "/p/personal", kind: SourceKind.claudeCode)
   let old = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
-  try db.write { db in
-    try Node.where { $0.id.eq(work.id) }.update { $0.context = #bind(NodeContext.work) }.execute(db)
-    try Node.where { $0.id.eq(personal.id) }.update { $0.context = #bind(NodeContext.personal) }.execute(db)
+  try database.write { database in
+    try Node.where { $0.id.eq(work.id) }.update { $0.context = #bind(NodeContext.work) }.execute(database)
+    try Node.where { $0.id.eq(personal.id) }.update { $0.context = #bind(NodeContext.personal) }.execute(database)
     let ew = Event(nodeID: work.id, sourceID: ws.id, occurredAt: old, kind: CaptureKind.ccSession,
                    summary: "s", detailJSON: "{}", fingerprint: "w1")
     let ep = Event(nodeID: personal.id, sourceID: ps.id, occurredAt: old, kind: CaptureKind.ccSession,
                    summary: "s", detailJSON: "{}", fingerprint: "p1")
-    try Event.insert { ew }.execute(db); try Event.insert { ep }.execute(db)
+    try Event.insert { ew }.execute(database); try Event.insert { ep }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: work.id, sourceEventID: ew.id, text: "t",
                quote: "ship the work thing", role: "user", sourceMessageIndex: 0)
-    }.execute(db)
+    }.execute(database)
   }
   // Unfiltered: both nodes present.
-  #expect(try SessionContextQueries.rankedContext(limit: 5, context: nil, db, now: Date()).count == 2)
+  #expect(try SessionContextQueries.rankedContext(limit: 5, context: nil, database, now: Date()).count == 2)
   // Work focus: personal is muted; the work node's top loose end is cited.
-  let work_only = try SessionContextQueries.rankedContext(limit: 5, context: NodeContext.work, db, now: Date())
+  let work_only = try SessionContextQueries.rankedContext(limit: 5, context: NodeContext.work, database, now: Date())
   #expect(work_only.count == 1)
   #expect(work_only.first?.nodeID == work.id)
   #expect(work_only.first?.topLooseEnd == "ship the work thing")
   // Limit is honored.
-  #expect(try SessionContextQueries.rankedContext(limit: 1, context: nil, db, now: Date()).count == 1)
+  #expect(try SessionContextQueries.rankedContext(limit: 1, context: nil, database, now: Date()).count == 1)
 }
 
 // MARK: - Recall tests
@@ -155,23 +155,23 @@ private func writeRecallTranscript(_ prefix: String, _ lines: [(type: String, te
 }
 
 /// Inserts an event pointing at `transcriptURL` + a loose end citing `citedIndex` with `quote`.
-private func seedRecallLooseEnd(_ db: any DatabaseWriter, transcriptURL: URL,
+private func seedRecallLooseEnd(_ database: any DatabaseWriter, transcriptURL: URL,
                                 citedIndex: Int, quote: String) throws -> LooseEnd {
-  let (node, source) = try ProjectResolver(db: db).resolve(path: "/p/recall", kind: SourceKind.claudeCode)
+  let (node, source) = try ProjectResolver(database: database).resolve(path: "/p/recall", kind: SourceKind.claudeCode)
   let detail = try encodeJSON(["transcriptPath": transcriptURL.path, "sessionID": "s", "prompts": "2"])
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                     kind: CaptureKind.ccSession, summary: "session", detailJSON: detail, fingerprint: "fpr")
   let le = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "finish the migration",
                     quote: quote, role: "user", sourceMessageIndex: citedIndex)
-  try db.write { db in
-    try Event.insert { event }.execute(db)
-    try LooseEnd.insert { le }.execute(db)
+  try database.write { database in
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert { le }.execute(database)
   }
   return le
 }
 
 @Test func recallReturnsWindowAroundCitedUserPrompt() throws {
-  let db = try openCanonicalDatabase(at: tempURL("recall-happy"))
+  let database = try openCanonicalDatabase(at: tempURL("recall-happy"))
   let url = try writeRecallTranscript("recall-happy", [
     (type: "user", text: "hello there"),                            // index 0
     (type: "assistant", text: "sure working on it"),                // index 1
@@ -179,8 +179,8 @@ private func seedRecallLooseEnd(_ db: any DatabaseWriter, transcriptURL: URL,
     (type: "assistant", text: "got it"),                            // index 3
     (type: "user", text: "thanks"),                                 // index 4
   ])
-  let le = try seedRecallLooseEnd(db, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
-  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 1, db))
+  let le = try seedRecallLooseEnd(database, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
+  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 1, database))
   #expect(bundle.transcriptAvailable)
   #expect(bundle.quote == "finish the migration")
   #expect(bundle.looseEndText == "finish the migration")
@@ -191,27 +191,27 @@ private func seedRecallLooseEnd(_ db: any DatabaseWriter, transcriptURL: URL,
 }
 
 @Test func recallRespectsRadius() throws {
-  let db = try openCanonicalDatabase(at: tempURL("recall-radius"))
+  let database = try openCanonicalDatabase(at: tempURL("recall-radius"))
   let url = try writeRecallTranscript("recall-radius", [
     (type: "user", text: "aaa"), (type: "assistant", text: "bbb"),
     (type: "user", text: "we still need to finish the migration"),  // index 2 (cited)
     (type: "assistant", text: "ccc"), (type: "user", text: "ddd"),
   ])
-  let le = try seedRecallLooseEnd(db, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
-  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 4, db))
+  let le = try seedRecallLooseEnd(database, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
+  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 4, database))
   #expect(bundle.messages.map(\.index) == [0, 1, 2, 3, 4])   // wider radius → whole clamped window
 }
 
 @Test func recallReturnsNilForUnknownID() throws {
-  let db = try openCanonicalDatabase(at: tempURL("recall-unknown"))
-  #expect(try SessionContextQueries.recall(looseEndID: UUID(), radius: 8, db) == nil)
+  let database = try openCanonicalDatabase(at: tempURL("recall-unknown"))
+  #expect(try SessionContextQueries.recall(looseEndID: UUID(), radius: 8, database) == nil)
 }
 
 @Test func recallDegradesHonestlyWhenTranscriptGone() throws {
-  let db = try openCanonicalDatabase(at: tempURL("recall-gone"))
+  let database = try openCanonicalDatabase(at: tempURL("recall-gone"))
   let gone = tempURL("recall-gone-file", ext: "jsonl")   // never written to disk
-  let le = try seedRecallLooseEnd(db, transcriptURL: gone, citedIndex: 0, quote: "anything")
-  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 8, db))
+  let le = try seedRecallLooseEnd(database, transcriptURL: gone, citedIndex: 0, quote: "anything")
+  let bundle = try #require(try SessionContextQueries.recall(looseEndID: le.id, radius: 8, database))
   #expect(bundle.transcriptAvailable == false)
   #expect(bundle.messages.isEmpty)
   #expect(bundle.quote == "anything")   // stored quote preserved for honest fallback

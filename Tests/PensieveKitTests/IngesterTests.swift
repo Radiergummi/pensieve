@@ -7,17 +7,17 @@ import SQLiteData
   // Arrange: a real temp git repo with one commit.
   let (repo, hash) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   let payload = GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(payload))
 
   // Act
-  let n = try await Ingester(spool: spool, db: db).drain()
+  let n = try await Ingester(spool: spool, database: database).drain()
 
   // Assert
   #expect(n == 1)
-  let events = try await db.read { db in try Event.all.fetchAll(db) }
+  let events = try await database.read { database in try Event.all.fetchAll(database) }
   #expect(events.count == 1)
   #expect(events.first?.summary == "first commit")
   #expect(events.first?.kind == CaptureKind.gitCommit)
@@ -28,7 +28,7 @@ import SQLiteData
   // A real temp git repo with one commit (for the good row).
   let (repo, hash) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   // Bad row: git.commit kind but undecodable payload (missing required fields) → throws in ingest.
   try spool.append(kind: CaptureKind.gitCommit, payload: "{}")
@@ -36,10 +36,10 @@ import SQLiteData
   let payload = GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(payload))
 
-  let n = try await Ingester(spool: spool, db: db).drain()
+  let n = try await Ingester(spool: spool, database: database).drain()
 
   #expect(n == 1)   // only the good row ingested
-  let events = try await db.read { db in try Event.all.fetchAll(db) }
+  let events = try await database.read { database in try Event.all.fetchAll(database) }
   #expect(events.count == 1)
   #expect(events.first?.summary == "first commit")
 
@@ -52,27 +52,27 @@ import SQLiteData
 
 @Test func unknownKindIsDropped() async throws {
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   try spool.append(kind: "bogus.unknown", payload: "{}")
 
-  let n = try await Ingester(spool: spool, db: db).drain()
+  let n = try await Ingester(spool: spool, database: database).drain()
 
   #expect(n == 0)                        // dropped row creates no events
   #expect(try spool.pending().isEmpty)   // marked done via default: branch, not retried
-  let events = try await db.read { db in try Event.all.fetchAll(db) }
+  let events = try await database.read { database in try Event.all.fetchAll(database) }
   #expect(events.isEmpty)                // nothing enriched
 }
 
 @Test func unattributableSessionStaysPending() async throws {
   // Transcript path doesn't exist → TranscriptParser returns cwd == nil → ingest throws.
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   let payload = SessionRefPayload(transcriptPath: "/tmp/does-not-exist-\(UUID().uuidString).jsonl")
   try spool.append(kind: CaptureKind.ccSession, payload: try encodeJSON(payload))
 
-  let n = try await Ingester(spool: spool, db: db).drain()
+  let n = try await Ingester(spool: spool, database: database).drain()
 
   #expect(n == 0)
   let pending = try spool.pending()
@@ -83,13 +83,13 @@ import SQLiteData
 @Test func unknownKindDoesNotCountAsEvent() async throws {
   let (repo, hash) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   try spool.append(kind: "bogus.x", payload: "{}")
   let payload = GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(payload))
 
-  let n = try await Ingester(spool: spool, db: db).drain()
+  let n = try await Ingester(spool: spool, database: database).drain()
 
   #expect(n == 1)                        // only the real commit counts
   #expect(try spool.pending().isEmpty)   // both rows marked (unknown dropped, commit ingested)
@@ -101,7 +101,7 @@ import SQLiteData
   try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
 
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   let commitPayload = GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")
   try spool.append(kind: CaptureKind.gitCommit, payload: try encodeJSON(commitPayload))
@@ -114,12 +114,12 @@ import SQLiteData
   let sessionPayload = SessionRefPayload(transcriptPath: transcript.path)
   try spool.append(kind: CaptureKind.ccSession, payload: try encodeJSON(sessionPayload))
 
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let projects = try await db.read { db in try Node.all.fetchAll(db) }
+  let projects = try await database.read { database in try Node.all.fetchAll(database) }
   #expect(projects.count == 1)
 
-  let events = try await db.read { db in try Event.all.fetchAll(db) }
+  let events = try await database.read { database in try Event.all.fetchAll(database) }
   let commitEvent = events.first { $0.kind == CaptureKind.gitCommit }
   let sessionEvent = events.first { $0.kind == CaptureKind.ccSession }
   #expect(commitEvent != nil && sessionEvent != nil)
@@ -133,7 +133,7 @@ import SQLiteData
 @Test func sessionFromDegenerateRootIsNotAttributed() async throws {
   for root in ["/", NSHomeDirectory()] {
     let spool = try CaptureSpool(at: tempURL("spool"))
-    let db = try openCanonicalDatabase(at: tempURL("canon"))
+    let database = try openCanonicalDatabase(at: tempURL("canon"))
 
     let transcript = tempURL("session", ext: "jsonl")
     let line = """
@@ -142,10 +142,10 @@ import SQLiteData
     try line.write(to: transcript, atomically: true, encoding: .utf8)
     try spool.append(kind: CaptureKind.ccSession, payload: try encodeJSON(SessionRefPayload(transcriptPath: transcript.path)))
 
-    _ = try await Ingester(spool: spool, db: db).drain()
+    _ = try await Ingester(spool: spool, database: database).drain()
 
-    #expect(try await db.read { db in try Node.all.fetchAll(db) }.isEmpty, "cwd \(root) must not create a node")
-    #expect(try await db.read { db in try Event.all.fetchAll(db) }.isEmpty, "cwd \(root) must not create an event")
+    #expect(try await database.read { database in try Node.all.fetchAll(database) }.isEmpty, "cwd \(root) must not create a node")
+    #expect(try await database.read { database in try Event.all.fetchAll(database) }.isEmpty, "cwd \(root) must not create an event")
     #expect(try spool.pending().isEmpty, "row must be consumed, not retried forever")
   }
 }
@@ -174,46 +174,46 @@ import SQLiteData
   let hash = Git.run(["rev-parse", "HEAD"], in: repo.path)!
 
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "feature-x")))
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
-  let ev = try await db.read { db in try Event.all.fetchAll(db) }.first { $0.kind == CaptureKind.gitCommit }
+  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first { $0.kind == CaptureKind.gitCommit }
   #expect(ev?.branchKey == "feature-x")
 }
 
 @Test func defaultBranchCommitHasNilBranchKey() async throws {
   let (repo, hash) = try makeCommittedRepo()   // commit is on "main"
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")))
-  _ = try await Ingester(spool: spool, db: db).drain()
-  let ev = try await db.read { db in try Event.all.fetchAll(db) }.first
+  _ = try await Ingester(spool: spool, database: database).drain()
+  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first
   #expect(ev?.branchKey == nil)
 }
 
 @Test func newActivityResurfacesArchivedNodeAndAncestors() async throws {
   let (repo, _) = try makeCommittedRepo()
   let spool = try CaptureSpool(at: tempURL("spool"))
-  let db = try openCanonicalDatabase(at: tempURL("canon"))
+  let database = try openCanonicalDatabase(at: tempURL("canon"))
 
   // First commit → drain → creates the project node P (active, root).
   let hash1 = Git.run(["rev-parse", "HEAD"], in: repo.path)!
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash1, branch: "main")))
-  _ = try await Ingester(spool: spool, db: db).drain()
-  let proj = try #require(try await db.read { db in try Node.all.fetchAll(db).first })
+  _ = try await Ingester(spool: spool, database: database).drain()
+  let proj = try #require(try await database.read { database in try Node.all.fetchAll(database).first })
 
   // Give P a parent domain D and an extra child strand S.
-  let domain = try #require(try NodeCommands.add(db, name: "Work", kind: .domain, parent: nil, description: ""))
-  _ = try NodeCommands.reparent(db, nodeID: proj.id, newParentID: domain.id)
-  let strand = try #require(try NodeCommands.add(db, name: "sibling", kind: .strand, parent: proj.name, description: ""))
+  let domain = try #require(try NodeCommands.add(database, name: "Work", kind: .domain, parent: nil, description: ""))
+  _ = try NodeCommands.reparent(database, nodeID: proj.id, newParentID: domain.id)
+  let strand = try #require(try NodeCommands.add(database, name: "sibling", kind: .strand, parent: proj.name, description: ""))
 
   // Archive the whole subtree (D + P + S archived), then make D muted (sticky).
-  #expect(try NodeCommands.archive(db, nodeID: domain.id))
-  try await db.write { db in try Node.where { $0.id.eq(domain.id) }.update { $0.state = NodeState.muted }.execute(db) }
+  #expect(try NodeCommands.archive(database, nodeID: domain.id))
+  try await database.write { database in try Node.where { $0.id.eq(domain.id) }.update { $0.state = NodeState.muted }.execute(database) }
 
   // Second commit → drain → attributes to P.
   try "more".write(to: repo.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
@@ -222,10 +222,10 @@ import SQLiteData
   let hash2 = Git.run(["rev-parse", "HEAD"], in: repo.path)!
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash2, branch: "main")))
-  _ = try await Ingester(spool: spool, db: db).drain()
+  _ = try await Ingester(spool: spool, database: database).drain()
 
   func state(_ id: UUID) async throws -> String? {
-    try await db.read { db in try Node.where { $0.id.eq(id) }.fetchOne(db)?.state.rawValue }
+    try await database.read { database in try Node.where { $0.id.eq(id) }.fetchOne(database)?.state.rawValue }
   }
   #expect(try await state(proj.id) == "active")     // resurfaced
   #expect(try await state(domain.id) == "muted")    // ancestor stays sticky

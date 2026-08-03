@@ -12,9 +12,9 @@ private func throwawayDefaults() -> (UserDefaults, String) {
 @Test func gatherReportsDisabledSyncAndEmptyStore() throws {
   let (d, suite) = throwawayDefaults()
   defer { d.removePersistentDomain(forName: suite) }
-  let db = try openCanonicalDatabase(at: tempURL("status-empty"))
+  let database = try openCanonicalDatabase(at: tempURL("status-empty"))
 
-  let status = SystemStatusGatherer.gather(db: db, defaults: d,
+  let status = SystemStatusGatherer.gather(database: database, defaults: d,
                                            cloudConfig: nil, apiKey: nil,
                                            backgroundSyncEnabled: false,
                                            syncLogURL: tempURL("absent", ext: "log"))
@@ -33,37 +33,37 @@ private func throwawayDefaults() -> (UserDefaults, String) {
   let log = tempURL("sync", ext: "log")
   try "ran".write(to: log, atomically: true, encoding: .utf8)
 
-  let status = SystemStatusGatherer.gather(db: nil, defaults: d,
+  let status = SystemStatusGatherer.gather(database: nil, defaults: d,
                                            cloudConfig: nil, apiKey: nil,
                                            backgroundSyncEnabled: true, syncLogURL: log)
 
   #expect(status.backgroundSyncEnabled == true)
   let mtime = try #require(status.lastSyncAt)
   #expect(abs(mtime.timeIntervalSinceNow) < 60)       // just written
-  #expect(status.lastEventAt == nil)                  // nil db degrades, never throws
+  #expect(status.lastEventAt == nil)                  // nil database degrades, never throws
 }
 
 @Test func gatherReportsMostRecentEventTime() throws {
   let (d, suite) = throwawayDefaults()
   defer { d.removePersistentDomain(forName: suite) }
-  let db = try openCanonicalDatabase(at: tempURL("status-events"))
-  let resolver = ProjectResolver(db: db)
+  let database = try openCanonicalDatabase(at: tempURL("status-events"))
+  let resolver = ProjectResolver(database: database)
   let (node, source) = try resolver.resolve(path: "/p/one", kind: SourceKind.claudeCode)
 
   let old = Date(timeIntervalSince1970: 1_000_000)
   let newest = Date(timeIntervalSince1970: 2_000_000)
-  try db.write { db in
+  try database.write { database in
     try Event.insert {
       Event(nodeID: node.id, sourceID: source.id, occurredAt: old, kind: CaptureKind.ccSession,
             summary: "old", detailJSON: "{}", fingerprint: "e1")
-    }.execute(db)
+    }.execute(database)
     try Event.insert {
       Event(nodeID: node.id, sourceID: source.id, occurredAt: newest, kind: CaptureKind.ccSession,
             summary: "new", detailJSON: "{}", fingerprint: "e2")
-    }.execute(db)
+    }.execute(database)
   }
 
-  let status = SystemStatusGatherer.gather(db: db, defaults: d,
+  let status = SystemStatusGatherer.gather(database: database, defaults: d,
                                            cloudConfig: nil, apiKey: nil,
                                            backgroundSyncEnabled: false,
                                            syncLogURL: tempURL("absent", ext: "log"))
@@ -80,14 +80,14 @@ private func throwawayDefaults() -> (UserDefaults, String) {
                            baseURL: CloudFlavor.anthropic.defaultBaseURL,
                            model: "claude-sonnet-5")
 
-  let configured = SystemStatusGatherer.gather(db: nil, defaults: d,
+  let configured = SystemStatusGatherer.gather(database: nil, defaults: d,
                                                cloudConfig: config, apiKey: "sk-test",
                                                backgroundSyncEnabled: false,
                                                syncLogURL: tempURL("absent", ext: "log"))
   #expect(configured.providerKind == "cloud")
 
   // Selected but keyless ⇒ falls back to a local kind (never "cloud"), same as the factory.
-  let keyless = SystemStatusGatherer.gather(db: nil, defaults: d,
+  let keyless = SystemStatusGatherer.gather(database: nil, defaults: d,
                                             cloudConfig: config, apiKey: nil,
                                             backgroundSyncEnabled: false,
                                             syncLogURL: tempURL("absent", ext: "log"))

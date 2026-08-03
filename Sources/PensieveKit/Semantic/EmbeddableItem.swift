@@ -25,13 +25,13 @@ public enum EmbeddableCorpus {
   /// store already holds historical rows written before that guard existed.
   static func isSearchable(_ text: String) -> Bool { TextQuality.isProse(text) }
 
-  public static func gather(_ db: any DatabaseReader) throws -> [EmbeddableItem] {
-    try db.read { db in
+  public static func gather(_ database: any DatabaseReader) throws -> [EmbeddableItem] {
+    try database.read { database in
       var out: [EmbeddableItem] = []
       // Active AND archived: archiving hides work from the normal views, it does not make the work
       // unrecallable. `muted` stays out of the corpus entirely. Each item carries its owning node's
       // real state, which is what lets the query layer scope results per search scope.
-      let nodes = try Node.all.fetchAll(db)
+      let nodes = try Node.all.fetchAll(database)
         .filter { $0.state == .active || $0.state == .archived }
       let stateByNodeID = Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
                                      uniquingKeysWith: { a, _ in a })
@@ -39,13 +39,13 @@ public enum EmbeddableCorpus {
         out.append(.init(itemID: n.id.uuidString, kind: "node", nodeID: n.id.uuidString,
                          state: n.state.rawValue, text: [n.name, n.description].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
-      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(db)
+      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       for le in ends {
         guard let state = stateByNodeID[le.nodeID] else { continue }
         out.append(.init(itemID: le.id.uuidString, kind: "loose_end", nodeID: le.nodeID.uuidString,
                          state: state, text: [le.text, le.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
-      let events = try Event.all.fetchAll(db)
+      let events = try Event.all.fetchAll(database)
       for e in events {
         guard let state = stateByNodeID[e.nodeID] else { continue }
         let text: String?

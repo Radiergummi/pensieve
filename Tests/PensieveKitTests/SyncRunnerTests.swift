@@ -40,9 +40,9 @@ private func writeSession(_ projects: URL, _ sessionID: String, prompts: Int) th
   let txURL = try writeSession(projects, sessionID, prompts: 1)
 
   let spool = try CaptureSpool(at: tmp("sync-spool", ext: "sqlite"))
-  let db = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
+  let database = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
   func runner() -> SyncRunner {
-    SyncRunner(spool: spool, db: db, provider: NoopProvider(),
+    SyncRunner(spool: spool, database: database, provider: NoopProvider(),
                projectsDir: projects, now: { Date() })
   }
 
@@ -50,8 +50,8 @@ private func writeSession(_ projects: URL, _ sessionID: String, prompts: Int) th
   let s1 = try await runner().run()
   #expect(s1.discovered == 1)
   #expect(s1.ingested >= 1)
-  let ingested = try await db.read { db in
-    try Event.where { $0.fingerprint.eq(Fingerprint.session(sessionID: sessionID)) }.fetchOne(db)
+  let ingested = try await database.read { database in
+    try Event.where { $0.fingerprint.eq(Fingerprint.session(sessionID: sessionID)) }.fetchOne(database)
   }
   #expect(ingested != nil)
   let sizeAfter1 = ingested?.extractedTranscriptSize ?? -99
@@ -67,8 +67,8 @@ private func writeSession(_ projects: URL, _ sessionID: String, prompts: Int) th
   try handle.seekToEnd(); handle.write(Data(more.utf8)); try handle.close()
 
   _ = try await runner().run()
-  let after3 = try await db.read { db in
-    try Event.where { $0.fingerprint.eq(Fingerprint.session(sessionID: sessionID)) }.fetchOne(db)
+  let after3 = try await database.read { database in
+    try Event.where { $0.fingerprint.eq(Fingerprint.session(sessionID: sessionID)) }.fetchOne(database)
   }
   #expect((after3?.extractedTranscriptSize ?? -1) > sizeAfter1)   // re-extraction ran on growth
 }
@@ -85,18 +85,18 @@ private struct NamingProvider: LLMProvider {
   let projects = tmp("projects", ext: "d")
   try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
   let spool = try CaptureSpool(at: tmp("sync-spool", ext: "sqlite"))
-  let db = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
+  let database = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
 
   // A committed repo + one spooled commit → a project node born with the verbatim dir name.
   let (repo, hash) = try makeCommittedRepo()
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")))
 
-  let runner = SyncRunner(spool: spool, db: db, provider: NamingProvider(name: "Cool Project"),
+  let runner = SyncRunner(spool: spool, database: database, provider: NamingProvider(name: "Cool Project"),
                           projectsDir: projects, now: { Date() })
   _ = try await runner.run()
 
-  let node = try await db.read { db in try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(db) }.first!
+  let node = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(database) }.first!
   #expect(node.name == "Cool Project")
   #expect(Ingester.nameInferred(inMetadata: node.metadataJSON) == true)
 }
@@ -107,16 +107,16 @@ private struct NamingProvider: LLMProvider {
   let projects = tmp("projects", ext: "d")
   try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
   let spool = try CaptureSpool(at: tmp("sync-spool", ext: "sqlite"))
-  let db = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
+  let database = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
 
-  try await db.write { db in
+  try await database.write { database in
     let n = Node(name: "Indexed project", kind: NodeKind.project)
-    try Node.insert { n }.execute(db)
+    try Node.insert { n }.execute(database)
   }
 
   let idxURL = tmp("s", ext: "sqlite")
   let store = SemanticIndexStore(url: idxURL, dimension: 16, embedderVersion: "stub:16")
-  let runner = SyncRunner(spool: spool, db: db, provider: NoopProvider(), projectsDir: projects,
+  let runner = SyncRunner(spool: spool, database: database, provider: NoopProvider(), projectsDir: projects,
                          now: { Date() },
                          semanticIndexer: SemanticIndexer(store: store, embedder: StubEmbedder(dimension: 16)))
   _ = try await runner.run()

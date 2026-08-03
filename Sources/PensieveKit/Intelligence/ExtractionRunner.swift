@@ -11,20 +11,20 @@ public struct ExtractionResult: Sendable {
 }
 
 public struct ExtractionRunner {
-  let db: any DatabaseWriter
+  let database: any DatabaseWriter
   let provider: any LLMProvider
   let now: @Sendable () -> Date
 
-  public init(db: any DatabaseWriter, provider: any LLMProvider,
+  public init(database: any DatabaseWriter, provider: any LLMProvider,
               now: @escaping @Sendable () -> Date = Date.init) {
-    self.db = db; self.provider = provider; self.now = now
+    self.database = database; self.provider = provider; self.now = now
   }
 
   public func run() async throws -> [ExtractionResult] {
     // Every cc.session event is a candidate now — the extract-once filter is gone; a
     // byte-size gate and a message-count watermark decide what (if anything) to re-extract.
-    let events = try await db.read { db in
-      try Event.where { $0.kind.eq(CaptureKind.ccSession) }.fetchAll(db)
+    let events = try await database.read { database in
+      try Event.where { $0.kind.eq(CaptureKind.ccSession) }.fetchAll(database)
     }
 
     Log.extraction.info("Extraction start: \(events.count, privacy: .public) sessions to evaluate")
@@ -56,11 +56,11 @@ public struct ExtractionRunner {
         // watermark/size WITHOUT extracting — otherwise migration would resurface every
         // previously-resolved loose end.
         if event.extractedAt != nil && event.extractedTranscriptSize == -1 {
-          try await db.write { db in
+          try await database.write { database in
             try Event.where { $0.id.eq(event.id) }.update {
               $0.extractedMessageCount = messageCount
               $0.extractedTranscriptSize = size
-            }.execute(db)
+            }.execute(database)
           }
           continue
         }
@@ -94,7 +94,7 @@ public struct ExtractionRunner {
         // SalienceClassifier + classifyNonSalientIndices remain for the eval and future reuse.
 
         // Best-effort session recap for narration (Part B). `summarize` is non-throwing (nil on
-        // failure), computed BEFORE the synchronous db.write. This line is lexically inside the
+        // failure), computed BEFORE the synchronous database.write. This line is lexically inside the
         // per-session do/catch, but a summary failure can't reach the catch precisely BECAUSE
         // `summarize` is non-throwing — a nil/absent summary must not skip the loose-end insert or
         // the watermark advance. DO NOT add `try` here: it would let a failure abort the session
@@ -102,7 +102,7 @@ public struct ExtractionRunner {
         let work = await SessionSummarizer(provider: provider).summarize(session.messages)
 
         let stamp = now()
-        let inserted = try await db.write { db -> Int in
+        let inserted = try await database.write { database -> Int in
           var insertedCount = 0
           // Collapse against ALL existing loose ends in this node (verbatim, normalized),
           // regardless of status: re-extraction (the shrink→0 path re-mines the whole
@@ -110,7 +110,7 @@ public struct ExtractionRunner {
           // RESOLVED loose end the user already dismissed. Skip the scan when there is
           // nothing to insert.
           if !verified.isEmpty {
-            let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(db)
+            let existing = try LooseEnd.where { $0.nodeID.eq(event.nodeID) }.fetchAll(database)
             var seen = Set(existing.map { normalizeWhitespace($0.quote) })
             for v in verified {
               let key = normalizeWhitespace(v.quote)
@@ -119,7 +119,7 @@ public struct ExtractionRunner {
               try LooseEnd.insert {
                 LooseEnd(nodeID: event.nodeID, sourceEventID: event.id, text: v.text,
                          quote: v.quote, role: v.role, sourceMessageIndex: v.sourceMessageIndex)
-              }.execute(db)
+              }.execute(database)
               insertedCount += 1
             }
           }
@@ -129,7 +129,7 @@ public struct ExtractionRunner {
             $0.extractedMessageCount = messageCount
             $0.extractedTranscriptSize = size
             $0.workSummary = work ?? event.workSummary
-          }.execute(db)
+          }.execute(database)
           return insertedCount
         }
 

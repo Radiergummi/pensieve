@@ -147,7 +147,7 @@ final class AppModel {
   /// first run). Fixed for the session so cards don't shift under you while the window is open.
   let briefingSince: Date
 
-  @ObservationIgnored var db: (any DatabaseWriter)?
+  @ObservationIgnored var database: (any DatabaseWriter)?
   /// Persistent spool connection, reused for BOTH drains and the heartbeat. Opening a fresh
   /// connection per refresh/drain touches the store dir's `-shm`/`-wal` sidecars, which re-fires
   /// the FSEvents watch below into a busy-loop; a long-lived connection reads without that churn.
@@ -288,7 +288,7 @@ final class AppModel {
     started = true
     AppLog.app.info("App started, canonical=\(Stores.canonicalURL.path, privacy: .public) spool=\(Stores.spoolURL.path, privacy: .public)")
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
-    db = try? openCanonicalDatabase(at: Stores.canonicalURL)
+    database = try? openCanonicalDatabase(at: Stores.canonicalURL)
     loadNarrationCache()
     spool = try? CaptureSpool(at: Stores.spoolURL)   // persistent — see the property note above
     activeFocusContext = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
@@ -296,11 +296,11 @@ final class AppModel {
 
     // Liveness (retires the 3 s Timer). Watches are app-lifetime (this AppModel never deinits),
     // so the menu-bar glyph stays live even when the main window is closed.
-    if let db {
+    if let database {
       observationTask = Task { [weak self] in
-        let observation = ValueObservation.tracking { db in try Event.fetchCount(db) }
+        let observation = ValueObservation.tracking { database in try Event.fetchCount(database) }
         do {
-          for try await _ in observation.values(in: db) {
+          for try await _ in observation.values(in: database) {
             await self?.refreshDebouncer.schedule()   // in-process writes (own drains, future edits)
           }
         } catch { /* observation ended; watches still cover changes */ }
@@ -329,8 +329,8 @@ final class AppModel {
 
   private func drainThenRefresh() async {
     AppLog.app.info("Drain+refresh triggered")
-    if let db, let spool {
-      _ = try? await Ingester(spool: spool, db: db).drain()   // no LLM: spool → events only
+    if let database, let spool {
+      _ = try? await Ingester(spool: spool, database: database).drain()   // no LLM: spool → events only
     }
     refresh()
     // launch/⌘R: do NOT blanket-clear — cachedNarration/narration are key-aware, so unchanged
@@ -341,9 +341,9 @@ final class AppModel {
     // Best-effort semantic index catch-up (launch + ⌘R cadence, mirroring SpotlightIndexer above).
     // The sync daemon also runs this periodically; this just keeps ⌘F "Related" fresh sooner after
     // in-app activity. Detached + toggle-gated so it never blocks the UI refresh.
-    if AppDefaults.semanticSearchEnabled, let db {
+    if AppDefaults.semanticSearchEnabled, let database {
       let store = semanticStore, embedder = self.embedder
-      Task.detached { await SemanticIndexer(store: store, embedder: embedder).sync(db) }
+      Task.detached { await SemanticIndexer(store: store, embedder: embedder).sync(database) }
     }
   }
 
@@ -352,8 +352,8 @@ final class AppModel {
   /// narration cache or bump refreshToken (those are launch/⌘R semantics).
   private func drainThenRefreshFromWatch() async {
     AppLog.app.debug("Spool watcher fired -> drain")
-    if let db, let spool {
-      _ = try? await Ingester(spool: spool, db: db).drain()
+    if let database, let spool {
+      _ = try? await Ingester(spool: spool, database: database).drain()
     }
   }
 
@@ -390,20 +390,20 @@ final class AppModel {
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
   /// skipping the briefing cards / forest that only the main window needs.
   func refreshGlance() {
-    snapshot = MonitorSnapshot.gather(canonical: db, spool: spool)
-    guard let db else { return }
-    guard let raw = try? SmartLists.compute(db, now: Date()) else { return }
+    snapshot = MonitorSnapshot.gather(canonical: database, spool: spool)
+    guard let database else { return }
+    guard let raw = try? SmartLists.compute(database, now: Date()) else { return }
     let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
     lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
   }
 
   func refresh() {
     // Heartbeat from the persistent connections (opening fresh ones here would re-fire the store-dir
-    // watch into a busy-loop). Works before the db guard: nil connections degrade to a zero snapshot.
-    snapshot = MonitorSnapshot.gather(canonical: db, spool: spool)
-    guard let db else { return }
+    // watch into a busy-loop). Works before the database guard: nil connections degrade to a zero snapshot.
+    snapshot = MonitorSnapshot.gather(canonical: database, spool: spool)
+    guard let database else { return }
     let now = Date()
-    let fetched = (try? ProjectQueries.all(db)) ?? allNodes
+    let fetched = (try? ProjectQueries.all(database)) ?? allNodes
     let nodesChanged = fetched != allNodes
     if nodesChanged {
       allNodes = fetched
@@ -411,10 +411,10 @@ final class AppModel {
     }
     let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
 
-    if let raw = try? SmartLists.compute(db, now: now) {
+    if let raw = try? SmartLists.compute(database, now: now) {
       lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
     }
-    if let raw = try? BriefingQueries.cards(db, since: briefingSince, now: now) {
+    if let raw = try? BriefingQueries.cards(database, since: briefingSince, now: now) {
       briefingCards = activeFocusContext.isEmpty ? raw : raw.filter { visible.contains($0.node.id) }
     }
     if nodesChanged || activeFocusContext != lastForestContext {
@@ -423,7 +423,7 @@ final class AppModel {
       archivedForest = NodeForest.build(source.filter { $0.state == .archived })
       lastForestContext = activeFocusContext
     }
-    reviewCount = (try? SalienceReviewQueries.pendingCount(db)) ?? 0
+    reviewCount = (try? SalienceReviewQueries.pendingCount(database)) ?? 0
     if isSearching { runSearch() }
   }
 
@@ -507,7 +507,7 @@ final class AppModel {
   func runSearch() {
     searchTask?.cancel()
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard query.count >= SearchQueries.minQueryLength, let db else {
+    guard query.count >= SearchQueries.minQueryLength, let database else {
       searchResults = SearchResults()
       semanticHits = []
       expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
@@ -520,7 +520,7 @@ final class AppModel {
     searchTask = Task { [weak self] in
       let results = try? await Task.detached {
         try SearchQueries.search(query: query, visibleNodeIDs: visible,
-                                 includeArchived: includeArchived, db)
+                                 includeArchived: includeArchived, database)
       }.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchResults = results ?? SearchResults()
@@ -530,7 +530,7 @@ final class AppModel {
       let sem = await SemanticQueries.search(
         query: query, visibleNodeIDs: visible, excludingIDs: exact, k: 8, floor: 0.25,
         includeArchived: includeArchived,
-        store: self.semanticStore, embedder: self.embedder, db)
+        store: self.semanticStore, embedder: self.embedder, database)
       guard self.searchToken == token, !Task.isCancelled else { return }
       self.semanticHits = sem
     }
@@ -554,8 +554,8 @@ final class AppModel {
   /// resolution) falls back to the briefing. A since-closed end still resolves → opens its node
   /// (the closed row simply won't render). Window fronting is done by `applyDeepLink`.
   func openLooseEnd(_ id: UUID) {
-    guard let db,
-          let facts = try? LooseEndFactsQueries.facts(for: [id], db),
+    guard let database,
+          let facts = try? LooseEndFactsQueries.facts(for: [id], database),
           let f = facts.first else {
       sidebarSelection = .briefing
       selectedNodeID = nil
@@ -589,10 +589,10 @@ final class AppModel {
 
   func detail(for node: Node) -> (status: ProjectStatus, looseEnds: [LooseEndView]) {
     let fallback = ProjectStatus(project: node, recentEvents: [])
-    guard let db else { return (fallback, []) }
+    guard let database else { return (fallback, []) }
     let now = Date()
-    let status = (try? ProjectQueries.status(db, node: node, limit: 15)) ?? fallback
-    let ends = (try? LooseEndQueries.open(db, nodeID: node.id, now: now)) ?? []
+    let status = (try? ProjectQueries.status(database, node: node, limit: 15)) ?? fallback
+    let ends = (try? LooseEndQueries.open(database, nodeID: node.id, now: now)) ?? []
     return (status, ends)
   }
 
@@ -609,21 +609,21 @@ final class AppModel {
   /// Open loose ends for a node — the inspector's slice of `detail(for:)` (no status query).
   /// Loaded once per selection via the inspector's `.task`, never in a view `body`.
   func looseEnds(forNode nodeID: UUID) -> [LooseEndView] {
-    guard let db else { return [] }
-    return (try? LooseEndQueries.open(db, nodeID: nodeID, now: Date())) ?? []
+    guard let database else { return [] }
+    return (try? LooseEndQueries.open(database, nodeID: nodeID, now: Date())) ?? []
   }
 
   /// The cross-node audit queue for the Review Suggestions surface. Loaded off-`body` via `.task`.
   func reviewItems() -> [LooseEndView] {
-    guard let db else { return [] }
-    return (try? SalienceReviewQueries.pending(db, now: Date())) ?? []
+    guard let database else { return [] }
+    return (try? SalienceReviewQueries.pending(database, now: Date())) ?? []
   }
 
   /// Confirm a user salience label for a loose end (👍 salient / 👎 noise / "" clears).
   func setLooseEndLabel(_ looseEndID: UUID, _ label: String) {
-    guard let db else { return }
+    guard let database else { return }
     do {
-      let ok = try LooseEndCommands.setLabel(db, id: looseEndID, label: label)
+      let ok = try LooseEndCommands.setLabel(database, id: looseEndID, label: label)
       if !ok { refuse(String(localized: "update"), String(localized: "this loose end")) }
     } catch {
       fail(String(localized: "update"), String(localized: "this loose end"), error)
@@ -664,13 +664,13 @@ final class AppModel {
   /// Commit the New Node modal: insert fully-formed, select it.
   func commitNewNode(parent parentID: UUID?, name: String, kind: NodeKind,
                      icon: String, colorTag: String, context: String) {
-    guard let db else { return }
+    guard let database else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     do {
       // nil ⇒ the parent id didn't resolve (deleted under the menu). Name the PARENT: the new node
       // doesn't exist yet, so its own name would be meaningless in the copy.
-      guard let new = try NodeCommands.add(db, name: trimmed, kind: kind,
+      guard let new = try NodeCommands.add(database, name: trimmed, kind: kind,
                                            parent: parentID?.uuidString, description: "",
                                            icon: icon, colorTag: colorTag, context: context) else {
         let parentName = parentID.map { displayName($0) } ?? String(localized: "the top level")
@@ -688,12 +688,12 @@ final class AppModel {
   /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
   func updateNode(_ nodeID: UUID, name: String, kind: NodeKind,
                   icon: String, colorTag: String, context: String) {
-    guard let db else { return }
+    guard let database else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     let label = displayName(nodeID)
     do {
-      let ok = try NodeCommands.update(db, nodeID: nodeID, name: trimmed, kind: kind,
+      let ok = try NodeCommands.update(database, nodeID: nodeID, name: trimmed, kind: kind,
                                        icon: icon, colorTag: colorTag, context: context)
       if ok { refresh() } else { refuse(String(localized: "rename"), label) }
     } catch {
@@ -703,16 +703,16 @@ final class AppModel {
 
   /// Whether `nodeID` may be deleted (no live source or auto-birthed strand in its subtree → won't resurrect on sync).
   func canDelete(_ nodeID: UUID) -> Bool {
-    guard let db else { return false }
-    return (try? NodeCommands.subtreeIsActivityBorn(db, nodeID: nodeID)) == false
+    guard let database else { return false }
+    return (try? NodeCommands.subtreeIsActivityBorn(database, nodeID: nodeID)) == false
   }
 
   func move(_ nodeID: UUID, under newParentID: UUID?) {
-    guard let db else { return }
+    guard let database else { return }
     let label = displayName(nodeID)
     do {
       // false ⇒ cycle guard, unknown node, or unknown parent — all stale-state rejections.
-      let ok = try NodeCommands.reparent(db, nodeID: nodeID, newParentID: newParentID)
+      let ok = try NodeCommands.reparent(database, nodeID: nodeID, newParentID: newParentID)
       if ok { refresh() } else { refuse(String(localized: "move"), label) }
     } catch {
       fail(String(localized: "move"), label, error)
@@ -720,13 +720,13 @@ final class AppModel {
   }
 
   func archive(_ nodeID: UUID) {
-    guard let db else { return }
+    guard let database else { return }
     let label = displayName(nodeID)
     // Captured BEFORE the write: after it, the subtree has left the active tree.
     let subtree = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
     do {
       // false ⇒ the node vanished between menu-open and click — a stale-state rejection.
-      let ok = try NodeCommands.archive(db, nodeID: nodeID)
+      let ok = try NodeCommands.archive(database, nodeID: nodeID)
       guard ok else { refuse(String(localized: "archive"), label); return }
       // Selection moves off the whole archived subtree so we don't strand the detail pane on a
       // node that just left the active tree.
@@ -739,10 +739,10 @@ final class AppModel {
   }
 
   func unarchive(_ nodeID: UUID) {
-    guard let db else { return }
+    guard let database else { return }
     let label = displayName(nodeID)
     do {
-      let ok = try NodeCommands.unarchive(db, nodeID: nodeID)
+      let ok = try NodeCommands.unarchive(database, nodeID: nodeID)
       if ok { refresh() } else { refuse(String(localized: "unarchive"), label) }
     } catch {
       fail(String(localized: "unarchive"), label, error)
@@ -754,17 +754,17 @@ final class AppModel {
   /// violation (no data loss — but "FOREIGN KEY constraint failed" is not copy we show a human). So
   /// pre-check both nodes and emit the normal refusal instead. `group` itself stays untouched.
   func merge(_ sourceID: UUID, into targetID: UUID) {
-    guard let db, sourceID != targetID else { return }
+    guard let database, sourceID != targetID else { return }
     let label = displayName(sourceID)
 
-    let bothExist = (try? db.read { db in
-      try Node.where { $0.id.eq(sourceID) }.fetchOne(db) != nil
-        && Node.where { $0.id.eq(targetID) }.fetchOne(db) != nil
+    let bothExist = (try? database.read { database in
+      try Node.where { $0.id.eq(sourceID) }.fetchOne(database) != nil
+        && Node.where { $0.id.eq(targetID) }.fetchOne(database) != nil
     }) ?? false
     guard bothExist else { refuse(String(localized: "merge"), label); return }
 
     do {
-      try ProjectResolver(db: db).group(targetID, into: [sourceID])
+      try ProjectResolver(database: database).group(targetID, into: [sourceID])
       // The source node is gone: move any state that referenced it onto the survivor.
       if selectedNodeID == sourceID { selectedNodeID = targetID }
       if sidebarSelection == .node(sourceID) { sidebarSelection = .node(targetID) }
@@ -784,10 +784,10 @@ final class AppModel {
 
   /// Delete a (source-free) node and its subtree via the Kit cascade. Moves selection off it.
   func deleteNode(_ nodeID: UUID) {
-    guard let db else { return }
+    guard let database else { return }
     let label = displayName(nodeID)
     do {
-      switch try NodeCommands.delete(db, nodeID: nodeID) {
+      switch try NodeCommands.delete(database, nodeID: nodeID) {
       case .deleted:
         if selectedNodeID == nodeID { selectedNodeID = nil }
         if sidebarSelection == .node(nodeID) { sidebarSelection = .briefing }
@@ -823,8 +823,8 @@ final class AppModel {
   /// nil only when the source event is missing; a present-but-unavailable transcript returns a
   /// ProvenanceContext with `transcriptAvailable == false`.
   func provenance(for looseEnd: LooseEnd) async -> ProvenanceContext? {
-    guard let db else { return nil }
-    return try? await Task.detached { try ProvenanceQueries.context(db, looseEnd: looseEnd) }.value
+    guard let database else { return nil }
+    return try? await Task.detached { try ProvenanceQueries.context(database, looseEnd: looseEnd) }.value
   }
 
   /// Cached narration for `node` IFF the stored key still matches the current events. Synchronous —
@@ -852,8 +852,8 @@ final class AppModel {
   /// True when `node` is a project with exactly one git source — i.e. `NodeDescriber` can act on
   /// it. Gates the DetailView's describe/refresh button so it never appears where it would no-op.
   func isDescribable(_ node: Node) -> Bool {
-    guard node.kind == .project, let db else { return false }
-    let key = try? db.read { db in try NodeDescriber.soleGitRepoKey(db, nodeID: node.id) }
+    guard node.kind == .project, let database else { return false }
+    let key = try? database.read { database in try NodeDescriber.soleGitRepoKey(database, nodeID: node.id) }
     return (key ?? nil) != nil
   }
 
@@ -861,8 +861,8 @@ final class AppModel {
   /// provider, then refresh so the new text renders. Best-effort — a failure/empty leaves the
   /// existing description untouched. Returns the outcome so the view can show an inline note.
   func describeNode(_ node: Node) async -> NodeDescriber.Outcome {
-    guard let db else { return .ineligible }
-    let outcome = await NodeDescriber.describe(db, nodeID: node.id, provider: descriptionProvider, force: true)
+    guard let database else { return .ineligible }
+    let outcome = await NodeDescriber.describe(database, nodeID: node.id, provider: descriptionProvider, force: true)
     refresh()
     return outcome
   }

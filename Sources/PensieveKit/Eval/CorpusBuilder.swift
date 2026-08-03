@@ -10,10 +10,10 @@ public enum CorpusBuilder {
   /// Reads the canonical store (+ transcripts/git) and produces a frozen, stratified corpus for
   /// all tasks. Read-only against the DB; never crashes on an empty store (0 nodes/sources ⇒
   /// empty pools ⇒ `([], manifest-with-zero-counts)`).
-  public static func build(db: any DatabaseReader, projectsDir: URL, config: EvalConfig) throws -> ([CorpusItem], CorpusManifest) {
-    let narrationPool = try buildNarrationPool(db: db)
+  public static func build(database: any DatabaseReader, projectsDir: URL, config: EvalConfig) throws -> ([CorpusItem], CorpusManifest) {
+    let narrationPool = try buildNarrationPool(database: database)
     let extractionPool = buildExtractionPool(projectsDir: projectsDir)
-    let descriptionPool = try buildDescriptionPool(db: db)
+    let descriptionPool = try buildDescriptionPool(database: database)
 
     let narrationItems = CorpusSampler.select(from: narrationPool, size: config.corpusSize, seed: config.corpusSeed)
     let extractionItems = CorpusSampler.select(from: extractionPool, size: config.corpusSize, seed: config.corpusSeed)
@@ -77,12 +77,12 @@ public enum CorpusBuilder {
 
   // MARK: - Narration pool (active nodes with events; the emptiest node is the stress case)
 
-  private static func buildNarrationPool(db: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
-    let activeNodes = try db.read { db in try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db) }
+  private static func buildNarrationPool(database: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
+    let activeNodes = try database.read { database in try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database) }
     var withEvents: [(node: Node, events: [Event])] = []
     for node in activeNodes {
-      let events = try db.read { db in
-        try Event.where { $0.nodeID.eq(node.id) }.order { $0.occurredAt.desc() }.limit(60).fetchAll(db)
+      let events = try database.read { database in
+        try Event.where { $0.nodeID.eq(node.id) }.order { $0.occurredAt.desc() }.limit(60).fetchAll(database)
       }
       withEvents.append((node, events))
     }
@@ -144,8 +144,8 @@ public enum CorpusBuilder {
 
   // MARK: - Description pool (nodes whose sole source is a git repo)
 
-  private static func buildDescriptionPool(db: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
-    let sources = try db.read { db in try Source.all.fetchAll(db) }
+  private static func buildDescriptionPool(database: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
+    let sources = try database.read { database in try Source.all.fetchAll(database) }
     let byNode = Dictionary(grouping: sources, by: { $0.nodeID })
     var pool: [(strata: String, isStress: Bool, item: CorpusItem)] = []
     for (nodeID, nodeSources) in byNode {

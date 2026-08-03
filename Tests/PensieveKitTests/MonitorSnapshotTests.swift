@@ -34,22 +34,22 @@ import SQLiteData
 
 @Test func gatherCountsCanonicalEventsAndOpenLooseEnds() throws {
   let canonURL = tempURL("canon")
-  let db = try openCanonicalDatabase(at: canonURL)
+  let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/app/.git")
   let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "abc"))
-  try db.write { db in
-    try Node.insert { node }.execute(db)
-    try Source.insert { src }.execute(db)
-    try Event.insert { ev }.execute(db)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { src }.execute(database)
+    try Event.insert { ev }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t1", quote: "q1", status: "open")
-    }.execute(db)
+    }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t2", quote: "q2", status: "resolved")
-    }.execute(db)
+    }.execute(database)
   }
   let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: tempURL("absent-spool"), now: Date())
   #expect(snap.eventCount == 1)
@@ -87,27 +87,27 @@ import SQLiteData
   roConfig.readonly = true
   let roQueue = try DatabaseQueue(path: spoolURL.path, configuration: roConfig)
   #expect(throws: (any Error).self) {
-    try roQueue.write { db in
-      try db.execute(sql: "INSERT INTO captures(ts, kind, payload) VALUES(?, ?, ?)",
+    try roQueue.write { database in
+      try database.execute(sql: "INSERT INTO captures(ts, kind, payload) VALUES(?, ?, ?)",
                       arguments: ["x", "y", "z"])
     }
   }
 
   // Canonical store: migrate via the normal path, then read the same file read-only.
   let canonURL = tempURL("canon-ro")
-  let db = try openCanonicalDatabase(at: canonURL)
+  let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/app-ro/.git")
   let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "ro-abc"))
-  try db.write { db in
-    try Node.insert { node }.execute(db)
-    try Source.insert { src }.execute(db)
-    try Event.insert { ev }.execute(db)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { src }.execute(database)
+    try Event.insert { ev }.execute(database)
   }
   let roDB = try openCanonicalDatabaseReadOnly(at: canonURL)
-  let roEventCount = try roDB.read { db in try Event.all.fetchAll(db).count }
+  let roEventCount = try roDB.read { database in try Event.all.fetchAll(database).count }
   #expect(roEventCount == 1)
 
   let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: spoolURL, now: t.addingTimeInterval(120))
@@ -117,27 +117,27 @@ import SQLiteData
 
 @Test func gatherExcludesConfirmedNoiseFromOpenLooseEndCount() throws {
   let canonURL = tempURL("canon-noise")
-  let db = try openCanonicalDatabase(at: canonURL)
+  let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/noise/.git")
   let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "noise-abc"))
-  try db.write { db in
-    try Node.insert { node }.execute(db)
-    try Source.insert { src }.execute(db)
-    try Event.insert { ev }.execute(db)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { src }.execute(database)
+    try Event.insert { ev }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t1", quote: "unlabeled item")
-    }.execute(db)
+    }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t2", quote: "confirmed noise",
                label: LooseEndLabel.noise)
-    }.execute(db)
+    }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t3", quote: "only suggested noise",
                labelSuggestion: LooseEndLabel.noise)
-    }.execute(db)
+    }.execute(database)
   }
   let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: tempURL("absent-spool-noise"), now: Date())
   #expect(snap.looseEndCount == 2)   // confirmed-noise excluded; unlabeled + suggestion-only-noise kept
@@ -152,23 +152,23 @@ import SQLiteData
   try spool.append(kind: CaptureKind.gitCommit, payload: "{}", at: now.addingTimeInterval(-60))
 
   let canonURL = tempURL("canon-open")
-  let db = try openCanonicalDatabase(at: canonURL)
+  let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/app-open/.git")
   let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: now,
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "open-abc"))
-  try db.write { db in
-    try Node.insert { node }.execute(db)
-    try Source.insert { src }.execute(db)
-    try Event.insert { ev }.execute(db)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { src }.execute(database)
+    try Event.insert { ev }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t", quote: "q", status: "open")
-    }.execute(db)
+    }.execute(database)
   }
 
   let viaURL = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: spoolURL, now: now)
-  let viaOpen = MonitorSnapshot.gather(canonical: db, spool: spool, now: now)
+  let viaOpen = MonitorSnapshot.gather(canonical: database, spool: spool, now: now)
   #expect(viaOpen == viaURL)
   #expect(viaOpen.status == .active)
   #expect(viaOpen.eventCount == 1 && viaOpen.looseEndCount == 1 && viaOpen.spoolPending == 1)

@@ -33,7 +33,7 @@ public enum SemanticQueries {
                             includeArchived: Bool = false,
                             store: SemanticIndexStore,
                             embedder: any TextEmbedder,
-                            _ db: any DatabaseReader) async -> [SemanticHit] {
+                            _ database: any DatabaseReader) async -> [SemanticHit] {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= 2, store.isAvailable,
           // `.first` is doubly optional now (batch nil vs. this-item nil) — both mean "no query
@@ -50,7 +50,7 @@ public enum SemanticQueries {
       let raw = store.knn(query: qvec, k: kFetch, includeArchived: includeArchived)
       let hits = buildHits(raw, k: k, floor: floor, visibleNodeIDs: visibleNodeIDs,
                            excludingIDs: excludingIDs, includeArchived: includeArchived,
-                           query: query, db)
+                           query: query, database)
       if hits.count >= k || raw.count < kFetch || kFetch >= maxFetch { return hits }
       if let last = raw.last, last.similarity < floor { return hits }
       kFetch = min(kFetch * 4, maxFetch)
@@ -63,14 +63,14 @@ public enum SemanticQueries {
   private static func buildHits(_ raw: [KNNResult], k: Int, floor: Double,
                                 visibleNodeIDs: Set<UUID>, excludingIDs: Set<UUID>,
                                 includeArchived: Bool,
-                                query: String, _ db: any DatabaseReader) -> [SemanticHit] {
+                                query: String, _ database: any DatabaseReader) -> [SemanticHit] {
     var hits: [SemanticHit] = []
     for r in raw {
       guard r.similarity >= floor,
             let nodeID = UUID(uuidString: r.nodeID), visibleNodeIDs.contains(nodeID) else { continue }
       guard let itemID = UUID(uuidString: r.itemID), !excludingIDs.contains(itemID) else { continue }
       guard let hit = try? resolve(kind: r.kind, itemID: itemID, similarity: r.similarity,
-                                   includeArchived: includeArchived, query: query, db) else { continue }
+                                   includeArchived: includeArchived, query: query, database) else { continue }
       hits.append(hit)
       if hits.count == k { break }
     }
@@ -83,26 +83,26 @@ public enum SemanticQueries {
   /// dropped here. Same predicate shape as `SearchQueries` uses for exact search.
   private static func resolve(kind: String, itemID: UUID, similarity: Double,
                               includeArchived: Bool, query: String,
-                              _ db: any DatabaseReader) throws -> SemanticHit? {
+                              _ database: any DatabaseReader) throws -> SemanticHit? {
     func eligible(_ n: Node) -> Bool {
       n.state == .active || (includeArchived && n.state == .archived)
     }
-    return try db.read { db in
+    return try database.read { database in
       switch kind {
       case "node":
-        guard let n = try Node.where({ $0.id.eq(itemID) }).fetchOne(db), eligible(n) else { return nil }
+        guard let n = try Node.where({ $0.id.eq(itemID) }).fetchOne(database), eligible(n) else { return nil }
         return SemanticHit(id: n.id, kind: kind, nodeID: n.id, nodeName: n.name, title: n.name,
                            snippet: SnippetMaker.make(from: n.description.isEmpty ? n.name : n.description, matching: query),
                            similarity: similarity, isArchived: n.state == .archived)
       case "loose_end":
-        guard let le = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) }).fetchOne(db),
-              let n = try Node.where({ $0.id.eq(le.nodeID) }).fetchOne(db), eligible(n) else { return nil }
+        guard let le = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) }).fetchOne(database),
+              let n = try Node.where({ $0.id.eq(le.nodeID) }).fetchOne(database), eligible(n) else { return nil }
         return SemanticHit(id: le.id, kind: kind, nodeID: le.nodeID, nodeName: n.name, title: le.text,
                            snippet: SnippetMaker.make(from: le.text, matching: query),
                            similarity: similarity, isArchived: n.state == .archived)
       case "event":
-        guard let e = try Event.where({ $0.id.eq(itemID) }).fetchOne(db),
-              let n = try Node.where({ $0.id.eq(e.nodeID) }).fetchOne(db), eligible(n) else { return nil }
+        guard let e = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),
+              let n = try Node.where({ $0.id.eq(e.nodeID) }).fetchOne(database), eligible(n) else { return nil }
         let body = (e.workSummary?.isEmpty == false ? e.workSummary! : e.summary)
         return SemanticHit(id: e.id, kind: kind, nodeID: e.nodeID, nodeName: n.name, title: body,
                            snippet: SnippetMaker.make(from: body, matching: query),

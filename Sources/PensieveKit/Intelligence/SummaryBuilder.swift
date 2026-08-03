@@ -43,18 +43,18 @@ public struct SummaryBuilder: Sendable {
     """
   }
 
-  public func build(_ db: any DatabaseWriter, node: Node, now: Date) async throws -> ProjectSummary? {
+  public func build(_ database: any DatabaseWriter, node: Node, now: Date) async throws -> ProjectSummary? {
     // Key off the node the caller holds — NOT its name. Node names aren't unique (two distinct
     // repos can share a basename), so a name lookup would resolve an arbitrary same-named node
     // and, e.g., narrate an empty one while the real one's activity stays invisible.
-    let status = try ProjectQueries.status(db, node: node, limit: 15)
+    let status = try ProjectQueries.status(database, node: node, limit: 15)
     // Nothing captured for this node (e.g. a scanned-but-untouched git repo): skip it rather
     // than hand the model an empty fact sheet, which it "narrates" by hallucinating or echoing
     // the prompt. A loose end can't exist without a source event, so no events ⇒ nothing grounded.
     guard !status.recentEvents.isEmpty else { return nil }
     let facts = Self.assembleFacts(project: status.project, events: status.recentEvents)
     let narration = (try? await provider.complete(prompt: Self.makePrompt(facts: facts))) ?? facts   // fall back to raw facts
-    let ends = try LooseEndQueries.open(db, nodeID: status.project.id, now: now)
+    let ends = try LooseEndQueries.open(database, nodeID: status.project.id, now: now)
     return ProjectSummary(
       whatItIs: "\(status.project.name) — \(status.project.state.rawValue)",
       lastWorkDone: narration,

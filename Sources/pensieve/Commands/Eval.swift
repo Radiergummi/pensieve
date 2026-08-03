@@ -34,13 +34,13 @@ struct Eval: AsyncParsableCommand {
 
       // Eval is a strictly read-only observer of the canonical store — it never creates one.
       // No store on disk (or unopenable) degrades to an empty, gracefully-written corpus.
-      guard let db = try? openCanonicalReadOnly() else {
+      guard let database = try? openCanonicalReadOnly() else {
         let manifest = CorpusManifest(seed: cfg.corpusSeed, contentHash: CorpusHash.hash([]), counts: [:], stressItems: [])
         try CorpusBuilder.write([], manifest: manifest, to: EvalPaths.corpusDir())
         print("Sampled 0 items; corpus \(manifest.contentHash). (no canonical store found)")
         return
       }
-      let (items, manifest) = try CorpusBuilder.build(db: db, projectsDir: PensievePaths.claudeProjectsURL(), config: cfg)
+      let (items, manifest) = try CorpusBuilder.build(database: database, projectsDir: PensievePaths.claudeProjectsURL(), config: cfg)
       try CorpusBuilder.write(items, manifest: manifest, to: EvalPaths.corpusDir())
       print("Sampled \(items.count) items; corpus \(manifest.contentHash).")
     }

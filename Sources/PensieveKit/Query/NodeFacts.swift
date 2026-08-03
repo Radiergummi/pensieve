@@ -15,29 +15,29 @@ public struct NodeFacts: Sendable {
 
 public enum NodeFactsQueries {
   /// Active nodes with their grounded facts (the same live set `NextQueries` surfaces).
-  public static func all(_ db: any DatabaseReader, now: Date) throws -> [NodeFacts] {
-    try db.read { db in
-      try Node.where { $0.state.eq(NodeState.active) }.fetchAll(db).map { try facts(for: $0, db, now: now) }
+  public static func all(_ database: any DatabaseReader, now: Date) throws -> [NodeFacts] {
+    try database.read { database in
+      try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database).map { try facts(for: $0, database, now: now) }
     }
   }
 
   /// Facts for specific node ids, **any state** (so a Spotlight tap on a since-archived node resolves).
-  public static func facts(for ids: [UUID], _ db: any DatabaseReader, now: Date) throws -> [NodeFacts] {
-    try db.read { db in
+  public static func facts(for ids: [UUID], _ database: any DatabaseReader, now: Date) throws -> [NodeFacts] {
+    try database.read { database in
       try ids.compactMap { id in
-        guard let node = try Node.where({ $0.id.eq(id) }).fetchOne(db) else { return nil }
-        return try facts(for: node, db, now: now)
+        guard let node = try Node.where({ $0.id.eq(id) }).fetchOne(database) else { return nil }
+        return try facts(for: node, database, now: now)
       }
     }
   }
 
-  private static func facts(for node: Node, _ db: Database, now: Date) throws -> NodeFacts {
+  private static func facts(for node: Node, _ database: Database, now: Date) throws -> NodeFacts {
     let latest = try Event.where { $0.nodeID.eq(node.id) }
-      .order { $0.occurredAt.desc() }.limit(1).fetchOne(db)
+      .order { $0.occurredAt.desc() }.limit(1).fetchOne(database)
     let dormant = latest.map {
       Calendar.current.dateComponents([.day], from: $0.occurredAt, to: now).day ?? 0
     } ?? 0
-    let open = try LooseEnd.where { $0.nodeID.eq(node.id) && LooseEnd.isOpen($0) }.fetchCount(db)
+    let open = try LooseEnd.where { $0.nodeID.eq(node.id) && LooseEnd.isOpen($0) }.fetchCount(database)
     return NodeFacts(node: node, openLooseEnds: open, daysDormant: dormant)
   }
 }
