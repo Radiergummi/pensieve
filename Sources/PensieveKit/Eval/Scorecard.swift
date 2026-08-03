@@ -26,10 +26,10 @@ public struct Recommendation: Sendable, Codable, Equatable {
 }
 
 public enum Aggregate {
-  public static func median(_ xs: [Double]) -> Double? {
-    guard !xs.isEmpty else { return nil }
-    let s = xs.sorted(); let n = s.count
-    return n % 2 == 1 ? s[n/2] : (s[n/2 - 1] + s[n/2]) / 2
+  public static func median(_ values: [Double]) -> Double? {
+    guard !values.isEmpty else { return nil }
+    let sorted = values.sorted(); let count = sorted.count
+    return count % 2 == 1 ? sorted[count/2] : (sorted[count/2 - 1] + sorted[count/2]) / 2
   }
   public static func majorityFabrication(_ flags: [Bool]) -> Bool {
     guard !flags.isEmpty else { return false }
@@ -51,11 +51,11 @@ public enum DecisionEngine {
     // A model clears the bar only ROBUSTLY (by ≥ noiseMargin on soft axes). The precision
     // hard-gate (reproduced fabrication) excludes a model regardless of every other score —
     // and it applies to EVERYONE, including the on-device incumbent.
-    func clears(_ s: CellScore) -> Bool {
-      if task == "extraction" && s.reproducedFabrication { return false }
-      if let p = bar.precision, (s.precision ?? -1) + 1e-9 < p { return false }
-      if let r = bar.recall, (s.recall ?? -1) + 1e-9 < r + noiseMargin { return false }
-      if let q = bar.quality, (s.quality ?? -1) + 1e-9 < q + noiseMargin { return false }
+    func clears(_ score: CellScore) -> Bool {
+      if task == "extraction" && score.reproducedFabrication { return false }
+      if let precisionBar = bar.precision, (score.precision ?? -1) + 1e-9 < precisionBar { return false }
+      if let recallBar = bar.recall, (score.recall ?? -1) + 1e-9 < recallBar + noiseMargin { return false }
+      if let qualityBar = bar.quality, (score.quality ?? -1) + 1e-9 < qualityBar + noiseMargin { return false }
       return true
     }
     let cleared = scores.filter(clears)
@@ -65,11 +65,11 @@ public enum DecisionEngine {
     // incumbent ($0, local) tops this whenever it clears, so we never switch to cloud merely for
     // quality-above-bar. A challenger wins only when the incumbent is EXCLUDED (failed the bar or
     // reproduced a fabrication).
-    let ranked = cleared.sorted { a, b in
-      if a.isOnDevice != b.isOnDevice { return a.isOnDevice && !b.isOnDevice }
-      if a.costUSD != b.costUSD { return a.costUSD < b.costUSD }
-      if a.latencyP50 != b.latencyP50 { return a.latencyP50 < b.latencyP50 }
-      return (a.quality ?? 0) > (b.quality ?? 0)
+    let ranked = cleared.sorted { lhs, rhs in
+      if lhs.isOnDevice != rhs.isOnDevice { return lhs.isOnDevice && !rhs.isOnDevice }
+      if lhs.costUSD != rhs.costUSD { return lhs.costUSD < rhs.costUSD }
+      if lhs.latencyP50 != rhs.latencyP50 { return lhs.latencyP50 < rhs.latencyP50 }
+      return (lhs.quality ?? 0) > (rhs.quality ?? 0)
     }
     guard let winner = ranked.first else {
       return Recommendation(task: task, winner: incumbentLabel, clearedBar: clearedLabels,

@@ -132,7 +132,7 @@ public struct SemanticIndexStore: Sendable {
   /// `muted` is excluded in BOTH modes — the filter is an allow-list, never a deny-list, so a
   /// future state can never leak in by omission. The SQL fragment is chosen from a Bool (no
   /// interpolated caller input), so there is no injection surface.
-  public func knn(query: [Float], k: Int, includeArchived: Bool) -> [KNNResult] {
+  public func knn(query: [Float], limit: Int, includeArchived: Bool) -> [KNNResult] {
     guard let database else { return [] }
     let json = "[" + query.map { String($0) }.joined(separator: ",") + "]"
     let filter = includeArchived
@@ -142,7 +142,7 @@ public struct SemanticIndexStore: Sendable {
       try Row.fetchAll(database, sql: """
         SELECT item_id, kind, node_id, distance FROM embeddings
         WHERE embedding MATCH ? AND k = ? \(filter) ORDER BY distance
-        """, arguments: [json, k]).map { r in
+        """, arguments: [json, limit]).map { r in
         KNNResult(itemID: r["item_id"], kind: r["kind"], nodeID: r["node_id"],
                   similarity: EmbeddingMath.cosine(fromL2: r["distance"]))
       }

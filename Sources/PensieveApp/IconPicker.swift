@@ -9,9 +9,9 @@ enum EmojiCatalog {
 
   private static func build(_ ranges: [ClosedRange<UInt32>]) -> [String] {
     var out: [String] = []
-    for r in ranges {
-      for v in r {
-        guard let scalar = Unicode.Scalar(v) else { continue }
+    for range in ranges {
+      for scalarValue in range {
+        guard let scalar = Unicode.Scalar(scalarValue) else { continue }
         let props = scalar.properties
         if props.isEmoji && props.isEmojiPresentation { out.append(String(scalar)) }
       }
@@ -30,10 +30,10 @@ enum EmojiCatalog {
     Category(id: "symbols", symbol: "heart", emoji: build([0x2600...0x26FF, 0x1F532...0x1F53D])),
   ]
 
-  /// A lowercase Unicode name for search, e.g. "😀" → "grinning face". Uses the system transform.
+  /// A lowercase Unicode name for search, emojiValue.g. "😀" → "grinning face". Uses the system transform.
   static func name(of emoji: String) -> String {
-    let t = emoji.applyingTransform(.toUnicodeName, reverse: false) ?? ""
-    return t.replacingOccurrences(of: "\\N{", with: "").replacingOccurrences(of: "}", with: "").lowercased()
+    let unicodeName = emoji.applyingTransform(.toUnicodeName, reverse: false) ?? ""
+    return unicodeName.replacingOccurrences(of: "\\N{", with: "").replacingOccurrences(of: "}", with: "").lowercased()
   }
 }
 
@@ -46,8 +46,8 @@ struct IconToggleRow: View {
   @State private var showSymbol = false
 
   private var isEmoji: Bool { if case .emoji = AppearanceIcon.parse(icon) { return true }; return false }
-  private var currentEmoji: String? { if case .emoji(let e) = AppearanceIcon.parse(icon) { return e }; return nil }
-  private var currentSymbol: String? { if case .sfSymbol(let n) = AppearanceIcon.parse(icon) { return n }; return nil }
+  private var currentEmoji: String? { if case .emoji(let emojiValue) = AppearanceIcon.parse(icon) { return emojiValue }; return nil }
+  private var currentSymbol: String? { if case .sfSymbol(let symbolName) = AppearanceIcon.parse(icon) { return symbolName }; return nil }
 
   var body: some View {
     HStack(spacing: 12) {
@@ -55,7 +55,7 @@ struct IconToggleRow: View {
       Button { showEmoji = true } label: {
         ZStack {
           Circle().fill(isEmoji ? tint.opacity(0.25) : Color.secondary.opacity(0.15))
-          if let e = currentEmoji { Text(e).font(.system(size: 22)) } else { Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(.secondary) }
+          if let emojiValue = currentEmoji { Text(emojiValue).font(.system(size: 22)) } else { Image(systemName: "face.smiling").font(.system(size: 20)).foregroundStyle(.secondary) }
         }.frame(width: 44, height: 44)
       }
       .buttonStyle(.plain)
@@ -85,9 +85,9 @@ struct EmojiPickerPopover: View {
   @State private var category = EmojiCatalog.categories.first!.id
 
   private var shown: [String] {
-    let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-    if !q.isEmpty {
-      return EmojiCatalog.categories.flatMap(\.emoji).filter { EmojiCatalog.name(of: $0).contains(q) }
+    let trimmedQuery = query.trimmingCharacters(in: .whitespaces).lowercased()
+    if !trimmedQuery.isEmpty {
+      return EmojiCatalog.categories.flatMap(\.emoji).filter { EmojiCatalog.name(of: $0).contains(trimmedQuery) }
     }
     return EmojiCatalog.categories.first { $0.id == category }?.emoji ?? []
   }
@@ -97,17 +97,17 @@ struct EmojiPickerPopover: View {
       TextField("Search", text: $query).textFieldStyle(.roundedBorder)
       ScrollView {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(34)), count: 6), spacing: 6) {
-          ForEach(shown, id: \.self) { e in
-            Button { onPick(e) } label: { Text(e).font(.system(size: 24)) }.buttonStyle(.plain)
+          ForEach(shown, id: \.self) { emojiValue in
+            Button { onPick(emojiValue) } label: { Text(emojiValue).font(.system(size: 24)) }.buttonStyle(.plain)
           }
         }
       }.frame(height: 220)
       if query.isEmpty {
         HStack(spacing: 4) {
-          ForEach(EmojiCatalog.categories) { c in
-            Button { category = c.id } label: {
-              Image(systemName: c.symbol).font(.system(size: 13))
-                .foregroundStyle(category == c.id ? Color.accentColor : .secondary)
+          ForEach(EmojiCatalog.categories) { category in
+            Button { category = category.id } label: {
+              Image(systemName: category.symbol).font(.system(size: 13))
+                .foregroundStyle(category == category.id ? Color.accentColor : .secondary)
             }.buttonStyle(.plain).frame(maxWidth: .infinity)
           }
         }
@@ -124,8 +124,8 @@ struct SymbolPickerPopover: View {
   @State private var query = ""
 
   private var shown: [String] {
-    let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-    return q.isEmpty ? Self.symbols : Self.symbols.filter { $0.contains(q) }
+    let trimmedQuery = query.trimmingCharacters(in: .whitespaces).lowercased()
+    return trimmedQuery.isEmpty ? Self.symbols : Self.symbols.filter { $0.contains(trimmedQuery) }
   }
 
   var body: some View {

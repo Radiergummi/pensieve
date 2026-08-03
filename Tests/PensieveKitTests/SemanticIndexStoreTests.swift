@@ -22,7 +22,7 @@ import Foundation
                             contentHash: "h1"), embedding: vectorA)
     store.upsert(row: .init(itemID: "b", kind: "loose_end", nodeID: "n2", state: "active",
                             contentHash: "h2"), embedding: vectorB)
-    let hits = store.knn(query: vectorA, k: 2, includeArchived: false)
+    let hits = store.knn(query: vectorA, limit: 2, includeArchived: false)
     #expect(hits.first?.itemID == "a")
     #expect(hits.first?.nodeID == "n1")
     #expect(hits.first!.similarity > hits.last!.similarity)
@@ -36,7 +36,7 @@ import Foundation
                             contentHash: "h"), embedding: vector)
     store.upsert(row: .init(itemID: "gone", kind: "node", nodeID: "n2", state: "archived",
                             contentHash: "h"), embedding: vector)
-    let hits = store.knn(query: vector, k: 5, includeArchived: false)
+    let hits = store.knn(query: vector, limit: 5, includeArchived: false)
     #expect(hits.map(\.itemID) == ["keep"])
   }
 
@@ -48,7 +48,7 @@ import Foundation
                             contentHash: "h"), embedding: vector)
     store.upsert(row: .init(itemID: "a", kind: "loose_end", nodeID: "new", state: "active",
                             contentHash: "h"), embedding: nil)   // repoint: node changes, no re-embed
-    #expect(store.knn(query: vector, k: 1, includeArchived: false).first?.nodeID == "new")
+    #expect(store.knn(query: vector, limit: 1, includeArchived: false).first?.nodeID == "new")
   }
 
   @Test func versionMismatchRebuildsEmpty() async {
@@ -76,7 +76,7 @@ import Foundation
     // Reopen with the SAME version + dimension → must NOT drop; indexed data survives.
     let reopened = SemanticIndexStore(url: url, dimension: 8, embedderVersion: "stub:8")
     #expect(reopened.existingItems() == ["a": "h"])
-    #expect(reopened.knn(query: vector, k: 1, includeArchived: false).first?.itemID == "a")
+    #expect(reopened.knn(query: vector, limit: 1, includeArchived: false).first?.itemID == "a")
   }
 
   @Test func existingItemsReturnsHashMap() async {
@@ -102,10 +102,10 @@ import Foundation
     indexStore.upsert(row: .init(itemID: "c", kind: "node", nodeID: "n3",
                         state: NodeState.muted.rawValue, contentHash: "h3"), embedding: mutedVec)
 
-    let narrow = Set(indexStore.knn(query: activeVec, k: 10, includeArchived: false).map { $0.itemID })
+    let narrow = Set(indexStore.knn(query: activeVec, limit: 10, includeArchived: false).map { $0.itemID })
     #expect(narrow == ["a"])
 
-    let wide = Set(indexStore.knn(query: activeVec, k: 10, includeArchived: true).map { $0.itemID })
+    let wide = Set(indexStore.knn(query: activeVec, limit: 10, includeArchived: true).map { $0.itemID })
     #expect(wide == ["a", "b"])            // archived in, muted still out
     #expect(!wide.contains("c"))
   }
@@ -124,12 +124,12 @@ import Foundation
                         state: NodeState.archived.rawValue, contentHash: "h"), embedding: nil)
 
     // The vector survived the flip: the row is still KNN-reachable, now under the wide filter.
-    #expect(indexStore.knn(query: vec, k: 10, includeArchived: false).isEmpty)
-    #expect(indexStore.knn(query: vec, k: 10, includeArchived: true).map { $0.itemID } == ["x"])
+    #expect(indexStore.knn(query: vec, limit: 10, includeArchived: false).isEmpty)
+    #expect(indexStore.knn(query: vec, limit: 10, includeArchived: true).map { $0.itemID } == ["x"])
 
     // And it flips back symmetrically, still without ever being re-embedded.
     indexStore.upsert(row: .init(itemID: "x", kind: "node", nodeID: "n1",
                         state: NodeState.active.rawValue, contentHash: "h"), embedding: nil)
-    #expect(indexStore.knn(query: vec, k: 10, includeArchived: false).map { $0.itemID } == ["x"])
+    #expect(indexStore.knn(query: vec, limit: 10, includeArchived: false).map { $0.itemID } == ["x"])
   }
 }

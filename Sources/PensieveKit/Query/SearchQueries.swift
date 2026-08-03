@@ -54,35 +54,35 @@ public enum SearchQueries {
                             _ database: any DatabaseReader) throws -> SearchResults {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= minQueryLength else { return SearchResults() }
-    func hit(_ s: String) -> Bool { s.range(of: query, options: .caseInsensitive) != nil }
+    func hit(_ text: String) -> Bool { text.range(of: query, options: .caseInsensitive) != nil }
 
     return try database.read { database in
       let nodes = try Node.order { $0.name }.fetchAll(database)
-        .filter { n -> Bool in
-          guard visibleNodeIDs.contains(n.id) else { return false }
-          return n.state == .active || (includeArchived && n.state == .archived)
+        .filter { node -> Bool in
+          guard visibleNodeIDs.contains(node.id) else { return false }
+          return node.state == .active || (includeArchived && node.state == .archived)
         }
       let matchedNodeIDs = Set(nodes.map { $0.id })
 
       // NODES — rank 0 = name match, rank 1 = description-only match.
       var nodeScored: [(rank: Int, node: Node)] = []
-      for n in nodes {
-        let nameHit = hit(n.name)
-        if nameHit { nodeScored.append((0, n)) } else if hit(n.description) { nodeScored.append((1, n)) }
+      for node in nodes {
+        let nameHit = hit(node.name)
+        if nameHit { nodeScored.append((0, node)) } else if hit(node.description) { nodeScored.append((1, node)) }
       }
       let sortedNodes = nodeScored.sorted {
         ($0.rank, $0.node.name, $0.node.id.uuidString) < ($1.rank, $1.node.name, $1.node.id.uuidString)
       }
-      let nodeHits = sortedNodes.prefix(cap).map { e -> NodeHit in
-        let src = e.rank == 0 ? e.node.name : e.node.description
-        return NodeHit(id: e.node.id, name: e.node.name, kind: e.node.kind,
-                       matchedField: e.rank == 0 ? .name : .description,
+      let nodeHits = sortedNodes.prefix(cap).map { entry -> NodeHit in
+        let src = entry.rank == 0 ? entry.node.name : entry.node.description
+        return NodeHit(id: entry.node.id, name: entry.node.name, kind: entry.node.kind,
+                       matchedField: entry.rank == 0 ? .name : .description,
                        snippet: SnippetMaker.make(from: src, matching: query),
-                       isArchived: e.node.state == .archived)
+                       isArchived: entry.node.state == .archived)
       }
 
       // LOOSE ENDS — open + not-noise, visible nodes only. rank 0 = text match, 1 = quote-only.
-      let nameByID = Dictionary(nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+      let nameByID = Dictionary(nodes.map { ($0.id, $0.name) }, uniquingKeysWith: { lhs, _ in lhs })
       let archivedNodeIDs = Set(nodes.filter { $0.state == .archived }.map { $0.id })
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
         .filter { matchedNodeIDs.contains($0.nodeID) }
@@ -91,17 +91,17 @@ public enum SearchQueries {
         let textHit = hit(looseEnd.text)
         if textHit { leScored.append((0, looseEnd)) } else if hit(looseEnd.quote) { leScored.append((1, looseEnd)) }
       }
-      let sortedEnds = leScored.sorted { a, b in
-        if a.rank != b.rank { return a.rank < b.rank }
-        if a.looseEnd.createdAt != b.looseEnd.createdAt { return a.looseEnd.createdAt > b.looseEnd.createdAt }
-        return a.looseEnd.id.uuidString < b.looseEnd.id.uuidString
+      let sortedEnds = leScored.sorted { lhs, rhs in
+        if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+        if lhs.looseEnd.createdAt != rhs.looseEnd.createdAt { return lhs.looseEnd.createdAt > rhs.looseEnd.createdAt }
+        return lhs.looseEnd.id.uuidString < rhs.looseEnd.id.uuidString
       }
-      let leHits = sortedEnds.prefix(cap).map { e -> LooseEndHit in
-        let src = e.rank == 0 ? e.looseEnd.text : e.looseEnd.quote
-        return LooseEndHit(id: e.looseEnd.id, nodeID: e.looseEnd.nodeID,
-                           nodeName: nameByID[e.looseEnd.nodeID] ?? "",
+      let leHits = sortedEnds.prefix(cap).map { entry -> LooseEndHit in
+        let src = entry.rank == 0 ? entry.looseEnd.text : entry.looseEnd.quote
+        return LooseEndHit(id: entry.looseEnd.id, nodeID: entry.looseEnd.nodeID,
+                           nodeName: nameByID[entry.looseEnd.nodeID] ?? "",
                            snippet: SnippetMaker.make(from: src, matching: query),
-                           isArchived: archivedNodeIDs.contains(e.looseEnd.nodeID))
+                           isArchived: archivedNodeIDs.contains(entry.looseEnd.nodeID))
       }
 
       return SearchResults(nodes: Array(nodeHits), looseEnds: Array(leHits),

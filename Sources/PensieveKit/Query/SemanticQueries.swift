@@ -16,7 +16,7 @@ public struct SemanticHit: Identifiable, Sendable, Equatable {
 }
 
 /// Semantic ("find similar") recall over the sqlite-vec index, joined back to the live canonical
-/// corpus. KNN alone is fixed-k and pre-filter — a fixed k could return only Focus-muted rows, so
+/// corpus. KNN alone is fixed-limit and pre-filter — a fixed limit could return only Focus-muted rows, so
 /// this over-fetches from the store before applying `visibleNodeIDs`/`excludingIDs`/`floor`, then
 /// re-resolves each survivor against canonical and re-applies the SAME "is this still part of the
 /// live corpus" predicate the index itself uses (`isOpen` / active node) as a last line of
@@ -28,7 +28,7 @@ public enum SemanticQueries {
   public static func search(query rawQuery: String,
                             visibleNodeIDs: Set<UUID>,
                             excludingIDs: Set<UUID>,
-                            k: Int,
+                            limit: Int,
                             floor: Double,
                             includeArchived: Bool = false,
                             store: SemanticIndexStore,
@@ -41,38 +41,38 @@ public enum SemanticQueries {
           let qvec = await embedder.embed([query])?.first ?? nil else { return [] }
 
     // Over-fetch, and grow the fetch window if post-KNN filtering (Focus-muting) starved the
-    // result below k. A floor-aware exit keeps ordinary sparse queries (few above-floor items) at
+    // result below limit. A floor-aware exit keeps ordinary sparse queries (few above-floor items) at
     // one fetch: similarity is monotonically non-increasing across `raw`, so once the farthest
     // fetched neighbor is below `floor`, no deeper neighbor can ever become a hit.
-    var kFetch = max(k * 8, 50)
+    var kFetch = max(limit * 8, 50)
     let maxFetch = 2000
     while true {
-      let raw = store.knn(query: qvec, k: kFetch, includeArchived: includeArchived)
-      let hits = buildHits(raw, k: k, floor: floor, visibleNodeIDs: visibleNodeIDs,
+      let raw = store.knn(query: qvec, limit: kFetch, includeArchived: includeArchived)
+      let hits = buildHits(raw, limit: limit, floor: floor, visibleNodeIDs: visibleNodeIDs,
                            excludingIDs: excludingIDs, includeArchived: includeArchived,
                            query: query, database)
-      if hits.count >= k || raw.count < kFetch || kFetch >= maxFetch { return hits }
+      if hits.count >= limit || raw.count < kFetch || kFetch >= maxFetch { return hits }
       if let last = raw.last, last.similarity < floor { return hits }
       kFetch = min(kFetch * 4, maxFetch)
     }
   }
 
-  /// Filter one KNN page down to at most `k` grounded, visible, above-floor, non-excluded hits,
+  /// Filter one KNN page down to at most `limit` grounded, visible, above-floor, non-excluded hits,
   /// re-resolving each survivor against canonical (the last grounding defense). Deterministic KNN
   /// ordering makes each larger fetch a superset prefix, so rebuilding from the top is correct.
-  private static func buildHits(_ raw: [KNNResult], k: Int, floor: Double,
+  private static func buildHits(_ raw: [KNNResult], limit: Int, floor: Double,
                                 visibleNodeIDs: Set<UUID>, excludingIDs: Set<UUID>,
                                 includeArchived: Bool,
                                 query: String, _ database: any DatabaseReader) -> [SemanticHit] {
     var hits: [SemanticHit] = []
-    for r in raw {
-      guard r.similarity >= floor,
-            let nodeID = UUID(uuidString: r.nodeID), visibleNodeIDs.contains(nodeID) else { continue }
-      guard let itemID = UUID(uuidString: r.itemID), !excludingIDs.contains(itemID) else { continue }
-      guard let hit = try? resolve(kind: r.kind, itemID: itemID, similarity: r.similarity,
+    for result in raw {
+      guard result.similarity >= floor,
+            let nodeID = UUID(uuidString: result.nodeID), visibleNodeIDs.contains(nodeID) else { continue }
+      guard let itemID = UUID(uuidString: result.itemID), !excludingIDs.contains(itemID) else { continue }
+      guard let hit = try? resolve(kind: result.kind, itemID: itemID, similarity: result.similarity,
                                    includeArchived: includeArchived, query: query, database) else { continue }
       hits.append(hit)
-      if hits.count == k { break }
+      if hits.count == limit { break }
     }
     return hits
   }
@@ -84,29 +84,29 @@ public enum SemanticQueries {
   private static func resolve(kind: String, itemID: UUID, similarity: Double,
                               includeArchived: Bool, query: String,
                               _ database: any DatabaseReader) throws -> SemanticHit? {
-    func eligible(_ n: Node) -> Bool {
-      n.state == .active || (includeArchived && n.state == .archived)
+    func eligible(_ node: Node) -> Bool {
+      node.state == .active || (includeArchived && node.state == .archived)
     }
     return try database.read { database in
       switch kind {
       case "node":
-        guard let n = try Node.where({ $0.id.eq(itemID) }).fetchOne(database), eligible(n) else { return nil }
-        return SemanticHit(id: n.id, kind: kind, nodeID: n.id, nodeName: n.name, title: n.name,
-                           snippet: SnippetMaker.make(from: n.description.isEmpty ? n.name : n.description, matching: query),
-                           similarity: similarity, isArchived: n.state == .archived)
+        guard let node = try Node.where({ $0.id.eq(itemID) }).fetchOne(database), eligible(node) else { return nil }
+        return SemanticHit(id: node.id, kind: kind, nodeID: node.id, nodeName: node.name, title: node.name,
+                           snippet: SnippetMaker.make(from: node.description.isEmpty ? node.name : node.description, matching: query),
+                           similarity: similarity, isArchived: node.state == .archived)
       case "loose_end":
         guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) }).fetchOne(database),
-              let n = try Node.where({ $0.id.eq(looseEnd.nodeID) }).fetchOne(database), eligible(n) else { return nil }
-        return SemanticHit(id: looseEnd.id, kind: kind, nodeID: looseEnd.nodeID, nodeName: n.name, title: looseEnd.text,
+              let node = try Node.where({ $0.id.eq(looseEnd.nodeID) }).fetchOne(database), eligible(node) else { return nil }
+        return SemanticHit(id: looseEnd.id, kind: kind, nodeID: looseEnd.nodeID, nodeName: node.name, title: looseEnd.text,
                            snippet: SnippetMaker.make(from: looseEnd.text, matching: query),
-                           similarity: similarity, isArchived: n.state == .archived)
+                           similarity: similarity, isArchived: node.state == .archived)
       case "event":
-        guard let e = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),
-              let n = try Node.where({ $0.id.eq(e.nodeID) }).fetchOne(database), eligible(n) else { return nil }
-        let body = (e.workSummary?.isEmpty == false ? e.workSummary! : e.summary)
-        return SemanticHit(id: e.id, kind: kind, nodeID: e.nodeID, nodeName: n.name, title: body,
+        guard let event = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),
+              let node = try Node.where({ $0.id.eq(event.nodeID) }).fetchOne(database), eligible(node) else { return nil }
+        let body = (event.workSummary?.isEmpty == false ? event.workSummary! : event.summary)
+        return SemanticHit(id: event.id, kind: kind, nodeID: event.nodeID, nodeName: node.name, title: body,
                            snippet: SnippetMaker.make(from: body, matching: query),
-                           similarity: similarity, isArchived: n.state == .archived)
+                           similarity: similarity, isArchived: node.state == .archived)
       default: return nil
       }
     }

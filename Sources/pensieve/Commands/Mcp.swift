@@ -217,7 +217,7 @@ enum PensieveMCP {
     let related: [SemanticHit]
     if PensieveDefaults.semanticSearchEnabled() {
       related = await SemanticQueries.search(query: query, visibleNodeIDs: visible, excludingIDs: exactIDs,
-                                             k: limit, floor: 0.25, includeArchived: includeArchived,
+                                             limit: limit, floor: 0.25, includeArchived: includeArchived,
                                              store: semanticStore, embedder: semanticEmbedder, database)
     } else {
       related = []

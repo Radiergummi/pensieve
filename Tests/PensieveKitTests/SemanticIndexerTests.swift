@@ -189,13 +189,13 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     #expect(items.keys.contains(event.id.uuidString))
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
-    let activeHits = indexStore.knn(query: queryVec, k: 5, includeArchived: false)
+    let activeHits = indexStore.knn(query: queryVec, limit: 5, includeArchived: false)
     #expect(!activeHits.contains { $0.itemID == looseEnd.id.uuidString })
 
     // The vector itself is still there, not destroyed — it'indexStore reachable under the wide filter.
     // This is what distinguishes "re-tagged" from "pruned-and-re-embedded" (both would satisfy
     // the assertions above; only this one pins the vector survived unpruned).
-    let archivedHits = indexStore.knn(query: queryVec, k: 5, includeArchived: true)
+    let archivedHits = indexStore.knn(query: queryVec, limit: 5, includeArchived: true)
     #expect(archivedHits.contains { $0.itemID == looseEnd.id.uuidString })
   }
 
@@ -217,14 +217,14 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await idx.sync(database)
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
-    #expect(!indexStore.knn(query: queryVec, k: 5, includeArchived: false).contains { $0.itemID == looseEnd.id.uuidString })
+    #expect(!indexStore.knn(query: queryVec, limit: 5, includeArchived: false).contains { $0.itemID == looseEnd.id.uuidString })
 
     try await database.write { database in
       try Node.where { $0.id.eq(node.id) }.update { $0.state = NodeState.active }.execute(database)
     }
     await idx.sync(database)
 
-    let restoredHits = indexStore.knn(query: queryVec, k: 5, includeArchived: false)
+    let restoredHits = indexStore.knn(query: queryVec, limit: 5, includeArchived: false)
     #expect(restoredHits.contains { $0.itemID == looseEnd.id.uuidString })
   }
 
@@ -253,7 +253,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     // content_hash for the loose end is unchanged (repoint is metadata-only, not nodeA re-embed).
     #expect(indexStore.existingItems()[looseEnd.id.uuidString] == hashBefore)
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
-    let hits = indexStore.knn(query: queryVec, k: 5, includeArchived: false)
+    let hits = indexStore.knn(query: queryVec, limit: 5, includeArchived: false)
     #expect(hits.first(where: { $0.itemID == looseEnd.id.uuidString })?.nodeID == nodeB.id.uuidString)
   }
 
@@ -274,7 +274,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     #expect(indexStore.existingItems()[node.id.uuidString] != hashBefore)   // content_hash changed → re-embedded
 
     let newVec = await StubEmbedder(dimension: 16).embed(["N — changed description"])![0]!
-    let hits = indexStore.knn(query: newVec, k: 1, includeArchived: false)
+    let hits = indexStore.knn(query: newVec, limit: 1, includeArchived: false)
     #expect(hits.first?.itemID == node.id.uuidString)
     #expect(hits.first!.similarity > 0.99)   // the stored vector IS the new content'indexStore embedding
   }
@@ -306,7 +306,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     #expect(items.keys.contains(event.id.uuidString))
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["wire up refunds — TODO refunds"])![0]!
-    let hits = indexStore.knn(query: queryVec, k: 5, includeArchived: false)
+    let hits = indexStore.knn(query: queryVec, limit: 5, includeArchived: false)
     #expect(hits.contains { $0.itemID == looseEnd.id.uuidString })
   }
 
