@@ -1,7 +1,7 @@
 # Semantic recall remediation — hygiene, BM25, and a paraphrase-only harness
 
 **Date:** 2026-07-28, **amended 2026-08-03** (§Amendment — P2 rewritten, was: BM25 replaces only the
-semantic half behind unchanged public shapes)
+semantic half behind unchanged public shapes), **reviewed 2026-08-03** (§Review pass)
 **Status:** design, revised after an adversarial review that re-measured on the real corpus
 **Scope:** three independently shippable pieces, in order. **P1** corpus hygiene (production change,
 ungated). **P2′** BM25 becomes the *single* retrieval path for ⌘F and MCP `search` — the substring
@@ -77,6 +77,35 @@ that deliberately — the hit type changes, `SearchQueries` is deleted, and MCP 
 array instead of two. Accepted because Pensieve is single-user and the only consumer of that
 contract is the author's own sessions.
 
+## Review pass (2026-08-03) — findings folded in
+
+A review of the amended document against the code and the committed probes. Nine changes, all
+in-place in the sections named; recorded here so a later reader can tell which parts of P2′ and P3
+were revised after the amendment rather than written with it.
+
+1. **Top Hit could not deliver the guarantee the Risks table claimed.** One 50-slot list makes nodes
+   compete with 1,686 events; `topHit` drawn *from that list* inherits the loss. Now a pure scan over
+   the node set. (§Results ▸ Top Hit; §Risks)
+2. **P3's operating-point search repeated the flaw that killed ROC-AUC** — a single global threshold
+   pools scores across queries. Now per-query normalised, with a separate rejection criterion for
+   lexical strategies. (§P3 ▸ `RetrievalMetrics`)
+3. **P1's de-dup was global and order-dependent**, silently deciding which project owns a shared
+   phrase. Now per-node and deterministically ordered — which invalidates `0.433` as a literal gate
+   value. (§P1; §Verification gate)
+4. **The `files` column's real risk is length normalisation, which a column weight does not touch.**
+   Fallback pre-specified rather than left to "explain the regression". (§Verification gate; §Risks)
+5. **After P2′ the index *is* search, so silent staleness stops being tolerable.** A minimum
+   not-yet-indexed sentinel is pulled in from the deferred `doctor` spec. (§First run and staleness)
+6. **Tokenizer parity had a second unnamed divergence** (`remove_diacritics 2` vs the probes' plain
+   lowercasing) — named, and the re-run probe adopts the folding. (§Matching)
+7. **Full rebuild on every app refresh** is a write on every WAL change; now hash-guarded.
+   (§Maintenance)
+8. **The vector's default lives in three places**; flipping it default-off means all three.
+   (§Maintenance)
+9. **FTS5 reaches us through raw SQL, not GRDB's conditionally-compiled FTS5 API** — recorded so the
+   `CSQLiteVec` precedent does not produce a false NO-GO. Availability verified. (§Where the index
+   lives)
+
 ## Problem
 
 Semantic recall ships default-on, feeding ⌘F "Related" and the MCP `search` tool every Claude Code
@@ -110,7 +139,8 @@ self excluded), n=300 over 82 eligible nodes. Random-baseline P@5 = 0.006.
 
 Per-query head-to-head on P@5: **bm25 better on 128, vector better on 30, 142 ties** (sign test
 \|128−30\| = 98 vs 2·SE = 12.6 — overwhelming). After P1 hygiene, BM25 rises further to **P@1 0.433**
-while the vector *drops* to 0.125.
+while the vector *drops* to 0.125. (That 0.433 was measured under *global* de-dup; P1 now ships
+per-node de-dup, so it is a historical figure, not the gate value — see §P1 and §Verification gate.)
 
 **Two results that contradict expectations and must not be lost:** `hybridRRF` is **worse than `bm25`
 alone** — the vector contributes negatively, so the reflex "hybrid wins" is false here. And
@@ -138,8 +168,25 @@ The corpus contains junk that occupies top-k slots and pollutes every strategy:
   top-k slots.
 - 155 of 704 loose ends (22%) have `text == quote` (bare prompt echo).
 
-**Change:** `EmbeddableCorpus.gather` skips `git.checkout` events and de-duplicates identical texts.
-Measured effect: 2,630 → 2,264 items, BM25 P@1 0.387 → **0.433**.
+**Change:** `EmbeddableCorpus.gather` skips `git.checkout` events and de-duplicates identical texts
+**within a node**. Measured effect (under *global* de-dup — see the caveat below): 2,630 → 2,264
+items, BM25 P@1 0.387 → **0.433**.
+
+**De-dup is per-node, not global, and it is ordered.** Global de-dup would collapse a commit subject
+like `fix ci` occurring in three projects down to one searchable row, so a hit points at one project
+when the work happened in three — the same class of grounding call P1 explicitly defers below, not
+hygiene. Per-node still kills the headline pathology, since the strings that occupy up to 84 top-k
+slots are same-node `checkout` texts already dropped by the other rule. And "keeps the first
+occurrence" is only meaningful if there *is* a first: `Event.all` carries no `ORDER BY`, so the
+survivor would otherwise be arbitrary and could change between rebuilds. Order by `(occurredAt, id)`
+and keep the earliest; pinned by test.
+
+**This unpins `0.433` as a literal number.** It was measured with global de-dup, which removes more
+items and, on a **same-node** gold set, removes precisely the cross-node distractors that gold set
+punishes — so the measurement mildly flatters the change. Per-node de-dup therefore needs its own
+baseline: re-run `rprobe4` with the shipped rule and record the result as *the* post-P1 figure, which
+is what §Verification gate then holds P2′ to. A number this document cites must be one the committed
+scripts reproduce.
 
 **Not in P1:** the `text == quote` loose ends. They are *real* captured user prompts, and suppressing
 them is a grounding/recall judgment, not hygiene — it belongs to whoever owns loose-end quality.
@@ -159,6 +206,15 @@ sharing a file would tie the FTS5 table's lifecycle to an embedder decision it h
 with, and P2′ is turning the vector *off*. Separate files also let the vector index be deleted
 outright later without touching search. The canonical store is untouched: it is the only store that
 will ever sync, and a derived index has no business in it.
+
+**FTS5 needs no vendoring — reach it through raw SQL, not GRDB's FTS5 API.** Recorded because
+`CSQLiteVec` sets the opposite precedent and would invite a false NO-GO: sqlite-vec had to be
+vendored as a static C target, FTS5 does not. It is compiled into the system SQLite (verified on
+3.51.0: `CREATE VIRTUAL TABLE … USING fts5(…)` plus a weighted `bm25(t, 1.0, 0.1)` both succeed), so
+the DDL, the `MATCH` query and the `bm25()` ranking all go through `database.execute(sql:)` and plain
+SQL. GRDB's *Swift-level* FTS5 surface (`FTS5TokenizerDescriptor`, `virtualTable(.fts5)`) is
+conditionally compiled and is deliberately not used — reaching for it is the reflex this note exists
+to stop. No `prepareDatabase` hook is needed either; that is a sqlite-vec requirement, not ours.
 
 ### What a document is
 
@@ -184,8 +240,17 @@ is not a file-history view.
 ### Matching
 
 **Tokenizer: `unicode61 remove_diacritics 2`, unstemmed** — reproducing the tokenization every
-measured number in this document rests on (§Amendment finding 3). Known divergence: the probes
-dropped 1-char tokens, FTS5 indexes them; immaterial to ranking, but "identical" is "near-identical".
+measured number in this document rests on (§Amendment finding 3). **Two known divergences**, both
+small, both named because the §Verification gate is only a comparison if the tokenizers match:
+
+- the probes dropped 1-char tokens, FTS5 indexes them — immaterial to ranking;
+- the probes only `lowercased()`, so `ä` stays `ä`; `remove_diacritics 2` folds it to `a`. On an
+  EN+DE corpus that changes German token identity. Folding is the **right** choice (it makes
+  `Lösung`/`Losung` one term), but it means the shipped tokenizer is not the measured one.
+
+So the re-run probe adopts the folding rather than the spec adopting the probe's omission: apply the
+same diacritic-stripping in `rprobe`'s `tok` before re-measuring. "Near-identical" is not a
+tokenizer property one can assert; it has to be made true.
 
 **A pure `FTSQuery` builder — user input never reaches `MATCH` raw.** FTS5 `MATCH` is a query
 language, so `don't`, `C++`, a stray `:`, or an unbalanced quote throw a SQLite error on ordinary
@@ -230,13 +295,29 @@ consequence stays in the report and in a code comment: **a rank cap is not a rel
 and P3 is what would earn one.
 
 **Result cap:** `SearchQueries`' existing `prefix(50)` carries over unchanged as the cap on the
-returned list, so the app's result volume does not change with the engine.
+returned list — but note what merging changes underneath it. Today nodes have their *own* 50 slots
+over a 240-row candidate set, so a matching node is returned essentially always. In one list, 240
+nodes compete with 1,686 events for the same 50 slots, and a query with common terms (`app`, `sync`,
+`search`) can fill every slot with events. **Total volume is unchanged; per-kind volume is not.**
 
-**Top Hit is a pure function**, `topHit(query:in:) -> SearchHit?` selected *from the returned hits*
-rather than by a second query — the first `kind == "node"` hit
-whose name has the query as a case- and diacritic-insensitive word prefix. The app pins it above the
-list; MCP ignores it. All navigation predictability lives in ~10 testable lines, with no second
-engine behind it.
+**Top Hit is a pure function over the node set, not over the returned hits.** `topHit(query:in:) ->
+SearchHit?` scans the nodes — 240 rows, already in hand (`AppModel.allNodes` in the app; MCP fetches
+them anyway to build `visibleNodeIDs`) — and returns the first whose name has the query as a case-
+and diacritic-insensitive word prefix, ordered by name for determinism. The app pins it above the
+list; MCP ignores it.
+
+**It is scanned over the same *visible, in-scope* nodes the query used**, never over the raw node
+table: a Focus-muted or archived-and-out-of-scope node must not be pinned above a list that
+deliberately excludes it. That makes the function's input the caller's already-filtered set, which is
+also what keeps it pure and trivially testable. Its `SearchHit` is synthesised from the node's own
+canonical row (name-match snippet, no BM25 score — it did not come from the ranking, and giving it a
+comparable-looking number would invite exactly the cross-scale confusion §P3 removes).
+
+The earlier formulation selected it *from the returned hits*, which cannot deliver what it was for:
+a node crowded out of the 50 by events is equally absent from any function of those 50, and that
+happens exactly on the common-term queries where navigation matters most. Scanning the node set is
+the same ~10 testable lines, is still pure, still introduces no second retrieval *engine* — and is
+actually a guarantee. Tested with a node deliberately ranked out of the BM25 top 50.
 
 **Snippets stay `SnippetMaker`**, extended to take the term list and highlight the first term that
 occurs. FTS5's native `snippet()` was considered — the platform-primitive answer — and rejected:
@@ -248,12 +329,47 @@ correct, since matched text is always a query term or its prefix.
 ### Maintenance
 
 **Full rebuild, never incremental.** `SemanticIndexer` needs membership/metadata reconciliation
-because embedding is expensive; FTS5 has no such cost — 2,264 documents rebuild in milliseconds. Drop
+because embedding is expensive; FTS5 has no such cost — ~2,300 documents rebuild in milliseconds. Drop
 and reinsert in one transaction, deleting a whole class of staleness bugs instead of reimplementing
 them. Runs at the seams `SemanticIndexer` already uses (after extraction in `SyncRunner`, and on app
-refresh) and stays best-effort: an index failure yields empty results and never blocks capture or
-ingest. **No toggle** — BM25 is no longer optional. `PensieveDefaults.semanticSearchKey` now governs
-the vector alone, default-off.
+refresh) and stays best-effort: an index failure never blocks capture or ingest — it yields no
+results, *reported as a state rather than as an empty list* (§First run and staleness). **No
+toggle** — BM25 is no longer optional.
+
+**Hash-guarded, because "on app refresh" is more often than it sounds.** App refresh fires off the
+debounced `ValueObservation` + FSEvents path, so it runs on every WAL change — including the sync
+daemon's. Rebuilding ~2,300 rows is milliseconds, but it is a *write* each time, for a corpus that
+usually did not change. Fold the existing per-item `EmbeddableItem.contentHash` into one corpus hash,
+store it in a `meta` row beside the index (as `SemanticIndexStore` already does for embedder
+version), and skip the rebuild when it matches. This adds no reconciliation logic — it is one
+equality check in front of an unconditional drop-and-reinsert.
+
+**The vector goes default-off, and its default lives in three places.**
+`PensieveDefaults.semanticSearchKey` now governs the vector alone; flipping it means
+`PensieveDefaults.semanticSearchEnabled()`, `AppDefaults`, and `IntelligenceSettingsTab`'s
+`@AppStorage(…) = true`, each of which carries the literal separately. The `@AppStorage` default is
+the one that will silently disagree, because it renders a toggle rather than gating a query. An
+explicit stored `true` is honored — the flip changes the unset default, so a user who deliberately
+enabled the vector keeps it.
+
+### First run and staleness
+
+Deferring `pensieve doctor` and index-staleness reporting (§Non-goals) was safe while the index fed a
+supplementary "Related" section that could be empty without anyone noticing. After P2′ the index
+**is** search: an unbuilt or failed `search-index.sqlite` makes ⌘F and MCP `search` return nothing,
+and with the substring matcher deleted there is no second path to fall back to. "No matches" and
+"never indexed" would render identically — the failure mode this project calls dishonest degradation,
+now sitting on the primary answer path.
+
+The minimum, and only the minimum, comes forward from that spec:
+
+- an **index-state sentinel** distinct from an empty result — absent / building / ready — so the app
+  can say "still indexing" and MCP can return a stated reason instead of a bare empty array;
+- **build on first launch before the search field accepts input**, so the window where a fresh
+  install returns nothing is one build, not one refresh cycle.
+
+Everything else — the `doctor` command, staleness age reporting, per-index diagnostics — stays
+deferred to its own spec.
 
 ### Surfaces
 
@@ -273,20 +389,40 @@ hard-won.
 
 ### Verification gate
 
-**The `files` column is unmeasured.** P@1 0.433 was measured without it, and adding an indexed column
-changes BM25's document-length normalisation even at weight 0.1. The probe scripts are committed
-precisely so they can be re-run: after P1 + P2′, re-run `rprobe` on a fresh `VACUUM INTO` snapshot and
-confirm **P@1 ≥ 0.433**, or explain the regression. This keeps the amendment inside the evidence
-discipline the draft-2 rescope established rather than riding on a number it quietly invalidated.
+**The `files` column is unmeasured, and the weight does not contain the risk.** Adding an indexed
+column changes BM25's document-length normalisation: FTS5 normalises by the row's *total* token count
+across all columns, so every event row gets longer and its `text` matches are discounted relative to
+nodes and loose ends — at any column weight, including 0.1. The 0.1 weight bounds how much a path
+*match* contributes; it does nothing about how much a path *presence* costs. Only re-measurement
+catches the second effect.
+
+**The gate, in two steps, because P1's per-node de-dup unpinned the old number.** `0.433` was
+measured under global de-dup and is no longer the shipped rule (§P1):
+
+1. **After P1**, re-run `rprobe4` with the shipped per-node de-dup on a fresh `VACUUM INTO` snapshot.
+   Record the result. That figure — not `0.433` — is the post-P1 baseline, and it goes into this
+   document and the measurements README.
+2. **After P2′**, re-run `rprobe` with the same snapshot, the diacritic-folded tokenizer (§Matching)
+   and the `files` column present. **P@1 must be ≥ the step-1 baseline.**
+
+**Pre-specified fallback if step 2 regresses:** move `files` into its **own FTS5 table** joined on
+`item_id`, queried separately and merged by rank. Path anchoring survives; the text ranking returns
+to the measured configuration exactly. Written down now, in the same spirit as the hardening plan's
+pre-specified `.searchScopes` fallback, so the failure branch is a decision already made rather than
+"explain the regression" under pressure to ship.
 
 ### Kit-tested
 
 `FTSQuery` builder against hostile input (apostrophes, unbalanced quotes, colons, emoji, CJK,
 umlauts, a lone `*`, pure punctuation); index build + rebuild idempotence; a pinned test that a
 `files`-only match ranks below a `text` match, so the 0.1 weight cannot drift silently; hygiene
-interaction; Focus/archived/`excludingIDs` parity with the vector path (the existing `SemanticQueries`
-tests are the template) including a stale index row dropped by the canonical re-resolve; `topHit`
-purity; file anchoring end-to-end, both bare and via `files:`; and the MCP JSON contract. The app
+interaction, including **per-node de-dup keeping the earliest by `(occurredAt, id)`** and an
+identical text in two nodes surviving in both; the **rebuild hash guard** (unchanged corpus ⇒ no
+write; changed corpus ⇒ rebuild); Focus/archived/`excludingIDs` parity with the vector path (the
+existing `SemanticQueries` tests are the template) including a stale index row dropped by the
+canonical re-resolve; `topHit` purity **and its guarantee — a node deliberately ranked out of the
+BM25 top 50 is still returned as Top Hit**; the index-state sentinel distinguishing absent from
+empty; file anchoring end-to-end, both bare and via `files:`; and the MCP JSON contract. The app
 target has no unit tests — build + smoke-launch + eyeball, as always.
 
 ## P3 — A paraphrase-only harness (the one open question)
@@ -297,9 +433,23 @@ Two files, not seven, because only one question is left: **does any on-device st
 - `RetrievalCorpus` — `VACUUM INTO` snapshot → `EmbeddableCorpus.gather` (verbatim; no parallel corpus
   definition) → content hash recorded in every run.
 - `RetrievalMetrics` — pure: recall@{1,5,10}, MRR@10, nDCG@10, and the **operating-point search**
-  ("highest threshold retaining recall@10 ≥ 0.8 while rejecting ≥90% of negatives", in each
-  strategy's own units, never compared across strategies) with an explicit **`NO VIABLE THRESHOLD`**
-  verdict. **No ROC-AUC.**
+  ("highest threshold retaining recall@10 ≥ 0.8 while rejecting ≥90% of negatives") with an explicit
+  **`NO VIABLE THRESHOLD`** verdict. **No ROC-AUC.**
+
+  **The threshold is per-query normalised** — score ÷ that query's top score — not raw. Stating "in
+  each strategy's own units, never compared across strategies" fixed cross-*strategy* comparison and
+  left the cross-*query* one, which is the flaw that invalidated ROC-AUC: a single global threshold
+  pools scores across queries, and BM25's scale varies with query length and idf mass. Applying a raw
+  threshold would hand `bm25`/`bm25Porter` a `NO VIABLE THRESHOLD` verdict for a reason that has
+  nothing to do with their retrieval quality — the mirror image of AUC flattering the vector.
+  Normalising asks the question that actually matters: *relative to this query's best hit, where does
+  relevance fall off?*
+
+  **Lexical strategies also get a structural rejection column, reported separately.** A negative
+  query whose terms are absent returns nothing at all — rejection by construction, no threshold
+  involved. That is a genuine property of a lexical engine and the reason the vector's inert floor is
+  a defect while BM25's absent floor is not, so it is measured and named rather than folded into the
+  same number as the vector's.
 
 **Gold set: 30–50 paraphrase queries the user writes**, from real recall needs, each naming the
 item(s) it should find. This single choice dissolves LLM circularity, the leakage guard, and the
@@ -356,8 +506,11 @@ recorded so a future run can confirm it is comparing like with like.
 - **Camel-case identifier splitting** — `Queries` will not match inside `SemanticQueries.swift`.
   A tokenizer change, and unmeasured; revisit if the file-anchored case proves weak in use.
 - **Stemming as a shipped default** — moved to P3's roster as `bm25Porter` (§Amendment finding 3).
-- **`pensieve doctor` and index-staleness reporting on the answer path** — the honest-degradation
-  siblings from the same competitive scan. Own spec; see `backlog.md`.
+- **`pensieve doctor` and staleness *reporting*** — the honest-degradation siblings from the same
+  competitive scan. Own spec; see `backlog.md`. **Narrowed by this review:** the index-state sentinel
+  and first-launch build are no longer deferred, because after P2′ they guard the only retrieval path
+  there is (§First run and staleness). What stays deferred is the diagnostic surface — the command,
+  staleness age, per-index health.
 - **Live Recall (`watch`/`tail`/`since`)** — coordination between parallel sessions, a different
   product axis from recall. Parked in `backlog.md`.
 
@@ -367,8 +520,11 @@ recorded so a future run can confirm it is comparing like with like.
 |---|---|
 | Same-node gold overstates BM25 (long-query bias) | stated in §Problem; P2′ keeps the vector in-tree and off rather than deleting it; P3 measures short queries properly |
 | BM25 fails on genuine paraphrase, so P2′ ships a feature that still can't do its headline job | P2′'s report and code comment say plainly that a rank cap is not a relevance threshold; P3 is the go/no-go on fixing it |
-| **P2′ deletes the substring matcher, so a query that used to hit literally now depends on ranking** | the Top Hit pin restores guaranteed node navigation; FTS5 phrase queries (`"…"`) restore guaranteed literal matching; both are Kit-tested |
-| **The `files` column dilutes BM25 and silently regresses the measured 0.433** | weight pinned at 0.1 by test; §Verification gate re-runs the committed probe and requires P@1 ≥ 0.433 before P2′ is considered done |
+| **P2′ deletes the substring matcher, so a query that used to hit literally now depends on ranking** | Top Hit scans the 240-row node set, *not* the capped result list, so node navigation is guaranteed even when events fill all 50 slots (tested with a node ranked out of the top 50); FTS5 phrase queries (`"…"`) restore guaranteed literal matching |
+| **One 50-slot list: nodes and loose ends now compete with 1,686 events, so a common-term query can return events only** | Top Hit covers the navigation case outright; beyond that this is accepted for now and visible in the P3 report — reserving per-kind slots is the fallback if it bites, and is deliberately not built on speculation |
+| **The `files` column dilutes BM25 via document-length normalisation and silently regresses the baseline** | the 0.1 weight bounds a path *match* but not a path *presence* — so the guard is measurement, not the weight: §Verification gate re-runs the committed probe against a re-measured post-P1 baseline, with a pre-specified fallback (own FTS5 table) if it regresses |
+| **Per-node de-dup keeps duplicate texts BM25 must now rank, weakening P1's measured gain** | accepted deliberately: global de-dup silently decides which project owns a shared phrase, a grounding call P1 declines to make; the gain is re-measured under the shipped rule rather than inherited |
+| **After P2′ an unbuilt or failed index makes search silently return nothing** | index-state sentinel (absent / building / ready) distinguishable from an empty result, plus a first-launch build before the field accepts input (§First run and staleness) |
 | **Raw user input reaches FTS5 `MATCH` and throws on an apostrophe** | input never reaches `MATCH` unescaped — the pure `FTSQuery` builder quotes every term as a string literal, with hostile-input tests |
 | **Two derived index files drift apart or double the rebuild cost** | both rebuild from the *same* `EmbeddableCorpus.gather`; the FTS5 rebuild is a full drop-and-reinsert measured in milliseconds, with no reconciliation logic to drift |
 | P3's n=30–50 is too small for fine distinctions | margin derived from n; scoped as go/no-go, not a ranking |
