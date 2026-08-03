@@ -21,14 +21,14 @@ private func event(_ summary: String, on d: Date) -> Event {
 @Test func rendersFullRecallAsExpectedMarkdown() {
   var node = Node(name: "Auth", kind: .strand, description: "OAuth + token refresh.")
   node.state = .active
-  let md = RecallMarkdown.render(
+  let markdown = RecallMarkdown.render(
     node: node,
     narration: "Wired up refresh-token rotation.",
     looseEnds: [looseEnd("rotate on 401", quote: "SECRET-QUOTE", on: date(2026, 7, 6))],
     events: [event("add rate limit", on: date(2026, 7, 7))],
     now: date(2026, 7, 8))
 
-  #expect(md == """
+  #expect(markdown == """
   # Auth
 
   *Strand · Active*
@@ -55,36 +55,36 @@ private func event(_ summary: String, on d: Date) -> Event {
 
 @Test func neverEmitsVerbatimQuote() {
   let node = Node(name: "X", kind: .project)
-  let md = RecallMarkdown.render(
+  let markdown = RecallMarkdown.render(
     node: node, narration: nil,
     looseEnds: [looseEnd("do the thing", quote: "DISTINCTIVE-SENTINEL-QUOTE", on: date(2026, 7, 1))],
     events: [], now: date(2026, 7, 2))
-  #expect(!md.contains("DISTINCTIVE-SENTINEL-QUOTE"))   // provenance quotes never leave via a share
-  #expect(md.contains("- do the thing"))                // but the summary text does
+  #expect(!markdown.contains("DISTINCTIVE-SENTINEL-QUOTE"))   // provenance quotes never leave via a share
+  #expect(markdown.contains("- do the thing"))                // but the summary text does
 }
 
 @Test func omitsNarrationSectionWhenNil() {
   let node = Node(name: "X", kind: .project)
-  let md = RecallMarkdown.render(node: node, narration: nil, looseEnds: [], events: [], now: date(2026, 7, 2))
-  #expect(!md.contains("## Last Work Done"))
+  let markdown = RecallMarkdown.render(node: node, narration: nil, looseEnds: [], events: [], now: date(2026, 7, 2))
+  #expect(!markdown.contains("## Last Work Done"))
 }
 
 @Test func omitsNarrationSectionWhenEmptyString() {
   let node = Node(name: "X", kind: .project)
-  let md = RecallMarkdown.render(node: node, narration: "", looseEnds: [], events: [], now: date(2026, 7, 2))
-  #expect(!md.contains("## Last Work Done"))
+  let markdown = RecallMarkdown.render(node: node, narration: "", looseEnds: [], events: [], now: date(2026, 7, 2))
+  #expect(!markdown.contains("## Last Work Done"))
 }
 
 @Test func emptyLooseEndsAndEventsShowPlaceholders() {
   let node = Node(name: "X", kind: .project)
-  let md = RecallMarkdown.render(node: node, narration: nil, looseEnds: [], events: [], now: date(2026, 7, 2))
-  #expect(md.contains("## Loose Ends\n\n_None open._"))
-  #expect(md.contains("## Recent Activity\n\n_No captured activity._"))
+  let markdown = RecallMarkdown.render(node: node, narration: nil, looseEnds: [], events: [], now: date(2026, 7, 2))
+  #expect(markdown.contains("## Loose Ends\n\n_None open._"))
+  #expect(markdown.contains("## Recent Activity\n\n_No captured activity._"))
 }
 
 @Test func omitsDescriptionLineWhenEmpty() {
   let node = Node(name: "X", kind: .project)   // description defaults to ""
-  let md = RecallMarkdown.render(node: node, narration: nil, looseEnds: [], events: [], now: date(2026, 7, 2))
+  let markdown = RecallMarkdown.render(node: node, narration: nil, looseEnds: [], events: [], now: date(2026, 7, 2))
   // header line is immediately followed by the meta line and then the first section — no stray blank block
-  #expect(md.contains("# X\n\n*Project · Active*\n\n## Loose Ends"))
+  #expect(markdown.contains("# X\n\n*Project · Active*\n\n## Loose Ends"))
 }

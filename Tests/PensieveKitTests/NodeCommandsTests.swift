@@ -99,13 +99,13 @@ import SQLiteData
   // the deleted subtree — though events.sourceID still needs a real row to satisfy its FK, so the
   // backing source is attached to the untouched sibling instead).
   let unrelatedSource = Source(nodeID: sibling.id, kind: SourceKind.gitRepo, key: "/p/sibling")
-  let ev = Event(nodeID: child.id, sourceID: unrelatedSource.id, occurredAt: Date(),
+  let event = Event(nodeID: child.id, sourceID: unrelatedSource.id, occurredAt: Date(),
                  kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
-  let le = LooseEnd(nodeID: child.id, sourceEventID: ev.id, text: "todo", quote: "q")
+  let looseEnd = LooseEnd(nodeID: child.id, sourceEventID: event.id, text: "todo", quote: "q")
   try database.write { database in
     try Source.insert { unrelatedSource }.execute(database)
-    try Event.insert { ev }.execute(database)
-    try LooseEnd.insert { le }.execute(database)
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert { looseEnd }.execute(database)
   }
 
   let result = try NodeCommands.delete(database, nodeID: root.id)

@@ -9,7 +9,7 @@ struct CheckpointCommand: ParsableCommand {
   @Argument var project: String
   @Argument var note: String
   func run() throws {
-    let ok = try CheckpointCommands.add(try openCanonical(), projectName: project, note: note)
-    print(ok ? "noted on \(project)" : "no project named '\(project)'")
+    let succeeded = try CheckpointCommands.add(try openCanonical(), projectName: project, note: note)
+    print(succeeded ? "noted on \(project)" : "no project named '\(project)'")
   }
 }

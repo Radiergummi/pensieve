@@ -42,12 +42,12 @@ public struct SalienceSuggester {
     let byEvent = Dictionary(grouping: capped, by: { $0.sourceEventID })
     for (eventID, group) in byEvent {
       let messages = try messages(database, eventID: eventID)
-      for le in group {
-        let vle = VerifiedLooseEnd(text: le.text, quote: le.quote, role: le.role,
-                                   sourceMessageIndex: le.sourceMessageIndex)
+      for looseEnd in group {
+        let vle = VerifiedLooseEnd(text: looseEnd.text, quote: looseEnd.quote, role: looseEnd.role,
+                                   sourceMessageIndex: looseEnd.sourceMessageIndex)
         let ctx = messages.isEmpty ? "" : SalienceClassifier.contextWindow(for: vle, messages: messages)
         if messages.isEmpty { quoteOnly += 1 }
-        items.append(Item(id: le.id, quote: le.quote, context: ctx))
+        items.append(Item(id: looseEnd.id, quote: looseEnd.quote, context: ctx))
       }
     }
 
@@ -73,8 +73,8 @@ public struct SalienceSuggester {
 
   /// Parse the event's transcript (best-effort). Returns [] on missing event / no path / empty parse.
   private func messages(_ database: any DatabaseWriter, eventID: UUID) throws -> [TranscriptMessage] {
-    guard let ev = try database.read({ database in try Event.where { $0.id.eq(eventID) }.fetchOne(database) }) else { return [] }
-    let detail = (try? JSONDecoder().decode([String: String].self, from: Data(ev.detailJSON.utf8))) ?? [:]
+    guard let event = try database.read({ database in try Event.where { $0.id.eq(eventID) }.fetchOne(database) }) else { return [] }
+    let detail = (try? JSONDecoder().decode([String: String].self, from: Data(event.detailJSON.utf8))) ?? [:]
     guard let path = detail["transcriptPath"], !path.isEmpty else { return [] }
     return parse(URL(fileURLWithPath: path)).messages
   }

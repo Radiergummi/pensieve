@@ -19,12 +19,12 @@ import SQLiteData
                quote: "we still need to do X", role: "user", sourceMessageIndex: 3)
     }.execute(database)
   }
-  let le = try database.read { database in try LooseEnd.all.fetchAll(database) }.first
-  #expect(le?.role == "user")
-  #expect(le?.sourceMessageIndex == 3)
-  let ev = try database.read { database in try Event.all.fetchAll(database) }.first
-  #expect(ev?.fingerprint == "fp-1")
-  #expect(ev?.extractedAt == nil)
+  let looseEnd = try database.read { database in try LooseEnd.all.fetchAll(database) }.first
+  #expect(looseEnd?.role == "user")
+  #expect(looseEnd?.sourceMessageIndex == 3)
+  let storedEvent = try database.read { database in try Event.all.fetchAll(database) }.first
+  #expect(storedEvent?.fingerprint == "fp-1")
+  #expect(storedEvent?.extractedAt == nil)
 }
 
 @Test func v3UniqueFingerprintIndexRejectsDuplicate() throws {

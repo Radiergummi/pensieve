@@ -185,8 +185,8 @@ private let migrationQuote = "Also remember to write the migration test before m
   let ends = try await database.read { database in try LooseEnd.all.fetchAll(database) }
   #expect(ends.count == 1)
   // Watermark repaired to the real count.
-  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first!
-  #expect(ev.extractedMessageCount == 1)
+  let reloadedEvent = try await database.read { database in try Event.all.fetchAll(database) }.first!
+  #expect(reloadedEvent.extractedMessageCount == 1)
 }
 
 @Test func reextractFromZeroDoesNotResurrectResolvedLooseEnd() async throws {
@@ -288,10 +288,10 @@ private let migrationQuote = "Also remember to write the migration test before m
 
   let results = try await ExtractionRunner(database: database, provider: SliceAwareProvider()).run()
   #expect(results.isEmpty)
-  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first!
-  #expect(ev.extractedAt == nil)              // not marked; will retry
-  #expect(ev.extractedMessageCount == 0)
-  #expect(ev.extractedTranscriptSize == -1)   // still the "never watermarked" sentinel
+  let event = try await database.read { database in try Event.all.fetchAll(database) }.first!
+  #expect(event.extractedAt == nil)              // not marked; will retry
+  #expect(event.extractedMessageCount == 0)
+  #expect(event.extractedTranscriptSize == -1)   // still the "never watermarked" sentinel
 }
 
 @Test func runnerFiltersClosureCandidatesBeforeInsert() async throws {
@@ -320,8 +320,8 @@ private let migrationQuote = "Also remember to write the migration test before m
     func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0] }
   }
   _ = try await ExtractionRunner(database: database, provider: SummarizingProvider()).run()
-  let ev = try await database.read { database in try Event.where { $0.id.eq(event.id) }.fetchOne(database) }
-  #expect(ev?.workSummary == "Migrated the auth tables.")
+  let reloadedEvent = try await database.read { database in try Event.where { $0.id.eq(event.id) }.fetchOne(database) }
+  #expect(reloadedEvent?.workSummary == "Migrated the auth tables.")
 }
 
 @Test func summarizerFailureDoesNotBlockWatermark() async throws {
@@ -333,9 +333,9 @@ private let migrationQuote = "Also remember to write the migration test before m
     func classifyGenuineIndices(prompt: String) async throws -> [Int] { [0] }
   }
   _ = try await ExtractionRunner(database: database, provider: FailSummaryProvider()).run()
-  let ev = try await database.read { database in try Event.where { $0.id.eq(event.id) }.fetchOne(database) }
-  #expect(ev?.workSummary == nil)                 // best-effort: left unset
-  #expect(ev?.extractedTranscriptSize != -1)      // watermark still advanced
+  let reloadedEvent = try await database.read { database in try Event.where { $0.id.eq(event.id) }.fetchOne(database) }
+  #expect(reloadedEvent?.workSummary == nil)                 // best-effort: left unset
+  #expect(reloadedEvent?.extractedTranscriptSize != -1)      // watermark still advanced
 }
 
 @Test func extractionIsLosslessWithoutSalienceGate() async throws {

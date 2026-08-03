@@ -152,12 +152,12 @@ public enum SessionContextQueries {
   /// `transcriptAvailable == false` (+ the stored quote) if the transcript is gone.
   public static func recall(looseEndID: UUID, radius: Int,
                             _ database: any DatabaseReader) throws -> RecallBundle? {
-    guard let le = try database.read({ database in
+    guard let looseEnd = try database.read({ database in
       try LooseEnd.where { $0.id.eq(looseEndID) }.fetchOne(database)
     }) else { return nil }
-    let ctx = try ProvenanceQueries.context(database, looseEnd: le, radius: radius)
+    let ctx = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: radius)
     return RecallBundle(
-      looseEndText: le.text, quote: le.quote,
+      looseEndText: looseEnd.text, quote: looseEnd.quote,
       transcriptAvailable: ctx.transcriptAvailable,
       sessionOccurredAt: ctx.sourceEvent.occurredAt,
       messages: ctx.messages.map { RecallMessage(index: $0.index, role: $0.role, text: $0.text,

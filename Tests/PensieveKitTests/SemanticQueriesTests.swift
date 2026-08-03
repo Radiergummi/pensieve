@@ -103,9 +103,9 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let database = try openCanonicalDatabase(at: tempURL("semq-stale"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n)
-    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "refund flow", quote: "q")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: n)
+    let looseEnd = LooseEnd(nodeID: n.id, sourceEventID: event.id, text: "refund flow", quote: "q")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
@@ -113,13 +113,13 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 
     // Simulate between-sync drift: noise-label the loose end in canonical WITHOUT re-syncing the index.
     try await database.write { database in
-      try LooseEnd.where { $0.id.eq(le.id) }.update { $0.label = "noise" }.execute(database)
+      try LooseEnd.where { $0.id.eq(looseEnd.id) }.update { $0.label = "noise" }.execute(database)
     }
 
     let hits = await SemanticQueries.search(
       query: "refund flow", visibleNodeIDs: [n.id], excludingIDs: [], k: 5, floor: -1.0,
       store: s, embedder: embedder, database)
-    #expect(!hits.contains { $0.id == le.id })           // join re-applies isOpen → dropped
+    #expect(!hits.contains { $0.id == looseEnd.id })           // join re-applies isOpen → dropped
   }
 
   @Test func floorDropsWeakMatches() async throws {
@@ -200,11 +200,11 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let database = try openCanonicalDatabase(at: tempURL("semq-archived-children"))
     let archived = Node(name: "Legacy billing", state: .archived, kind: NodeKind.project)
     try await database.write { try Node.insert { archived }.execute($0) }
-    let ev = try makeEvent(database, node: archived, kind: CaptureKind.ccSession,
+    let event = try makeEvent(database, node: archived, kind: CaptureKind.ccSession,
                            workSummary: "migrated the old invoices")
-    let le = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+    let looseEnd = LooseEnd(nodeID: archived.id, sourceEventID: event.id,
                       text: "drop the legacy invoice table", quote: "TODO drop invoices")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let embedder = StubEmbedder(dimension: 16)
     let s = store()
@@ -215,8 +215,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
       k: 8, floor: -1.0, includeArchived: true, store: s, embedder: embedder, database)
 
     // All three item kinds under an archived node resolve, and every one is flagged archived.
-    #expect(hits.contains { $0.id == le.id && $0.kind == "loose_end" })
-    #expect(hits.contains { $0.id == ev.id && $0.kind == "event" })
+    #expect(hits.contains { $0.id == looseEnd.id && $0.kind == "loose_end" })
+    #expect(hits.contains { $0.id == event.id && $0.kind == "event" })
     #expect(hits.contains { $0.id == archived.id && $0.kind == "node" })
     #expect(hits.allSatisfy { $0.isArchived })
   }

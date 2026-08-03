@@ -14,16 +14,16 @@ private func sampleBundle(prose: String?) -> ProjectContextBundle {
 }
 
 @Test func markdownIncludesNameLooseEndAndProse() {
-  let md = SessionContextRender.markdown(sampleBundle(prose: "A short recap."))
-  #expect(md.contains("Pensieve"))
-  #expect(md.contains("we must finish the auth flow"))
-  #expect(md.contains("A short recap."))
+  let markdown = SessionContextRender.markdown(sampleBundle(prose: "A short recap."))
+  #expect(markdown.contains("Pensieve"))
+  #expect(markdown.contains("we must finish the auth flow"))
+  #expect(markdown.contains("A short recap."))
 }
 
 @Test func markdownOmitsProseSectionWhenNil() {
-  let md = SessionContextRender.markdown(sampleBundle(prose: nil))
-  #expect(md.contains("we must finish the auth flow"))
-  #expect(!md.lowercased().contains("last work done"))   // the prose heading is absent
+  let markdown = SessionContextRender.markdown(sampleBundle(prose: nil))
+  #expect(markdown.contains("we must finish the auth flow"))
+  #expect(!markdown.lowercased().contains("last work done"))   // the prose heading is absent
 }
 
 @Test func compactIsPlainAndCitesLooseEnds() {
@@ -61,11 +61,11 @@ private func bundleWithLooseEnds(_ count: Int) -> ProjectContextBundle {
     WhatsNextItem(nodeID: UUID(), name: "Beta", kind: NodeKind.strand,
                   openLooseEnds: 0, daysDormant: 2, score: 2, topLooseEnd: nil),
   ]
-  let md = SessionContextRender.whatsNext(items)
-  #expect(md.contains("# What's Next"))
-  #expect(md.contains("**Alpha** — 3 open, 5d dormant"))
-  #expect(md.contains("> ship the thing"))
-  #expect(md.contains("**Beta** — 0 open, 2d dormant"))
+  let markdown = SessionContextRender.whatsNext(items)
+  #expect(markdown.contains("# What's Next"))
+  #expect(markdown.contains("**Alpha** — 3 open, 5d dormant"))
+  #expect(markdown.contains("> ship the thing"))
+  #expect(markdown.contains("**Beta** — 0 open, 2d dormant"))
 }
 
 @Test func whatsNextEmptyIsJustTheHeader() {

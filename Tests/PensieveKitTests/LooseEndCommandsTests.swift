@@ -8,16 +8,16 @@ import SQLiteData
 private func seedLooseEnd(_ database: any DatabaseWriter, quote: String) throws -> UUID {
   let node = Node(name: "N")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
-  let ev = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                  kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
-  let le = LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: quote, quote: quote)
+  let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: quote, quote: quote)
   try database.write { database in
     try Node.insert { node }.execute(database)
     try Source.insert { source }.execute(database)
-    try Event.insert { ev }.execute(database)
-    try LooseEnd.insert { le }.execute(database)
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert { looseEnd }.execute(database)
   }
-  return le.id
+  return looseEnd.id
 }
 
 @Test func setLabelConfirmsAndClears() throws {

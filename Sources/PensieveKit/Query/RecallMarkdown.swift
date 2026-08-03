@@ -29,7 +29,7 @@ public enum RecallMarkdown {
     if looseEnds.isEmpty {
       out.append("_None open._")
     } else {
-      for le in looseEnds { out.append("- \(le.looseEnd.text)") }
+      for looseEnd in looseEnds { out.append("- \(looseEnd.looseEnd.text)") }
     }
 
     out.append("")

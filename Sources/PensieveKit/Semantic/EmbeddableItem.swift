@@ -40,10 +40,10 @@ public enum EmbeddableCorpus {
                          state: n.state.rawValue, text: [n.name, n.description].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
-      for le in ends {
-        guard let state = stateByNodeID[le.nodeID] else { continue }
-        out.append(.init(itemID: le.id.uuidString, kind: "loose_end", nodeID: le.nodeID.uuidString,
-                         state: state, text: [le.text, le.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
+      for looseEnd in ends {
+        guard let state = stateByNodeID[looseEnd.nodeID] else { continue }
+        out.append(.init(itemID: looseEnd.id.uuidString, kind: "loose_end", nodeID: looseEnd.nodeID.uuidString,
+                         state: state, text: [looseEnd.text, looseEnd.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
       let events = try Event.all.fetchAll(database)
       for e in events {

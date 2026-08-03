@@ -95,10 +95,10 @@ public enum SemanticQueries {
                            snippet: SnippetMaker.make(from: n.description.isEmpty ? n.name : n.description, matching: query),
                            similarity: similarity, isArchived: n.state == .archived)
       case "loose_end":
-        guard let le = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) }).fetchOne(database),
-              let n = try Node.where({ $0.id.eq(le.nodeID) }).fetchOne(database), eligible(n) else { return nil }
-        return SemanticHit(id: le.id, kind: kind, nodeID: le.nodeID, nodeName: n.name, title: le.text,
-                           snippet: SnippetMaker.make(from: le.text, matching: query),
+        guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) }).fetchOne(database),
+              let n = try Node.where({ $0.id.eq(looseEnd.nodeID) }).fetchOne(database), eligible(n) else { return nil }
+        return SemanticHit(id: looseEnd.id, kind: kind, nodeID: looseEnd.nodeID, nodeName: n.name, title: looseEnd.text,
+                           snippet: SnippetMaker.make(from: looseEnd.text, matching: query),
                            similarity: similarity, isArchived: n.state == .archived)
       case "event":
         guard let e = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),

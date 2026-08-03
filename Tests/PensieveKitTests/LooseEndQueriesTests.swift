@@ -4,7 +4,7 @@ import SQLiteData
 @testable import PensieveKit
 
 @Test func openLooseEndsCarrySourceAge() throws {
-  let database = try openCanonicalDatabase(at: tempURL("le-q"))
+  let database = try openCanonicalDatabase(at: tempURL("looseEnd-q"))
   let (project, source) = try ProjectResolver(database: database).resolve(path: "/p/x", kind: SourceKind.claudeCode)
   let occurred = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
   let event = Event(nodeID: project.id, sourceID: source.id, occurredAt: occurred,
@@ -34,10 +34,10 @@ import SQLiteData
     try Event.insert { src }.execute(database)
   }
   func add(_ quote: String, label: String = "", suggestion: String = "") throws -> UUID {
-    let le = LooseEnd(nodeID: node.id, sourceEventID: src.id, text: quote, quote: quote,
+    let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: src.id, text: quote, quote: quote,
                       label: label, labelSuggestion: suggestion)
-    try database.write { database in try LooseEnd.insert { le }.execute(database) }
-    return le.id
+    try database.write { database in try LooseEnd.insert { looseEnd }.execute(database) }
+    return looseEnd.id
   }
   _ = try add("unlabeled item")
   _ = try add("confirmed salient", label: LooseEndLabel.salient)

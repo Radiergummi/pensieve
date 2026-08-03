@@ -37,18 +37,18 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/app/.git")
-  let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
+  let event = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "abc"))
   try database.write { database in
     try Node.insert { node }.execute(database)
     try Source.insert { src }.execute(database)
-    try Event.insert { ev }.execute(database)
+    try Event.insert { event }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t1", quote: "q1", status: "open")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t1", quote: "q1", status: "open")
     }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t2", quote: "q2", status: "resolved")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t2", quote: "q2", status: "resolved")
     }.execute(database)
   }
   let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: tempURL("absent-spool"), now: Date())
@@ -98,13 +98,13 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/app-ro/.git")
-  let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
+  let event = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "ro-abc"))
   try database.write { database in
     try Node.insert { node }.execute(database)
     try Source.insert { src }.execute(database)
-    try Event.insert { ev }.execute(database)
+    try Event.insert { event }.execute(database)
   }
   let roDB = try openCanonicalDatabaseReadOnly(at: canonURL)
   let roEventCount = try roDB.read { database in try Event.all.fetchAll(database).count }
@@ -120,22 +120,22 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/noise/.git")
-  let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
+  let event = Event(nodeID: node.id, sourceID: src.id, occurredAt: Date(),
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "noise-abc"))
   try database.write { database in
     try Node.insert { node }.execute(database)
     try Source.insert { src }.execute(database)
-    try Event.insert { ev }.execute(database)
+    try Event.insert { event }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t1", quote: "unlabeled item")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t1", quote: "unlabeled item")
     }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t2", quote: "confirmed noise",
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t2", quote: "confirmed noise",
                label: LooseEndLabel.noise)
     }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t3", quote: "only suggested noise",
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t3", quote: "only suggested noise",
                labelSuggestion: LooseEndLabel.noise)
     }.execute(database)
   }
@@ -155,15 +155,15 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: canonURL)
   let node = Node(name: "app")
   let src = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/app-open/.git")
-  let ev = Event(nodeID: node.id, sourceID: src.id, occurredAt: now,
+  let event = Event(nodeID: node.id, sourceID: src.id, occurredAt: now,
                  kind: CaptureKind.gitCommit, summary: "x", detailJSON: "{}",
                  fingerprint: Fingerprint.commit(hash: "open-abc"))
   try database.write { database in
     try Node.insert { node }.execute(database)
     try Source.insert { src }.execute(database)
-    try Event.insert { ev }.execute(database)
+    try Event.insert { event }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: "t", quote: "q", status: "open")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t", quote: "q", status: "open")
     }.execute(database)
   }
 

@@ -7,7 +7,7 @@ struct Nest: ParsableCommand {
   @Argument var child: String
   @Option(name: .long) var under: String
   func run() throws {
-    let ok = try NodeCommands.nest(try openCanonical(), child: child, under: under)
-    print(ok ? "nested \(child) under \(under)" : "unknown node name(s)")
+    let succeeded = try NodeCommands.nest(try openCanonical(), child: child, under: under)
+    print(succeeded ? "nested \(child) under \(under)" : "unknown node name(s)")
   }
 }

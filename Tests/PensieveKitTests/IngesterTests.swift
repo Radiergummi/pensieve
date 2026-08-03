@@ -179,8 +179,8 @@ import SQLiteData
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "feature-x")))
   _ = try await Ingester(spool: spool, database: database).drain()
 
-  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first { $0.kind == CaptureKind.gitCommit }
-  #expect(ev?.branchKey == "feature-x")
+  let event = try await database.read { database in try Event.all.fetchAll(database) }.first { $0.kind == CaptureKind.gitCommit }
+  #expect(event?.branchKey == "feature-x")
 }
 
 @Test func defaultBranchCommitHasNilBranchKey() async throws {
@@ -190,8 +190,8 @@ import SQLiteData
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")))
   _ = try await Ingester(spool: spool, database: database).drain()
-  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first
-  #expect(ev?.branchKey == nil)
+  let event = try await database.read { database in try Event.all.fetchAll(database) }.first
+  #expect(event?.branchKey == nil)
 }
 
 @Test func newActivityResurfacesArchivedNodeAndAncestors() async throws {

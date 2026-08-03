@@ -623,8 +623,8 @@ final class AppModel {
   func setLooseEndLabel(_ looseEndID: UUID, _ label: String) {
     guard let database else { return }
     do {
-      let ok = try LooseEndCommands.setLabel(database, id: looseEndID, label: label)
-      if !ok { refuse(String(localized: "update"), String(localized: "this loose end")) }
+      let succeeded = try LooseEndCommands.setLabel(database, id: looseEndID, label: label)
+      if !succeeded { refuse(String(localized: "update"), String(localized: "this loose end")) }
     } catch {
       fail(String(localized: "update"), String(localized: "this loose end"), error)
     }
@@ -693,9 +693,9 @@ final class AppModel {
     guard !trimmed.isEmpty else { return }
     let label = displayName(nodeID)
     do {
-      let ok = try NodeCommands.update(database, nodeID: nodeID, name: trimmed, kind: kind,
+      let succeeded = try NodeCommands.update(database, nodeID: nodeID, name: trimmed, kind: kind,
                                        icon: icon, colorTag: colorTag, context: context)
-      if ok { refresh() } else { refuse(String(localized: "rename"), label) }
+      if succeeded { refresh() } else { refuse(String(localized: "rename"), label) }
     } catch {
       fail(String(localized: "rename"), label, error)
     }
@@ -712,8 +712,8 @@ final class AppModel {
     let label = displayName(nodeID)
     do {
       // false ⇒ cycle guard, unknown node, or unknown parent — all stale-state rejections.
-      let ok = try NodeCommands.reparent(database, nodeID: nodeID, newParentID: newParentID)
-      if ok { refresh() } else { refuse(String(localized: "move"), label) }
+      let succeeded = try NodeCommands.reparent(database, nodeID: nodeID, newParentID: newParentID)
+      if succeeded { refresh() } else { refuse(String(localized: "move"), label) }
     } catch {
       fail(String(localized: "move"), label, error)
     }
@@ -726,8 +726,8 @@ final class AppModel {
     let subtree = NodeForest.descendantIDs(of: nodeID, in: allNodes).union([nodeID])
     do {
       // false ⇒ the node vanished between menu-open and click — a stale-state rejection.
-      let ok = try NodeCommands.archive(database, nodeID: nodeID)
-      guard ok else { refuse(String(localized: "archive"), label); return }
+      let succeeded = try NodeCommands.archive(database, nodeID: nodeID)
+      guard succeeded else { refuse(String(localized: "archive"), label); return }
       // Selection moves off the whole archived subtree so we don't strand the detail pane on a
       // node that just left the active tree.
       if let sel = selectedNodeID, subtree.contains(sel) { selectedNodeID = nil }
@@ -742,8 +742,8 @@ final class AppModel {
     guard let database else { return }
     let label = displayName(nodeID)
     do {
-      let ok = try NodeCommands.unarchive(database, nodeID: nodeID)
-      if ok { refresh() } else { refuse(String(localized: "unarchive"), label) }
+      let succeeded = try NodeCommands.unarchive(database, nodeID: nodeID)
+      if succeeded { refresh() } else { refuse(String(localized: "unarchive"), label) }
     } catch {
       fail(String(localized: "unarchive"), label, error)
     }

@@ -29,9 +29,9 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let database = try openCanonicalDatabase(at: tempURL("semidx-add"))
     let n = Node(name: "Payments", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n, kind: CaptureKind.ccSession, workSummary: "wired up refunds")
-    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "wire up refunds", quote: "TODO refunds")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: n, kind: CaptureKind.ccSession, workSummary: "wired up refunds")
+    let looseEnd = LooseEnd(nodeID: n.id, sourceEventID: event.id, text: "wire up refunds", quote: "TODO refunds")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let s = store()
     let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
@@ -39,21 +39,21 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 
     let items = s.existingItems()
     #expect(items.keys.contains(n.id.uuidString))
-    #expect(items.keys.contains(le.id.uuidString))
-    #expect(items.keys.contains(ev.id.uuidString))
+    #expect(items.keys.contains(looseEnd.id.uuidString))
+    #expect(items.keys.contains(event.id.uuidString))
   }
 
   @Test func skipsUnenrichedCCSessionEventWithoutWorkSummary() async throws {
     let database = try openCanonicalDatabase(at: tempURL("semidx-skip"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n, kind: CaptureKind.ccSession, workSummary: nil) // un-enriched
+    let event = try makeEvent(database, node: n, kind: CaptureKind.ccSession, workSummary: nil) // un-enriched
 
     let s = store()
     let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
     await idx.sync(database)
 
-    #expect(!s.existingItems().keys.contains(ev.id.uuidString))
+    #expect(!s.existingItems().keys.contains(event.id.uuidString))
   }
 
   /// Degenerate extraction output ("[]", "/") is not searchable content — it must never reach the
@@ -123,40 +123,40 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let database = try openCanonicalDatabase(at: tempURL("semidx-noise"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n)
-    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "t", quote: "q")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: n)
+    let looseEnd = LooseEnd(nodeID: n.id, sourceEventID: event.id, text: "t", quote: "q")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let s = store()
     let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
     await idx.sync(database)
-    #expect(s.existingItems().keys.contains(le.id.uuidString))
+    #expect(s.existingItems().keys.contains(looseEnd.id.uuidString))
 
     try await database.write { database in
-      try LooseEnd.where { $0.id.eq(le.id) }.update { $0.label = "noise" }.execute(database)
+      try LooseEnd.where { $0.id.eq(looseEnd.id) }.update { $0.label = "noise" }.execute(database)
     }
     await idx.sync(database)                      // membership-driven prune (hash unchanged)
-    #expect(!s.existingItems().keys.contains(le.id.uuidString))
+    #expect(!s.existingItems().keys.contains(looseEnd.id.uuidString))
   }
 
   @Test func resolvedLooseEndPrunesFromIndex() async throws {
     let database = try openCanonicalDatabase(at: tempURL("semidx-resolved"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n)
-    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "t", quote: "q")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: n)
+    let looseEnd = LooseEnd(nodeID: n.id, sourceEventID: event.id, text: "t", quote: "q")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let s = store()
     let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
     await idx.sync(database)
-    #expect(s.existingItems().keys.contains(le.id.uuidString))
+    #expect(s.existingItems().keys.contains(looseEnd.id.uuidString))
 
     try await database.write { database in
-      try LooseEnd.where { $0.id.eq(le.id) }.update { $0.status = "resolved" }.execute(database)
+      try LooseEnd.where { $0.id.eq(looseEnd.id) }.update { $0.status = "resolved" }.execute(database)
     }
     await idx.sync(database)
-    #expect(!s.existingItems().keys.contains(le.id.uuidString))
+    #expect(!s.existingItems().keys.contains(looseEnd.id.uuidString))
   }
 
   /// Superseded contract: archiving used to prune a node's items from the index entirely. Task 1
@@ -167,16 +167,16 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let database = try openCanonicalDatabase(at: tempURL("semidx-archive"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n)
-    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "t", quote: "q")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: n)
+    let looseEnd = LooseEnd(nodeID: n.id, sourceEventID: event.id, text: "t", quote: "q")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let s = store()
     let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
     await idx.sync(database)
     #expect(s.existingItems().keys.contains(n.id.uuidString))
-    #expect(s.existingItems().keys.contains(le.id.uuidString))
-    #expect(s.existingItems().keys.contains(ev.id.uuidString))
+    #expect(s.existingItems().keys.contains(looseEnd.id.uuidString))
+    #expect(s.existingItems().keys.contains(event.id.uuidString))
 
     try await database.write { database in
       try Node.where { $0.id.eq(n.id) }.update { $0.state = NodeState.archived }.execute(database)
@@ -185,27 +185,27 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 
     let items = s.existingItems()
     #expect(items.keys.contains(n.id.uuidString))
-    #expect(items.keys.contains(le.id.uuidString))
-    #expect(items.keys.contains(ev.id.uuidString))
+    #expect(items.keys.contains(looseEnd.id.uuidString))
+    #expect(items.keys.contains(event.id.uuidString))
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
     let activeHits = s.knn(query: queryVec, k: 5, includeArchived: false)
-    #expect(!activeHits.contains { $0.itemID == le.id.uuidString })
+    #expect(!activeHits.contains { $0.itemID == looseEnd.id.uuidString })
 
     // The vector itself is still there, not destroyed — it's reachable under the wide filter.
     // This is what distinguishes "re-tagged" from "pruned-and-re-embedded" (both would satisfy
     // the assertions above; only this one pins the vector survived unpruned).
     let archivedHits = s.knn(query: queryVec, k: 5, includeArchived: true)
-    #expect(archivedHits.contains { $0.itemID == le.id.uuidString })
+    #expect(archivedHits.contains { $0.itemID == looseEnd.id.uuidString })
   }
 
   @Test func unarchivingNodeRestoresItsItemsToDefaultScopeResults() async throws {
     let database = try openCanonicalDatabase(at: tempURL("semidx-unarchive"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n)
-    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "t", quote: "q")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: n)
+    let looseEnd = LooseEnd(nodeID: n.id, sourceEventID: event.id, text: "t", quote: "q")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let s = store()
     let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
@@ -217,7 +217,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await idx.sync(database)
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
-    #expect(!s.knn(query: queryVec, k: 5, includeArchived: false).contains { $0.itemID == le.id.uuidString })
+    #expect(!s.knn(query: queryVec, k: 5, includeArchived: false).contains { $0.itemID == looseEnd.id.uuidString })
 
     try await database.write { database in
       try Node.where { $0.id.eq(n.id) }.update { $0.state = NodeState.active }.execute(database)
@@ -225,7 +225,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     await idx.sync(database)
 
     let restoredHits = s.knn(query: queryVec, k: 5, includeArchived: false)
-    #expect(restoredHits.contains { $0.itemID == le.id.uuidString })
+    #expect(restoredHits.contains { $0.itemID == looseEnd.id.uuidString })
   }
 
   @Test func repointUpdatesNodeWithoutChangingHash() async throws {
@@ -236,25 +236,25 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
       try Node.insert { a }.execute(database)
       try Node.insert { b }.execute(database)
     }
-    let ev = try makeEvent(database, node: a)
-    let le = LooseEnd(nodeID: a.id, sourceEventID: ev.id, text: "t", quote: "q")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: a)
+    let looseEnd = LooseEnd(nodeID: a.id, sourceEventID: event.id, text: "t", quote: "q")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let s = store()
     let idx = SemanticIndexer(store: s, embedder: StubEmbedder(dimension: 16))
     await idx.sync(database)
-    let hashBefore = s.existingItems()[le.id.uuidString]
+    let hashBefore = s.existingItems()[looseEnd.id.uuidString]
 
     try await database.write { database in
-      try LooseEnd.where { $0.id.eq(le.id) }.update { $0.nodeID = b.id }.execute(database)
+      try LooseEnd.where { $0.id.eq(looseEnd.id) }.update { $0.nodeID = b.id }.execute(database)
     }
     await idx.sync(database)
 
     // content_hash for the loose end is unchanged (repoint is metadata-only, not a re-embed).
-    #expect(s.existingItems()[le.id.uuidString] == hashBefore)
+    #expect(s.existingItems()[looseEnd.id.uuidString] == hashBefore)
     let queryVec = await StubEmbedder(dimension: 16).embed(["t — q"])![0]!
     let hits = s.knn(query: queryVec, k: 5, includeArchived: false)
-    #expect(hits.first(where: { $0.itemID == le.id.uuidString })?.nodeID == b.id.uuidString)
+    #expect(hits.first(where: { $0.itemID == looseEnd.id.uuidString })?.nodeID == b.id.uuidString)
   }
 
   @Test func changedTextReEmbedsWithNewContent() async throws {
@@ -283,9 +283,9 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let database = try openCanonicalDatabase(at: tempURL("semidx-nilembed-retry"))
     let n = Node(name: "N", kind: NodeKind.project)
     try await database.write { try Node.insert { n }.execute($0) }
-    let ev = try makeEvent(database, node: n, kind: CaptureKind.ccSession, workSummary: "wired up refunds")
-    let le = LooseEnd(nodeID: n.id, sourceEventID: ev.id, text: "wire up refunds", quote: "TODO refunds")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    let event = try makeEvent(database, node: n, kind: CaptureKind.ccSession, workSummary: "wired up refunds")
+    let looseEnd = LooseEnd(nodeID: n.id, sourceEventID: event.id, text: "wire up refunds", quote: "TODO refunds")
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let s = store()
 
@@ -302,12 +302,12 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 
     let items = s.existingItems()
     #expect(items.keys.contains(n.id.uuidString))
-    #expect(items.keys.contains(le.id.uuidString))
-    #expect(items.keys.contains(ev.id.uuidString))
+    #expect(items.keys.contains(looseEnd.id.uuidString))
+    #expect(items.keys.contains(event.id.uuidString))
 
     let queryVec = await StubEmbedder(dimension: 16).embed(["wire up refunds — TODO refunds"])![0]!
     let hits = s.knn(query: queryVec, k: 5, includeArchived: false)
-    #expect(hits.contains { $0.itemID == le.id.uuidString })
+    #expect(hits.contains { $0.itemID == looseEnd.id.uuidString })
   }
 
   @Test func gatherIncludesArchivedNodesTaggedWithTheirState() async throws {
@@ -329,17 +329,17 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     let database = try openCanonicalDatabase(at: tempURL("corpus-archived-children"))
     let archived = Node(name: "Legacy billing", state: .archived, kind: NodeKind.project)
     try await database.write { try Node.insert { archived }.execute($0) }
-    let ev = try makeEvent(database, node: archived, kind: CaptureKind.ccSession,
+    let event = try makeEvent(database, node: archived, kind: CaptureKind.ccSession,
                            workSummary: "migrated the old invoices")
-    let le = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+    let looseEnd = LooseEnd(nodeID: archived.id, sourceEventID: event.id,
                       text: "drop the legacy invoice table", quote: "TODO drop invoices")
-    try await database.write { try LooseEnd.insert { le }.execute($0) }
+    try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
     let items = try EmbeddableCorpus.gather(database)
     let byID = Dictionary(items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
 
-    #expect(byID[le.id.uuidString]?.state == "archived")
-    #expect(byID[ev.id.uuidString]?.state == "archived")
+    #expect(byID[looseEnd.id.uuidString]?.state == "archived")
+    #expect(byID[event.id.uuidString]?.state == "archived")
   }
 
   @Test func gatherStillExcludesMutedNodesAndClosedLooseEnds() async throws {
@@ -350,8 +350,8 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
       try Node.insert { muted }.execute(database)
       try Node.insert { archived }.execute(database)
     }
-    let ev = try makeEvent(database, node: archived)
-    let closed = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+    let event = try makeEvent(database, node: archived)
+    let closed = LooseEnd(nodeID: archived.id, sourceEventID: event.id,
                           text: "already handled", quote: "done", status: "closed")
     try await database.write { try LooseEnd.insert { closed }.execute($0) }
 

@@ -22,13 +22,13 @@ private func seedLooseEnd(_ database: any DatabaseWriter, transcriptURL: URL,
   let detail = try encodeJSON(["transcriptPath": transcriptURL.path, "sessionID": "s", "prompts": "2"])
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                     kind: CaptureKind.ccSession, summary: "session", detailJSON: detail, fingerprint: "fp")
-  let le = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "finish the migration",
+  let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "finish the migration",
                     quote: quote, role: "user", sourceMessageIndex: citedIndex)
   try database.write { database in
     try Event.insert { event }.execute(database)
-    try LooseEnd.insert { le }.execute(database)
+    try LooseEnd.insert { looseEnd }.execute(database)
   }
-  return le
+  return looseEnd
 }
 
 @Test func provenanceReturnsWindowAroundCitedUserPrompt() throws {
@@ -40,9 +40,9 @@ private func seedLooseEnd(_ database: any DatabaseWriter, transcriptURL: URL,
     (type: "assistant", text: "got it"),                                  // index 3
     (type: "user", text: "thanks"),                                       // index 4
   ])
-  let le = try seedLooseEnd(database, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
+  let looseEnd = try seedLooseEnd(database, transcriptURL: url, citedIndex: 2, quote: "finish the migration")
 
-  let ctx = try ProvenanceQueries.context(database, looseEnd: le, radius: 1)
+  let ctx = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: 1)
   #expect(ctx.transcriptAvailable)
   #expect(ctx.messages.map(\.index) == [1, 2, 3])          // radius 1 around index 2
   let cited = ctx.messages.first { $0.isCited }
@@ -57,8 +57,8 @@ private func seedLooseEnd(_ database: any DatabaseWriter, transcriptURL: URL,
     (type: "user", text: "start the work now"),                          // index 0 (cited)
     (type: "assistant", text: "ok"),                                     // index 1
   ])
-  let le = try seedLooseEnd(database, transcriptURL: url, citedIndex: 0, quote: "start the work")
-  let ctx = try ProvenanceQueries.context(database, looseEnd: le, radius: 4)
+  let looseEnd = try seedLooseEnd(database, transcriptURL: url, citedIndex: 0, quote: "start the work")
+  let ctx = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: 4)
   #expect(ctx.transcriptAvailable)
   #expect(ctx.messages.map(\.index) == [0, 1])              // no negative indices
   #expect(ctx.messages.first?.isCited == true)
@@ -67,8 +67,8 @@ private func seedLooseEnd(_ database: any DatabaseWriter, transcriptURL: URL,
 @Test func provenanceMissingTranscriptDegradesHonestly() throws {
   let database = try openCanonicalDatabase(at: tempURL("prov-missing"))
   let gone = tempURL("prov-missing-gone", ext: "jsonl")     // never written to disk
-  let le = try seedLooseEnd(database, transcriptURL: gone, citedIndex: 0, quote: "anything")
-  let ctx = try ProvenanceQueries.context(database, looseEnd: le, radius: 4)
+  let looseEnd = try seedLooseEnd(database, transcriptURL: gone, citedIndex: 0, quote: "anything")
+  let ctx = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: 4)
   #expect(ctx.transcriptAvailable == false)
   #expect(ctx.messages.isEmpty)
 }
@@ -76,8 +76,8 @@ private func seedLooseEnd(_ database: any DatabaseWriter, transcriptURL: URL,
 @Test func provenanceRejectsOutOfBoundsIndex() throws {
   let database = try openCanonicalDatabase(at: tempURL("prov-oob"))
   let url = try writeTranscript("prov-oob", [(type: "user", text: "only message here")])
-  let le = try seedLooseEnd(database, transcriptURL: url, citedIndex: 99, quote: "only message")
-  let ctx = try ProvenanceQueries.context(database, looseEnd: le, radius: 4)
+  let looseEnd = try seedLooseEnd(database, transcriptURL: url, citedIndex: 99, quote: "only message")
+  let ctx = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: 4)
   #expect(ctx.transcriptAvailable == false)                 // no message with index 99
   #expect(ctx.messages.isEmpty)
 }
@@ -91,7 +91,7 @@ private func seedLooseEnd(_ database: any DatabaseWriter, transcriptURL: URL,
     (type: "user", text: "please handle the retry logic"),               // index 0
     (type: "assistant", text: "handle the retry logic like this"),       // index 1 (non-user, same phrase)
   ])
-  let le = try seedLooseEnd(database, transcriptURL: url, citedIndex: 1, quote: "handle the retry logic")
-  let ctx = try ProvenanceQueries.context(database, looseEnd: le, radius: 2)
+  let looseEnd = try seedLooseEnd(database, transcriptURL: url, citedIndex: 1, quote: "handle the retry logic")
+  let ctx = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: 2)
   #expect(ctx.transcriptAvailable == false)                 // cited message isUserPrompt == false → rejected
 }

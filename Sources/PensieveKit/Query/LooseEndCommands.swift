@@ -51,8 +51,8 @@ public enum LooseEndCommands {
     // Build a normalized-quote -> [id] index once (a quote may recur across nodes; label them all).
     let index: [String: [UUID]] = try database.read { database in
       var map: [String: [UUID]] = [:]
-      for le in try LooseEnd.all.fetchAll(database) {
-        map[normalizeWhitespace(le.quote), default: []].append(le.id)
+      for looseEnd in try LooseEnd.all.fetchAll(database) {
+        map[normalizeWhitespace(looseEnd.quote), default: []].append(looseEnd.id)
       }
       return map
     }

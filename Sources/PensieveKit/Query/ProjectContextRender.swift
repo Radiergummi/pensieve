@@ -12,8 +12,8 @@ public enum SessionContextRender {
     }
     if !b.looseEnds.isEmpty {
       out += "\n## Open Loose Ends\n\n"
-      for le in b.looseEnds {
-        out += "- \(le.text)\n  > \(le.quote)\n"
+      for looseEnd in b.looseEnds {
+        out += "- \(looseEnd.text)\n  > \(looseEnd.quote)\n"
       }
     }
     if !b.recentEvents.isEmpty {
@@ -31,7 +31,7 @@ public enum SessionContextRender {
     if let prose = b.prose { lines.append(prose) }
     if !b.looseEnds.isEmpty {
       lines.append("Open loose ends:")
-      for le in b.looseEnds.prefix(maxLooseEnds) { lines.append("• \(le.text) — \"\(le.quote)\"") }
+      for looseEnd in b.looseEnds.prefix(maxLooseEnds) { lines.append("• \(looseEnd.text) — \"\(looseEnd.quote)\"") }
       let remaining = b.looseEnds.count - maxLooseEnds
       if remaining > 0 { lines.append("… and \(remaining) more") }
     }

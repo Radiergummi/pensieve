@@ -17,10 +17,10 @@ public enum LooseEndQueries {
         ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       }
       var views: [LooseEndView] = []
-      for le in ends {
-        guard let event = try Event.where({ $0.id.eq(le.sourceEventID) }).fetchOne(database) else { continue }
+      for looseEnd in ends {
+        guard let event = try Event.where({ $0.id.eq(looseEnd.sourceEventID) }).fetchOne(database) else { continue }
         let days = Calendar.current.dateComponents([.day], from: event.occurredAt, to: now).day ?? 0
-        views.append(LooseEndView(looseEnd: le, occurredAt: event.occurredAt, ageDays: days))
+        views.append(LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt, ageDays: days))
       }
       return views.sorted { $0.occurredAt < $1.occurredAt }   // oldest source first
     }

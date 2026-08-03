@@ -33,23 +33,23 @@ public enum CellScoring {
   /// recall are `nil` (unknown), not 0, so `DecisionEngine` treats the cell as not-clearing.
   public static func score(task: any EvalTask, items: [CorpusItem], samples: [CellSample],
                            spec: ModelSpec, gold: GoldSet, judge: Judge) async -> CellScore {
-    let ok = samples.filter { $0.outcome == "success" }
-    guard !ok.isEmpty else {
+    let successfulSamples = samples.filter { $0.outcome == "success" }
+    guard !successfulSamples.isEmpty else {
       return CellScore(modelLabel: spec.label, isOnDevice: spec.isOnDevice, quality: nil,
                        precision: nil, recall: nil, costUSD: 0, latencyP50: 0,
                        reproducedFabrication: false)
     }
 
-    let costs = ok.map { TokenEstimate.costUSD(inputText: "", outputText: $0.outputText, spec: spec) }
+    let costs = successfulSamples.map { TokenEstimate.costUSD(inputText: "", outputText: $0.outputText, spec: spec) }
     let costUSD = costs.reduce(0, +) / Double(costs.count)
-    let latencyP50 = Aggregate.median(ok.map { $0.latencyMS }) ?? 0
+    let latencyP50 = Aggregate.median(successfulSamples.map { $0.latencyMS }) ?? 0
 
     switch task.scorer {
     case .extraction:
       var recalls: [Double] = []
       var precisions: [Double] = []
       var fabFlags: [Bool] = []
-      for sample in ok {
+      for sample in successfulSamples {
         let surfaced = sample.looseEndQuotes ?? []
         if let r = gold.recallScore(itemID: sample.itemID, surfaced: surfaced) { recalls.append(r) }
         if let labels = gold.grounding[sample.itemID], !labels.isEmpty {
@@ -69,7 +69,7 @@ public enum CellScoring {
     case .rubric(let dims):
       let itemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
       var qualities: [Double] = []
-      for sample in ok {
+      for sample in successfulSamples {
         guard let item = itemsByID[sample.itemID] else { continue }
         let verdict = await judge.scoreRubric(output: sample.outputText, dimensions: dims,
                                               sourceContext: sourceContext(for: item))

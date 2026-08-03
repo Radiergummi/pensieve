@@ -49,8 +49,8 @@ private struct StubProvider: LLMProvider {
 
 @Test func decodeCandidatesSkipsMalformedOutput() {
   #expect(LooseEndExtractor.decodeCandidates("no json here").isEmpty)
-  let ok = LooseEndExtractor.decodeCandidates(#"prefix [{"text":"t","quote":"qqqqqqqqqqqqqqqq","messageIndex":2}] suffix"#)
-  #expect(ok.first?.messageIndex == 2)
+  let candidates = LooseEndExtractor.decodeCandidates(#"prefix [{"text":"t","quote":"qqqqqqqqqqqqqqqq","messageIndex":2}] suffix"#)
+  #expect(candidates.first?.messageIndex == 2)
 }
 
 @Test func decodeCandidatesToleratesTrailingBracketInProse() {

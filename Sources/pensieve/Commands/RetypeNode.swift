@@ -11,7 +11,7 @@ struct RetypeNode: ParsableCommand {
       print("unknown kind '\(newKind)' (expected one of: \(NodeKind.all.map(\.rawValue).joined(separator: ", ")))")
       return
     }
-    let ok = try NodeCommands.retype(try openCanonical(), node: node, to: kind)
-    print(ok ? "retyped \(node) → \(newKind)" : "unknown node '\(node)'")
+    let succeeded = try NodeCommands.retype(try openCanonical(), node: node, to: kind)
+    print(succeeded ? "retyped \(node) → \(newKind)" : "unknown node '\(node)'")
   }
 }

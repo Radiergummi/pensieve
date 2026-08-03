@@ -22,19 +22,19 @@ private func seedLE(_ database: any DatabaseWriter, quote: String, label: String
                     messageIndex: Int = 0) throws -> (UUID, UUID) {
   let node = Node(name: "N")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
-  let ev = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
                  kind: CaptureKind.ccSession, summary: "s",
                  detailJSON: "{\"transcriptPath\":\"/tmp/does-not-exist-\(UUID().uuidString).jsonl\"}")
-  let le = LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: quote, quote: quote,
+  let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: quote, quote: quote,
                     status: status, sourceMessageIndex: messageIndex,
                     label: label, labelSuggestion: suggestion)
   try database.write { database in
     try Node.insert { node }.execute(database)
     try Source.insert { source }.execute(database)
-    try Event.insert { ev }.execute(database)
-    try LooseEnd.insert { le }.execute(database)
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert { looseEnd }.execute(database)
   }
-  return (le.id, ev.id)
+  return (looseEnd.id, event.id)
 }
 
 private func labelOf(_ database: any DatabaseWriter, _ id: UUID) throws -> (label: String, suggestion: String) {

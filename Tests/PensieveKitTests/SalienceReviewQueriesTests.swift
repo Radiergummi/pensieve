@@ -9,17 +9,17 @@ private func seed(_ database: any DatabaseWriter, quote: String, label: String, 
   let node = Node(name: "N")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
   let when = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
-  let ev = Event(nodeID: node.id, sourceID: source.id, occurredAt: when,
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: when,
                  kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
-  let le = LooseEnd(nodeID: node.id, sourceEventID: ev.id, text: quote, quote: quote,
+  let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: quote, quote: quote,
                     status: status, label: label, labelSuggestion: suggestion)
   try database.write { database in
     try Node.insert { node }.execute(database)
     try Source.insert { source }.execute(database)
-    try Event.insert { ev }.execute(database)
-    try LooseEnd.insert { le }.execute(database)
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert { looseEnd }.execute(database)
   }
-  return le.id
+  return looseEnd.id
 }
 
 @Test func reviewPendingReturnsOnlyUnlabeledSuggestedOpen() throws {

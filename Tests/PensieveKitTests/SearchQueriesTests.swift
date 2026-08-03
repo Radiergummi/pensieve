@@ -64,7 +64,7 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
 }
 
 @Test func searchMatchesLooseEndTextAndQuote() throws {
-  let database = try openCanonicalDatabase(at: tempURL("search-le"))
+  let database = try openCanonicalDatabase(at: tempURL("search-looseEnd"))
   _ = try seed(database, name: "P", ends: [
     (text: "finish the deploy pipeline", quote: "irrelevant", label: ""),
     (text: "unrelated", quote: "remember the deploy vars", label: ""),
@@ -160,15 +160,15 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     try Node.insert { active }.execute(database)
     try Node.insert { archived }.execute(database)
   }
-  let ev = try makeEvent(database, node: archived)
-  let le = LooseEnd(nodeID: archived.id, sourceEventID: ev.id,
+  let event = try makeEvent(database, node: archived)
+  let looseEnd = LooseEnd(nodeID: archived.id, sourceEventID: event.id,
                     text: "refund the last batch", quote: "TODO refund")
-  try await database.write { try LooseEnd.insert { le }.execute($0) }
+  try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
   let r = try SearchQueries.search(query: "refund", visibleNodeIDs: [active.id, archived.id],
                                    includeArchived: true, database)
 
   #expect(r.nodes.first { $0.id == active.id }?.isArchived == false)
   #expect(r.nodes.first { $0.id == archived.id }?.isArchived == true)
-  #expect(r.looseEnds.first { $0.id == le.id }?.isArchived == true)
+  #expect(r.looseEnds.first { $0.id == looseEnd.id }?.isArchived == true)
 }

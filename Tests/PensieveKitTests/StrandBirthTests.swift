@@ -51,8 +51,8 @@ private func spoolCommits(_ n: Int, on branch: String, repo: URL, spool: Capture
 
   let strands = try await database.read { database in try Node.where { $0.kind.eq(NodeKind.strand) }.fetchAll(database) }
   #expect(strands.isEmpty)                              // tagged, not materialized
-  let ev = try await database.read { database in try Event.all.fetchAll(database) }.first { $0.kind == CaptureKind.gitCommit }
-  #expect(ev?.branchKey == "feature-y")                // branch is still recorded on the event
+  let event = try await database.read { database in try Event.all.fetchAll(database) }.first { $0.kind == CaptureKind.gitCommit }
+  #expect(event?.branchKey == "feature-y")                // branch is still recorded on the event
 }
 
 @Test func materializedStrandGetsLLMName() async throws {

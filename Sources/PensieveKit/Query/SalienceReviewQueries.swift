@@ -12,10 +12,10 @@ public enum SalienceReviewQueries {
         .where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) && $0.labelSuggestion.neq("") }
         .fetchAll(database)
       var views: [LooseEndView] = []
-      for le in ends {
-        guard let event = try Event.where({ $0.id.eq(le.sourceEventID) }).fetchOne(database) else { continue }
+      for looseEnd in ends {
+        guard let event = try Event.where({ $0.id.eq(looseEnd.sourceEventID) }).fetchOne(database) else { continue }
         let days = Calendar.current.dateComponents([.day], from: event.occurredAt, to: now).day ?? 0
-        views.append(LooseEndView(looseEnd: le, occurredAt: event.occurredAt, ageDays: days))
+        views.append(LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt, ageDays: days))
       }
       // Suggested-salient first (0 before 1), then oldest source first.
       return views.sorted { a, b in

@@ -15,9 +15,9 @@ private struct JSONProvider: LLMProvider {
 
 @Test func judgeLabelsGrounding() async {
   let p = JSONProvider(json: "{\"candidateLabels\":[{\"quote\":\"revisit retries\",\"grounded\":true},{\"quote\":\"call Bob\",\"grounded\":false}]}")
-  let le = [VerifiedLooseEnd(text: "t", quote: "revisit retries", role: "user", sourceMessageIndex: 0),
+  let looseEnd = [VerifiedLooseEnd(text: "t", quote: "revisit retries", role: "user", sourceMessageIndex: 0),
             VerifiedLooseEnd(text: "t2", quote: "call Bob", role: "user", sourceMessageIndex: 1)]
-  let labels = await Judge(provider: p).labelGrounding(looseEnds: le, source: "we should revisit retries")
+  let labels = await Judge(provider: p).labelGrounding(looseEnds: looseEnd, source: "we should revisit retries")
   #expect(labels?.count == 2)
   #expect(labels?.first(where: { $0.quote == "call Bob" })?.grounded == false)
 }
@@ -31,8 +31,8 @@ private struct JSONProvider: LLMProvider {
   // A quote value containing { } [ ] must not desync the balanced scanner.
   let json = #"{"candidateLabels":[{"quote":"fix the { retry } loop [v2]","grounded":true}]}"#
   let p = JSONProvider(json: json)
-  let le = [VerifiedLooseEnd(text: "t", quote: "fix the { retry } loop [v2]", role: "user", sourceMessageIndex: 0)]
-  let labels = await Judge(provider: p).labelGrounding(looseEnds: le, source: "…")
+  let looseEnd = [VerifiedLooseEnd(text: "t", quote: "fix the { retry } loop [v2]", role: "user", sourceMessageIndex: 0)]
+  let labels = await Judge(provider: p).labelGrounding(looseEnds: looseEnd, source: "…")
   #expect(labels?.count == 1)
   #expect(labels?.first?.quote == "fix the { retry } loop [v2]")
   #expect(labels?.first?.grounded == true)
@@ -42,8 +42,8 @@ private struct JSONProvider: LLMProvider {
   // An escaped double-quote inside a string value must not prematurely end the string.
   let json = #"{"candidateLabels":[{"quote":"he said \"stop\" then left","grounded":false}]}"#
   let p = JSONProvider(json: json)
-  let le = [VerifiedLooseEnd(text: "t", quote: "he said \"stop\" then left", role: "user", sourceMessageIndex: 0)]
-  let labels = await Judge(provider: p).labelGrounding(looseEnds: le, source: "…")
+  let looseEnd = [VerifiedLooseEnd(text: "t", quote: "he said \"stop\" then left", role: "user", sourceMessageIndex: 0)]
+  let labels = await Judge(provider: p).labelGrounding(looseEnds: looseEnd, source: "…")
   #expect(labels?.count == 1)
   #expect(labels?.first?.quote == "he said \"stop\" then left")
   #expect(labels?.first?.grounded == false)

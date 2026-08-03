@@ -102,13 +102,13 @@ struct Mcp: AsyncParsableCommand {
     await server.withMethodHandler(ReadResource.self) { params in
       let uri = params.uri
       if uri == "pensieve://smartlist/whats-next" {
-        let md = try PensieveMCP.whatsNextMarkdown()
-        return .init(contents: [.text(md, uri: uri, mimeType: "text/markdown")])
+        let markdown = try PensieveMCP.whatsNextMarkdown()
+        return .init(contents: [.text(markdown, uri: uri, mimeType: "text/markdown")])
       }
       if uri.hasPrefix("pensieve://node/"),
          let id = UUID(uuidString: String(uri.dropFirst("pensieve://node/".count))),
-         let md = try await PensieveMCP.nodeMarkdown(id: id) {
-        return .init(contents: [.text(md, uri: uri, mimeType: "text/markdown")])
+         let markdown = try await PensieveMCP.nodeMarkdown(id: id) {
+        return .init(contents: [.text(markdown, uri: uri, mimeType: "text/markdown")])
       }
       throw MCPError.invalidParams("unknown resource: \(uri)")
     }
