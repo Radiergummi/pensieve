@@ -4,63 +4,63 @@ import Testing
 @testable import PensieveKit
 
 @Test func snippetMatchAtStart() {
-  let s = SnippetMaker.make(from: "hello world", matching: "hello")
-  #expect(s.leading == "")
-  #expect(s.match == "hello")
-  #expect(s.trailing == " world")
+  let snippet = SnippetMaker.make(from: "hello world", matching: "hello")
+  #expect(snippet.leading == "")
+  #expect(snippet.match == "hello")
+  #expect(snippet.trailing == " world")
 }
 
 @Test func snippetMatchInMiddle() {
-  let s = SnippetMaker.make(from: "the quick brown fox", matching: "quick")
-  #expect(s.leading == "the ")
-  #expect(s.match == "quick")
-  #expect(s.trailing == " brown fox")
+  let snippet = SnippetMaker.make(from: "the quick brown fox", matching: "quick")
+  #expect(snippet.leading == "the ")
+  #expect(snippet.match == "quick")
+  #expect(snippet.trailing == " brown fox")
 }
 
 @Test func snippetMatchAtEnd() {
-  let s = SnippetMaker.make(from: "abc xyz", matching: "xyz")
-  #expect(s.leading == "abc ")
-  #expect(s.match == "xyz")
-  #expect(s.trailing == "")
+  let snippet = SnippetMaker.make(from: "abc xyz", matching: "xyz")
+  #expect(snippet.leading == "abc ")
+  #expect(snippet.match == "xyz")
+  #expect(snippet.trailing == "")
 }
 
 @Test func snippetIsCaseInsensitiveAndKeepsSourceCase() {
-  let s = SnippetMaker.make(from: "Deploy the App", matching: "deploy")
-  #expect(s.match == "Deploy")   // original case preserved
+  let snippet = SnippetMaker.make(from: "Deploy the App", matching: "deploy")
+  #expect(snippet.match == "Deploy")   // original case preserved
 }
 
 @Test func snippetTakesFirstOccurrence() {
-  let s = SnippetMaker.make(from: "cat dog cat", matching: "cat")
-  #expect(s.leading == "")
-  #expect(s.match == "cat")
-  #expect(s.trailing == " dog cat")
+  let snippet = SnippetMaker.make(from: "cat dog cat", matching: "cat")
+  #expect(snippet.leading == "")
+  #expect(snippet.match == "cat")
+  #expect(snippet.trailing == " dog cat")
 }
 
 @Test func snippetNoMatchReturnsSourceInLeading() {
-  let s = SnippetMaker.make(from: "hello", matching: "zzz")
-  #expect(s.leading == "hello")
-  #expect(s.match == "")
-  #expect(s.trailing == "")
+  let snippet = SnippetMaker.make(from: "hello", matching: "zzz")
+  #expect(snippet.leading == "hello")
+  #expect(snippet.match == "")
+  #expect(snippet.trailing == "")
 }
 
 @Test func snippetRoundTrips() {
-  let s = SnippetMaker.make(from: "the quick brown fox", matching: "quick")
-  #expect(s.leading + s.match + s.trailing == "the quick brown fox")
+  let snippet = SnippetMaker.make(from: "the quick brown fox", matching: "quick")
+  #expect(snippet.leading + snippet.match + snippet.trailing == "the quick brown fox")
 }
 
 @Test func snippetWindowsLongSidesAndKeepsMatchExact() {
   let source = String(repeating: "a", count: 200) + "NEEDLE" + String(repeating: "b", count: 200)
-  let s = SnippetMaker.make(from: source, matching: "needle", window: 10)
-  #expect(s.match == "NEEDLE")
-  #expect(s.leading.hasPrefix("…"))
-  #expect(s.trailing.hasSuffix("…"))
-  #expect(s.leading.count <= 11)   // "…" + 10
-  #expect(s.trailing.count <= 11)
+  let snippet = SnippetMaker.make(from: source, matching: "needle", window: 10)
+  #expect(snippet.match == "NEEDLE")
+  #expect(snippet.leading.hasPrefix("…"))
+  #expect(snippet.trailing.hasSuffix("…"))
+  #expect(snippet.leading.count <= 11)   // "…" + 10
+  #expect(snippet.trailing.count <= 11)
 }
 
 @Test func snippetUnicodeSafe() {
-  let s = SnippetMaker.make(from: "😀😀 needle 🚀", matching: "needle")
-  #expect(s.leading == "😀😀 ")
-  #expect(s.match == "needle")
-  #expect(s.trailing == " 🚀")
+  let snippet = SnippetMaker.make(from: "😀😀 needle 🚀", matching: "needle")
+  #expect(snippet.leading == "😀😀 ")
+  #expect(snippet.match == "needle")
+  #expect(snippet.trailing == " 🚀")
 }

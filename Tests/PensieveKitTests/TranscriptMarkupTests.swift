@@ -139,8 +139,8 @@ import Testing
   var scanner = Scanner(input)
   #expect(scanner.consumeIndentedCodeLine() == true)
   let expectedEnd = input.index(input.startIndex, offsetBy: expectedPrefix.count)
-  #expect(scanner.i == expectedEnd)
-  #expect(String(input[input.startIndex..<scanner.i]) == expectedPrefix)
+  #expect(scanner.scanIndex == expectedEnd)
+  #expect(String(input[input.startIndex..<scanner.scanIndex]) == expectedPrefix)
 }
 
 /// Public-API counterpart to the white-box test above: proves the invariant args reader actually

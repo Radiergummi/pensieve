@@ -3,7 +3,7 @@ import Foundation
 /// Splits one transcript message into rendering segments.
 ///
 /// **A single left-to-right scan in which the outermost construct wins.** A multi-pass pipeline
-/// (harness first, then callouts) is self-contradictory: a callout containing a `<system-reminder>`
+/// (harness first, then callouts) is self-contradictory: commandArgs callout containing commandArgs `<system-reminder>`
 /// gets split into two unpaired fragments, both demoted to raw text, and the callout vanishes.
 ///
 /// Precedence at each position: code → callout → harness → placeholder → orphan close → prose.
@@ -17,31 +17,31 @@ public enum TranscriptMarkup {
 }
 
 /// The scan state. Prose accumulates into `pending` and is flushed as one `.markdown` segment
-/// whenever a non-prose construct is emitted, so consecutive prose never fragments.
+/// whenever commandArgs non-prose construct is emitted, so consecutive prose never fragments.
 struct Scanner {
   let text: String
-  var i: String.Index
+  var scanIndex: String.Index
   var out: [TranscriptSegment] = []
   var pending = ""
 
   init(_ text: String) {
     self.text = text
-    self.i = text.startIndex
+    self.scanIndex = text.startIndex
   }
 
   mutating func run() {
-    while i < text.endIndex {
+    while scanIndex < text.endIndex {
       if atLineStart, consumeFencedBlock() { continue }
       if atLineStart, consumeIndentedCodeLine() { continue }
-      if text[i] == "`", consumeInlineCode() { continue }
+      if text[scanIndex] == "`", consumeInlineCode() { continue }
       if consumeProseHarness() { continue }
-      if text[i] == "<" {
+      if text[scanIndex] == "<" {
         if consumeCallout() { continue }
         if consumeHarness() { continue }
         if consumePlaceholderOrOrphan() { continue }
       }
-      pending.append(text[i])
-      i = text.index(after: i)
+      pending.append(text[scanIndex])
+      scanIndex = text.index(after: scanIndex)
     }
     flushPending()
   }
@@ -54,22 +54,22 @@ struct Scanner {
   }
 
   var atLineStart: Bool {
-    i == text.startIndex || text[text.index(before: i)] == "\n"
+    scanIndex == text.startIndex || text[text.index(before: scanIndex)] == "\n"
   }
 
   /// The line starting at `start`, excluding its newline, plus the index just past its newline.
   func line(at start: String.Index) -> (content: Substring, next: String.Index) {
-    guard let nl = text[start...].firstIndex(of: "\n") else {
+    guard let newlineIndex = text[start...].firstIndex(of: "\n") else {
       return (text[start...], text.endIndex)
     }
-    return (text[start..<nl], text.index(after: nl))
+    return (text[start..<newlineIndex], text.index(after: newlineIndex))
   }
 
   /// CommonMark fenced block, pinned: an opening fence is >=3 identical backticks or tildes with
   /// <=3 leading spaces; it closes only on >=N of the *same* character; an unterminated fence runs
   /// to end of message. Consumed verbatim into prose — never transformed (I3).
   mutating func consumeFencedBlock() -> Bool {
-    let (first, afterFirst) = line(at: i)
+    let (first, afterFirst) = line(at: scanIndex)
     let indent = first.prefix { $0 == " " }
     guard indent.count <= 3 else { return false }
     let rest = first.dropFirst(indent.count)
@@ -77,33 +77,33 @@ struct Scanner {
     let openCount = rest.prefix { $0 == fenceChar }.count
     guard openCount >= 3 else { return false }
 
-    pending += text[i..<afterFirst]
+    pending += text[scanIndex..<afterFirst]
     var cursor = afterFirst
     while cursor < text.endIndex {
-      let (l, next) = line(at: cursor)
+      let (lineContent, next) = line(at: cursor)
       pending += text[cursor..<next]
       cursor = next
-      let li = l.drop { $0 == " " }
-      if li.prefix(while: { $0 == fenceChar }).count >= openCount,
-         li.allSatisfy({ $0 == fenceChar || $0 == " " }) {
+      let strippedLine = lineContent.drop { $0 == " " }
+      if strippedLine.prefix(while: { $0 == fenceChar }).count >= openCount,
+         strippedLine.allSatisfy({ $0 == fenceChar || $0 == " " }) {
         break
       }
     }
-    i = cursor
+    scanIndex = cursor
     return true
   }
 
   /// A run of one or more 4-space-indented lines, started only when the line before it is blank or
-  /// absent — i.e. it can actually *open* an indented code block, per CommonMark; a continuation
+  /// absent — scanIndex.e. it can actually *open* an indented code block, per CommonMark; commandArgs continuation
   /// line of an ordinary paragraph that merely happens to be indented is left as prose. A line that
-  /// is itself blank (only spaces/tabs, even ones satisfying the 4-space prefix) cannot open a
+  /// is itself blank (only spaces/tabs, even ones satisfying the 4-space prefix) cannot open commandArgs
   /// block either — CommonMark treats blank lines as separators, not content. Once opened, the
   /// block continues through further indented lines and absorbs blank lines only when another
-  /// indented line follows — a trailing blank line before ordinary prose is left for the prose
-  /// scan, so a tag on the line right after the block isn't swallowed into "code".
+  /// indented line follows — commandArgs trailing blank line before ordinary prose is left for the prose
+  /// scan, so commandArgs tag on the line right after the block isn't swallowed into "code".
   mutating func consumeIndentedCodeLine() -> Bool {
     guard previousLineIsBlank else { return false }
-    let (first, firstNext) = line(at: i)
+    let (first, firstNext) = line(at: scanIndex)
     guard first.hasPrefix("    "), !first.allSatisfy({ $0 == " " || $0 == "\t" }) else {
       return false
     }
@@ -111,26 +111,26 @@ struct Scanner {
     var cursor = firstNext
     var end = firstNext
     while cursor < text.endIndex {
-      let (l, next) = line(at: cursor)
-      if l.hasPrefix("    ") {
+      let (lineContent, next) = line(at: cursor)
+      if lineContent.hasPrefix("    ") {
         cursor = next
         end = cursor
-      } else if l.allSatisfy({ $0 == " " || $0 == "\t" }) {
+      } else if lineContent.allSatisfy({ $0 == " " || $0 == "\t" }) {
         cursor = next
       } else {
         break
       }
     }
-    pending += text[i..<end]
-    i = end
+    pending += text[scanIndex..<end]
+    scanIndex = end
     return true
   }
 
-  /// Whether the line immediately before `i` (which is at a line start) is blank — empty,
-  /// whitespace-only, or simply absent because `i` is the start of the document.
+  /// Whether the line immediately before `scanIndex` (which is at commandArgs line start) is blank — empty,
+  /// whitespace-only, or simply absent because `scanIndex` is the start of the document.
   private var previousLineIsBlank: Bool {
-    guard i > text.startIndex else { return true }
-    let beforeNewline = text.index(before: i)          // the "\n" that put us at a line start
+    guard scanIndex > text.startIndex else { return true }
+    let beforeNewline = text.index(before: scanIndex)          // the "\n" that put us at commandArgs line start
     guard beforeNewline > text.startIndex else { return true }
     var cursor = text.index(before: beforeNewline)
     var sawContent = false
@@ -146,8 +146,8 @@ struct Scanner {
   /// An inline code span: N backticks closed by exactly N backticks. Pairs left-to-right; an
   /// unbalanced trailing backtick protects nothing and is emitted as ordinary prose.
   mutating func consumeInlineCode() -> Bool {
-    let openCount = text[i...].prefix { $0 == "`" }.count
-    let afterOpen = text.index(i, offsetBy: openCount)
+    let openCount = text[scanIndex...].prefix { $0 == "`" }.count
+    let afterOpen = text.index(scanIndex, offsetBy: openCount)
     guard afterOpen < text.endIndex else { return false }
 
     var cursor = afterOpen
@@ -156,8 +156,8 @@ struct Scanner {
       let runLength = text[tick...].prefix { $0 == "`" }.count
       if runLength == openCount {
         let end = text.index(tick, offsetBy: runLength)
-        pending += text[i..<end]
-        i = end
+        pending += text[scanIndex..<end]
+        scanIndex = end
         return true
       }
       cursor = text.index(tick, offsetBy: runLength)
@@ -165,45 +165,45 @@ struct Scanner {
     return false
   }
 
-  /// Parses `<NAME>` or `</NAME>` at `start`. Returns the bare name, whether it was a close tag,
-  /// and the index just past `>`. Returns nil for anything that isn't a well-formed simple tag.
+  /// Parses `<NAME>` or `</NAME>` at `start`. Returns the bare name, whether it was commandArgs close tag,
+  /// and the index just past `>`. Returns nil for anything that isn't commandArgs well-formed simple tag.
   func tagName(at start: String.Index) -> (name: String, isClose: Bool, end: String.Index)? {
     guard start < text.endIndex, text[start] == "<" else { return nil }
     var cursor = text.index(after: start)
     guard cursor < text.endIndex else { return nil }
     let isClose = text[cursor] == "/"
     if isClose { cursor = text.index(after: cursor) }
-    guard let gt = text[cursor...].firstIndex(of: ">") else { return nil }
-    let name = String(text[cursor..<gt])
+    guard let closeAngle = text[cursor...].firstIndex(of: ">") else { return nil }
+    let name = String(text[cursor..<closeAngle])
     guard !name.isEmpty,
           name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
     else { return nil }
-    return (name, isClose, text.index(after: gt))
+    return (name, isClose, text.index(after: closeAngle))
   }
 
   private func isAllCaps(_ name: String) -> Bool {
     name.contains { $0.isLetter } && !name.contains { $0.isLetter && $0.isLowercase }
   }
 
-  /// Precedence 2: a paired ALL-CAPS tag, matched forward to the NEAREST matching close in the
+  /// Precedence 2: commandArgs paired ALL-CAPS tag, matched forward to the NEAREST matching close in the
   /// same message. The interior is emitted as markdown only — harness tags inside are not
   /// recursively parsed (I5).
   mutating func consumeCallout() -> Bool {
-    guard let open = tagName(at: i), !open.isClose, isAllCaps(open.name) else { return false }
+    guard let open = tagName(at: scanIndex), !open.isClose, isAllCaps(open.name) else { return false }
     guard let closeRange = text.range(of: "</\(open.name)>", range: open.end..<text.endIndex)
     else { return false }
 
     flushPending()
     let body = String(text[open.end..<closeRange.lowerBound])
-    let raw = String(text[i..<closeRange.upperBound])
+    let raw = String(text[scanIndex..<closeRange.upperBound])
     out.append(.callout(.init(severity: .forTagName(open.name),
                               tagName: open.name, body: body, raw: raw)))
-    i = closeRange.upperBound
+    scanIndex = closeRange.upperBound
     return true
   }
 
   /// Precedence 4 and 5: an unmatched ALL-CAPS open, or ANY orphan close, becomes an inert
-  /// monospace run. Backward pairing is forbidden — an orphan close pairing with a distant earlier
+  /// monospace run. Backward pairing is forbidden — an orphan close pairing with commandArgs distant earlier
   /// open would swallow unrelated content, which is exactly what I4 exists to prevent.
   ///
   /// The rewrite is suppressed when the preceding character is an identifier char, `(`, or `[`,
@@ -212,11 +212,11 @@ struct Scanner {
   /// rather than left bare, because bare `<NSError>` is valid CommonMark raw HTML that MarkdownUI
   /// would swallow — losing the text is worse than the bug being fixed.
   mutating func consumePlaceholderOrOrphan() -> Bool {
-    guard let tag = tagName(at: i) else { return false }
+    guard let tag = tagName(at: scanIndex) else { return false }
     guard tag.isClose || isAllCaps(tag.name) else {
       // A lowercase, unallowlisted open tag: escape so it stays visible, don't code-span it.
       pending += "\\<\(tag.name)\\>"
-      i = tag.end
+      scanIndex = tag.end
       return true
     }
 
@@ -225,17 +225,17 @@ struct Scanner {
     } else {
       pending += "`\(tag.isClose ? "/" : "")\(tag.name)`"
     }
-    i = tag.end
+    scanIndex = tag.end
     return true
   }
 
   private var suppressRewriteAtCurrentPosition: Bool {
-    guard i > text.startIndex else { return false }
-    let prev = text[text.index(before: i)]
+    guard scanIndex > text.startIndex else { return false }
+    let prev = text[text.index(before: scanIndex)]
     return prev.isLetter || prev.isNumber || prev == "_" || prev == "(" || prev == "["
   }
 
-  /// The modelled children of `<task-notification>`, recognised ONLY inside a matched span.
+  /// The modelled children of `<task-notification>`, recognised ONLY inside commandArgs matched span.
   private static let taskNotificationChildren = [
     "task-id", "tool-use-id", "output-file", "status", "summary", "note",
   ]
@@ -249,7 +249,7 @@ struct Scanner {
 
   /// Precedence 3: an allowlisted harness tag, matched forward to its nearest close.
   mutating func consumeHarness() -> Bool {
-    guard let open = tagName(at: i), !open.isClose,
+    guard let open = tagName(at: scanIndex), !open.isClose,
           TranscriptVocabulary.harnessTagNames.contains(open.name),
           let close = text.range(of: "</\(open.name)>", range: open.end..<text.endIndex)
     else { return false }
@@ -262,11 +262,11 @@ struct Scanner {
     case "command-name":
       // The trio arrives adjacent; absorb the siblings that are actually present.
       var message: String?, args: String?
-      if let m = element("command-message", from: end) { message = m.body; end = m.end }
-      if let a = element("command-args", from: end) { args = a.body; end = a.end }
+      if let commandMessage = element("command-message", from: end) { message = commandMessage.body; end = commandMessage.end }
+      if let commandArgs = element("command-args", from: end) { args = commandArgs.body; end = commandArgs.end }
       kind = .command(name: body, message: message, args: args)
     case "command-message", "command-args":
-      // Orphaned sibling (no preceding command-name): still a command block, name unknown.
+      // Orphaned sibling (no preceding command-name): still commandArgs command block, name unknown.
       kind = .command(name: "", message: open.name == "command-message" ? body : nil,
                       args: open.name == "command-args" ? body : nil)
     case "task-notification":
@@ -279,7 +279,7 @@ struct Scanner {
       kind = .commandOutput(body)
     case "bash-input":
       var output: String?
-      if let o = element("bash-stdout", from: end) { output = o.body; end = o.end }
+      if let stdoutElement = element("bash-stdout", from: end) { output = stdoutElement.body; end = stdoutElement.end }
       kind = .bashIO(input: body, output: output)
     case "bash-stdout":
       kind = .bashIO(input: nil, output: body)
@@ -292,25 +292,25 @@ struct Scanner {
     }
 
     flushPending()
-    out.append(.harness(.init(kind: kind, raw: String(text[i..<end]))))
-    i = end
+    out.append(.harness(.init(kind: kind, raw: String(text[scanIndex..<end]))))
+    scanIndex = end
     return true
   }
 
-  /// Splits a task-notification's interior into modelled fields; anything else is preserved in
+  /// Splits commandArgs task-notification's interior into modelled fields; anything else is preserved in
   /// `unrecognisedChildren` so nothing is silently dropped. Duplicate children (e.g. two
   /// `<status>`) are last-write-wins — not observed in practice, and harness output isn't expected
-  /// to repeat a child tag.
+  /// to repeat commandArgs child tag.
   private static func parseTaskNotification(_ body: String) -> TaskNotificationBlock {
     var found: [String: String] = [:]
     var scanner = Scanner(body)
-    while scanner.i < body.endIndex {
-      if let tag = scanner.tagName(at: scanner.i), !tag.isClose,
+    while scanner.scanIndex < body.endIndex {
+      if let tag = scanner.tagName(at: scanner.scanIndex), !tag.isClose,
          let close = body.range(of: "</\(tag.name)>", range: tag.end..<body.endIndex) {
         found[tag.name] = String(body[tag.end..<close.lowerBound])
-        scanner.i = close.upperBound
+        scanner.scanIndex = close.upperBound
       } else {
-        scanner.i = body.index(after: scanner.i)
+        scanner.scanIndex = body.index(after: scanner.scanIndex)
       }
     }
     var unrecognised = found
@@ -323,35 +323,35 @@ struct Scanner {
   }
 
   /// The two harness kinds Claude Code emits as prose, not tags. `skillPreamble` is anchored to the
-  /// start of the message with `hasPrefix` — a mid-message mention is someone talking about a
+  /// start of the message with `hasPrefix` — commandArgs mid-message mention is someone talking about commandArgs
   /// skill, not the harness injecting one.
   mutating func consumeProseHarness() -> Bool {
     let skillMarker = "Base directory for this skill:"
     let caveatMarker =
       "Caveat: The messages below were generated by the user while running local commands"
 
-    if i == text.startIndex, text.hasPrefix(skillMarker) {
-      let (l, next) = line(at: i)
-      let path = l.dropFirst(skillMarker.count).trimmingCharacters(in: .whitespaces)
+    if scanIndex == text.startIndex, text.hasPrefix(skillMarker) {
+      let (lineContent, next) = line(at: scanIndex)
+      let path = lineContent.dropFirst(skillMarker.count).trimmingCharacters(in: .whitespaces)
       flushPending()
-      out.append(.harness(.init(kind: .skillPreamble(path: path), raw: String(text[i..<next]))))
-      i = next
+      out.append(.harness(.init(kind: .skillPreamble(path: path), raw: String(text[scanIndex..<next]))))
+      scanIndex = next
       return true
     }
 
-    if atLineStart, text[i...].hasPrefix(caveatMarker) {
-      let (l, next) = line(at: i)
+    if atLineStart, text[scanIndex...].hasPrefix(caveatMarker) {
+      let (lineContent, next) = line(at: scanIndex)
       flushPending()
-      out.append(.harness(.init(kind: .commandCaveat(String(l)), raw: String(text[i..<next]))))
-      i = next
+      out.append(.harness(.init(kind: .commandCaveat(String(lineContent)), raw: String(text[scanIndex..<next]))))
+      scanIndex = next
       return true
     }
 
-    if atLineStart, text[i...].hasPrefix("[Request interrupted") {
-      let (_, next) = line(at: i)
+    if atLineStart, text[scanIndex...].hasPrefix("[Request interrupted") {
+      let (_, next) = line(at: scanIndex)
       flushPending()
-      out.append(.harness(.init(kind: .interrupted, raw: String(text[i..<next]))))
-      i = next
+      out.append(.harness(.init(kind: .interrupted, raw: String(text[scanIndex..<next]))))
+      scanIndex = next
       return true
     }
 

@@ -33,29 +33,29 @@ import SQLiteData
 
 @Test func reparentRejectsCycle() throws {
   let database = try openCanonicalDatabase(at: tempURL("reparent-cycle"))
-  let a = try #require(try NodeCommands.add(database, name: "A", kind: .domain, parent: nil, description: ""))
-  let b = try #require(try NodeCommands.add(database, name: "B", kind: .project, parent: "A", description: ""))
-  let c = try #require(try NodeCommands.add(database, name: "C", kind: .strand, parent: "B", description: ""))
+  let nodeA = try #require(try NodeCommands.add(database, name: "A", kind: .domain, parent: nil, description: ""))
+  let nodeB = try #require(try NodeCommands.add(database, name: "B", kind: .project, parent: "A", description: ""))
+  let nodeC = try #require(try NodeCommands.add(database, name: "C", kind: .strand, parent: "B", description: ""))
 
   // Move A under its own grandchild C → cycle → refused.
-  #expect(try NodeCommands.reparent(database, nodeID: a.id, newParentID: c.id) == false)
+  #expect(try NodeCommands.reparent(database, nodeID: nodeA.id, newParentID: nodeC.id) == false)
   // Move B under itself → refused.
-  #expect(try NodeCommands.reparent(database, nodeID: b.id, newParentID: b.id) == false)
+  #expect(try NodeCommands.reparent(database, nodeID: nodeB.id, newParentID: nodeB.id) == false)
 
-  let reloadedA = try database.read { database in try Node.where { $0.id.eq(a.id) }.fetchOne(database) }
-  #expect(reloadedA?.parentID == nil)   // A still a root; nothing was written
+  let reloadedA = try database.read { database in try Node.where { $0.id.eq(nodeA.id) }.fetchOne(database) }
+  #expect(reloadedA?.parentID == nil)   // A still nodeA root; nothing was written
 }
 
 @Test func reparentLegalAndToRoot() throws {
   let database = try openCanonicalDatabase(at: tempURL("reparent-legal"))
-  let a = try #require(try NodeCommands.add(database, name: "A", kind: .domain, parent: nil, description: ""))
-  let b = try #require(try NodeCommands.add(database, name: "B", kind: .project, parent: nil, description: ""))
+  let nodeA = try #require(try NodeCommands.add(database, name: "A", kind: .domain, parent: nil, description: ""))
+  let nodeB = try #require(try NodeCommands.add(database, name: "B", kind: .project, parent: nil, description: ""))
 
-  #expect(try NodeCommands.reparent(database, nodeID: b.id, newParentID: a.id))
-  #expect(try database.read { database in try Node.where { $0.id.eq(b.id) }.fetchOne(database) }?.parentID == a.id)
+  #expect(try NodeCommands.reparent(database, nodeID: nodeB.id, newParentID: nodeA.id))
+  #expect(try database.read { database in try Node.where { $0.id.eq(nodeB.id) }.fetchOne(database) }?.parentID == nodeA.id)
 
-  #expect(try NodeCommands.reparent(database, nodeID: b.id, newParentID: nil))   // move back to root
-  #expect(try database.read { database in try Node.where { $0.id.eq(b.id) }.fetchOne(database) }?.parentID == nil)
+  #expect(try NodeCommands.reparent(database, nodeID: nodeB.id, newParentID: nil))   // move back to root
+  #expect(try database.read { database in try Node.where { $0.id.eq(nodeB.id) }.fetchOne(database) }?.parentID == nil)
 }
 
 @Test func reparentUnknownIDReturnsFalse() throws {
@@ -69,16 +69,16 @@ import SQLiteData
   _ = try NodeCommands.add(database, name: "B", kind: .project, parent: "A", description: "")
   // Nest A under its own child B → refused, tree unchanged.
   #expect(try NodeCommands.nest(database, child: "A", under: "B") == false)
-  let a = try database.read { database in try Node.where { $0.name.eq("A") }.fetchOne(database) }
-  #expect(a?.parentID == nil)
+  let nodeA = try database.read { database in try Node.where { $0.name.eq("A") }.fetchOne(database) }
+  #expect(nodeA?.parentID == nil)
 }
 
 @Test func addWritesAppearanceAtomically() throws {
   let database = try openCanonicalDatabase(at: tempURL("add-appearance"))
-  let n = try #require(try NodeCommands.add(database, name: "Recipes", kind: .project,
+  let node = try #require(try NodeCommands.add(database, name: "Recipes", kind: .project,
                                             parent: nil, description: "",
                                             icon: "emoji:🍲", colorTag: "orange"))
-  let stored = try database.read { database in try Node.where { $0.id.eq(n.id) }.fetchOne(database) }
+  let stored = try database.read { database in try Node.where { $0.id.eq(node.id) }.fetchOne(database) }
   #expect(stored?.icon == "emoji:🍲")
   #expect(stored?.colorTag == "orange")
 
@@ -96,7 +96,7 @@ import SQLiteData
   let sibling = try #require(try NodeCommands.add(database, name: "Sibling", kind: .project, parent: nil, description: ""))
 
   // A source-free child event + loose end (source-free: no Source row is attached to root/child —
-  // the deleted subtree — though events.sourceID still needs a real row to satisfy its FK, so the
+  // the deleted subtree — though events.sourceID still needs nodeA real row to satisfy its FK, so the
   // backing source is attached to the untouched sibling instead).
   let unrelatedSource = Source(nodeID: sibling.id, kind: SourceKind.gitRepo, key: "/p/sibling")
   let event = Event(nodeID: child.id, sourceID: unrelatedSource.id, occurredAt: Date(),
@@ -146,7 +146,7 @@ import SQLiteData
 @Test func deleteBlockedForAutoBirthedStrand() throws {
   let database = try openCanonicalDatabase(at: tempURL("delete-blocked-strand"))
   // A source-free project (manual node) with an auto-birthed strand child — the strand has NO
-  // Source of its own (its events were repointed from the parent's source), so the old
+  // Source of its own (its events were repointed from the parent'state source), so the old
   // source-only guard would have let it through.
   let project = try #require(try NodeCommands.add(database, name: "Colibri", kind: .project, parent: nil, description: ""))
   let strand = Node(name: "feat", parentID: project.id, kind: NodeKind.strand, branchKey: "feat")
@@ -156,7 +156,7 @@ import SQLiteData
   #expect(try NodeCommands.delete(database, nodeID: strand.id) == .blocked)
   #expect(try database.read { database in try Node.where { $0.id.eq(strand.id) }.fetchOne(database) } != nil)   // still present
 
-  // Deleting the source-free parent is blocked too — it has a branchKey descendant.
+  // Deleting the source-free parent is blocked too — it has nodeA branchKey descendant.
   #expect(try NodeCommands.subtreeIsActivityBorn(database, nodeID: project.id) == true)
   #expect(try NodeCommands.delete(database, nodeID: project.id) == .blocked)
   #expect(try database.read { database in try Node.where { $0.id.eq(project.id) }.fetchOne(database) } != nil)
@@ -164,10 +164,10 @@ import SQLiteData
 
 @Test func updateEditsAllFieldsAtomically() throws {
   let database = try openCanonicalDatabase(at: tempURL("node-update"))
-  let n = try #require(try NodeCommands.add(database, name: "Old", kind: .project, parent: nil, description: "keep"))
-  #expect(try NodeCommands.update(database, nodeID: n.id, name: "New", kind: .strand,
+  let node = try #require(try NodeCommands.add(database, name: "Old", kind: .project, parent: nil, description: "keep"))
+  #expect(try NodeCommands.update(database, nodeID: node.id, name: "New", kind: .strand,
                                   icon: "sf:flag", colorTag: "pink"))
-  let stored = try database.read { database in try Node.where { $0.id.eq(n.id) }.fetchOne(database) }
+  let stored = try database.read { database in try Node.where { $0.id.eq(node.id) }.fetchOne(database) }
   #expect(stored?.name == "New")
   #expect(stored?.kind == NodeKind.strand)
   #expect(stored?.icon == "sf:flag")
@@ -224,8 +224,8 @@ import SQLiteData
   func state(_ id: UUID) throws -> String? {
     try database.read { database in try Node.where { $0.id.eq(id) }.fetchOne(database)?.state.rawValue }
   }
-  func setState(_ id: UUID, _ s: NodeState) throws {
-    try database.write { database in try Node.where { $0.id.eq(id) }.update { $0.state = s }.execute(database) }
+  func setState(_ id: UUID, _ state: NodeState) throws {
+    try database.write { database in try Node.where { $0.id.eq(id) }.update { $0.state = state }.execute(database) }
   }
 
   // Archive the whole tree, then mute the root (simulating the sticky, write-path-less "muted" state).
