@@ -104,10 +104,10 @@ struct EmojiPickerPopover: View {
       }.frame(height: 220)
       if query.isEmpty {
         HStack(spacing: 4) {
-          ForEach(EmojiCatalog.categories) { category in
-            Button { category = category.id } label: {
-              Image(systemName: category.symbol).font(.system(size: 13))
-                .foregroundStyle(category == category.id ? Color.accentColor : .secondary)
+          ForEach(EmojiCatalog.categories) { catalogCategory in
+            Button { category = catalogCategory.id } label: {
+              Image(systemName: catalogCategory.symbol).font(.system(size: 13))
+                .foregroundStyle(category == catalogCategory.id ? Color.accentColor : .secondary)
             }.buttonStyle(.plain).frame(maxWidth: .infinity)
           }
         }
