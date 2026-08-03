@@ -70,8 +70,10 @@ public struct SearchIndexStore: Sendable {
 
   public func state() -> SearchIndexState {
     guard let database else { return .absent }
-    // `try?` over a fetchOne makes this doubly optional (read failed vs no row) — both mean
-    // "cannot answer", so flatten and treat either as absent.
+    // `try?` over a fetchOne already flattens to a single optional since SE-0230 (the `?? nil`
+    // below is a harmless no-op, kept so a future Optional-returning change here stays safe) —
+    // read failed and no row both surface as nil, and both mean "cannot answer", so treat nil as
+    // absent either way.
     let fetched = try? database.read { database in
       try Row.fetchOne(database, sql: "SELECT corpus_hash, building FROM meta")
     }

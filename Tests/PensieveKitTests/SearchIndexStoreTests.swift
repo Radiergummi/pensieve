@@ -55,6 +55,10 @@ import Foundation
     let hits = store.search(FTSQueryBuilder.build("parser ")!, limit: 10, includeArchived: false)
     #expect(hits.map(\.itemID) == ["text-match", "files-match"])
     #expect(hits[0].score > hits[1].score)
+    // Pins the WEIGHT, not just the ordering: ordering survives uniform weighting, the gap does
+    // not. Measured ~7.9x at weight 0.1 vs ~1.25x at 1.0, so this threshold separates them
+    // decisively without being brittle about the exact bm25 arithmetic.
+    #expect(hits[0].score / hits[1].score > 3)
   }
 
   @Test func archivedIsExcludedByDefaultAndIncludedOnRequest() {
