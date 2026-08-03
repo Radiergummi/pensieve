@@ -56,11 +56,11 @@ public struct ProjectContext: Sendable {
   /// First matching package manifest → a short `name — description` string (advisory, not
   /// authoritative). Order is fixed; a monorepo's arbitrary first match is acceptable.
   private static func manifest(in worktree: URL) -> String? {
-    if let s = jsonNameDesc(worktree.appendingPathComponent("composer.json")) { return s }
-    if let s = jsonNameDesc(worktree.appendingPathComponent("package.json")) { return s }
-    if let s = grepFirst(worktree.appendingPathComponent("Package.swift"), pattern: #"name:\s*"([^"]+)""#) { return s }
-    if let s = tomlNameDesc(worktree.appendingPathComponent("Cargo.toml")) { return s }
-    if let s = tomlNameDesc(worktree.appendingPathComponent("pyproject.toml")) { return s }
+    if let found = jsonNameDesc(worktree.appendingPathComponent("composer.json")) { return found }
+    if let found = jsonNameDesc(worktree.appendingPathComponent("package.json")) { return found }
+    if let found = grepFirst(worktree.appendingPathComponent("Package.swift"), pattern: #"name:\s*"([^"]+)""#) { return found }
+    if let found = tomlNameDesc(worktree.appendingPathComponent("Cargo.toml")) { return found }
+    if let found = tomlNameDesc(worktree.appendingPathComponent("pyproject.toml")) { return found }
     return nil
   }
 
@@ -87,11 +87,11 @@ public struct ProjectContext: Sendable {
   /// First capture group of the first regex match in the file's head, or nil.
   private static func grepFirst(_ url: URL, pattern: String) -> String? {
     guard let text = head(of: url, maxBytes: 4096),
-          let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+          let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
     let range = NSRange(text.startIndex..., in: text)
-    guard let m = re.firstMatch(in: text, range: range), m.numberOfRanges > 1,
-          let r = Range(m.range(at: 1), in: text) else { return nil }
-    return String(text[r])
+    guard let match = regex.firstMatch(in: text, range: range), match.numberOfRanges > 1,
+          let captureRange = Range(match.range(at: 1), in: text) else { return nil }
+    return String(text[captureRange])
   }
 
   /// Bounded UTF-8 head of a file: up to `maxBytes` and `maxLines`, trimmed. nil if absent,
@@ -115,10 +115,10 @@ public struct ProjectContext: Sendable {
   /// The signal lines shared by `namePrompt` and `describePrompt` — present fields only.
   private static func signalLines(_ ctx: ProjectContext) -> [String] {
     var lines = ["Directory name: \(ctx.dirName)"]
-    if let r = ctx.gitRemote { lines.append("Git remote: \(r)") }
-    if let m = ctx.manifest { lines.append("Package manifest: \(m)") }
-    if let rd = ctx.readmeHead { lines.append("README excerpt:\n\(rd)") }
-    if let cm = ctx.claudeMdHead { lines.append("CLAUDE.md excerpt:\n\(cm)") }
+    if let remote = ctx.gitRemote { lines.append("Git remote: \(remote)") }
+    if let manifest = ctx.manifest { lines.append("Package manifest: \(manifest)") }
+    if let readme = ctx.readmeHead { lines.append("README excerpt:\n\(readme)") }
+    if let claudeMd = ctx.claudeMdHead { lines.append("CLAUDE.md excerpt:\n\(claudeMd)") }
     return lines
   }
 
@@ -155,7 +155,7 @@ public struct ProjectContext: Sendable {
   /// or a one-line `# foo` README is NOT enough → the describe pass skips it (cheaply, no LLM) and
   /// retries once real content appears.
   public static func hasMeaningfulSignal(_ ctx: ProjectContext) -> Bool {
-    if let m = ctx.manifest, m.contains(" — ") { return true }
+    if let manifest = ctx.manifest, manifest.contains(" — ") { return true }
     if descriptiveBodyLength(ctx.readmeHead) >= 20 { return true }
     if descriptiveBodyLength(ctx.claudeMdHead) >= 20 { return true }
     return false

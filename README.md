@@ -29,9 +29,38 @@ So Pensieve doesn't ask me to write anything. It watches what I already do, like
 - **Organizes into a tree of work.** A project is an area of work, not a directory. Git repos are one *source type*; Claude Code sessions are another. Many sources bind to one node, and nodes nest into a typed tree. Long-running sub-efforts ("strands") get born automatically when the same kind of activity recurs.
 - **Surfaces loose ends.** The thing I actually need: the open threads I left behind. "You said you'd investigate sqlite-vec." "You decided to defer the fork backend." Each one cites the exact sentence it came from.
 - **Answers "where was I?"** A briefing of what changed since I last looked, per project, plus a ranked queue of what to pick up next.
+- **Explains what a thing even is.** A node's description is derived from the repo itself, not from me writing one. Checkpoints are the one place I *can* type a note, when I want to leave myself something the capture path could never infer.
 
 Every loose end Pensieve shows me cites real captured text (say, a verbatim quote from a transcript or commit) or it does not appear at all. This is enforced by a trust gate in the extraction path, and it is the core provenance grounding constraint. A tool that reminds me of things I never said is worse than no tool, because I'd have to verify everything it tells me, and then I'm doing the work again.  
 LLM-written prose (the "last work done" recap, strand naming) sits deliberately *outside* that gate, and is best-effort: when the model has nothing grounded to say, the code returns *nothing* rather than a plausible summary. There is no fallback that invents.
+
+## How a loose end is made
+
+Mining open threads out of a coding-agent transcript is mostly a precision problem. A session is thousands of lines of me pasting specs, agents printing plans, and tool output scrolling past; the few sentences where I actually deferred something are buried in it. So extraction is a funnel of cheap deterministic filters bracketing the expensive semantic ones:
+
+```
+session transcript
+  │
+  ├─ StructuralNoiseFilter   pure    drop generated agent briefs (long AND templated)
+  ├─ IntentClassifier        model   keep only messages that are my own intent
+  ├─ LooseEndExtractor       model   propose candidates: a summary + a supporting quote
+  ├─ CandidateFilter         pure    drop closures, status checks, pasted tool output
+  ├─ LooseEndVerifier        pure    ── THE TRUST GATE ── quote must be verbatim, long
+  │                                     enough, and from a real user-authored message
+  ├─ SalienceClassifier      model   drop asks the assistant already carried out
+  │
+  └─ stored loose end
+```
+
+The two classifiers exist because the transcript's own metadata cannot make these calls. A spec I pasted is recorded as a `promptSource: typed` user message exactly like a sentence I typed myself, so separating "what I meant" from "what I pasted" is necessarily a semantic judgment - that's **`IntentClassifier`**. And a quote can be perfectly verbatim and still not be a loose end: "read the spec, then fix the test" is a request the assistant carried out three seconds later, not an open thread waiting for me. That's **`SalienceClassifier`**.
+
+Two properties of the arrangement matter more than either classifier:
+
+**Order.** The salience gate runs *after* the verbatim gate, never before. It only ever sees quotes that already passed, which means it can only ever remove - there is no path by which it introduces text. The one stage that can *add* something (`LooseEndExtractor`) is the one immediately bracketed by the gate.
+
+**Failure direction.** Every model stage fails toward the outcome I can live with. `IntentClassifier` fails *open* on a hard provider error, so a transient glitch degrades precision rather than silently zeroing out a session's extraction entirely. `SalienceClassifier` keeps everything when it is uncertain, when the batch fails, and when the drop set comes back empty. Being shown one request I'd already handled costs me a second; not being shown the thing I parked two weeks ago costs me the project.
+
+Because the salience gate is a judgment call about my own habits, `pensieve label-suggest` runs the same classification offline over the stored backlog and writes a *suggestion* column only - it never touches my own labels. That gives me a corpus to check the gate's judgment against my own, rather than trusting it.
 
 ## How it works
 
@@ -48,10 +77,22 @@ A separate, rebuildable, never-synced `semantic-index.sqlite` holds vector embed
 
 Attribution runs by canonicalized filesystem path/source/node, keyed on the git *common* directory so worktrees of one repo unify into a single node.
 
+## Choosing the models
+
+Every feature that calls a model needs an answer to "why *this* model, and not a cheaper or more private one?" Hand-picking a constant and moving on is how that question stays permanently unanswered, so `pensieve eval` answers it empirically instead: It sweeps a candidate roster (on-device Foundation Models plus cloud models from Anthropic, OpenAI, Google and xAI) over a frozen corpus for each registered task, and recommends a default. Extraction is scored objectively, by checking grounding; the soft tasks (narration, node description) go to a blinded rubric judge.
+
+Three things keep the numbers honest:
+
+- **Stage isolation.** A real pipeline is multi-stage, and only one stage is under test. The harness swaps the candidate model *only* at that stage and pins every other model-calling stage to a fixed reference provider. Evaluating extraction measures the candidate-generation call alone - the classifiers around it run on the reference for every model tested, so fail-open differences between providers can't leak into the score.
+- **Incumbent-anchored bars.** Acceptance thresholds aren't hand-chosen constants either. The harness first measures the currently-shipped default over the same frozen corpus, then sets the bar to *that*. "Clears the bar" means "no worse than what ships today"; recommending a challenger means it beat the incumbent by more than the run-to-run noise margin.
+- **Ranking by what I actually care about**, in order: privacy/locality, then cost, then latency, then quality. On-device wins ties by construction, which is why extraction has stayed local.
+
+A test fails the suite if a registered task has no configured default, so a new model-backed feature can't quietly ship a guess.
+
 ## Surfaces
 
 - The app itself, a three-pane SwiftUI window: a briefing home, smart lists (What's Next / Dormant / Recently Active), the typed node tree, and a recall view showing what a node is, its open loose ends with inline verbatim provenance, and its recent activity. Plus a menu-bar item, `pensieve://` deep links, a provenance inspector, secondary recall windows, macOS Focus filters (work vs. personal), Spotlight and App Intents integration, and ⌘F search across both exact and semantic recall. Localized in English and German.
-- The `pensieve` CLI , bundled inside the app at `Contents/Helpers/pensieve` and symlinked to `~/.local/bin`. Commands for capture (`capture-commit`, `capture-session-start`), ingestion (`ingest`, `sync`), organizing (`add-node`, `nest`, `rename`, `retype`, `group`), and querying (`list`, `status`, `next`, `digest`, `looseends`).
+- The `pensieve` CLI , bundled inside the app at `Contents/Helpers/pensieve` and symlinked to `~/.local/bin`. Commands for capture (`capture-commit`, `capture-checkout`, `capture-session-start`/`-end`), ingestion (`ingest`, `sync`), source discovery and wiring (`scan`, `track`, `install-hooks`, `install-session-hook`), organizing (`add-node`, `nest`, `rename`, `retype`, `group`), querying (`list`, `status`, `next`, `digest`, `looseends`, `checkpoint`), and the model plumbing (`eval`, `label-suggest`).
 - The MCP server (`pensieve mcp`) feeds Pensieve's grounded context *back into* Claude Code, with tools for project context, what's next, search, and `recall` (which returns the surrounding transcript window for a loose end, not just a pointer to it). `pensieve prime` runs as a `SessionStart` hook so a new session starts already knowing where the project stands.
 - Intelligence runs on-device by default via Foundation Models. A cloud provider (Anthropic or OpenAI-compatible) is available for narration only, with the API key stored in the Keychain and never on disk. Extraction (the trust-gated part) is always on-device.
 
