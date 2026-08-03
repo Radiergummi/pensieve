@@ -27,8 +27,13 @@ jobs:
 
       # PensieveKit and its tests are SwiftPM; the app and CLI are Xcode targets
       # and are covered by the build job instead.
+      #
+      # pipefail is required: the annotation filter is a passthrough and always
+      # exits 0, so without it a failing suite would report as a green step.
       - name: Run test suite
-        run: ./scripts/test.sh
+        run: |
+          set -o pipefail
+          ./scripts/test.sh 2>&1 | ./scripts/swift-test-annotations.sh
 
   build-app:
     name: App + CLI build
@@ -36,8 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      # xcbeautify renders compiler errors and warnings as annotations. It is not
+      # used for the test job: its GitHub Actions renderer does not attach filenames
+      # to Swift Testing failures (cpisciotta/xcbeautify#328).
+      - name: Install XcodeGen and xcbeautify
+        run: brew install xcodegen xcbeautify
 
       # Non-interactive equivalent of Xcode's "Trust & Enable" prompt for the
       # SQLiteData macro plugins; without it the first xcodebuild fails.
@@ -54,9 +62,11 @@ jobs:
       # so this needs no keychain or certificate. Also builds and embeds the CLI.
       - name: Build app
         run: |
+          set -o pipefail
           xcodebuild -project Pensieve.xcodeproj -scheme Pensieve \
             -configuration Debug -derivedDataPath ./.build-xcode \
-            build
+            build \
+            | xcbeautify --renderer github-actions
 
       # Proves the CLI was actually embedded and can launch — the app target has
       # no unit tests, so this build job is its only automated signal.
