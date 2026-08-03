@@ -17,6 +17,8 @@ public struct EmbeddableItem: Sendable {
 /// v1 producer of the semantic corpus: active AND archived nodes + their open loose ends +
 /// their enriched events, each tagged with its owning node's state (the query layer scopes on it).
 /// `muted` is never indexed. The seam future producers (transcript chunks, etc.) extend.
+/// Event hygiene (spec P1): `git.checkout` events are dropped (no work content), and identical
+/// event texts within a node are de-duplicated, keeping the earliest by (occurredAt, id).
 public enum EmbeddableCorpus {
   /// Degenerate LLM output ("[]", "/", stray punctuation) is not searchable content — it embeds to
   /// noise and renders as an empty-looking "Related" row. Applies ONLY to model-generated text;
@@ -45,8 +47,17 @@ public enum EmbeddableCorpus {
         out.append(.init(itemID: looseEnd.id.uuidString, kind: "loose_end", nodeID: looseEnd.nodeID.uuidString,
                          state: state, text: [looseEnd.text, looseEnd.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
       }
-      let events = try Event.all.fetchAll(database)
-      for event in events {
+      // Hygiene (spec P1). Two rules, both bounded to events:
+      //  1. `git.checkout` carries no work content — 261 of 1,686 rows were bare "checkout <branch>",
+      //     84 of them literally "checkout HEAD". They only ever occupied top-k slots.
+      //  2. De-duplicate identical texts WITHIN a node, keeping the earliest by (occurredAt, id).
+      //     Deliberately not global: collapsing "fix ci" across three projects would silently pick
+      //     which project owns the only findable copy — a grounding call, not hygiene. Ordering is
+      //     explicit because `Event.all` has none, so "the first occurrence" would otherwise be
+      //     whatever SQLite happened to return, and could differ between rebuilds.
+      let events = try Event.order { ($0.occurredAt, $0.id) }.fetchAll(database)
+      var seenTextsByNode: [UUID: Set<String>] = [:]
+      for event in events where event.kind != CaptureKind.gitCheckout {
         guard let state = stateByNodeID[event.nodeID] else { continue }
         let text: String?
         switch event.kind {
@@ -55,10 +66,10 @@ public enum EmbeddableCorpus {
         // Human-authored (a git commit subject). NOT gated — "wip" and "fix ci" are real, short work.
         default: text = event.summary.isEmpty ? nil : event.summary
         }
-        if let text {
-          out.append(.init(itemID: event.id.uuidString, kind: "event", nodeID: event.nodeID.uuidString,
-                           state: state, text: text))
-        }
+        guard let text else { continue }
+        guard seenTextsByNode[event.nodeID, default: []].insert(text).inserted else { continue }
+        out.append(.init(itemID: event.id.uuidString, kind: "event", nodeID: event.nodeID.uuidString,
+                         state: state, text: text))
       }
       return out
     }
