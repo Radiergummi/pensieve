@@ -208,10 +208,11 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
-## Semantic relevance floor is inert — OPEN DEFECT (found 2026-07-19, needs its own spec)
+## Semantic recall was a ranking failure — P1+P2 DONE (2026-08-02), P3 open
 
-**The `floor: 0.25` similarity cutoff never rejects anything.** Measured against the live store via
-`pensieve mcp` `search` right after the 2026-07-19 reinstall:
+**The diagnosis changed.** This entry originally framed the problem as threshold calibration — the
+`floor: 0.25` similarity cutoff never rejected anything. That symptom was real (measured against the
+live store right after the 2026-07-19 reinstall):
 
 | Query | Top hit | Similarity |
 |---|---|---|
@@ -220,25 +221,51 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 | "background sync agent login items" | `Log owner-mode seq-scan finding` ❌ | 0.921 |
 | **"banana zeppelin custard velocipede"** (gibberish) | `checkout feat/pensieve-app-three-pane` | **0.880** |
 
-Gibberish scores **0.880**; a perfect topical match scores **0.936**. The entire usable range is
-~0.06 wide and sits far above the 0.25 floor (`Mcp.swift:210`, `AppModel.swift:531`).
+Gibberish scoring 0.880 against a 0.936 perfect match looks like a scale problem — the whole usable
+range is ~0.06 wide, so no constant sitting in that band could separate signal from noise. But the
+cause underneath is **ranking failure, not scale failure**: mean-pooled `NLContextualEmbedding`
+vectors were never trained as a sentence-similarity encoder (that's what SBERT-style training exists
+to produce), so the ordering itself is unreliable, and no floor placement fixes an ordering that is
+already wrong. Confirmed on the full 2,630-item corpus by the retrieval-eval harness (same-node
+relatedness gold set, n=300 over 82 nodes, random-baseline P@5 = 0.006):
 
-**Consequences.** (1) ⌘F "Related" and MCP `search` **always** return a full result set regardless of
-relevance — the grounding guards hold (every hit is a real cited item, nothing fabricated) but
-relevance is not enforced at all. (2) Ranking is directionally correct yet so compressed that corpus
-noise outranks true matches — see the sqlite-vec and background-sync rows. (3) *Reasoned, not
-measured:* Part D's floor-aware early exit (`SemanticQueries.swift:46`) can never fire, so a
-heavily-Focus-muted query should climb the grow-`k` loop to the `maxFetch=2000` cap instead of
-exiting early — the inverse of that optimization's intent.
+| Strategy | P@1 | P@5 | MRR@50 |
+|---|---|---|---|
+| `vector` (shipped until 2026-08-02) | 0.250 | 0.153 | 0.354 |
+| **`bm25`** | **0.387** | **0.253** | **0.497** |
+| `hybridRRF` | 0.323 | 0.215 | 0.444 |
 
-**Likely cause:** anisotropy of mean-pooled contextual embeddings — vectors occupy a narrow cone, so
-raw cosine is compressed and offset far from zero. Short git-commit-subject documents amplify it.
-**Candidate remedies (pick at spec time):** center embeddings against the corpus mean before
-comparing; calibrate the floor empirically (percentile / z-score against a sampled baseline) instead
-of an absolute constant; or hybrid retrieval blending a lexical signal so rare tokens like
-"sqlite-vec" carry weight. **Not a one-line tweak** — a floor change alone would be guesswork without
-a calibration method. *Revisit trigger:* next time semantic recall is touched, or sooner — this is
-live, default-on, and currently diluting the grounded context fed to Claude via MCP.
+`hybridRRF` scores **worse than `bm25` alone** — the vector contributes negatively, so the reflex
+"hybrid always wins" is false here. Mean-centring the embeddings (a candidate remedy from the earlier
+diagnosis) was tried and only marginally improves the vector's own numbers; it does not close the gap
+to BM25. Corroborated by 8 hand-written short paraphrase queries scored by inspection — the real
+⌘F/MCP shape, as opposed to the gold set's full-document queries: `vector` ≈ 0/8, `bm25` ≈ 2/8. Both
+are bad; BM25 is less bad.
+
+**Shipped 2026-08-02 — P1 corpus hygiene + P2 BM25.** P1: `EmbeddableCorpus.gather` drops
+`git.checkout` events (15.5% of events were bare `checkout <branch>` strings — the actual source of
+this entry's original gibberish top-hit) and exact-duplicate texts (15% of rows). Measured: 2,630 →
+2,264 items, BM25 P@1 0.387 → **0.433** (the vector, measured the same way, *drops* to 0.125 — hygiene
+helps a discriminating ranker and hurts one that was already guessing). P2: a new `TextIndexStore`
+(FTS5 + SQLite's `bm25()`, in a separate, rebuildable, never-synced `text-index.sqlite` — kept apart
+from `semantic-index.sqlite` because that store's `prepareDatabase` hook throws when sqlite-vec fails
+to register, which would take keyword search down with it) + `RelatedQueries` now sit behind ⌘F
+"Related" and MCP `search`. Both engines share one extracted `RelatedResolver` so the canonical
+grounding re-check can't drift between them. The `0.25` floor is **removed, not retuned** — BM25
+scores are unbounded and per-query-scaled, so a fixed cutoff is meaningless for it too; relevance is
+now bounded by rank plus the requirement that a returned document actually contain a query term. The
+vector stack (`SemanticQueries`, `SemanticIndexStore`, `SemanticIndexer`, `NLContextualEmbedder`) is
+retained in the tree and tested, but wired to nothing — P3 is what would give it (or BM25) a reason to
+come back.
+
+**Still open — P3: the paraphrase-only eval harness.** Neither engine solves "find without
+remembering the words" — see the ≈0/8 and ≈2/8 numbers above. **A rank cap is not a relevance
+threshold** — P2 did not earn one, and P3 (a harness measured on real hand-written paraphrase queries,
+with its decision rule and an absolute floor pre-registered) is what would. **Blocked on the user**
+writing 30–50 paraphrase queries as the gold set.
+
+Cross-reference: `specs/2026-07-28-retrieval-eval-harness-design.md`,
+`measurements/2026-07-28-retrieval-recall/`.
 
 ---
 

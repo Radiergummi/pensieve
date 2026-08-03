@@ -1,4 +1,4 @@
-# CONTINUE — session handoff (2026-07-26)
+# CONTINUE — session handoff (2026-08-02)
 
 Self-contained pickup for a fresh agent. Read `CLAUDE.md` first (project rules + the full shipped
 changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the durable long-term list
@@ -6,26 +6,48 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-Everything is **on `main`**; the tracked tree is clean. **524 tests**, run with `./scripts/test.sh`
+Everything is **on `main`**; the tracked tree is clean. **558 tests**, run with `./scripts/test.sh`
 (thin `swift test` passthrough). The full loop is **LIVE and dogfooded**: capture → ingest →
 auto-extract runs unattended via the bundled background-sync agent; the app is a real `Pensieve.app`
 bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The core intelligence gate passed
 long ago. The hard part is done — remaining work is feature breadth, not foundations.
 
-**⚠️ The installed app is stale.** `/Applications/Pensieve.app` was built **2026-07-19** and is four
+**⚠️ The installed app is stale.** `/Applications/Pensieve.app` was built **2026-07-19** and is five
 ships behind `main` — so the running app has no chat transcript rendering, and the bundled
-`pensieve mcp` (which this and every Claude Code session actually calls) is missing the widened
-`include_archived` search. **Rebuild + reinstall before trusting anything you see in the live app**,
-then check `ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
+`pensieve mcp` (which this and every Claude Code session actually calls) is still running the old
+**vector** `search` (missing both the widened `include_archived` and the whole BM25 swap).
+**Rebuild + reinstall before trusting anything you see in the live app**, then check
+`ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
 
-**One OPEN DEFECT is live in production:** the semantic relevance floor is inert — see THE NEXT
-ACTION below and `backlog.md:211`.
+**The semantic-recall defect is closed for P1+P2** (2026-08-02): the diagnosis was a *ranking*
+failure, not an inert-threshold one, and ⌘F "Related" + MCP `search` now run on BM25. What stays
+open is **P3 — the paraphrase eval harness**, which is **blocked on you writing 30–50 paraphrase
+queries** as the gold set. See THE NEXT ACTION below and `backlog.md:211`.
+
+`~/Library/Application Support/Pensieve/semantic-index.sqlite` is now **inert** — nothing reads or
+maintains it. Nothing deletes it automatically either; it is safe to remove by hand.
 
 ## Most recent ships (newest first)
 
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
+- **Retrieval P1 + P2 — corpus hygiene and BM25 "Related"** (2026-08-02). The semantic-recall defect
+  re-diagnosed: a **ranking failure, not a scale failure** — mean-pooled `NLContextualEmbedding` was
+  never a sentence-similarity encoder, so no floor placement could have fixed an ordering that was
+  already wrong. **P1:** `EmbeddableCorpus.gather` drops `git.checkout` events and exact-duplicate
+  texts (2,630 → 2,264 items; BM25 P@1 0.387 → **0.433**). **P2:** a new `TextIndexStore` (FTS5 +
+  SQLite's `bm25()` in a separate, rebuildable, never-synced `text-index.sqlite` — kept apart from
+  `semantic-index.sqlite` because that store's `prepareDatabase` throws when sqlite-vec can't
+  register, and keyword search must not inherit that) + `RelatedQueries` now sit behind ⌘F "Related"
+  and MCP `search`, sharing **one** extracted `RelatedResolver` with `SemanticQueries` so the
+  grounding guards can't drift between engines. The `0.25` floor is **removed, not retuned**;
+  relevance is bounded by rank plus the requirement that a document contain query terms — **a rank
+  cap is not a relevance threshold**. The vector stack is retained, tested, and wired to nothing.
+  Settings toggle keeps its key + ON default; only the copy changed ("Find related work"). Trust gate
+  untouched. **558 tests** (+34). **Post-merge carry:** rebuild + reinstall to `/Applications`.
+  Spec/measurements: `specs/2026-07-28-retrieval-eval-harness-design.md`,
+  `measurements/2026-07-28-retrieval-recall/`; plan: `plans/2026-08-02-retrieval-p1-p2-bm25.md`.
 - **Transcript readability — chat rendering + harness vocabulary + type scale** (2026-07-26, merged
   `4b184a3`). The inline provenance view renders a transcript window as readable chat instead of a flat
   list of raw-tagged text. **Kit (tested, pure):** `TranscriptVocabulary` — **two members, not one list**:
@@ -105,16 +127,17 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**⚠️ FIRST — the semantic relevance floor is inert (OPEN DEFECT, in production).** `backlog.md:211`
-has the measurements: gibberish ("banana zeppelin custard velocipede") scores **0.880** cosine; a
-perfect topical match scores **0.936**. The whole usable range is ~0.06 wide and sits far above the
-`0.25` floor (`Mcp.swift:210`, `AppModel.swift:531`), so ⌘F "Related" and MCP `search` **always**
-return a full result set regardless of relevance, and corpus noise outranks true matches. The
-grounding guards hold — every hit is a real cited item, nothing fabricated — but relevance is not
-enforced at all, and this is **live, default-on, and diluting the context fed to Claude via MCP**.
-Likely cause: anisotropy of mean-pooled contextual embeddings (short git-commit subjects amplify it).
-**A floor change alone would be guesswork** — the spec must pick a calibration method (mean-centering
-/ empirical percentile / hybrid lexical blend). Its own brainstorm→spec→plan.
+**⚠️ FIRST — P3: write 30–50 paraphrase queries.** This is the one open piece of the retrieval work
+and **only you can do it** — it is the gold set the eval harness needs, and no agent can invent it
+without inventing the answer too. P1+P2 shipped BM25 behind ⌘F "Related" and MCP `search` (measured
+1.7× better P@5 than the vector it replaced), but **neither engine solves "find it without
+remembering the words"**: on 8 hand-written short paraphrase queries, `vector` ≈ 0/8 and `bm25` ≈ 2/8.
+**A rank cap is not a relevance threshold** — P2 did not earn one; P3 is what would. The harness's
+decision rule and its absolute floor are already pre-registered in
+`specs/2026-07-28-retrieval-eval-harness-design.md`; the measurements live in
+`measurements/2026-07-28-retrieval-recall/` and `backlog.md:211`. Write the queries as things you'd
+actually type when you half-remember a piece of work, each paired with the item you'd expect back.
+Until that exists, P3 cannot start — so if you don't want to write it now, pick Track A instead.
 
 **Track A — the three-pane app (the product spine).** Everything through Share-recall, archive, and
 error-surfacing has shipped. Next: **slice 5 (talk-to-system** — describe a strand in natural language →
@@ -129,10 +152,13 @@ editing remain parked in `backlog.md`, not part of Track B.)
 **Track C — findability / OS-integration.** In-app find (⌘F), the menu-bar item, `pensieve://`, App
 Intents + Spotlight, Focus filters, **semantic/vector recall (#2, 2026-07-18)**, **Spotlight loose-end
 indexing (1b, 2026-07-19)**, the **semantic-recall hardening batch (2026-07-19)**, **archived content in
-the semantic index (2026-07-19)**, and **transcript readability (2026-07-26)** are all live. Remaining:
+the semantic index (2026-07-19)**, **transcript readability (2026-07-26)**, and **retrieval P1+P2 —
+corpus hygiene + BM25 "Related" (2026-08-02)** are all live. Remaining:
+- **P3 — the paraphrase eval harness.** Blocked on the gold set above; see the ⚠️ item.
 - **Transcript-passage chunking** — the next corpus increment. **The spec is already written**
   (`specs/2026-07-19-transcript-passage-chunking-design.md`, committed `35b0ed1`) — **no plan yet**, so
-  this is the shortest path to shipping. Would also make the Part D `maxFetch=2000` cap worth revisiting.
+  this is the shortest path to shipping. Would also make `RelatedQueries`' `maxFetch=2000` cap worth
+  revisiting.
 - **Newly-live revisit triggers** from the readability spec's parked siblings (`backlog.md:245`): rich
   code blocks (syntax highlighting + diagrams — corpus evidence says **Graphviz DOT, not Mermaid**, so a
   Mermaid-only renderer may buy nothing) and macOS Writing Tools on loose ends (**spike feasibility
