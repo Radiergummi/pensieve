@@ -41,26 +41,31 @@ Mining open threads out of a coding-agent transcript is mostly a precision probl
 ```
 session transcript
   │
+  ├─ isUserPrompt            pure    user-authored turns only
   ├─ StructuralNoiseFilter   pure    drop generated agent briefs (long AND templated)
   ├─ IntentClassifier        model   keep only messages that are my own intent
   ├─ LooseEndExtractor       model   propose candidates: a summary + a supporting quote
   ├─ CandidateFilter         pure    drop closures, status checks, pasted tool output
   ├─ LooseEndVerifier        pure    ── THE TRUST GATE ── quote must be verbatim, long
   │                                     enough, and from a real user-authored message
-  ├─ SalienceClassifier      model   drop asks the assistant already carried out
-  │
   └─ stored loose end
 ```
 
-The two classifiers exist because the transcript's own metadata cannot make these calls. A spec I pasted is recorded as a `promptSource: typed` user message exactly like a sentence I typed myself, so separating "what I meant" from "what I pasted" is necessarily a semantic judgment - that's **`IntentClassifier`**. And a quote can be perfectly verbatim and still not be a loose end: "read the spec, then fix the test" is a request the assistant carried out three seconds later, not an open thread waiting for me. That's **`SalienceClassifier`**.
+`IntentClassifier` is the one stage that has to be a model. A spec I pasted is recorded as a `promptSource: typed` user message exactly like a sentence I typed myself, so the transcript's own metadata cannot separate "what I meant" from "what I pasted" - that is irreducibly a semantic judgment. Everything else on either side of the extractor is a pure, tested function.
 
-Two properties of the arrangement matter more than either classifier:
+Two properties of the arrangement matter more than any single stage:
 
-**Order.** The salience gate runs *after* the verbatim gate, never before. It only ever sees quotes that already passed, which means it can only ever remove - there is no path by which it introduces text. The one stage that can *add* something (`LooseEndExtractor`) is the one immediately bracketed by the gate.
+**The gate is last, and it can only subtract.** The one stage that can *introduce* text (`LooseEndExtractor`) is immediately followed by the verbatim check, and nothing model-driven runs after it. A loose end that reaches storage has been checked, character for character, against a message I actually wrote.
 
-**Failure direction.** Every model stage fails toward the outcome I can live with. `IntentClassifier` fails *open* on a hard provider error, so a transient glitch degrades precision rather than silently zeroing out a session's extraction entirely. `SalienceClassifier` keeps everything when it is uncertain, when the batch fails, and when the drop set comes back empty. Being shown one request I'd already handled costs me a second; not being shown the thing I parked two weeks ago costs me the project.
+**Failure direction.** Every model stage fails toward the outcome I can live with. `IntentClassifier` fails *open* on a hard provider error, so a transient glitch degrades precision rather than silently zeroing out a session's extraction entirely. Being shown one request I'd already handled costs me a second; not being shown the thing I parked two weeks ago costs me the project.
 
-Because the salience gate is a judgment call about my own habits, `pensieve label-suggest` runs the same classification offline over the stored backlog and writes a *suggestion* column only - it never touches my own labels. That gives me a corpus to check the gate's judgment against my own, rather than trusting it.
+### The classifier that didn't ship
+
+There is a second classifier in the tree - `SalienceClassifier` - and it is **deliberately not wired into extraction**. It was built to solve a real remaining problem: A quote can be perfectly verbatim and still not be a loose end, because "read the spec, then fix the test" is a request the assistant carried out three seconds later, not an open thread waiting for me.
+
+Then I hand-labeled 120 real quotes from my own store (19 genuinely salient, 101 not) and measured it. The on-device ~3B model scored **recall 0.68** - it confidently discarded six genuine loose ends while removing little noise. Haiku did far better on recall (0.947) but its precision was still only 0.23, and it is non-deterministic.
+
+So the gate stays off and extraction stays lossless. For a tool whose entire premise is "never lose the thing you parked," a filter that silently eats a third of the real ones is worse than no filter, and modest precision is not worth buying with it. The code remains, exercised by the eval harness and by `pensieve label-suggest`, which runs the same classification offline over the stored backlog and writes a *suggestion* column only, never my own labels - accumulating the labeled corpus a deterministic on-device replacement will need. The write-up is [`docs/superpowers/salience-eval-2026-07-09.md`](docs/superpowers/salience-eval-2026-07-09.md).
 
 ## How it works
 
@@ -88,6 +93,8 @@ Three things keep the numbers honest:
 - **Ranking by what I actually care about**, in order: privacy/locality, then cost, then latency, then quality. On-device wins ties by construction, which is why extraction has stayed local.
 
 A test fails the suite if a registered task has no configured default, so a new model-backed feature can't quietly ship a guess.
+
+The harness earns its keep mostly by *stopping* things. The salience gate above was already written, already merged, and felt right; it took a measurement to establish it was quietly making the tool worse.
 
 ## Surfaces
 

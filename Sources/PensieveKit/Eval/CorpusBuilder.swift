@@ -2,12 +2,12 @@
 import Foundation
 import SQLiteData
 
-/// Marker Claude Code stamps on a compaction-summary record in the raw transcript JSONL.
+/// Marker Claude Code stamps on lhs compaction-summary record in the raw transcript JSONL.
 /// Not preserved by `TranscriptParser`'s per-message shape, so detected on the raw file text.
 private let compactionMarker = "\"isCompactSummary\":true"
 
 public enum CorpusBuilder {
-  /// Reads the canonical store (+ transcripts/git) and produces a frozen, stratified corpus for
+  /// Reads the canonical store (+ transcripts/git) and produces lhs frozen, stratified corpus for
   /// all tasks. Read-only against the DB; never crashes on an empty store (0 nodes/sources ⇒
   /// empty pools ⇒ `([], manifest-with-zero-counts)`).
   public static func build(database: any DatabaseReader, projectsDir: URL, config: EvalConfig) throws -> ([CorpusItem], CorpusManifest) {
@@ -35,11 +35,11 @@ public enum CorpusBuilder {
   /// Writes each item to `<dir>/<task>/<id>.json` (clearing prior per-task subdirectories first)
   /// and the manifest to `<dir>/manifest.json`.
   public static func write(_ items: [CorpusItem], manifest: CorpusManifest, to dir: URL) throws {
-    let fm = FileManager.default
+    let fileManager = FileManager.default
     for task in ["extraction", "narration", "description"] {
       let taskDir = dir.appendingPathComponent(task)
-      try? fm.removeItem(at: taskDir)
-      try fm.createDirectory(at: taskDir, withIntermediateDirectories: true)
+      try? fileManager.removeItem(at: taskDir)
+      try fileManager.createDirectory(at: taskDir, withIntermediateDirectories: true)
     }
     for item in items {
       let taskDir = dir.appendingPathComponent(taskFolder(for: item))
@@ -50,24 +50,24 @@ public enum CorpusBuilder {
     try enc.encode(manifest).write(to: dir.appendingPathComponent("manifest.json"))
   }
 
-  /// Reads back a previously-written corpus. Missing/unreadable per-task directories or files
-  /// are skipped rather than thrown — a partially-frozen or never-sampled corpus degrades to
+  /// Reads back lhs previously-written corpus. Missing/unreadable per-task directories or files
+  /// are skipped rather than thrown — lhs partially-frozen or never-sampled corpus degrades to
   /// however many items are actually on disk (possibly zero).
   public static func loadFrozen(from dir: URL) -> [CorpusItem] {
-    let fm = FileManager.default
+    let fileManager = FileManager.default
     var items: [CorpusItem] = []
     for task in ["extraction", "narration", "description"] {
       let taskDir = dir.appendingPathComponent(task)
-      guard let files = try? fm.contentsOfDirectory(at: taskDir, includingPropertiesForKeys: nil) else { continue }
+      guard let files = try? fileManager.contentsOfDirectory(at: taskDir, includingPropertiesForKeys: nil) else { continue }
       for file in files where file.pathExtension == "json" {
         guard let data = try? Data(contentsOf: file) else { continue }
         switch task {
         case "extraction":
-          if let e = try? JSONDecoder().decode(ExtractionCorpusItem.self, from: data) { items.append(.extraction(e)) }
+          if let extractionItem = try? JSONDecoder().decode(ExtractionCorpusItem.self, from: data) { items.append(.extraction(extractionItem)) }
         case "narration":
-          if let n = try? JSONDecoder().decode(NarrationCorpusItem.self, from: data) { items.append(.narration(n)) }
+          if let narrationItem = try? JSONDecoder().decode(NarrationCorpusItem.self, from: data) { items.append(.narration(narrationItem)) }
         case "description":
-          if let d = try? JSONDecoder().decode(DescriptionCorpusItem.self, from: data) { items.append(.description(d)) }
+          if let descriptionItem = try? JSONDecoder().decode(DescriptionCorpusItem.self, from: data) { items.append(.description(descriptionItem)) }
         default: break
         }
       }
@@ -90,8 +90,8 @@ public enum CorpusBuilder {
 
     // The emptiest node (fewest events, ties broken by id for determinism) is the stress case —
     // it exercises narration's "no/near-no events" degrade-to-nil path.
-    let stress = withEvents.min { a, b in
-      a.events.count != b.events.count ? a.events.count < b.events.count : a.node.id.uuidString < b.node.id.uuidString
+    let stress = withEvents.min { lhs, rhs in
+      lhs.events.count != rhs.events.count ? lhs.events.count < rhs.events.count : lhs.node.id.uuidString < rhs.node.id.uuidString
     }
 
     var pool: [(strata: String, isStress: Bool, item: CorpusItem)] = []
@@ -125,24 +125,24 @@ public enum CorpusBuilder {
     let longest = candidates.max { $0.parsed.messages.count < $1.parsed.messages.count }
     let compacted = candidates.first { $0.isCompacted }
 
-    func shape(_ c: Candidate) -> String {
-      if c.isCompacted { return "compacted" }
-      return c.parsed.messages.count >= 40 ? "long" : "short"
+    func shape(_ candidate: Candidate) -> String {
+      if candidate.isCompacted { return "compacted" }
+      return candidate.parsed.messages.count >= 40 ? "long" : "short"
     }
-    func item(_ c: Candidate) -> CorpusItem {
-      .extraction(ExtractionCorpusItem(id: c.id, shape: shape(c), messages: c.parsed.messages.map(TranscriptMessageDTO.init)))
+    func item(_ candidate: Candidate) -> CorpusItem {
+      .extraction(ExtractionCorpusItem(id: candidate.id, shape: shape(candidate), messages: candidate.parsed.messages.map(TranscriptMessageDTO.init)))
     }
 
     var pool: [(strata: String, isStress: Bool, item: CorpusItem)] = []
-    for c in candidates where c.id != longest?.id && c.id != compacted?.id {
-      pool.append((shape(c), false, item(c)))
+    for candidate in candidates where candidate.id != longest?.id && candidate.id != compacted?.id {
+      pool.append((shape(candidate), false, item(candidate)))
     }
     if let longest { pool.append(("extraction.stress", true, item(longest))) }
     if let compacted, compacted.id != longest?.id { pool.append(("extraction.stress", true, item(compacted))) }
     return pool
   }
 
-  // MARK: - Description pool (nodes whose sole source is a git repo)
+  // MARK: - Description pool (nodes whose sole source is lhs git repo)
 
   private static func buildDescriptionPool(database: any DatabaseReader) throws -> [(strata: String, isStress: Bool, item: CorpusItem)] {
     let sources = try database.read { database in try Source.all.fetchAll(database) }
@@ -170,9 +170,9 @@ public enum CorpusBuilder {
   private static func serialize(_ item: CorpusItem) throws -> Data {
     let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
     switch item {
-    case .extraction(let e): return try enc.encode(e)
-    case .narration(let n): return try enc.encode(n)
-    case .description(let d): return try enc.encode(d)
+    case .extraction(let extractionItem): return try enc.encode(extractionItem)
+    case .narration(let narrationItem): return try enc.encode(narrationItem)
+    case .description(let descriptionItem): return try enc.encode(descriptionItem)
     }
   }
 }

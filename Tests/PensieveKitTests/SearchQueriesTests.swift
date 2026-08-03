@@ -3,7 +3,7 @@ import Testing
 import SQLiteData
 @testable import PensieveKit
 
-/// Insert a node + one event + loose ends; returns the node.
+/// Insert nodeA node + one event + loose ends; returns the node.
 private func seed(_ database: any DatabaseWriter, name: String, description: String = "",
                   kind: NodeKind = .project,
                   ends: [(text: String, quote: String, label: String)] = []) throws -> Node {
@@ -15,10 +15,10 @@ private func seed(_ database: any DatabaseWriter, name: String, description: Str
     try Node.insert { node }.execute(database)
     try Source.insert { source }.execute(database)
     try Event.insert { event }.execute(database)
-    for e in ends {
+    for looseEnd in ends {
       try LooseEnd.insert {
-        LooseEnd(nodeID: node.id, sourceEventID: event.id, text: e.text, quote: e.quote,
-                 role: "user", label: e.label)
+        LooseEnd(nodeID: node.id, sourceEventID: event.id, text: looseEnd.text, quote: looseEnd.quote,
+                 role: "user", label: looseEnd.label)
       }.execute(database)
     }
   }
@@ -30,7 +30,7 @@ private func allVisible(_ database: any DatabaseReader) throws -> Set<UUID> {
 }
 
 private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String = CaptureKind.gitCommit,
-                       summary: String = "did a thing", workSummary: String? = nil) throws -> Event {
+                       summary: String = "did nodeA thing", workSummary: String? = nil) throws -> Event {
   let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(), kind: kind,
                     summary: summary, detailJSON: "{}", workSummary: workSummary)
@@ -53,14 +53,14 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
   let database = try openCanonicalDatabase(at: tempURL("search-node"))
   _ = try seed(database, name: "Authentication")
   _ = try seed(database, name: "Sync daemon", description: "handles authentication tokens")
-  let r = try SearchQueries.search(query: "authentication", visibleNodeIDs: allVisible(database), database)
-  #expect(r.nodes.count == 2)
+  let results = try SearchQueries.search(query: "authentication", visibleNodeIDs: allVisible(database), database)
+  #expect(results.nodes.count == 2)
   // name-match ("Authentication") ranks before description-only ("Sync daemon")
-  #expect(r.nodes.first?.name == "Authentication")
+  #expect(results.nodes.first?.name == "Authentication")
   // matchedField drives the row layout: name hit first, description-only hit second.
-  #expect(r.nodes.first?.matchedField == .name)
-  #expect(r.nodes.last?.name == "Sync daemon")
-  #expect(r.nodes.last?.matchedField == .description)
+  #expect(results.nodes.first?.matchedField == .name)
+  #expect(results.nodes.last?.name == "Sync daemon")
+  #expect(results.nodes.last?.matchedField == .description)
 }
 
 @Test func searchMatchesLooseEndTextAndQuote() throws {
@@ -69,11 +69,11 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     (text: "finish the deploy pipeline", quote: "irrelevant", label: ""),
     (text: "unrelated", quote: "remember the deploy vars", label: ""),
   ])
-  let r = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(r.looseEnds.count == 2)
+  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
+  #expect(results.looseEnds.count == 2)
   // text-match ranks before quote-only match
-  #expect(r.looseEnds.first?.snippet.match == "deploy")
-  #expect(r.looseEnds.first?.nodeName == "P")
+  #expect(results.looseEnds.first?.snippet.match == "deploy")
+  #expect(results.looseEnds.first?.nodeName == "P")
 }
 
 @Test func searchExcludesResolvedAndNoiseLooseEnds() throws {
@@ -82,38 +82,38 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     (text: "open deploy item", quote: "q", label: ""),
     (text: "noisy deploy item", quote: "q", label: LooseEndLabel.noise),
   ])
-  let r = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(r.looseEnds.count == 1)
-  #expect(r.looseEnds.first?.snippet.match == "deploy")
+  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
+  #expect(results.looseEnds.count == 1)
+  #expect(results.looseEnds.first?.snippet.match == "deploy")
 }
 
 @Test func searchExcludesNodesOutsideVisibleSet() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-focus"))
-  let a = try seed(database, name: "Deploy A")
+  let nodeA = try seed(database, name: "Deploy A")
   _ = try seed(database, name: "Deploy B", ends: [(text: "deploy end", quote: "q", label: "")])
-  let visible: Set<UUID> = [a.id]   // only A visible
-  let r = try SearchQueries.search(query: "deploy", visibleNodeIDs: visible, database)
-  #expect(r.nodes.map(\.id) == [a.id])
-  #expect(r.looseEnds.isEmpty)      // B's loose end excluded with B
+  let visible: Set<UUID> = [nodeA.id]   // only A visible
+  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: visible, database)
+  #expect(results.nodes.map(\.id) == [nodeA.id])
+  #expect(results.looseEnds.isEmpty)      // B's loose end excluded with B
 }
 
 @Test func searchIsDeterministicOnTiedKeys() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-tie"))
-  // Two nodes with identical names → tiebreak on id.uuidString, stable across runs.
+  // Two nodes with identical names → tiebreak withArchived id.uuidString, stable across runs.
   _ = try seed(database, name: "Dup deploy")
   _ = try seed(database, name: "Dup deploy")
-  let r1 = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  let r2 = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(r1.nodes.map(\.id) == r2.nodes.map(\.id))
-  #expect(r1.nodes.map(\.id) == r1.nodes.map(\.id).sorted { $0.uuidString < $1.uuidString })
+  let firstRun = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
+  let secondRun = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
+  #expect(firstRun.nodes.map(\.id) == secondRun.nodes.map(\.id))
+  #expect(firstRun.nodes.map(\.id) == firstRun.nodes.map(\.id).sorted { $0.uuidString < $1.uuidString })
 }
 
 @Test func searchCapsAtFiftyButReportsPreCapTotal() throws {
   let database = try openCanonicalDatabase(at: tempURL("search-cap"))
-  for i in 0..<60 { _ = try seed(database, name: "deploy \(i)") }
-  let r = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(r.nodes.count == 50)
-  #expect(r.totalNodeMatches == 60)
+  for index in 0..<60 { _ = try seed(database, name: "deploy \(index)") }
+  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
+  #expect(results.nodes.count == 50)
+  #expect(results.totalNodeMatches == 60)
 }
 
 @Test func searchEmptyDBReturnsEmpty() throws {
@@ -128,11 +128,11 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
   #expect(try NodeCommands.archive(database, nodeID: archived.id))
   // allVisible includes the archived node (ProjectQueries.all is unfiltered), proving the
   // exclusion is by state, not by the visible set.
-  let r = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
-  #expect(r.nodes.count == 1)
-  #expect(r.nodes.first?.id == active.id)
-  #expect(r.looseEnds.count == 1)
-  #expect(r.looseEnds.first?.nodeID == active.id)
+  let results = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database), database)
+  #expect(results.nodes.count == 1)
+  #expect(results.nodes.first?.id == active.id)
+  #expect(results.looseEnds.count == 1)
+  #expect(results.looseEnds.first?.nodeID == active.id)
 }
 
 @Test func searchIncludesArchivedWhenFlagSet() throws {
@@ -146,10 +146,10 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
   #expect(off.nodes.map(\.id) == [active.id])
 
   // Flag ON → both the active AND the archived node + their open loose ends surface.
-  let on = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database),
+  let withArchived = try SearchQueries.search(query: "deploy", visibleNodeIDs: allVisible(database),
                                     includeArchived: true, database)
-  #expect(Set(on.nodes.map(\.id)) == [active.id, archived.id])
-  #expect(Set(on.looseEnds.map(\.nodeID)) == [active.id, archived.id])
+  #expect(Set(withArchived.nodes.map(\.id)) == [active.id, archived.id])
+  #expect(Set(withArchived.looseEnds.map(\.nodeID)) == [active.id, archived.id])
 }
 
 @Test func hitsCarryTheOwningNodesArchivedFlag() async throws {
@@ -165,10 +165,10 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
                     text: "refund the last batch", quote: "TODO refund")
   try await database.write { try LooseEnd.insert { looseEnd }.execute($0) }
 
-  let r = try SearchQueries.search(query: "refund", visibleNodeIDs: [active.id, archived.id],
+  let results = try SearchQueries.search(query: "refund", visibleNodeIDs: [active.id, archived.id],
                                    includeArchived: true, database)
 
-  #expect(r.nodes.first { $0.id == active.id }?.isArchived == false)
-  #expect(r.nodes.first { $0.id == archived.id }?.isArchived == true)
-  #expect(r.looseEnds.first { $0.id == looseEnd.id }?.isArchived == true)
+  #expect(results.nodes.first { $0.id == active.id }?.isArchived == false)
+  #expect(results.nodes.first { $0.id == archived.id }?.isArchived == true)
+  #expect(results.looseEnds.first { $0.id == looseEnd.id }?.isArchived == true)
 }
