@@ -35,34 +35,27 @@ LLM-written prose (the "last work done" recap, strand naming) sits deliberately 
 
 ## How it works
 
-Two SQLite databases, deliberately separate:
+Pensieve uses three SQLite databases, which are deliberately kept separate:
 
 ```
 git hook / CLI ──► capture.sqlite ──► Ingester.drain() ──► pensieve.sqlite ──► queries
                    (dumb spool)                            (canonical store)
 ```
 
-**The capture spool** is append-only, WAL, and never synced. A git hook writes one raw row and exits. **The capture path is sacred** — it must be fast, fire-and-forget, and must never block or break a commit. If Pensieve is broken, my commits still work.
+The capture spool is append-only, WAL, and never synced. A git hook writes one raw row and exits. The capture path is sacred: It must be fast, fire-and-forget, and never block or break a commit. If Pensieve is broken, my commits still work.  
+The canonical store is the rich model, and `Ingester.drain()` is its only writer. Ingestion enriches raw rows into project-attributed events: It shells out to `git show` for commits, and reads the on-disk `.jsonl` transcripts for Claude Code sessions. Everything else in the system reads this store read-only.  
+A separate, rebuildable, never-synced `semantic-index.sqlite` holds vector embeddings (using `NLContextualEmbedding` and `sqlite-vec`) for semantic recall. It is disposable by design; delete it and it rebuilds automatically.
 
-**The canonical store** is the rich model, and `Ingester.drain()` is its only writer. Ingestion enriches raw rows into project-attributed events: it shells out to `git show` for commits, and reads the on-disk `.jsonl` transcripts for Claude Code sessions. Everything else in the system reads this store read-only.
-
-A separate, rebuildable, never-synced `semantic-index.sqlite` holds vector embeddings (`NLContextualEmbedding` + `sqlite-vec`) for semantic recall. It is disposable by design — delete it and it rebuilds.
-
-Attribution runs by canonicalized filesystem path → source → node, keyed on the git *common* directory so worktrees of one repo unify into a single node.
+Attribution runs by canonicalized filesystem path/source/node, keyed on the git *common* directory so worktrees of one repo unify into a single node.
 
 ## Surfaces
 
-**The app** — a three-pane SwiftUI window: a briefing home, smart lists (What's Next / Dormant / Recently Active), the typed node tree, and a recall view showing what a node is, its open loose ends with inline verbatim provenance, and its recent activity. Plus a menu-bar item, `pensieve://` deep links, a provenance inspector, secondary recall windows, macOS Focus filters (work vs. personal), Spotlight and App Intents integration, and ⌘F search across both exact and semantic recall. Localized in English and German.
-
-**The CLI** — `pensieve`, bundled inside the app at `Contents/Helpers/pensieve` and symlinked to `~/.local/bin`. Commands for capture (`capture-commit`, `capture-session-start`), ingestion (`ingest`, `sync`), organizing (`add-node`, `nest`, `rename`, `retype`, `group`), and querying (`list`, `status`, `next`, `digest`, `looseends`).
-
-**The MCP server** — `pensieve mcp` feeds Pensieve's grounded context *back into* Claude Code, with tools for project context, what's next, search, and `recall` (which returns the surrounding transcript window for a loose end, not just a pointer to it). `pensieve prime` runs as a `SessionStart` hook so a new session starts already knowing where the project stands.
-
-**Intelligence** runs on-device by default via Foundation Models. A cloud provider (Anthropic or OpenAI-compatible) is available for narration only, with the API key stored in the Keychain and never on disk. Extraction — the trust-gated part — is always on-device.
+- The app itself, a three-pane SwiftUI window: a briefing home, smart lists (What's Next / Dormant / Recently Active), the typed node tree, and a recall view showing what a node is, its open loose ends with inline verbatim provenance, and its recent activity. Plus a menu-bar item, `pensieve://` deep links, a provenance inspector, secondary recall windows, macOS Focus filters (work vs. personal), Spotlight and App Intents integration, and ⌘F search across both exact and semantic recall. Localized in English and German.
+- The `pensieve` CLI , bundled inside the app at `Contents/Helpers/pensieve` and symlinked to `~/.local/bin`. Commands for capture (`capture-commit`, `capture-session-start`), ingestion (`ingest`, `sync`), organizing (`add-node`, `nest`, `rename`, `retype`, `group`), and querying (`list`, `status`, `next`, `digest`, `looseends`).
+- The MCP server (`pensieve mcp`) feeds Pensieve's grounded context *back into* Claude Code, with tools for project context, what's next, search, and `recall` (which returns the surrounding transcript window for a loose end, not just a pointer to it). `pensieve prime` runs as a `SessionStart` hook so a new session starts already knowing where the project stands.
+- Intelligence runs on-device by default via Foundation Models. A cloud provider (Anthropic or OpenAI-compatible) is available for narration only, with the API key stored in the Keychain and never on disk. Extraction (the trust-gated part) is always on-device.
 
 ## Building it
-
-This is how *I* build it, not an install guide — see the note at the top.
 
 **Requirements:** macOS 15+, Xcode 26.6, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (2.45+).
 
@@ -98,28 +91,12 @@ pensieve install-session-hook                   # Claude Code SessionStart/Sessi
 claude mcp add pensieve -- pensieve mcp         # expose context back to Claude Code
 ```
 
-Background sync runs from a code-signed `SMAppService` agent bundled inside the app (approve once in System Settings ▸ General ▸ Login Items). The app must live at `/Applications/Pensieve.app` — `SMAppService` pins registration to path + cdhash, so a DerivedData path won't hold.
+Background sync runs from a code-signed `SMAppService` agent bundled inside the app (approve once in System Settings ▸ General ▸ Login Items). The app must live at `/Applications/Pensieve.app`: `SMAppService` pins registration to path and cdhash, so a DerivedData path won't hold.
 
-**Why `/Applications` matters more than it looks:** each ad-hoc rebuild mints a new cdhash, and a bare `register()` silently no-ops a stale registration. The app does `unregister()` + `register()` to refresh it.
+The `/Applications` home matters more than it looks: Each ad-hoc rebuild mints a new cdhash, and a bare `register()` silently no-ops a stale registration. The app does `unregister()` and `register()` to refresh it.
 
 Logs: `tail -f ~/Library/Logs/Pensieve/sync.log`, or `log stream --predicate 'subsystem == "me.mazetti.pensieve"' --level debug`.
 
-## How it was built
-
-Pensieve was built design-first with Claude Code, and the paper trail is public: **48 specs** and **49 plans** under [`docs/superpowers/`](docs/superpowers/). Every feature went brainstorm → spec → plan → subagent-driven execution with adversarial review checkpoints, and the specs record the arguments — including the ones where a review killed a design I'd already committed to.
-
-If you're here out of curiosity, that trail is probably more interesting than the Swift. Some entry points:
-
-- [`specs/2026-07-03-pensieve-mvp-design.md`](docs/superpowers/specs/2026-07-03-pensieve-mvp-design.md) — the original design, full intent, all phases.
-- [`phase-1b-outcome.md`](docs/superpowers/phase-1b-outcome.md) — the make-or-break precision gate, and what it actually measured.
-- [`specs/2026-07-19-transcript-readability-design.md`](docs/superpowers/specs/2026-07-19-transcript-readability-design.md) — where a third adversarial review caught that "one shared vocabulary constant" would have handed the transcript renderer a write path into the trust gate.
-- [`backlog.md`](docs/superpowers/backlog.md) — the roadmap and the deferred ledger.
-- [`CLAUDE.md`](CLAUDE.md) — the working context, which doubles as a fairly complete build log.
-
-There is a pleasing recursion here: most of what Pensieve knows about Pensieve, it captured itself, from the sessions that built it.
-
 ## License
 
-**None.** No `LICENSE` file, which means default copyright — all rights reserved.
-
-That's not an oversight and it's not hostility. Licensing this would imply I'm offering it to you, and I'm not; it's a tool I use, published so people who asked could look. Read it, learn from it, reimplement any idea in it. If you want to actually reuse the code, ask me.
+**None.** No `LICENSE` file, which means default copyright: All rights reserved.
