@@ -44,9 +44,11 @@ import Foundation
     #expect(store.storedCorpusHash() == "h2")
   }
 
-  /// Pins the 0.1 `files` weight: a term matching in `text` must outrank the same term matching
-  /// only in `files`. Measured on SQLite 3.51.0: 1.13e-06 vs 1.42e-07.
-  @Test func textMatchOutranksFilesOnlyMatch() {
+  /// Pins the merge order: everything the TEXT index found comes first, then rows only the path
+  /// index found. This is structural, not a scoring accident — the two bm25 scores come from
+  /// different tables with different average document lengths and are never comparable, so a
+  /// path-only hit can no longer outrank a real text match by arithmetic coincidence.
+  @Test func textMatchesComeBeforePathOnlyMatches() {
     let store = tempStore()
     store.rebuild(items: [item("text-match", "refactor the parser today"),
                           item("files-match", "unrelated commit subject",
@@ -54,11 +56,20 @@ import Foundation
                   corpusHash: "h")
     let hits = store.search(FTSQueryBuilder.build("parser ")!, limit: 10, includeArchived: false)
     #expect(hits.map(\.itemID) == ["text-match", "files-match"])
-    #expect(hits[0].score > hits[1].score)
-    // Pins the WEIGHT, not just the ordering: ordering survives uniform weighting, the gap does
-    // not. Measured ~7.9x at weight 0.1 vs ~1.25x at 1.0, so this threshold separates them
-    // decisively without being brittle about the exact bm25 arithmetic.
-    #expect(hits[0].score / hits[1].score > 3)
+  }
+
+  /// The reason the tables are split at all: a path must not lengthen the text row and discount its
+  /// text matches. Two identical texts, one carrying a long path — they must score identically.
+  @Test func pathsDoNotDiscountTheTextTheyAccompany() {
+    let store = tempStore()
+    store.rebuild(items: [item("bare", "refactor the parser today"),
+                          item("pathful", "refactor the parser today",
+                               files: "Sources/PensieveKit/Search/SearchIndexStore.swift\n"
+                                    + "Sources/PensieveKit/Search/FTSQuery.swift")],
+                  corpusHash: "h")
+    let hits = store.search(FTSQueryBuilder.build("parser ")!, limit: 10, includeArchived: false)
+    #expect(hits.count == 2)
+    #expect(hits[0].score == hits[1].score)
   }
 
   @Test func archivedIsExcludedByDefaultAndIncludedOnRequest() {
@@ -73,14 +84,42 @@ import Foundation
     #expect(widened == ["live", "old"])   // muted is excluded in BOTH modes — allow-list, never deny-list
   }
 
-  @Test func filesColumnIsSearchableByPathSegment() {
+  @Test func pathsAreSearchableByPathSegment() {
     let store = tempStore()
     store.rebuild(items: [item("a", "unrelated subject", files: "Sources/PensieveKit/Sync/SyncRunner.swift")],
                   corpusHash: "h")
+    // Bare term: found via the opportunistic path probe, even though the text says nothing of it.
     #expect(store.search(FTSQueryBuilder.build("syncrunner ")!, limit: 10,
                          includeArchived: false).map(\.itemID) == ["a"])
+    // Explicit directive: found via the path restriction.
     #expect(store.search(FTSQueryBuilder.build("files:syncrunner ")!, limit: 10,
                          includeArchived: false).map(\.itemID) == ["a"])
+  }
+
+  /// A structured `file:` parameter RESTRICTS — it is an AND across the two tables (a join), not a
+  /// second list merged in. "work about the parser that touched Lexer.swift" must not also return
+  /// work about the parser that touched something else.
+  @Test func structuredFileParameterRestrictsRatherThanWidens() {
+    let store = tempStore()
+    store.rebuild(items: [item("both", "refactor the parser", files: "Sources/parser/Lexer.swift"),
+                          item("text-only", "refactor the parser", files: "Sources/other/Thing.swift"),
+                          item("path-only", "unrelated subject", files: "Sources/parser/Lexer.swift")],
+                  corpusHash: "h")
+    let query = FTSQueryBuilder.build("parser ", file: "Lexer.swift")!
+    #expect(store.search(query, limit: 10, includeArchived: false).map(\.itemID) == ["both"])
+  }
+
+  /// The path index must honour the same state allow-list the text index does — otherwise a bare
+  /// filename would surface archived or muted work the text path correctly hides.
+  @Test func pathProbeHonoursTheStateAllowList() {
+    let store = tempStore()
+    store.rebuild(items: [item("live", "unrelated", files: "Sources/Shared.swift", nodeID: "n1", state: "active"),
+                          item("old", "unrelated", files: "Sources/Shared.swift", nodeID: "n2", state: "archived"),
+                          item("hidden", "unrelated", files: "Sources/Shared.swift", nodeID: "n3", state: "muted")],
+                  corpusHash: "h")
+    let query = FTSQueryBuilder.build("shared ")!
+    #expect(store.search(query, limit: 10, includeArchived: false).map(\.itemID) == ["live"])
+    #expect(Set(store.search(query, limit: 10, includeArchived: true).map(\.itemID)) == ["live", "old"])
   }
 
   @Test func diacriticsAreFoldedBothWays() {

@@ -39,18 +39,35 @@ import Testing
     #expect(FTSQueryBuilder.build("\"background sync")?.match == "\"background sync\"*")
   }
 
-  @Test func filesPrefixRoutesToTheFilesColumn() {
-    #expect(FTSQueryBuilder.build("files:SemanticQueries.swift ")?.match
-            == "files : \"SemanticQueries.swift\"")
+  /// Paths live in their own FTS5 table, so a `files:` directive leaves in `filesFilter`, not in
+  /// the text `match` — a `files : …` clause against the text table is now a hard SQLite error.
+  @Test func filesPrefixRoutesToTheFilesTable() {
+    let built = FTSQueryBuilder.build("files:SemanticQueries.swift ")
+    #expect(built?.match == "")
+    #expect(built?.filesFilter == "\"SemanticQueries.swift\"")
+    #expect(built?.filesProbe == nil)
   }
 
-  @Test func structuredFileParameterIsAndedIn() {
+  @Test func structuredFileParameterBecomesARestriction() {
     let built = FTSQueryBuilder.build("refactor ", file: "Sources/A.swift")
-    #expect(built?.match == "\"refactor\" AND files : \"Sources/A.swift\"")
+    #expect(built?.match == "\"refactor\"")
+    #expect(built?.filesFilter == "\"Sources/A.swift\"")
+    #expect(built?.filesProbe == nil)   // an explicit restriction suppresses the opportunistic probe
   }
 
   @Test func structuredFileParameterAloneIsAValidQuery() {
-    #expect(FTSQueryBuilder.build("", file: "Sources/A.swift")?.match == "files : \"Sources/A.swift\"")
+    let built = FTSQueryBuilder.build("", file: "Sources/A.swift")
+    #expect(built?.match == "")
+    #expect(built?.filesFilter == "\"Sources/A.swift\"")
+  }
+
+  /// Without an explicit directive the bare terms are ALSO tried against paths, so typing a bare
+  /// filename still finds the commits that touched it.
+  @Test func bareTermsGetAnOpportunisticPathProbe() {
+    let built = FTSQueryBuilder.build("syncrunner ")
+    #expect(built?.match == "\"syncrunner\"")
+    #expect(built?.filesProbe == "\"syncrunner\"")
+    #expect(built?.filesFilter == nil)
   }
 
   @Test func emptyAndWhitespaceOnlyYieldNil() {

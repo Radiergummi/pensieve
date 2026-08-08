@@ -4,7 +4,7 @@ import Foundation
 import NaturalLanguage
 
 let SP = ProcessInfo.processInfo.environment["PENSIEVE_MEASURE_DIR"] ?? FileManager.default.currentDirectoryPath
-struct Doc { let kind: String; let itemID: String; let nodeID: String; let text: String }
+struct Doc { let kind: String; let itemID: String; let nodeID: String; let text: String; let files: String }
 
 var docs: [Doc] = []
 if let s = try? String(contentsOfFile: "\(SP)/corpus.jsonl", encoding: .utf8) {
@@ -13,7 +13,7 @@ if let s = try? String(contentsOfFile: "\(SP)/corpus.jsonl", encoding: .utf8) {
           let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
           let k = o["kind"] as? String, let i = o["itemID"] as? String,
           let n = o["nodeID"] as? String, let t = o["text"] as? String, !t.isEmpty else { continue }
-    docs.append(Doc(kind: k, itemID: i, nodeID: n, text: t))
+    docs.append(Doc(kind: k, itemID: i, nodeID: n, text: t, files: (o["files"] as? String) ?? ""))
   }
 }
 FileHandle.standardError.write("docs \(docs.count)\n".data(using: .utf8)!)
@@ -148,6 +148,37 @@ func cbm25(_ q: String, skip: Int) -> [(Int, Double)] {
   }
   return acc.map { ($0.key, $0.value) }.sorted { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 > $1.1 }
 }
+// ---- P2′: the same BM25, but with the shipped `files` column present (weights text 1.0 / files 0.1).
+// The weight only bounds how much a path MATCH contributes. The effect that needs measuring is the
+// other one: FTS5 normalises by the row's TOTAL token count across all columns, so every commit row
+// got longer and its `text` matches are discounted relative to nodes and loose ends. Modelling only
+// the weight would measure nothing, so `dl` here is the sum of both fields' token counts and `df`
+// counts a row as containing a term if it appears in EITHER column — as FTS5 does.
+let cFileToks = ckept.map { tok($0.files) }
+let cftf: [[String: Int]] = cFileToks.map { d in var m: [String: Int] = [:]; for w in d { m[w, default: 0] += 1 }; return m }
+let cCombinedLen = (0..<ckept.count).map { Double(cdocToks[$0].count + cFileToks[$0].count) }
+let cAvgCombined = cCombinedLen.reduce(0, +) / cN
+var cfdf: [String: Int] = [:]
+for i in 0..<ckept.count { for w in Set(cdocToks[i]).union(Set(cFileToks[i])) { cfdf[w, default: 0] += 1 } }
+var cfinv: [String: [Int]] = [:]
+for i in 0..<ckept.count { for w in Set(cdocToks[i]).union(Set(cFileToks[i])) { cfinv[w, default: []].append(i) } }
+
+func cbm25WithFiles(_ q: String, skip: Int) -> [(Int, Double)] {
+  let k1 = 1.2, b = 0.75, filesWeight = 0.1
+  var acc: [Int: Double] = [:]
+  for w in Set(tok(q)) {
+    guard let post = cfinv[w], let d = cfdf[w] else { continue }
+    let idf = log(1 + (cN - Double(d) + 0.5) / (Double(d) + 0.5))
+    for i in post where i != skip {
+      let norm = k1 * (1 - b + b * cCombinedLen[i] / cAvgCombined)
+      func saturate(_ f: Double) -> Double { f == 0 ? 0 : (f * (k1 + 1)) / (f + norm) }
+      acc[i, default: 0] += idf * (saturate(Double(ctf[i][w] ?? 0))
+                                   + filesWeight * saturate(Double(cftf[i][w] ?? 0)))
+    }
+  }
+  return acc.map { ($0.key, $0.value) }.sorted { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 > $1.1 }
+}
+
 func cvrank(_ q: String, skip: Int) -> [(Int, Double)] {
   guard let qv = embed(q) else { return [] }
   return (0..<cvecs.count).filter { $0 != skip }.map { ($0, cosf(qv, cvecs[$0])) }.sorted { $0.1 > $1.1 }
@@ -160,20 +191,25 @@ for q in ["banana zeppelin custard velocipede", "sourdough starter hydration rat
   for (i, s) in r { print(String(format: "    %.3f ", s) + "[\(ckept[i].kind)] " + ckept[i].text.replacingOccurrences(of: "\n", with: " ").prefix(66)) }
 }
 
-print("\n== same-node relatedness on the CLEANED corpus (n=300) ==")
+// (the query count is printed below, after `cq` is drawn — it is env-configurable)
 var cByNode: [String: [Int]] = [:]
 for (i, d) in ckept.enumerated() { cByNode[d.nodeID, default: []].append(i) }
 let cEligible = cByNode.filter { $0.value.count >= 4 && $0.value.count <= 200 }
 var g2: UInt64 = 7
 func rnd2(_ n: Int) -> Int { g2 = g2 &* 6364136223846793005 &+ 1442695040888963407; return Int((g2 >> 33) % UInt64(n)) }
 let cKeys = cEligible.keys.sorted()
+// n=300 is the committed default so runs stay comparable to the recorded baselines. Raise it via
+// PENSIEVE_MEASURE_N only to resolve a difference that is ambiguous at 300 (see the McNemar block).
+let queryCount = Int(ProcessInfo.processInfo.environment["PENSIEVE_MEASURE_N"] ?? "") ?? 300
 var cq: [Int] = []
-while cq.count < 300 {
+let eligibleTotal = cEligible.values.reduce(0) { $0 + $1.count }
+while cq.count < min(queryCount, eligibleTotal) {
   let nk = cKeys[rnd2(cKeys.count)]
   let cands = cEligible[nk]!
   let pick = cands[rnd2(cands.count)]
   if !cq.contains(pick) { cq.append(pick) }
 }
+print("\n== same-node relatedness on the CLEANED corpus (n=\(cq.count)) ==")
 func cEval(_ label: String, _ ranker: (Int) -> [(Int, Double)]) {
   var p1 = 0.0, p5 = 0.0, mrr = 0.0
   for q in cq {
@@ -187,4 +223,32 @@ func cEval(_ label: String, _ ranker: (Int) -> [(Int, Double)]) {
   print(label.padding(toLength: 10, withPad: " ", startingAt: 0) + String(format: "P@1=%.3f  P@5=%.3f  MRR@50=%.3f", p1/n, p5/n, mrr/n))
 }
 cEval("vector", { cvrank(ckept[$0].text, skip: $0) })
+// `bm25` is BOTH the post-P1 baseline and — after the verification gate rejected the shared table —
+// the SHIPPED P2′ ranking: paths live in their own FTS5 table, so they no longer lengthen the text
+// row. `bm25+files` is the REJECTED configuration, kept so the rejection stays reproducible.
 cEval("bm25", { cbm25(ckept[$0].text, skip: $0) })
+cEval("bm25+files", { cbm25WithFiles(ckept[$0].text, skip: $0) })
+
+// The two BM25 rows are PAIRED (identical corpus, identical 300 queries), so the difference between
+// two point estimates is not the question — the discordant pairs are. McNemar's exact test over the
+// queries where exactly one configuration got P@1 right is what decides whether the verification
+// gate's "P@1 regressed" precondition is actually met, or whether it is sampling noise.
+var onlyBaselineRight = 0, onlyFilesRight = 0
+for q in cq {
+  let gold = Set(cByNode[ckept[q].nodeID]!).subtracting([q])
+  let baselineRight = cbm25(ckept[q].text, skip: q).first.map { gold.contains($0.0) } ?? false
+  let filesRight = cbm25WithFiles(ckept[q].text, skip: q).first.map { gold.contains($0.0) } ?? false
+  if baselineRight && !filesRight { onlyBaselineRight += 1 }
+  if filesRight && !baselineRight { onlyFilesRight += 1 }
+}
+let discordant = onlyBaselineRight + onlyFilesRight
+// Two-sided exact binomial p over the discordant pairs (p = 0.5 under the null).
+func logFactorial(_ n: Int) -> Double { (1...max(n, 1)).reduce(0.0) { $0 + log(Double($1)) } }
+func binomialProbability(_ k: Int, _ n: Int) -> Double {
+  exp(logFactorial(n) - logFactorial(k) - logFactorial(n - k) - Double(n) * log(2))
+}
+let observed = min(onlyBaselineRight, onlyFilesRight)
+var pValue = 0.0
+if discordant > 0 { for k in 0...observed { pValue += 2 * binomialProbability(k, discordant) } }
+print(String(format: "McNemar: baseline-only-right=%d  files-only-right=%d  (n=%d)  p=%.3f",
+             onlyBaselineRight, onlyFilesRight, discordant, min(pValue, 1.0)))

@@ -61,6 +61,32 @@ Below the historical 0.433 as expected — per-node de-dup keeps cross-node dupl
 de-dup removed, and on a same-node gold set those duplicates are pure distractors. This is the figure
 §Verification gate's step 2 (post-P2′) is held to, not 0.433.
 
+**Post-P2′ (`files` in the corpus) — 2026-08-08 verification gate, step 2.** Corpus regenerated
+(2,704 items: 267 node / 837 loose_end / 1,600 event), so the absolute numbers move slightly from the
+line above; the comparison that matters is **paired within a single run** — same corpus, same query
+set, two rankers:
+
+| ranker | n=300 P@1 | n=1500 P@1 | n=1500 P@5 | n=1500 MRR@50 |
+|---|---|---|---|---|
+| vector | 0.220 | 0.255 | 0.171 | 0.362 |
+| `bm25` — text-only ranking (**shipped**) | 0.400 | **0.395** | 0.269 | 0.514 |
+| `bm25+files` — one table, weights 1.0 / 0.1 (**rejected**) | 0.380 | **0.378** | 0.256 | 0.499 |
+
+**The single-table configuration was rejected and the spec's pre-specified fallback shipped instead.**
+At n=300 the 0.02 gap was not decidable (McNemar 19 vs 13 discordant, p = 0.377), so n was raised:
+at n=1500 it is **McNemar 50 vs 28, p = 0.017** — a real regression, consistent across P@1, P@5 and
+MRR. Cause is the one §P2′ predicted: FTS5 normalises bm25 by the row's **total** token count across
+all columns, so carrying paths beside the text discounted every commit's text matches relative to
+nodes and loose ends. A per-column weight bounds what a path *match* scores; it does nothing about
+what a path's mere *presence* costs.
+
+Shipped instead: `files` in its own `document_files` FTS5 table (`SearchIndexStore` schema v2). The
+text ranking is therefore byte-identical to the `bm25` row above — P@1 returns to baseline **by
+construction**, not by luck, because the text table no longer contains paths at all.
+
+`rprobe4` keeps both rankers so the rejection stays reproducible, and takes `PENSIEVE_MEASURE_N` to
+re-run at a larger n (default 300, for comparability with the baselines above).
+
 ## What each number means, and the one bias that matters
 
 The headline table (`rprobe2`/`rprobe4`) uses a **same-node relatedness** gold set: query = one

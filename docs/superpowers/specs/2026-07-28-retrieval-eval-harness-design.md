@@ -408,14 +408,41 @@ measured under global de-dup and is no longer the shipped rule (§P1):
    relatedness gold. Below 0.433 as expected — per-node de-dup keeps cross-node duplicate texts
    global de-dup removed, and those are pure distractors on a same-node gold set. **0.403 is the
    step-2 gate value**, not 0.433.
-2. **After P2′**, re-run `rprobe` with the same snapshot, the diacritic-folded tokenizer (§Matching)
+2. **After P2′**, re-run the probe with the same snapshot, the diacritic-folded tokenizer (§Matching)
    and the `files` column present. **P@1 must be ≥ the step-1 baseline.**
+   **Done (2026-08-08): it regressed, and the fallback shipped.** Measured paired within one run on a
+   regenerated 2,704-item corpus — single table with weights 1.0 / 0.1 vs text-only ranking:
+   P@1 **0.395 → 0.378**, P@5 0.269 → 0.256, MRR@50 0.514 → 0.499 at n=1500. At the committed n=300
+   the 0.02 gap was *not* decidable (McNemar 19 vs 13, p = 0.377), so n was raised rather than the
+   gate being read off an ambiguous point estimate; at n=1500 it is **McNemar 50 vs 28, p = 0.017**.
+   The predicted cause is the confirmed one — length normalisation, not match weight.
+   Ran in `rprobe4` (which produced the step-1 baseline) rather than `rprobe` as originally written,
+   because a gate is only a comparison if both sides come from the same instrument.
 
 **Pre-specified fallback if step 2 regresses:** move `files` into its **own FTS5 table** joined on
 `item_id`, queried separately and merged by rank. Path anchoring survives; the text ranking returns
 to the measured configuration exactly. Written down now, in the same spirit as the hardening plan's
 pre-specified `.searchScopes` fallback, so the failure branch is a decision already made rather than
 "explain the regression" under pressure to ship.
+
+**Shipped (2026-08-08).** `SearchIndexStore` schema v2: `documents(text, …)` and
+`document_files(files, …)`, both keyed by `item_id`. The text ranking is now byte-identical to the
+step-1 baseline **by construction** — the text table contains no paths at all — so P@1 returns to
+baseline rather than merely measuring as if it had.
+
+Two refinements the one-line fallback did not specify, both forced by the tool contract:
+
+- **An explicit path directive restricts; it does not widen.** `files:…` and MCP's structured `file:`
+  parameter mean "work whose text matches *and* whose paths match", so those run as a **join** across
+  the two tables, still ranked by text bm25 alone (the path contributes no score). Merging them by
+  rank instead would answer "text matches *or* path matches" — strictly worse than the shared-table
+  behaviour it replaced, and wrong against the tool's documented meaning.
+- **A bare term is also tried against paths.** Typing `SyncRunner.swift` must still find the commits
+  that touched it even though no commit message contains the string, so with no explicit directive the
+  same terms run a second, opportunistic path query whose hits are **appended below** the text hits —
+  never interleaved. The two bm25 scores come from different tables with different average document
+  lengths and are not comparable, so appending is the only honest ordering, and it is also what keeps
+  P@1 exactly at baseline: position 1 is always the top text hit.
 
 ### Kit-tested
 

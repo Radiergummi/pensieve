@@ -14,10 +14,13 @@ public struct SearchIndexHit: Sendable {
 /// sqlite-vec it needs no vendored C target and no per-connection registration. GRDB's Swift-level
 /// FTS5 API is conditionally compiled and deliberately unused.
 public struct SearchIndexStore: Sendable {
-  private static let schemaVersion = 1
-  /// Column order fixes the bm25 weights: text 1.0, files 0.1. UNINDEXED columns are still stored
-  /// and filterable; their positional weights default to 1.0 and are inert (they never match).
-  private static let ranking = "bm25(documents, 1.0, 0.1)"
+  private static let schemaVersion = 2
+  /// Ranking always comes from the TEXT table. Paths never contribute a score — they restrict
+  /// (`filesFilter`) or they surface a row the text index could not (`filesProbe`), and in the
+  /// latter case the row is ranked by its own path relevance in a separate result list that is
+  /// merged BELOW the text hits.
+  private static let ranking = "bm25(documents)"
+  private static let filesRanking = "bm25(document_files)"
 
   private let database: (any DatabaseWriter)?
   public var isAvailable: Bool { database != nil }
@@ -47,11 +50,23 @@ public struct SearchIndexStore: Sendable {
         let storedVersion = try? Int.fetchOne(database, sql: "SELECT schema_version FROM meta")
         if storedVersion != schemaVersion {
           try database.execute(sql: "DROP TABLE IF EXISTS documents")
+          try database.execute(sql: "DROP TABLE IF EXISTS document_files")
           try database.execute(sql: "DROP TABLE IF EXISTS meta")
         }
+        // Two tables, not one table with two columns. FTS5 normalises bm25 by the row's TOTAL token
+        // count across all columns, so carrying paths beside the text discounted every commit's text
+        // matches against nodes and loose ends — measurably (P@1 0.395 → 0.378, McNemar p = 0.017,
+        // n = 1500). A per-column weight cannot fix that; it bounds what a path MATCH scores, not
+        // what a path's PRESENCE costs. Splitting the tables restores the text ranking exactly.
         try database.execute(sql: """
           CREATE VIRTUAL TABLE IF NOT EXISTS documents USING fts5(
-            text, files,
+            text,
+            item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
+            tokenize = 'unicode61 remove_diacritics 2')
+          """)
+        try database.execute(sql: """
+          CREATE VIRTUAL TABLE IF NOT EXISTS document_files USING fts5(
+            files,
             item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
             tokenize = 'unicode61 remove_diacritics 2')
           """)
@@ -102,11 +117,19 @@ public struct SearchIndexStore: Sendable {
     do {
       try database.write { database in
         try database.execute(sql: "DELETE FROM documents")
+        try database.execute(sql: "DELETE FROM document_files")
         for item in items {
           try database.execute(sql: """
-            INSERT INTO documents(text, files, item_id, kind, node_id, state)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, arguments: [item.text, item.files, item.itemID, item.kind, item.nodeID, item.state])
+            INSERT INTO documents(text, item_id, kind, node_id, state)
+            VALUES (?, ?, ?, ?, ?)
+            """, arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state])
+          // Only rows that actually carry paths — an empty row would be dead weight in the path
+          // index and would skew its own average document length.
+          guard !item.files.isEmpty else { continue }
+          try database.execute(sql: """
+            INSERT INTO document_files(files, item_id, kind, node_id, state)
+            VALUES (?, ?, ?, ?, ?)
+            """, arguments: [item.files, item.itemID, item.kind, item.nodeID, item.state])
         }
         try database.execute(sql: "UPDATE meta SET corpus_hash = ?, building = 0",
                              arguments: [corpusHash])
@@ -120,20 +143,72 @@ public struct SearchIndexStore: Sendable {
   /// `includeArchived: false` returns active items only; `true` widens to active + archived.
   /// `muted` is excluded in BOTH modes — an allow-list, never a deny-list, so a future state can
   /// never leak in by omission. The SQL fragment is chosen from a Bool (no interpolated caller
-  /// input) and the MATCH expression comes from `FTSQueryBuilder`, so there is no injection surface.
+  /// input) and every MATCH expression comes from `FTSQueryBuilder`, so there is no injection
+  /// surface.
+  ///
+  /// Three shapes, decided by the builder, never by string inspection here:
+  ///  - text only → rank by text relevance;
+  ///  - text AND an explicit path restriction → join the two tables, still ranked by TEXT relevance
+  ///    (the path restricts the candidate set and contributes no score);
+  ///  - text with an opportunistic path probe → two queries, path hits appended BELOW the text hits
+  ///    so typing a bare filename finds its commits without a path match ever outranking a real
+  ///    text match.
   public func search(_ query: FTSQuery, limit: Int, includeArchived: Bool) -> [SearchIndexHit] {
     guard let database else { return [] }
     let stateFilter = includeArchived
-      ? "AND state IN ('active','archived')"
-      : "AND state = 'active'"
+      ? "state IN ('active','archived')"
+      : "state = 'active'"
+
+    if let filesFilter = query.filesFilter {
+      guard !query.match.isEmpty else {
+        return fetch(sql: """
+          SELECT item_id, kind, node_id, state, -\(Self.filesRanking) AS score
+          FROM document_files
+          WHERE document_files MATCH ? AND \(stateFilter)
+          ORDER BY \(Self.filesRanking) LIMIT ?
+          """, arguments: [filesFilter, limit])
+      }
+      return fetch(sql: """
+        SELECT d.item_id AS item_id, d.kind AS kind, d.node_id AS node_id, d.state AS state,
+               -\(Self.ranking) AS score
+        FROM documents d
+        JOIN document_files f ON f.item_id = d.item_id
+        WHERE documents MATCH ? AND document_files MATCH ? AND d.\(stateFilter)
+        ORDER BY \(Self.ranking) LIMIT ?
+        """, arguments: [query.match, filesFilter, limit])
+    }
+
+    let textHits = fetch(sql: """
+      SELECT item_id, kind, node_id, state, -\(Self.ranking) AS score
+      FROM documents
+      WHERE documents MATCH ? AND \(stateFilter)
+      ORDER BY \(Self.ranking) LIMIT ?
+      """, arguments: [query.match, limit])
+
+    guard let filesProbe = query.filesProbe, textHits.count < limit else { return textHits }
+    let pathHits = fetch(sql: """
+      SELECT item_id, kind, node_id, state, -\(Self.filesRanking) AS score
+      FROM document_files
+      WHERE document_files MATCH ? AND \(stateFilter)
+      ORDER BY \(Self.filesRanking) LIMIT ?
+      """, arguments: [filesProbe, limit])
+
+    // Append, never interleave: the two scores come from different tables with different average
+    // document lengths and are not comparable, so the only honest ordering is "everything the text
+    // index found, then what only the path index found".
+    var seen = Set(textHits.map(\.itemID))
+    var merged = textHits
+    for hit in pathHits where seen.insert(hit.itemID).inserted {
+      merged.append(hit)
+      if merged.count == limit { break }
+    }
+    return merged
+  }
+
+  private func fetch(sql: String, arguments: StatementArguments) -> [SearchIndexHit] {
+    guard let database else { return [] }
     return (try? database.read { database in
-      try Row.fetchAll(database, sql: """
-        SELECT item_id, kind, node_id, state, -\(Self.ranking) AS score
-        FROM documents
-        WHERE documents MATCH ? \(stateFilter)
-        ORDER BY \(Self.ranking)
-        LIMIT ?
-        """, arguments: [query.match, limit]).map { row in
+      try Row.fetchAll(database, sql: sql, arguments: arguments).map { row in
         SearchIndexHit(itemID: row["item_id"], kind: row["kind"], nodeID: row["node_id"],
                        state: row["state"], score: row["score"])
       }
