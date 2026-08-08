@@ -63,10 +63,13 @@ struct Mcp: AsyncParsableCommand {
            ]), "required": .array([.string("loose_end_id")])]),
            annotations: .init(readOnlyHint: true, openWorldHint: false)),
       Tool(name: "search",
-           description: "Find across all your work by keyword AND meaning — exact first, related below; each result is a real, cited item.",
+           description: "Find across all your work — by keyword, by phrase, or by the files a commit touched. "
+             + "Every result is a real, cited item.",
            inputSchema: .object(["type": .string("object"), "properties": .object([
              "query": .object(["type": .string("string"), "description": .string("what to find")]),
-             "limit": .object(["type": .string("number"), "description": .string("max results per group (default 8)")]),
+             "file": .object(["type": .string("string"),
+                              "description": .string("restrict to work that touched this file path (or any part of one)")]),
+             "limit": .object(["type": .string("number"), "description": .string("max results (default 8)")]),
              "include_archived": .object(["type": .string("boolean"),
                                           "description": .string("also search archived projects (default false)")]),
            ]), "required": .array([.string("query")])]),
@@ -123,9 +126,10 @@ struct Mcp: AsyncParsableCommand {
     guard let query = params.arguments?["query"]?.stringValue, !query.isEmpty else {
       return .init(content: [.text(text: "search requires a non-empty query", annotations: nil, _meta: nil)], isError: true)
     }
+    let file = params.arguments?["file"]?.stringValue
     let limit = params.arguments?["limit"]?.intValue ?? 8
     let includeArchived = params.arguments?["include_archived"]?.boolValue ?? false
-    let json = try await PensieveMCP.searchJSON(query: query, limit: limit,
+    let json = try await PensieveMCP.searchJSON(query: query, file: file, limit: limit,
                                                 includeArchived: includeArchived)
     return PensieveMCP.result(json)
   }
@@ -159,6 +163,7 @@ enum PensieveMCP {
   private static let semanticStore = SemanticIndexStore(
     url: PensievePaths.semanticIndexURL(),
     dimension: semanticEmbedder.dimension, embedderVersion: semanticEmbedder.version)
+  private static let searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
 
   private static func makeBuilderAndKind() -> (SummaryBuilder, String) {
     let defaults = PensieveDefaults.shared()
@@ -220,14 +225,16 @@ enum PensieveMCP {
     return try makeEncoder().encode(bundle)   // encodes `null` for an unknown id
   }
 
-  /// Unified "find across my work" tool: exact substring match (`SearchQueries`) plus, when the
-  /// semantic-search toggle is on, semantically related items (`SemanticQueries`) over the on-device
-  /// index — excluding anything already surfaced as an exact hit. Scope is all active nodes (MCP has
-  /// no Focus context), widened to archived by `include_archived`, which gates the exact and semantic
-  /// halves alike. Cloud is never used here; the embedder + index are on-device only.
-  static func searchJSON(query: String, limit: Int, includeArchived: Bool = false) async throws -> Data {
+  /// Unified "find across my work": BM25 over the on-device FTS5 index, plus — only when the
+  /// experimental vector toggle is on — semantically related items below it, excluding anything
+  /// BM25 already returned. Scope is all active nodes (MCP has no Focus context), widened by
+  /// `include_archived`. `index_state` distinguishes "nothing matched" from "the index isn't built",
+  /// which since BM25 became the only retrieval path would otherwise read identically. Cloud is
+  /// never used here; the embedder + both indexes are on-device only.
+  static func searchJSON(query: String, file: String?, limit: Int,
+                         includeArchived: Bool = false) async throws -> Data {
     guard let database = try? openCanonicalReadOnly() else {
-      return try makeEncoder().encode(SearchPayload(exact: [], related: []))
+      return try makeEncoder().encode(SearchPayload(items: [], indexState: .absent))
     }
     // The visible set must widen with the flag: it gates BOTH halves, so leaving it active-only
     // would filter archived hits back out after the query layer allowed them through.
@@ -237,25 +244,21 @@ enum PensieveMCP {
         $0.state == .active || (includeArchived && $0.state == .archived)
       }.map { $0.id })
     }
-    let exact = try SearchQueries.search(query: query, visibleNodeIDs: visible,
-                                         includeArchived: includeArchived, database)
-    let exactIDs = Set(exact.nodes.map { $0.id } + exact.looseEnds.map { $0.id })
+    let scope = SearchScope(visibleNodeIDs: visible, limit: limit, includeArchived: includeArchived)
+    let ranked = SearchQueries.search(query: query, file: file, scope: scope,
+                                      store: searchStore, database)
 
-    let related: [SemanticHit]
+    var items = ranked.map { SearchItem(hit: $0, engine: "bm25") }
     if PensieveDefaults.semanticSearchEnabled() {
-      related = await SemanticQueries.search(
+      let related = await SemanticQueries.search(
         query: query,
-        scope: SemanticSearchScope(visibleNodeIDs: visible, excludingIDs: exactIDs, limit: limit,
-                                   floor: 0.25, includeArchived: includeArchived),
+        scope: SemanticSearchScope(visibleNodeIDs: visible, excludingIDs: Set(ranked.map { $0.id }),
+                                   limit: limit, floor: 0.25, includeArchived: includeArchived),
         store: semanticStore, embedder: semanticEmbedder, database)
-    } else {
-      related = []
+      items += related.map { SearchItem(hit: $0, engine: "vector") }
     }
-
-    let exactItems = exact.nodes.map(SearchItem.init(node:)) + exact.looseEnds.map(SearchItem.init(looseEnd:))
-    let relatedItems = related.map(SearchItem.init(semantic:))
-    let payload = SearchPayload(exact: Array(exactItems.prefix(limit)), related: Array(relatedItems.prefix(limit)))
-    return try makeEncoder().encode(payload)
+    return try makeEncoder().encode(
+      SearchPayload(items: Array(items.prefix(limit * 2)), indexState: searchStore.state()))
   }
 
   /// A text tool result carrying the JSON payload + the result-size hint Claude Code honors.
@@ -268,12 +271,16 @@ enum PensieveMCP {
   }
 }
 
-/// The `search` tool's response shape: `{ "exact": [...], "related": [...] }`. `similarity` is
-/// present only on related (semantic) items — `encode(to:)` omits it (not `null`) for exact items,
-/// since exact matches have no similarity score.
+/// The `search` tool's response shape. One ranked `items` array (the two-array exact/related shape
+/// retired with the substring matcher), plus the index state so an unbuilt index is distinguishable
+/// from a genuine miss.
 private struct SearchPayload: Encodable {
-  var exact: [SearchItem]
-  var related: [SearchItem]
+  var items: [SearchItem]
+  var indexState: SearchIndexState
+  private enum CodingKeys: String, CodingKey {
+    case items
+    case indexState = "index_state"
+  }
 }
 
 private struct SearchItem: Encodable {
@@ -283,60 +290,27 @@ private struct SearchItem: Encodable {
   var nodeName: String
   var title: String
   var snippet: String
-  var similarity: Double?
+  /// Ranking score in the PRODUCING engine's units — a BM25 score and a cosine similarity are
+  /// never comparable, which is what `engine` is here to make explicit.
+  var score: Double?
+  var engine: String
   var archived: Bool
 
-  init(node hit: NodeHit) {
-    id = hit.id.uuidString
-    kind = "node"
-    nodeID = hit.id.uuidString
-    nodeName = hit.name
-    title = hit.name
-    snippet = Self.text(hit.snippet)
-    similarity = nil
-    archived = hit.isArchived
-  }
-
-  init(looseEnd hit: LooseEndHit) {
-    id = hit.id.uuidString
-    kind = "loose_end"
-    nodeID = hit.nodeID.uuidString
-    nodeName = hit.nodeName
-    let snippetText = Self.text(hit.snippet)
-    title = snippetText
-    snippet = snippetText
-    similarity = nil
-    archived = hit.isArchived
-  }
-
-  init(semantic hit: SemanticHit) {
+  init(hit: SearchHit, engine: String) {
     id = hit.id.uuidString
     kind = hit.kind
     nodeID = hit.nodeID.uuidString
     nodeName = hit.nodeName
     title = hit.title
-    snippet = Self.text(hit.snippet)
-    similarity = hit.similarity
+    snippet = hit.snippet.leading + hit.snippet.match + hit.snippet.trailing
+    score = hit.score
+    self.engine = engine
     archived = hit.isArchived
   }
 
-  private static func text(_ snippet: Snippet) -> String { snippet.leading + snippet.match + snippet.trailing }
-
   private enum CodingKeys: String, CodingKey {
-    case id, kind, title, snippet, similarity, archived
+    case id, kind, title, snippet, score, engine, archived
     case nodeID = "node_id"
     case nodeName = "node_name"
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var encoderContainer = encoder.container(keyedBy: CodingKeys.self)
-    try encoderContainer.encode(id, forKey: .id)
-    try encoderContainer.encode(kind, forKey: .kind)
-    try encoderContainer.encode(nodeID, forKey: .nodeID)
-    try encoderContainer.encode(nodeName, forKey: .nodeName)
-    try encoderContainer.encode(title, forKey: .title)
-    try encoderContainer.encode(snippet, forKey: .snippet)
-    try encoderContainer.encodeIfPresent(similarity, forKey: .similarity)
-    try encoderContainer.encode(archived, forKey: .archived)
   }
 }
