@@ -24,9 +24,8 @@ enum AppDefaults {
       ? true : UserDefaults.standard.bool(forKey: backgroundSyncEnabledKey)
   }
 
-  /// Semantic search is ON by default (matching the @AppStorage default and the Kit reader).
+  /// Semantic (vector) search is OFF by default — see PensieveDefaults.semanticSearchEnabled.
   static var semanticSearchEnabled: Bool {
-    UserDefaults.standard.object(forKey: PensieveDefaults.semanticSearchKey) == nil
-      ? true : UserDefaults.standard.bool(forKey: PensieveDefaults.semanticSearchKey)
+    UserDefaults.standard.bool(forKey: PensieveDefaults.semanticSearchKey)
   }
 }

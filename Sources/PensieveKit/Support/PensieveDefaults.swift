@@ -16,9 +16,11 @@ public enum PensieveDefaults {
   /// can't be opened (never nil). The app itself uses `.standard` directly (its own domain).
   public static func shared() -> UserDefaults { UserDefaults(suiteName: appDomain) ?? .standard }
 
-  /// Semantic search is ON by default (matching the app's @AppStorage default). Cross-process
-  /// readers (the daemon) must honor the same default — `bool` alone reads false when unset.
+  /// Semantic (vector) search is OFF by default. It is the experimental second engine now — BM25
+  /// is the shipped retrieval path — and on this corpus the vector measured materially worse
+  /// (P@1 0.250 vs 0.387). An explicitly stored `true` is still honored; only the unset default
+  /// changed. Cross-process readers (the daemon, MCP) must agree with the app's @AppStorage default.
   public static func semanticSearchEnabled(_ defaults: UserDefaults = shared()) -> Bool {
-    defaults.object(forKey: semanticSearchKey) == nil ? true : defaults.bool(forKey: semanticSearchKey)
+    defaults.bool(forKey: semanticSearchKey)
   }
 }

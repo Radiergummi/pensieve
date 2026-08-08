@@ -8,7 +8,7 @@ struct IntelligenceSettingsTab: View {
   var model: AppModel
   @AppStorage(PensieveDefaults.llmProviderKey) private var providerRaw = ProviderPreference.auto.rawValue
   @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
-  @AppStorage(PensieveDefaults.semanticSearchKey) private var semanticSearchEnabled = true
+  @AppStorage(PensieveDefaults.semanticSearchKey) private var semanticSearchEnabled = false
 
   @AppStorage(PensieveDefaults.cloudFlavorKey) private var cloudFlavorRaw = CloudFlavor.anthropic.rawValue
   @AppStorage(PensieveDefaults.cloudBaseURLKey) private var cloudBaseURL = ""
@@ -63,10 +63,12 @@ struct IntelligenceSettingsTab: View {
       Section {
         Toggle("Show “Last Work Done” narration", isOn: $narrationEnabled)
 
-        Toggle("Semantic search (find by meaning)", isOn: $semanticSearchEnabled)
+        Toggle("Semantic search (experimental)", isOn: $semanticSearchEnabled)
         Text("""
-          Builds an on-device index so ⌘F and Claude Code can find work by meaning, not just exact words. \
-          First use downloads a small on-device model.
+          Adds a second, separately ranked list of related work below the search results, found by \
+          meaning rather than by words. Off by default: it currently finds the right project less \
+          often than the ordinary search does. Builds an on-device index; first use downloads a \
+          small on-device model.
           """)
           .font(.caption).foregroundStyle(.secondary)
 

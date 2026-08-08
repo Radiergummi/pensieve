@@ -101,15 +101,20 @@ final class AppModel {
 
   // MARK: - In-app find
   var searchText: String = ""
-  /// ⌘F search scope. `.all` opts archived nodes into EXACT results (semantic "Related" stays
-  /// active-only — the semantic index holds no archived content). Observable → drives the scope bar.
+  /// ⌘F search scope. `.all` opts archived nodes into results. Observable → drives the scope bar.
   enum SearchScope: Hashable { case active, all }
   var searchScope: SearchScope = .active
-  /// NOT private(set): AppModel+Search.swift's runSearch()/clearSearch() write it.
-  var searchResults: SearchResults = SearchResults()
-  /// Semantic ("Related") hits, populated after the exact search when the Settings toggle is on.
-  /// NOT private(set): AppModel+Search.swift's runSearch()/clearSearch() write it.
-  var semanticHits: [SemanticHit] = []
+  // All four are written by AppModel+Search.swift's runSearch()/clearSearch(), hence not private(set).
+  /// The single ranked result list.
+  var searchHits: [SearchHit] = []
+  /// The node pinned above the list for guaranteed navigation. Selected by scanning the visible
+  /// node set, NOT the capped list — see SearchQueries.topHit.
+  var pinnedTopHit: SearchHit?
+  /// Experimental vector hits, shown below the ranked list only when the toggle is on.
+  var semanticHits: [SearchHit] = []
+  /// Whether the index can answer at all — distinct from "no matches", so an unbuilt index does
+  /// not read as "you never worked on that".
+  var searchIndexState: SearchIndexState = .absent
   /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
   var expandedLooseEndID: UUID?
   /// Set by the Find command; RootView observes it to move focus into the .searchable field.
@@ -121,6 +126,7 @@ final class AppModel {
   @ObservationIgnored lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
   @ObservationIgnored lazy var semanticStore = SemanticIndexStore(
     url: PensievePaths.semanticIndexURL(), dimension: embedder.dimension, embedderVersion: embedder.version)
+  @ObservationIgnored lazy var searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
   /// site that branches on search (the middle content, the refresh re-run, the detail one-home
@@ -191,13 +197,7 @@ final class AppModel {
     // selected node happens in DetailView (force: on same-node token bump).
     refreshToken += 1
     await SpotlightIndexer.reindex(activeContext: activeFocusContext)   // launch + ⌘R
-    // Best-effort semantic index catch-up (launch + ⌘R cadence, mirroring SpotlightIndexer above).
-    // The sync daemon also runs this periodically; this just keeps ⌘F "Related" fresh sooner after
-    // in-app activity. Detached + toggle-gated so it never blocks the UI refresh.
-    if AppDefaults.semanticSearchEnabled, let database {
-      let store = semanticStore, embedder = self.embedder
-      Task.detached { await SemanticIndexer(store: store, embedder: embedder).sync(database) }
-    }
+    syncSearchIndexes()   // see AppModel+Search.swift
   }
 
   /// Watch-triggered drain: ingest new spool rows on our own connection. The resulting canonical
