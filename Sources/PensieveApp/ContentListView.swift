@@ -42,15 +42,38 @@ struct ContentListView: View {
   }
 
   @ViewBuilder private func searchResultsList() -> some View {
-    let results = model.searchResults
     List {
       searchScopePicker()
-      if !results.nodes.isEmpty { searchNodesSection(results.nodes) }
-      if !results.looseEnds.isEmpty { searchLooseEndsSection(results.looseEnds) }
-      if !model.semanticHits.isEmpty { searchRelatedSection(model.semanticHits) }
+      if let pinned = model.pinnedTopHit {
+        Section(header: Text("Top Hit")) { searchRow(pinned) }
+      }
+      if !model.searchHits.isEmpty {
+        Section(header: Text("Results")) {
+          ForEach(model.searchHits) { hit in searchRow(hit) }
+        }
+      }
+      if !model.semanticHits.isEmpty {
+        Section(header: Text("Related (experimental)")) {
+          ForEach(model.semanticHits) { hit in searchRow(hit) }
+        }
+      }
     }
-    .overlay {
-      if results.isEmpty && model.semanticHits.isEmpty { ContentUnavailableView.search(text: model.searchText) }
+    .overlay { searchEmptyState() }
+  }
+
+  /// "Nothing matched" and "the index isn't built" must not look the same — since BM25 became the
+  /// only retrieval path, an unbuilt index would otherwise read as "you never worked on that".
+  @ViewBuilder private func searchEmptyState() -> some View {
+    if model.searchHits.isEmpty && model.semanticHits.isEmpty && model.pinnedTopHit == nil {
+      switch model.searchIndexState {
+      case .building:
+        ContentUnavailableView("Building the search index…", systemImage: "clock.arrow.circlepath")
+      case .absent:
+        ContentUnavailableView("The search index has not been built yet.",
+                               systemImage: "exclamationmark.magnifyingglass")
+      case .ready:
+        ContentUnavailableView.search(text: model.searchText)
+      }
     }
   }
 
@@ -65,68 +88,30 @@ struct ContentListView: View {
     .listRowSeparator(.hidden)
   }
 
-  @ViewBuilder private func searchNodesSection(_ hits: [NodeHit]) -> some View {
-    Section(header: Text("Projects")) {
-      ForEach(hits) { hit in
-        Button { model.selectSearchNode(hit.id) } label: {
-          HStack(spacing: 10) {
-            if let resultNode = model.node(hit.id) { NodeBadge(node: resultNode, size: 22) }
-            VStack(alignment: .leading, spacing: 2) {
-              switch hit.matchedField {
-              case .name:
-                // The match is in the name — the snippet IS the highlighted name.
-                SnippetText(snippet: hit.snippet)
-                Text(AppearanceStyle.kindLabel(hit.kind)).font(.caption).foregroundStyle(.secondary)
-              case .description:
-                // Matched only in the description — lead with the node name so the hit is
-                // identifiable, and show the description snippet (why it matched) below.
-                Text(hit.name)
-                SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
-              }
-            }
-            if hit.isArchived { Spacer(); ArchivedBadge() }
-          }
-          .rowHitArea()
+  /// One row for every hit, branching on `kind` — there is one hit type now, so the old
+  /// per-section row builders collapse into this.
+  @ViewBuilder private func searchRow(_ hit: SearchHit) -> some View {
+    Button { model.selectSearchHit(hit) } label: {
+      HStack(spacing: 10) {
+        if hit.kind == "node", let resultNode = model.node(hit.nodeID) {
+          NodeBadge(node: resultNode, size: 22)
         }
-        .buttonStyle(.plain)
-      }
-    }
-  }
-
-  @ViewBuilder private func searchLooseEndsSection(_ hits: [LooseEndHit]) -> some View {
-    Section(header: Text("Loose Ends")) {
-      ForEach(hits) { hit in
-        Button { model.selectSearchLooseEnd(hit) } label: {
-          VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-              Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
-              if hit.isArchived { ArchivedBadge() }
-            }
+        VStack(alignment: .leading, spacing: 2) {
+          if hit.kind == "node" {
+            // The node IS the hit — lead with its name, and show what matched below it.
+            Text(hit.nodeName)
+            SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)
+          } else {
+            // A loose end or an event — lead with the owning node so the hit is placeable.
+            Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
             SnippetText(snippet: hit.snippet)
           }
-          .rowHitArea()
         }
-        .buttonStyle(.plain)
+        if hit.isArchived { Spacer(); ArchivedBadge() }
       }
+      .rowHitArea()
     }
-  }
-
-  @ViewBuilder private func searchRelatedSection(_ hits: [SemanticHit]) -> some View {
-    Section(header: Text("Related")) {
-      ForEach(hits) { hit in
-        Button { model.selectSemanticHit(hit) } label: {
-          VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-              Text(hit.nodeName).font(.caption).foregroundStyle(.secondary)
-              if hit.isArchived { ArchivedBadge() }
-            }
-            Text(hit.title).lineLimit(2)
-          }
-          .rowHitArea()
-        }
-        .buttonStyle(.plain)
-      }
-    }
+    .buttonStyle(.plain)
   }
 
   @ViewBuilder private func nodeList(_ items: [Node]) -> some View {

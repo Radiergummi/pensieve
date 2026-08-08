@@ -12,13 +12,68 @@
         }
       }
     },
-    "Builds an on-device index so ⌘F and Claude Code can find work by meaning, not just exact words. First use downloads a small on-device model." : {
+    "Adds a second, separately ranked list of related work below the search results, found by meaning rather than by words. Off by default: it currently finds the right project less often than the ordinary search does. Builds an on-device index; first use downloads a small on-device model." : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erstellt einen geräteinternen Index, damit ⌘F und Claude Code Arbeit nach Bedeutung finden, nicht nur nach exakten Wörtern. Bei der ersten Nutzung wird ein kleines geräteinternes Modell geladen."
+            "value" : "Ergänzt die Suchergebnisse um eine zweite, separat sortierte Liste verwandter Arbeit, gefunden nach Bedeutung statt nach Wörtern. Standardmäßig aus: derzeit wird das richtige Projekt seltener gefunden als mit der gewöhnlichen Suche. Erstellt einen geräteinternen Index; bei der ersten Nutzung wird ein kleines geräteinternes Modell geladen."
+          }
+        }
+      }
+    },
+    "Building the search index…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suchindex wird erstellt…"
+          }
+        }
+      }
+    },
+    "Results" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ergebnisse"
+          }
+        }
+      }
+    },
+    "Related (experimental)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ähnlich (experimentell)"
+          }
+        }
+      }
+    },
+    "The search index has not been built yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Suchindex wurde noch nicht erstellt."
+          }
+        }
+      }
+    },
+    "Top Hit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bester Treffer"
           }
         }
       }
@@ -1881,17 +1936,6 @@
         }
       }
     },
-    "Related" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verwandt"
-          }
-        }
-      }
-    },
     "rename" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2020,13 +2064,13 @@
         }
       }
     },
-    "Semantic search (find by meaning)" : {
+    "Semantic search (experimental)" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Semantische Suche (nach Bedeutung finden)"
+            "value" : "Semantische Suche (experimentell)"
           }
         }
       }
