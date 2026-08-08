@@ -25,6 +25,24 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
     return SemanticIndexStore(url: url, dimension: 16, embedderVersion: "stub:16")
   }
 
+  /// The shared `SearchHit.score` is optional (a pinned BM25 Top Hit carries nil), but the semantic
+  /// path always ranks by cosine similarity, so its hits must always carry one.
+  @Test func semanticHitsAlwaysCarryTheirSimilarityAsScore() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("semq-score"))
+    let node = Node(name: "Refunds pipeline overhaul", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let embedder = StubEmbedder(dimension: 16)
+    let indexStore = store()
+    await SemanticIndexer(store: indexStore, embedder: embedder).sync(database)
+
+    let hits = await SemanticQueries.search(
+      query: "Refunds pipeline overhaul",
+      scope: SemanticSearchScope(visibleNodeIDs: [node.id], excludingIDs: [], limit: 5, floor: -1.0),
+      store: indexStore, embedder: embedder, database)
+    #expect(hits.count == 1)
+    #expect((hits[0].score ?? -1) > 0.99)   // identical text embeds to the same vector
+  }
+
   @Test func focusMutingDoesNotZeroOutVisibleHits() async throws {
     let database = try openCanonicalDatabase(at: tempURL("semq-mute"))
     let visible = Node(name: "Visible refunds work", kind: NodeKind.project)
