@@ -125,3 +125,24 @@ private struct NamingProvider: LLMProvider {
 
   #expect(!store.existingItems().isEmpty)
 }
+
+/// Proves the injected `searchIndexer` runs at the end of `run()` and leaves a ready, searchable
+/// FTS5 index. Unlike the semantic one this is NOT toggle-gated — BM25 is the only retrieval path.
+@Test func runBuildsTheSearchIndex() async throws {
+  let projects = tmp("projects", ext: "d")
+  try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+  let spool = try CaptureSpool(at: tmp("sync-search-spool", ext: "sqlite"))
+  let database = try openCanonicalDatabase(at: tmp("sync-search-canon", ext: "sqlite"))
+
+  let node = Node(name: "Background sync agent", kind: NodeKind.project)
+  try await database.write { database in try Node.insert { node }.execute(database) }
+
+  let store = SearchIndexStore(url: tmp("sync-search-index", ext: "sqlite"))
+  let runner = SyncRunner(spool: spool, database: database, provider: NoopProvider(),
+                          projectsDir: projects, searchIndexer: SearchIndexer(store: store))
+  _ = try await runner.run()
+
+  #expect(store.state() == .ready)
+  #expect(store.search(FTSQueryBuilder.build("background ")!, limit: 5,
+                       includeArchived: false).map(\.itemID) == [node.id.uuidString])
+}
