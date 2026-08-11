@@ -64,9 +64,10 @@ public struct NodeRowFacts: Sendable, Equatable {
 }
 
 extension NodeFactsQueries {
-  /// Facts for every node at once, as **two grouped aggregates in one read** — deliberately NOT the
-  /// per-node loop `facts(for:)` uses, which is two queries per node and would be ~356 round trips
-  /// against the real store on every middle-column selection change.
+  /// Facts for every node at once, as **two grouped aggregates in one read** — avoids the N+1 a
+  /// per-node loop (`facts(for:)`, two queries per node) would introduce on every middle-column
+  /// selection change. That N+1 pattern still exists elsewhere: `BriefingQueries.cards`, called one
+  /// line above this in `AppModel.refresh()`, fetches every event row per node just to count them.
   ///
   /// A node with neither events nor open loose ends is absent from the result; callers treat a miss
   /// as "no activity, zero open".

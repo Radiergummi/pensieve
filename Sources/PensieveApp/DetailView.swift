@@ -65,7 +65,12 @@ struct DetailView: View {
               .foregroundStyle(.secondary)
           }
         } else if narrationEnabled, isNarrating, loadedNodeID == node.id {
-          ProgressView().controlSize(.small)
+          HStack(spacing: 6) {
+            ProgressView().controlSize(.small)
+            Label("Generated summary", systemImage: "sparkles")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+          }
         }
 
         // RECENT ACTIVITY (GitHub-style rail timeline)

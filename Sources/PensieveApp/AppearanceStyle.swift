@@ -48,13 +48,6 @@ enum AppearanceStyle {
     }
   }
 
-  static func stateColor(_ state: NodeState) -> Color {
-    switch state {
-    case .muted:    return .orange
-    case .archived: return .gray
-    case .active:   return .green
-    }
-  }
 }
 
 /// A node's effective icon in a colored rounded-rect badge. Reused in the sidebar tree, the middle
