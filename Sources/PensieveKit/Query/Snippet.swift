@@ -37,10 +37,12 @@ public enum SnippetMaker {
   /// displayed text keeps coming from the canonical store rather than the index.
   public static func make(from source: String, matchingAny terms: [String],
                           window: Int = 80) -> Snippet {
+    // Keep the first term that actually produced a highlight. Testing for a match first and then
+    // re-running the search would search twice per term AND let the two searches disagree on their
+    // options — a term found under one comparison and missed by the other yielded no highlight.
     for term in terms where !term.isEmpty {
-      if source.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil {
-        return make(from: source, matching: term, window: window)
-      }
+      let snippet = make(from: source, matching: term, window: window)
+      if !snippet.match.isEmpty { return snippet }
     }
     return make(from: source, matching: "", window: window)
   }

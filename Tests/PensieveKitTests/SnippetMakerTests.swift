@@ -64,3 +64,22 @@ import Testing
   #expect(snippet.match == "needle")
   #expect(snippet.trailing == " 🚀")
 }
+
+@Test func matchingAnyHighlightsTheFirstTermThatActuallyMatches() {
+  let snippet = SnippetMaker.make(from: "the quick brown fox", matchingAny: ["absent", "brown"])
+  #expect(snippet.match == "brown")
+}
+
+/// The regression this pins: the eligibility test used to be diacritic-insensitive while the
+/// highlighting search was not, so a term matching ONLY under the looser comparison was chosen and
+/// then found nothing — swallowing the highlight a later, genuinely matching term would have made.
+@Test func matchingAnyDoesNotLetADiacriticOnlyMatchSwallowTheHighlight() {
+  let snippet = SnippetMaker.make(from: "über sync agent", matchingAny: ["uber", "sync"])
+  #expect(snippet.match == "sync")
+}
+
+@Test func matchingAnyWithNoMatchingTermYieldsAHeadWindow() {
+  let snippet = SnippetMaker.make(from: "the quick brown fox", matchingAny: ["absent", ""])
+  #expect(snippet.match == "")
+  #expect(snippet.leading == "the quick brown fox")
+}
