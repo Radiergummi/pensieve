@@ -12,16 +12,14 @@ public struct SyncRunner {
   let provider: any LLMProvider
   let projectsDir: URL
   let now: @Sendable () -> Date
-  let semanticIndexer: SemanticIndexer?
   let searchIndexer: SearchIndexer?
 
   public init(spool: CaptureSpool, database: any DatabaseWriter, provider: any LLMProvider,
               projectsDir: URL, now: @escaping @Sendable () -> Date = Date.init,
-              semanticIndexer: SemanticIndexer? = nil,
               searchIndexer: SearchIndexer? = nil) {
     self.spool = spool; self.database = database; self.provider = provider
     self.projectsDir = projectsDir; self.now = now
-    self.semanticIndexer = semanticIndexer; self.searchIndexer = searchIndexer
+    self.searchIndexer = searchIndexer
   }
 
   public struct Summary: Sendable {
@@ -53,25 +51,14 @@ public struct SyncRunner {
       extracted=\(extracted, privacy: .public)
       """)
 
-    // Semantic index refresh (best-effort, on-device, toggle-gated). Never blocks the sync summary.
-    if let semanticIndexer {
-      await semanticIndexer.sync(database)
-    } else if PensieveDefaults.semanticSearchEnabled() {
-      let embedder = NLContextualEmbedder()
-      let store = SemanticIndexStore(url: PensievePaths.semanticIndexURL(),
-                                     dimension: embedder.dimension, embedderVersion: embedder.version)
-      if store.isAvailable, embedder.dimension > 0 {
-        await SemanticIndexer(store: store, embedder: embedder).sync(database)
-      }
-    }
-
-    // Search index refresh (best-effort, NOT toggle-gated — BM25 is the only retrieval path, so it
-    // is never optional). Hash-guarded, so an unchanged corpus costs one read.
+    // Search index refresh (best-effort — BM25 is the only retrieval path, so it is never
+    // optional). Hash-guarded, so an unchanged corpus costs one read.
     //
-    // Deliberately no fallback to `PensievePaths.searchIndexURL()` when nil, unlike the semantic
-    // block above: a whole-rebuild against the shared support directory would let any test that
-    // constructs a SyncRunner overwrite the developer's live index with its fixture corpus. Both
-    // production entry points (`pensieve sync`, PensieveSyncAgent) inject one explicitly.
+    // Deliberately no fallback to `PensievePaths.searchIndexURL()` when nil: a whole-rebuild
+    // against the shared support directory would let any test that constructs a SyncRunner
+    // overwrite the developer's live index with its fixture corpus. (The retired semantic block
+    // here DID self-construct exactly that way, which is why it is worth naming.) Both production
+    // entry points (`pensieve sync`, PensieveSyncAgent) inject one explicitly.
     searchIndexer?.sync(database)
 
     return Summary(ingested: ingested, discovered: discovered.count, extracted: extracted)

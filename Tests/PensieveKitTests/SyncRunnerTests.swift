@@ -103,27 +103,29 @@ private struct NamingProvider: LLMProvider {
   #expect(Ingester.nameInferred(inMetadata: node.metadataJSON) == true)
 }
 
-/// Proves the injected `semanticIndexer` runs at the end of `run()` and populates the index
-/// (an active node is embeddable content per `EmbeddableCorpus.gather`).
-@Test func syncPopulatesSemanticIndexWhenEnabled() async throws {
+/// The retired vector path must leave no way back in. `SyncRunner` used to construct a
+/// SemanticIndexer itself when none was injected and the toggle was on — pointing at the SHARED
+/// index path, so any caller could rebuild a real index it never asked for. This pins the surviving
+/// shape: one optional indexer, no self-construction, and a run that indexes only what it was given.
+@Test func syncTakesOnlyASearchIndexer() async throws {
   let projects = tmp("projects", ext: "d")
   try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
-  let spool = try CaptureSpool(at: tmp("sync-spool", ext: "sqlite"))
-  let database = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
+  let spool = try CaptureSpool(at: tmp("sync-onlysearch-spool", ext: "sqlite"))
+  let database = try openCanonicalDatabase(at: tmp("sync-onlysearch-canon", ext: "sqlite"))
+  let node = Node(name: "Background sync agent", kind: NodeKind.project)
+  try await database.write { database in try Node.insert { node }.execute(database) }
 
-  try await database.write { database in
-    let node = Node(name: "Indexed project", kind: NodeKind.project)
-    try Node.insert { node }.execute(database)
-  }
-
-  let idxURL = tmp("s", ext: "sqlite")
-  let store = SemanticIndexStore(url: idxURL, dimension: 16, embedderVersion: "stub:16")
-  let runner = SyncRunner(spool: spool, database: database, provider: NoopProvider(), projectsDir: projects,
-                         now: { Date() },
-                         semanticIndexer: SemanticIndexer(store: store, embedder: StubEmbedder(dimension: 16)))
+  let store = SearchIndexStore(url: tmp("sync-onlysearch-index", ext: "sqlite"))
+  // Compiles ONLY while `semanticIndexer:` does not exist: adding it back with a default would keep
+  // this green, but re-adding a self-constructing fallback is what the deleted `else if` did, and
+  // Step 4's grep is what guards that.
+  let runner = SyncRunner(spool: spool, database: database, provider: NoopProvider(),
+                          projectsDir: projects, searchIndexer: SearchIndexer(store: store))
   _ = try await runner.run()
 
-  #expect(!store.existingItems().isEmpty)
+  #expect(store.state() == .ready)
+  #expect(store.search(FTSQueryBuilder.build("background ")!, limit: 5,
+                       includeArchived: false).map(\.itemID) == [node.id.uuidString])
 }
 
 /// Proves the injected `searchIndexer` runs at the end of `run()` and leaves a ready, searchable
