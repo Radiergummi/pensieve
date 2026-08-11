@@ -113,31 +113,21 @@ struct DetailView: View {
       recentEvents = detail.status.recentEvents
       looseEnds = detail.looseEnds
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
-      find.reset(nodeID: node.id,
-                 document: NodeFindDocument.make(node: node, narration: nil,
-                                                 looseEnds: looseEnds, events: recentEvents,
-                                                 showsLooseEnds: showsLooseEnds))
+      resetFind(narration: nil)
       shareMarkdown = RecallMarkdown.render(node: node,
                                             narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
       if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {
         lastWorkDone = cached
-        find.reset(nodeID: node.id,
-                   document: NodeFindDocument.make(node: node, narration: cached,
-                                                   looseEnds: looseEnds, events: recentEvents,
-                                                   showsLooseEnds: showsLooseEnds))
+        resetFind(narration: cached)
         return
       }
       isNarrating = true
       let prose = await model.narration(for: node, events: recentEvents, force: isRefresh)
       guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
       lastWorkDone = prose
-      find.reset(nodeID: node.id,
-                 document: NodeFindDocument.make(node: node,
-                                                 narration: narrationEnabled ? prose : nil,
-                                                 looseEnds: looseEnds, events: recentEvents,
-                                                 showsLooseEnds: showsLooseEnds))
+      resetFind(narration: narrationEnabled ? prose : nil)
       shareMarkdown = RecallMarkdown.render(node: node, narration: prose,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       isNarrating = false
@@ -154,7 +144,25 @@ struct DetailView: View {
     }
     }
     .focusedSceneValue(\.nodeFind, find)
+    .onChange(of: find.isPresented) { _, presented in
+      // Opening the bar is what pays for the transcript sweep: it reads every referenced transcript
+      // off the main actor, so nothing loads it until the user actually asks to find something.
+      if presented { find.startSweep(looseEnds: looseEnds, loader: model.provenanceLoader) }
+    }
     .onExitCommand { if find.isPresented { find.dismiss() } }
+  }
+
+  /// Rebuilds the find document for what is currently on screen, then restarts the transcript sweep.
+  /// The two belong together: `reset` rebuilds every provenance slot as unresolved AND cancels the
+  /// in-flight sweep, so a same-node rebuild (⌘R, narration arriving) would otherwise drop the
+  /// transcript matches the sweep had already filled with nothing left to refill them. Restarting is
+  /// cheap — the loader serves an unchanged transcript from its cache and reports "nothing to do".
+  @MainActor private func resetFind(narration: String?) {
+    find.reset(nodeID: node.id,
+               document: NodeFindDocument.make(node: node, narration: narration,
+                                               looseEnds: looseEnds, events: recentEvents,
+                                               showsLooseEnds: showsLooseEnds))
+    find.startSweep(looseEnds: looseEnds, loader: model.provenanceLoader)
   }
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {

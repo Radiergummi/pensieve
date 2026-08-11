@@ -82,11 +82,38 @@ struct LooseEndRow: View {
       // indexes these exact arrays by position, so a separate parse could disagree about ordinals.
       parsed = loaded?.segments ?? []
       loading = false
+      // The window this row renders is the truth. The sweep may have recorded a different one — the
+      // loader re-slices a transcript that grew since — so let the rendered window correct the
+      // document, keeping its segment ordinals and the on-screen ordinals the same numbers.
+      find?.noteRenderedProvenance(looseEndID: view.looseEnd.id, loaded: loaded,
+                                   quote: view.looseEnd.quote)
     }
-    .onAppear { if expandedLooseEndID == view.looseEnd.id { expanded = true } }
+    .onAppear {
+      if expandedLooseEndID == view.looseEnd.id { expanded = true }
+      if isFindTarget { revealForFind() }
+    }
     .onChange(of: expandedLooseEndID) { _, newValue in
       if newValue == view.looseEnd.id { expanded = true }
     }
+    // The per-window find channel, ALONGSIDE the app-wide `expandedLooseEndID` above and never
+    // instead of it: that property is read by the detail pane in every open window, so driving find
+    // through it would expand this row in every ⌘⌥N recall window and clobber a pending search or
+    // Spotlight landing.
+    .onChange(of: isFindTarget) { _, forced in
+      if forced { revealForFind() }
+    }
+  }
+
+  /// True while find has force-expanded this row to reveal a match inside it.
+  private var isFindTarget: Bool { find?.forcedExpansions.contains(view.looseEnd.id) ?? false }
+
+  /// Opens the row AND its provenance disclosure for a find target — both, unconditionally. The
+  /// collapsed preview renders a SINGLE segment (`previewSegments`) at view-ordinal 0 whatever that
+  /// segment's true position is, so a document anchor for any other segment has no on-screen site to
+  /// highlight or scroll to while the disclosure is shut.
+  private func revealForFind() {
+    expanded = true
+    provenanceExpanded = true
   }
 
   @ViewBuilder private var looseEndText: some View {
@@ -178,8 +205,32 @@ struct LooseEndRow: View {
   }
 
   @ViewBuilder private func messageRow(_ msg: ProvenanceMessage, showsRole: Bool) -> some View {
-    TranscriptMessageView(message: msg, segments: segments(for: msg),
-                          compact: compact, showsRoleLabel: showsRole)
+    let messageSegments = segments(for: msg)
+    TranscriptMessageView(message: msg, segments: messageSegments,
+                          compact: compact, showsRoleLabel: showsRole,
+                          highlights: highlights(for: msg, segments: messageSegments),
+                          anchorForSegment: { ordinal in
+                            .transcriptSegment(looseEndID: view.looseEnd.id,
+                                               messageIndex: msg.index, segment: ordinal)
+                          },
+                          find: find)
+  }
+
+  /// Highlight runs per segment ordinal — only for the segments that actually match. The ordinal is
+  /// the position in the FULL segment array, the same number the document's anchors carry.
+  private func highlights(for msg: ProvenanceMessage,
+                          segments: [TranscriptSegment]) -> [Int: SegmentHighlight] {
+    guard let find, !find.query.isEmpty else { return [:] }
+    var result: [Int: SegmentHighlight] = [:]
+    for (ordinal, segment) in segments.enumerated() {
+      guard let text = segment.findableText else { continue }
+      let anchor = FindAnchor.transcriptSegment(looseEndID: view.looseEnd.id,
+                                               messageIndex: msg.index, segment: ordinal)
+      let runs = find.runs(for: anchor, text: text)
+      guard !runs.isEmpty else { continue }
+      result[ordinal] = SegmentHighlight(runs: runs, currentOffset: find.currentOffset(in: anchor))
+    }
+    return result
   }
 
   /// Segments for a message, by position in the parallel `parsed` array. Falls back to a single

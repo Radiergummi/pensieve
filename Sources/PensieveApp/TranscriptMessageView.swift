@@ -21,6 +21,14 @@ struct TranscriptMessageView: View {
   let compact: Bool
   /// Suppressed when the previous message has the same speaker (Decision 6).
   var showsRoleLabel: Bool = true
+  /// Per-segment find highlight, keyed by segment ordinal. Empty when find is closed, when this
+  /// surface is not find-scoped, or when nothing in this message matches.
+  var highlights: [Int: SegmentHighlight] = [:]
+  /// Builds the find anchor for a segment ordinal, when this message participates in find. nil on the
+  /// surfaces that do not (the collapsed preview, the middle column, Review Suggestions), which keeps
+  /// their view identity exactly as it ships today.
+  var anchorForSegment: ((Int) -> FindAnchor)?
+  var find: NodeFindState?
 
   private var speaker: SpeakerClass { .of(message, segments: segments) }
 
@@ -32,8 +40,9 @@ struct TranscriptMessageView: View {
           .foregroundStyle(.secondary)
       }
       VStack(alignment: .leading, spacing: 8) {
-        ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-          TranscriptSegmentView(segment: segment)
+        ForEach(Array(segments.enumerated()), id: \.offset) { ordinal, segment in
+          TranscriptSegmentView(segment: segment, highlight: highlights[ordinal])
+            .modifier(OptionalFindSite(anchor: anchorForSegment?(ordinal), find: find))
         }
       }
       .padding(bubbled ? 10 : 0)
@@ -68,4 +77,16 @@ struct TranscriptMessageView: View {
   /// fallback layout ships by default: full-width for all three classes, class conveyed by role
   /// caption + background tint. Bubbles remain available for the wide detail pane only.
   private var bubbled: Bool { !compact && speaker != .system }
+}
+
+/// Applies `.findSite` only to a segment that participates in find, so the surfaces that don't (the
+/// collapsed preview, the middle column, Review Suggestions) keep their current view identity — a
+/// `.id()` they never had would change it.
+private struct OptionalFindSite: ViewModifier {
+  let anchor: FindAnchor?
+  let find: NodeFindState?
+
+  @ViewBuilder func body(content: Content) -> some View {
+    if let anchor { content.findSite(anchor, find) } else { content }
+  }
 }

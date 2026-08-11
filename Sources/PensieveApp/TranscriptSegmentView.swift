@@ -3,10 +3,22 @@ import SwiftUI
 import PensieveKit
 import MarkdownUI
 
+/// A matched segment's highlight runs, plus which of them is the current match. Computed where the
+/// find state and the segment array meet (`LooseEndRow.highlights`).
+struct SegmentHighlight {
+  let runs: [FindRun]
+  let currentOffset: Int?
+}
+
 /// Renders one parsed transcript segment. All parsing lives in PensieveKit's `TranscriptMarkup`;
 /// this file only decides what each segment looks like.
 struct TranscriptSegmentView: View {
   let segment: TranscriptSegment
+  /// Non-nil only while a find is open AND this segment matches. Carried but not yet drawn: painting
+  /// the match means rendering the segment as plain highlighted text instead of Markdown (MarkdownUI
+  /// 2.4.1 exposes no way to style a substring inside a rendered block — its AST types are internal),
+  /// and that trade-off — visible raw syntax until the bar closes — is its own change.
+  var highlight: SegmentHighlight?
 
   var body: some View {
     switch segment {
