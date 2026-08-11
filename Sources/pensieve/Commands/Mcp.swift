@@ -172,14 +172,9 @@ struct Mcp: AsyncParsableCommand {
 enum PensieveMCP {
   static let maxResultSizeMeta = "anthropic/maxResultSizeChars"
 
-  // Built once for the server's lifetime (the MCP process is long-lived): the NL asset load + the
-  // index pool open are otherwise repeated on every `search` call. Both are Sendable. Caveat: a
-  // version bump WHILE the server runs won't reopen the cached store — acceptable, the server is
-  // session-scoped and the app/daemon own rebuilds.
-  private static let semanticEmbedder = NLContextualEmbedder()
-  private static let semanticStore = SemanticIndexStore(
-    url: PensievePaths.semanticIndexURL(),
-    dimension: semanticEmbedder.dimension, embedderVersion: semanticEmbedder.version)
+  // Built once for the server's lifetime (the MCP process is long-lived): the index pool open is
+  // otherwise repeated on every `search` call. Sendable. The server is session-scoped and the
+  // app/daemon own rebuilds.
   private static let searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
 
   private static func makeBuilderAndKind() -> (SummaryBuilder, String) {
@@ -242,12 +237,10 @@ enum PensieveMCP {
     return try makeEncoder().encode(bundle)   // encodes `null` for an unknown id
   }
 
-  /// Unified "find across my work": BM25 over the on-device FTS5 index, plus — only when the
-  /// experimental vector toggle is on — semantically related items below it, excluding anything
-  /// BM25 already returned. Scope is all active nodes (MCP has no Focus context), widened by
-  /// `include_archived`. `index_state` distinguishes "nothing matched" from "the index isn't built",
-  /// which since BM25 became the only retrieval path would otherwise read identically. Cloud is
-  /// never used here; the embedder + both indexes are on-device only.
+  /// Unified "find across my work": BM25 over the on-device FTS5 index, the only retrieval path.
+  /// Scope is all active nodes (MCP has no Focus context), widened by `include_archived`.
+  /// `index_state` distinguishes "nothing matched" from "the index isn't built", which would
+  /// otherwise read identically. Cloud is never used here; the index is on-device only.
   static func searchJSON(query: String, file: String?, limit: Int,
                          includeArchived: Bool = false) async throws -> Data {
     guard let database = try? openCanonicalReadOnly() else {
@@ -264,17 +257,11 @@ enum PensieveMCP {
     let ranked = SearchQueries.search(query: query, file: file, scope: scope,
                                       store: searchStore, database)
 
-    var items = ranked.map { SearchItem(hit: $0, engine: "bm25") }
-    if PensieveDefaults.semanticSearchEnabled() {
-      let related = await SemanticQueries.search(
-        query: query,
-        scope: SemanticSearchScope(visibleNodeIDs: visible, excludingIDs: Set(ranked.map { $0.id }),
-                                   limit: limit, floor: 0.25, includeArchived: includeArchived),
-        store: semanticStore, embedder: semanticEmbedder, database)
-      items += related.map { SearchItem(hit: $0, engine: "vector") }
-    }
+    // `limit` is honoured by SearchQueries itself; there is no second engine to make room for, so
+    // the payload no longer over-allocates and then truncates.
+    let items = ranked.map { SearchItem(hit: $0) }
     return try makeEncoder().encode(
-      SearchPayload(items: Array(items.prefix(limit * 2)), indexState: searchStore.state()))
+      SearchPayload(items: items, indexState: searchStore.state()))
   }
 
   /// A text tool result carrying the JSON payload + the result-size hint Claude Code honors.
@@ -306,19 +293,14 @@ private struct SearchItem: Encodable {
   var nodeName: String
   var title: String
   var snippet: String
-  /// Ranking score in the PRODUCING engine's units — a BM25 score and a cosine similarity are
-  /// never comparable, which is what `engine` is here to make explicit.
-  ///
-  /// It is not reliably comparable WITHIN an engine either: bm25 hits found by path come from a
+  /// BM25 relevance. NOT reliably comparable between items: hits found by file path come from a
   /// different FTS5 table with a different average document length than text hits, and can score
   /// higher while being less relevant. Array order is the contract — re-sorting by `score` would
-  /// reconstruct exactly the ranking the verification gate rejected on measured evidence. Reported
-  /// because it is informative, and the tool description tells the caller not to rank on it.
+  /// reconstruct exactly the ranking the verification gate rejected on measured evidence.
   var score: Double?
-  var engine: String
   var archived: Bool
 
-  init(hit: SearchHit, engine: String) {
+  init(hit: SearchHit) {
     id = hit.id.uuidString
     kind = hit.kind.rawValue   // the wire format is the raw string, unchanged by the typed boundary
     nodeID = hit.nodeID.uuidString
@@ -326,12 +308,11 @@ private struct SearchItem: Encodable {
     title = hit.title
     snippet = hit.snippet.leading + hit.snippet.match + hit.snippet.trailing
     score = hit.score
-    self.engine = engine
     archived = hit.isArchived
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, kind, title, snippet, score, engine, archived
+    case id, kind, title, snippet, score, archived
     case nodeID = "node_id"
     case nodeName = "node_name"
   }
