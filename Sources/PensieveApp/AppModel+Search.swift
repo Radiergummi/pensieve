@@ -11,7 +11,7 @@ extension AppModel {
   /// JSON blob per event) and the rebuild re-tokenizes the whole corpus, which grows with the corpus
   /// and is the one full-store read that would otherwise sit on the main actor. The store also has a
   /// 5 s busy timeout because the daemon writes the same file, so a rebuild racing the agent could
-  /// block the main thread for seconds — exactly when overlap is likeliest. Both indexes are
+  /// block the main thread for seconds — exactly when overlap is likeliest. The index is
   /// hash-guarded, so an unchanged corpus costs one gather and one hash.
   ///
   /// The state assignment and the search re-run hop back to the main actor afterwards, so a search
@@ -26,19 +26,8 @@ extension AppModel {
     guard !isSyncingIndexes else { return }
     isSyncingIndexes = true
     let searchStore = self.searchStore
-    // Resolved ONLY when the branch will actually run. `semanticStore` and `embedder` are lazy vars
-    // with real side effects on first touch: the store creates its SQLite file, and its initialiser
-    // reads `embedder.dimension`, which loads the NaturalLanguage model asset. Reading them
-    // unconditionally — as this did briefly — made a DISABLED feature create a semantic-index.sqlite
-    // and load a model on every launch. Verified by deleting the file and relaunching: it must stay
-    // absent while the toggle is off.
-    let semantic: (store: SemanticIndexStore, embedder: NLContextualEmbedder)? =
-      AppDefaults.semanticSearchEnabled ? (semanticStore, embedder) : nil
     Task.detached { [weak self] in
       SearchIndexer(store: searchStore).sync(database)
-      if let semantic {
-        await SemanticIndexer(store: semantic.store, embedder: semantic.embedder).sync(database)
-      }
       // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
       // timeout is the whole reason this work is detached.
       let state = searchStore.state()
@@ -70,7 +59,6 @@ extension AppModel {
     guard query.count >= SearchQueries.minQueryLength, let database else {
       searchHits = []
       pinnedTopHit = nil
-      semanticHits = []
       expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
       return
     }
@@ -100,15 +88,6 @@ extension AppModel {
       }.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchHits = hits
-
-      guard AppDefaults.semanticSearchEnabled else { self.semanticHits = []; return }
-      let related = await SemanticQueries.search(
-        query: query,
-        scope: SemanticSearchScope(visibleNodeIDs: visible, excludingIDs: Set(hits.map { $0.id }),
-                                   limit: 8, floor: 0.25, includeArchived: includeArchived),
-        store: self.semanticStore, embedder: self.embedder, database)
-      guard self.searchToken == token, !Task.isCancelled else { return }
-      self.semanticHits = related
     }
   }
 
@@ -153,7 +132,6 @@ extension AppModel {
     searchText = ""
     searchHits = []
     pinnedTopHit = nil
-    semanticHits = []
     expandedLooseEndID = nil
     searchTask?.cancel()
   }

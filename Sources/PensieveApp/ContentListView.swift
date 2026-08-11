@@ -52,11 +52,6 @@ struct ContentListView: View {
           ForEach(model.searchHits) { hit in searchRow(hit) }
         }
       }
-      if !model.semanticHits.isEmpty {
-        Section(header: Text("Related (experimental)")) {
-          ForEach(model.semanticHits) { hit in searchRow(hit) }
-        }
-      }
     }
     .overlay { searchEmptyState() }
   }
@@ -64,7 +59,7 @@ struct ContentListView: View {
   /// "Nothing matched" and "the index isn't built" must not look the same — since BM25 became the
   /// only retrieval path, an unbuilt index would otherwise read as "you never worked on that".
   @ViewBuilder private func searchEmptyState() -> some View {
-    if model.searchHits.isEmpty && model.semanticHits.isEmpty && model.pinnedTopHit == nil {
+    if model.searchHits.isEmpty && model.pinnedTopHit == nil {
       switch model.searchIndexState {
       case .building:
         ContentUnavailableView("Building the search index…", systemImage: "clock.arrow.circlepath")

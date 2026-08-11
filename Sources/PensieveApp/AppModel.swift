@@ -110,8 +110,6 @@ final class AppModel {
   /// The node pinned above the list for guaranteed navigation. Selected by scanning the visible
   /// node set, NOT the capped list — see SearchQueries.topHit.
   var pinnedTopHit: SearchHit?
-  /// Experimental vector hits, shown below the ranked list only when the toggle is on.
-  var semanticHits: [SearchHit] = []
   /// Whether the index can answer at all — distinct from "no matches", so an unbuilt index does
   /// not read as "you never worked on that".
   var searchIndexState: SearchIndexState = .absent
@@ -125,10 +123,6 @@ final class AppModel {
   // NOT private: AppModel+Search.swift's runSearch()/clearSearch() also read/write these.
   @ObservationIgnored var searchTask: Task<Void, Never>?
   @ObservationIgnored var searchToken = 0
-  // Built once; NLContextualEmbedder resolves dimension from the loaded asset at init.
-  @ObservationIgnored lazy var embedder: NLContextualEmbedder = NLContextualEmbedder()
-  @ObservationIgnored lazy var semanticStore = SemanticIndexStore(
-    url: PensievePaths.semanticIndexURL(), dimension: embedder.dimension, embedderVersion: embedder.version)
   @ObservationIgnored lazy var searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every

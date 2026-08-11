@@ -12,17 +12,6 @@
         }
       }
     },
-    "Adds a second, separately ranked list of related work below the search results, found by meaning rather than by words. Off by default: it currently finds the right project less often than the ordinary search does. Builds an on-device index; first use downloads a small on-device model." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ergänzt die Suchergebnisse um eine zweite, separat sortierte Liste verwandter Arbeit, gefunden nach Bedeutung statt nach Wörtern. Standardmäßig aus: derzeit wird das richtige Projekt seltener gefunden als mit der gewöhnlichen Suche. Erstellt einen geräteinternen Index; bei der ersten Nutzung wird ein kleines geräteinternes Modell geladen."
-          }
-        }
-      }
-    },
     "Building the search index…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -41,17 +30,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ergebnisse"
-          }
-        }
-      }
-    },
-    "Related (experimental)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ähnlich (experimentell)"
           }
         }
       }
@@ -2060,17 +2038,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Projekt auswählen"
-          }
-        }
-      }
-    },
-    "Semantic search (experimental)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Semantische Suche (experimentell)"
           }
         }
       }
