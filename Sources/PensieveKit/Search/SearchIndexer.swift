@@ -14,6 +14,13 @@ public struct SearchIndexer: Sendable {
   let store: SearchIndexStore
   public init(store: SearchIndexStore) { self.store = store }
 
+  /// The indexer over the real shared index. `SyncRunner` deliberately has no fallback to this —
+  /// a test that constructed one would overwrite the developer's live index with its fixture
+  /// corpus — so every production entry point injects it, and this is the one place that spells it.
+  public static func production() -> SearchIndexer {
+    SearchIndexer(store: SearchIndexStore(url: PensievePaths.searchIndexURL()))
+  }
+
   public func sync(_ database: any DatabaseReader) {
     guard store.isAvailable else { return }
     guard let corpus = try? EmbeddableCorpus.gather(database) else { return }
@@ -26,15 +33,12 @@ public struct SearchIndexer: Sendable {
   /// hash. `contentHash` covers `text`; `files` is folded in separately because `contentHash`
   /// deliberately excludes it (paths must never force a re-embed on the semantic side).
   public static func corpusHash(_ items: [EmbeddableItem]) -> String {
-    var accumulator: UInt64 = 1469598103934665603
-    func absorb(_ text: String) {
-      for byte in text.utf8 { accumulator = (accumulator ^ UInt64(byte)) &* 1099511628211 }
-      accumulator = (accumulator ^ 0x1F) &* 1099511628211      // field separator
-    }
+    var hash = StableHash()
     for item in items.sorted(by: { $0.itemID < $1.itemID }) {
-      absorb(item.itemID); absorb(item.contentHash); absorb(item.files)
-      absorb(item.kind); absorb(item.nodeID); absorb(item.state)
+      hash.absorbField(item.itemID); hash.absorbField(item.contentHash)
+      hash.absorbField(item.files); hash.absorbField(item.kind)
+      hash.absorbField(item.nodeID); hash.absorbField(item.state)
     }
-    return String(accumulator, radix: 16)
+    return hash.hexValue
   }
 }

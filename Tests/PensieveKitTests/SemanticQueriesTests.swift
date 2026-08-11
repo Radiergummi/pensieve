@@ -251,9 +251,9 @@ private func makeEvent(_ database: any DatabaseWriter, node: Node, kind: String 
       store: indexStore, embedder: embedder, database)
 
     // All three item kinds under an archived node resolve, and every one is flagged archived.
-    #expect(hits.contains { $0.id == looseEnd.id && $0.kind == "loose_end" })
-    #expect(hits.contains { $0.id == event.id && $0.kind == "event" })
-    #expect(hits.contains { $0.id == archived.id && $0.kind == "node" })
+    #expect(hits.contains { $0.id == looseEnd.id && $0.kind == .looseEnd })
+    #expect(hits.contains { $0.id == event.id && $0.kind == .event })
+    #expect(hits.contains { $0.id == archived.id && $0.kind == .node })
     #expect(hits.allSatisfy { $0.isArchived })
   }
 }

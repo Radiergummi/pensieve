@@ -46,7 +46,7 @@ extension AppModel {
     let includeArchived = (searchScope == .all)
     let rawQuery = searchText
     let scopedNodes = allNodes.filter {
-      visible.contains($0.id) && ($0.state == .active || (includeArchived && $0.state == .archived))
+      visible.contains($0.id) && $0.state.isSearchable(includeArchived: includeArchived)
     }
     // The pin is pure and instant — no DB, no index. Assign it before the async read so navigation
     // never waits on ranking.
@@ -89,7 +89,7 @@ extension AppModel {
   /// Any ranked hit. A loose end auto-expands its cited row; a node or an event drives the detail
   /// (an event's home is its node).
   func selectSearchHit(_ hit: SearchHit) {
-    if hit.kind == "loose_end" {
+    if hit.kind == .looseEnd {
       selectedNodeID = hit.nodeID
       expandedLooseEndID = hit.id
     } else {

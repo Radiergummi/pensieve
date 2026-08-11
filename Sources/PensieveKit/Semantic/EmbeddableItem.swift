@@ -3,9 +3,9 @@ import SQLiteData
 
 public struct EmbeddableItem: Sendable {
   public let itemID: String, kind: String, nodeID: String, state: String, text: String
-  /// Newline-joined changed-file paths. Events only; "" everywhere else. Indexed by the FTS5
-  /// search index at weight 0.1 — the SEMANTIC path ignores this field entirely, because file
-  /// paths must not enter embedded text.
+  /// Newline-joined changed-file paths. Events only; "" everywhere else. Indexed into the FTS5
+  /// search index's SEPARATE `document_files` table, never beside the text — the SEMANTIC path
+  /// ignores this field entirely, because file paths must not enter embedded text.
   public let files: String
   public init(itemID: String, kind: String, nodeID: String, state: String, text: String,
               files: String = "") {
@@ -16,9 +16,9 @@ public struct EmbeddableItem: Sendable {
   /// Hashes `text` ONLY: `files` is deliberately excluded so adding path indexing does not
   /// invalidate every embedding. The search index tracks paths through its own corpus hash.
   public var contentHash: String {
-    var hashAccumulator: UInt64 = 1469598103934665603            // FNV-1a
-    for byte in text.utf8 { hashAccumulator = (hashAccumulator ^ UInt64(byte)) &* 1099511628211 }
-    return String(hashAccumulator, radix: 16)
+    var hash = StableHash()
+    hash.absorb(text)
+    return hash.hexValue
   }
 }
 
@@ -86,9 +86,8 @@ public enum EmbeddableCorpus {
   /// The ingester writes {"hash","branch","files"} for a commit, with `files` newline-joined.
   /// Anything else (a session's detail, malformed JSON, an absent key) yields "".
   static func changedFiles(in detailJSON: String) -> String {
-    guard let data = detailJSON.data(using: .utf8),
-          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let files = object["files"] as? String else { return "" }
-    return files
+    let detail = (try? JSONDecoder().decode([String: String].self,
+                                            from: Data(detailJSON.utf8))) ?? [:]
+    return detail["files"] ?? ""
   }
 }

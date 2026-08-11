@@ -43,9 +43,11 @@ public enum SearchQueries {
                             store: SearchIndexStore,
                             _ database: any DatabaseReader) -> [SearchHit] {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    let hasFile = !(file ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    guard query.count >= minQueryLength || hasFile, store.isAvailable,
+    guard store.isAvailable,
           let ftsQuery = FTSQueryBuilder.build(rawQuery, file: file) else { return [] }
+    // A one-character query is noise on its own, but not when a path directive anchors it — and the
+    // shape already tells us whether one is present, so there is no need to re-inspect `file` here.
+    if case .textWithPathProbe = ftsQuery.shape, query.count < minQueryLength { return [] }
 
     // Over-fetch, and grow the window if post-index filtering (Focus-muting, exclusions, a stale
     // row) starved the result below `limit`. With no floor there is no early exit to be had: the
@@ -74,7 +76,7 @@ public enum SearchQueries {
       .filter { hasWordPrefix($0.name, prefix: query) }
       .min { ($0.name, $0.id.uuidString) < ($1.name, $1.id.uuidString) }
     guard let match else { return nil }
-    return SearchHit(id: match.id, kind: "node", nodeID: match.id, nodeName: match.name,
+    return SearchHit(id: match.id, kind: .node, nodeID: match.id, nodeName: match.name,
                      title: match.name,
                      snippet: SnippetMaker.make(from: match.name, matching: query),
                      score: nil, isArchived: match.state == .archived)
@@ -89,63 +91,27 @@ public enum SearchQueries {
       .contains { $0.range(of: prefix, options: options) != nil }
   }
 
+  /// Filter one index page down to at most `limit` grounded, visible, non-excluded hits, resolving
+  /// each survivor against canonical via the shared `SearchHitResolver`. One read transaction for
+  /// the whole page rather than one per candidate.
   private static func buildHits(_ candidates: [SearchIndexHit], terms: [String],
                                 scope: SearchScope, _ database: any DatabaseReader) -> [SearchHit] {
-    var hits: [SearchHit] = []
-    for candidate in candidates {
-      guard let nodeID = UUID(uuidString: candidate.nodeID),
-            scope.visibleNodeIDs.contains(nodeID) else { continue }
-      guard let itemID = UUID(uuidString: candidate.itemID),
-            !scope.excludingIDs.contains(itemID) else { continue }
-      guard let hit = try? resolve(candidate, itemID: itemID, terms: terms,
-                                   includeArchived: scope.includeArchived, database) else { continue }
-      hits.append(hit)
-      if hits.count == scope.limit { break }
-    }
-    return hits
-  }
-
-  /// Re-resolve one index row against canonical — the last grounding defense. The state predicate
-  /// MUST mirror the index filter: if the index widens to archived but this does not, archived
-  /// rows pass the query and are then silently dropped here.
-  private static func resolve(_ candidate: SearchIndexHit, itemID: UUID, terms: [String],
-                              includeArchived: Bool,
-                              _ database: any DatabaseReader) throws -> SearchHit? {
-    let score = candidate.score
-    func eligible(_ node: Node) -> Bool {
-      node.state == .active || (includeArchived && node.state == .archived)
-    }
-    return try database.read { database in
-      switch candidate.kind {
-      case "node":
-        guard let node = try Node.where({ $0.id.eq(itemID) }).fetchOne(database),
-              eligible(node) else { return nil }
-        let body = node.description.isEmpty ? node.name : node.description
-        return SearchHit(id: node.id, kind: "node", nodeID: node.id, nodeName: node.name,
-                         title: node.name,
-                         snippet: SnippetMaker.make(from: body, matchingAny: terms),
-                         score: score, isArchived: node.state == .archived)
-      case "loose_end":
-        guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) })
-                .fetchOne(database),
-              let node = try Node.where({ $0.id.eq(looseEnd.nodeID) }).fetchOne(database),
-              eligible(node) else { return nil }
-        return SearchHit(id: looseEnd.id, kind: "loose_end", nodeID: looseEnd.nodeID,
-                         nodeName: node.name, title: looseEnd.text,
-                         snippet: SnippetMaker.make(from: looseEnd.text, matchingAny: terms),
-                         score: score, isArchived: node.state == .archived)
-      case "event":
-        guard let event = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),
-              let node = try Node.where({ $0.id.eq(event.nodeID) }).fetchOne(database),
-              eligible(node) else { return nil }
-        let workSummary = event.workSummary ?? ""
-        let body = workSummary.isEmpty ? event.summary : workSummary
-        return SearchHit(id: event.id, kind: "event", nodeID: event.nodeID, nodeName: node.name,
-                         title: body,
-                         snippet: SnippetMaker.make(from: body, matchingAny: terms),
-                         score: score, isArchived: node.state == .archived)
-      default: return nil
+    let resolver = SearchHitResolver(includeArchived: scope.includeArchived,
+                                     highlight: { SnippetMaker.make(from: $0, matchingAny: terms) })
+    return (try? database.read { database in
+      var hits: [SearchHit] = []
+      for candidate in candidates {
+        guard let kind = SearchHit.Kind(rawValue: candidate.kind),
+              let nodeID = UUID(uuidString: candidate.nodeID),
+              scope.visibleNodeIDs.contains(nodeID) else { continue }
+        guard let itemID = UUID(uuidString: candidate.itemID),
+              !scope.excludingIDs.contains(itemID) else { continue }
+        guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: candidate.score,
+                                              database) else { continue }
+        hits.append(hit)
+        if hits.count == scope.limit { break }
       }
-    }
+      return hits
+    }) ?? []
   }
 }

@@ -19,7 +19,7 @@ enum PensieveSyncAgent {
         database: try openCanonical(),
         provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()),
         projectsDir: PensievePaths.claudeProjectsURL(),
-        searchIndexer: SearchIndexer(store: SearchIndexStore(url: PensievePaths.searchIndexURL()))).run()
+        searchIndexer: .production()).run()
       line = "\(now) sync: ingested \(syncResult.ingested) event(s), discovered \(syncResult.discovered) session(s), "
         + "extracted \(syncResult.extracted) loose end(s)\n"
     } catch {

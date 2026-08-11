@@ -2,8 +2,11 @@ import Foundation
 import SQLiteData   // re-exports GRDB
 import GRDB
 
+/// One index row that matched. Deliberately carries no `state`: the index's copy is only ever used
+/// to decide eligibility inside the SQL allow-list, and handing callers a stale duplicate of a
+/// canonical field invites filtering on it instead of on the live `Node`.
 public struct SearchIndexHit: Sendable {
-  public let itemID: String, kind: String, nodeID: String, state: String, score: Double
+  public let itemID: String, kind: String, nodeID: String, score: Double
 }
 
 /// A small, disposable, device-local FTS5 index over the same corpus the semantic index uses
@@ -15,10 +18,10 @@ public struct SearchIndexHit: Sendable {
 /// FTS5 API is conditionally compiled and deliberately unused.
 public struct SearchIndexStore: Sendable {
   private static let schemaVersion = 2
-  /// Ranking always comes from the TEXT table. Paths never contribute a score — they restrict
-  /// (`filesFilter`) or they surface a row the text index could not (`filesProbe`), and in the
-  /// latter case the row is ranked by its own path relevance in a separate result list that is
-  /// merged BELOW the text hits.
+  /// Ranking always comes from the TEXT table. Paths never contribute a score to a text query —
+  /// `.textRestrictedByPath` uses them to narrow the candidate set, and `.textWithPathProbe`
+  /// surfaces rows the text index could not find at all, ranked by their own path relevance in a
+  /// separate list appended BELOW the text hits.
   private static let ranking = "bm25(documents)"
   private static let filesRanking = "bm25(document_files)"
 
@@ -35,7 +38,7 @@ public struct SearchIndexStore: Sendable {
       try? FileManager.default.removeItem(at: url)
       self.database = Self.open(url)
       if self.database == nil {
-        Log.semantic.error("SearchIndexStore: failed to open index after delete-and-retry at \(url.path, privacy: .public)")
+        Log.search.error("SearchIndexStore: failed to open index after delete-and-retry at \(url.path, privacy: .public)")
       }
     }
   }
@@ -85,24 +88,21 @@ public struct SearchIndexStore: Sendable {
 
   public func state() -> SearchIndexState {
     guard let database else { return .absent }
-    // `try?` over a fetchOne already flattens to a single optional since SE-0230 (the `?? nil`
-    // below is a harmless no-op, kept so a future Optional-returning change here stays safe) —
-    // read failed and no row both surface as nil, and both mean "cannot answer", so treat nil as
-    // absent either way.
-    let fetched = try? database.read { database in
+    // A failed read and a missing row both flatten to nil, and both mean "cannot answer" — which is
+    // exactly `.absent`, so neither needs distinguishing.
+    let row = try? database.read { database in
       try Row.fetchOne(database, sql: "SELECT corpus_hash, building FROM meta")
     }
-    guard let row = fetched ?? nil else { return .absent }
+    guard let row else { return .absent }
     if (row["building"] as Int?) == 1 { return .building }
     return (row["corpus_hash"] as String?) == nil ? .absent : .ready
   }
 
   public func storedCorpusHash() -> String? {
     guard let database else { return nil }
-    let fetched = try? database.read { database in
+    return try? database.read { database in
       try String.fetchOne(database, sql: "SELECT corpus_hash FROM meta")
     }
-    return fetched ?? nil
   }
 
   /// Drop and reinsert everything in one transaction. Whole-rebuild rather than reconciliation:
@@ -118,91 +118,104 @@ public struct SearchIndexStore: Sendable {
       try database.write { database in
         try database.execute(sql: "DELETE FROM documents")
         try database.execute(sql: "DELETE FROM document_files")
+        // Prepared once, not per row: `execute(sql:)` re-compiles its statement on every call, and
+        // a whole-corpus rebuild is thousands of identical inserts.
+        let documentInsert = try database.cachedStatement(sql: """
+          INSERT INTO documents(text, item_id, kind, node_id, state) VALUES (?, ?, ?, ?, ?)
+          """)
+        let fileInsert = try database.cachedStatement(sql: """
+          INSERT INTO document_files(files, item_id, kind, node_id, state) VALUES (?, ?, ?, ?, ?)
+          """)
         for item in items {
-          try database.execute(sql: """
-            INSERT INTO documents(text, item_id, kind, node_id, state)
-            VALUES (?, ?, ?, ?, ?)
-            """, arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state])
+          try documentInsert.execute(
+            arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state])
           // Only rows that actually carry paths — an empty row would be dead weight in the path
           // index and would skew its own average document length.
           guard !item.files.isEmpty else { continue }
-          try database.execute(sql: """
-            INSERT INTO document_files(files, item_id, kind, node_id, state)
-            VALUES (?, ?, ?, ?, ?)
-            """, arguments: [item.files, item.itemID, item.kind, item.nodeID, item.state])
+          try fileInsert.execute(
+            arguments: [item.files, item.itemID, item.kind, item.nodeID, item.state])
         }
         try database.execute(sql: "UPDATE meta SET corpus_hash = ?, building = 0",
                              arguments: [corpusHash])
       }
     } catch {
-      Log.semantic.error("SearchIndexStore: rebuild failed: \(error, privacy: .public)")
+      Log.search.error("SearchIndexStore: rebuild failed: \(error, privacy: .public)")
       try? database.write { database in try database.execute(sql: "UPDATE meta SET building = 0") }
     }
   }
 
   /// `includeArchived: false` returns active items only; `true` widens to active + archived.
-  /// `muted` is excluded in BOTH modes — an allow-list, never a deny-list, so a future state can
-  /// never leak in by omission. The SQL fragment is chosen from a Bool (no interpolated caller
+  /// The state fragment is derived from a Bool and `NodeState`'s raw values (no interpolated caller
   /// input) and every MATCH expression comes from `FTSQueryBuilder`, so there is no injection
   /// surface.
   ///
-  /// Three shapes, decided by the builder, never by string inspection here:
-  ///  - text only → rank by text relevance;
-  ///  - text AND an explicit path restriction → join the two tables, still ranked by TEXT relevance
-  ///    (the path restricts the candidate set and contributes no score);
-  ///  - text with an opportunistic path probe → two queries, path hits appended BELOW the text hits
-  ///    so typing a bare filename finds its commits without a path match ever outranking a real
-  ///    text match.
+  /// The query shape is decided by `FTSQueryBuilder`, never by inspecting strings here — this
+  /// switches on it exhaustively, so adding a shape cannot silently fall through.
   public func search(_ query: FTSQuery, limit: Int, includeArchived: Bool) -> [SearchIndexHit] {
-    guard let database else { return [] }
-    let stateFilter = includeArchived
-      ? "state IN ('active','archived')"
-      : "state = 'active'"
+    guard database != nil else { return [] }
+    switch query.shape {
+    case .pathOnly(let path):
+      return pathHits(matching: path, limit: limit, includeArchived: includeArchived)
 
-    if let filesFilter = query.filesFilter {
-      guard !query.match.isEmpty else {
-        return fetch(sql: """
-          SELECT item_id, kind, node_id, state, -\(Self.filesRanking) AS score
-          FROM document_files
-          WHERE document_files MATCH ? AND \(stateFilter)
-          ORDER BY \(Self.filesRanking) LIMIT ?
-          """, arguments: [filesFilter, limit])
-      }
+    case .textRestrictedByPath(let text, let path):
       return fetch(sql: """
-        SELECT d.item_id AS item_id, d.kind AS kind, d.node_id AS node_id, d.state AS state,
+        SELECT d.item_id AS item_id, d.kind AS kind, d.node_id AS node_id,
                -\(Self.ranking) AS score
         FROM documents d
         JOIN document_files f ON f.item_id = d.item_id
-        WHERE documents MATCH ? AND document_files MATCH ? AND d.\(stateFilter)
+        WHERE documents MATCH ? AND document_files MATCH ?
+              AND \(Self.stateFilter(alias: "d.", includeArchived: includeArchived))
         ORDER BY \(Self.ranking) LIMIT ?
-        """, arguments: [query.match, filesFilter, limit])
+        """, arguments: [text, path, limit])
+
+    case .textWithPathProbe(let text):
+      let textHits = fetch(sql: """
+        SELECT item_id, kind, node_id, -\(Self.ranking) AS score
+        FROM documents
+        WHERE documents MATCH ? AND \(Self.stateFilter(includeArchived: includeArchived))
+        ORDER BY \(Self.ranking) LIMIT ?
+        """, arguments: [text, limit])
+      guard textHits.count < limit else { return textHits }
+
+      // Append, never interleave: the two scores come from different tables with different average
+      // document lengths and are not comparable, so the only honest ordering is "everything the text
+      // index found, then what only the path index found".
+      var seen = Set(textHits.map(\.itemID))
+      var merged = textHits
+      for hit in pathHits(matching: text, limit: limit, includeArchived: includeArchived)
+      where seen.insert(hit.itemID).inserted {
+        merged.append(hit)
+        if merged.count == limit { break }
+      }
+      return merged
     }
+  }
 
-    let textHits = fetch(sql: """
-      SELECT item_id, kind, node_id, state, -\(Self.ranking) AS score
-      FROM documents
-      WHERE documents MATCH ? AND \(stateFilter)
-      ORDER BY \(Self.ranking) LIMIT ?
-      """, arguments: [query.match, limit])
-
-    guard let filesProbe = query.filesProbe, textHits.count < limit else { return textHits }
-    let pathHits = fetch(sql: """
-      SELECT item_id, kind, node_id, state, -\(Self.filesRanking) AS score
+  /// Rows the PATH index matched, ranked by path relevance. Shared by the explicit `files:`
+  /// directive and the opportunistic probe — the two differ only in where the expression came from,
+  /// never in how paths are queried or scored.
+  private func pathHits(matching match: String, limit: Int,
+                        includeArchived: Bool) -> [SearchIndexHit] {
+    fetch(sql: """
+      SELECT item_id, kind, node_id, -\(Self.filesRanking) AS score
       FROM document_files
-      WHERE document_files MATCH ? AND \(stateFilter)
+      WHERE document_files MATCH ? AND \(Self.stateFilter(includeArchived: includeArchived))
       ORDER BY \(Self.filesRanking) LIMIT ?
-      """, arguments: [filesProbe, limit])
+      """, arguments: [match, limit])
+  }
 
-    // Append, never interleave: the two scores come from different tables with different average
-    // document lengths and are not comparable, so the only honest ordering is "everything the text
-    // index found, then what only the path index found".
-    var seen = Set(textHits.map(\.itemID))
-    var merged = textHits
-    for hit in pathHits where seen.insert(hit.itemID).inserted {
-      merged.append(hit)
-      if merged.count == limit { break }
-    }
-    return merged
+  /// The SQL rendering of `NodeState.searchable(includeArchived:)` — the same allow-list the
+  /// canonical re-check applies, so the two can never disagree. Built from `NodeState`'s own raw
+  /// values rather than SQL string literals: this codebase turned `NodeState` into an enum precisely
+  /// to kill mistyped-literal hazards, and a hand-written `'active'` here would reintroduce one the
+  /// compiler cannot see.
+  ///
+  /// `alias` is explicit rather than left to the caller to prepend: the fragment starts with the
+  /// column name, so `"d.\(fragment)"` only happens to produce valid SQL, and a shape whose first
+  /// clause was not the column would break silently.
+  private static func stateFilter(alias: String = "", includeArchived: Bool) -> String {
+    let allowed = NodeState.searchable(includeArchived: includeArchived)
+    return "\(alias)state IN (\(allowed.map { "'\($0.rawValue)'" }.joined(separator: ",")))"
   }
 
   private func fetch(sql: String, arguments: StatementArguments) -> [SearchIndexHit] {
@@ -210,7 +223,7 @@ public struct SearchIndexStore: Sendable {
     return (try? database.read { database in
       try Row.fetchAll(database, sql: sql, arguments: arguments).map { row in
         SearchIndexHit(itemID: row["item_id"], kind: row["kind"], nodeID: row["node_id"],
-                       state: row["state"], score: row["score"])
+                       score: row["score"])
       }
     }) ?? []
   }

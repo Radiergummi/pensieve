@@ -3,12 +3,6 @@ import Foundation
 @testable import PensieveKit
 
 @Suite struct SearchIndexStoreTests {
-  private func tempStore() -> SearchIndexStore {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("search-\(UUID().uuidString).sqlite")
-    return SearchIndexStore(url: url)
-  }
-
   private func item(_ itemID: String, _ text: String, files: String = "",
                     kind: String = "event", nodeID: String = "n1",
                     state: String = "active") -> EmbeddableItem {
@@ -17,14 +11,14 @@ import Foundation
   }
 
   @Test func freshStoreIsAvailableAndAbsent() {
-    let store = tempStore()
+    let store = tempSearchStore()
     #expect(store.isAvailable)
     #expect(store.state() == .absent)
     #expect(store.storedCorpusHash() == nil)
   }
 
   @Test func rebuildMakesItReadyAndSearchable() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("a", "background sync agent login items")], corpusHash: "h1")
     #expect(store.state() == .ready)
     #expect(store.storedCorpusHash() == "h1")
@@ -33,7 +27,7 @@ import Foundation
   }
 
   @Test func rebuildIsIdempotentAndReplacesRatherThanAppends() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("a", "alpha")], corpusHash: "h1")
     store.rebuild(items: [item("a", "alpha")], corpusHash: "h1")
     let query = FTSQueryBuilder.build("alpha ")!
@@ -49,7 +43,7 @@ import Foundation
   /// different tables with different average document lengths and are never comparable, so a
   /// path-only hit can no longer outrank a real text match by arithmetic coincidence.
   @Test func textMatchesComeBeforePathOnlyMatches() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("text-match", "refactor the parser today"),
                           item("files-match", "unrelated commit subject",
                                files: "Sources/parser/Lexer.swift")],
@@ -61,7 +55,7 @@ import Foundation
   /// The reason the tables are split at all: a path must not lengthen the text row and discount its
   /// text matches. Two identical texts, one carrying a long path — they must score identically.
   @Test func pathsDoNotDiscountTheTextTheyAccompany() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("bare", "refactor the parser today"),
                           item("pathful", "refactor the parser today",
                                files: "Sources/PensieveKit/Search/SearchIndexStore.swift\n"
@@ -73,7 +67,7 @@ import Foundation
   }
 
   @Test func archivedIsExcludedByDefaultAndIncludedOnRequest() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("live", "shared phrase", nodeID: "n1", state: "active"),
                           item("old", "shared phrase", nodeID: "n2", state: "archived"),
                           item("hidden", "shared phrase", nodeID: "n3", state: "muted")],
@@ -85,7 +79,7 @@ import Foundation
   }
 
   @Test func pathsAreSearchableByPathSegment() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("a", "unrelated subject", files: "Sources/PensieveKit/Sync/SyncRunner.swift")],
                   corpusHash: "h")
     // Bare term: found via the opportunistic path probe, even though the text says nothing of it.
@@ -100,7 +94,7 @@ import Foundation
   /// second list merged in. "work about the parser that touched Lexer.swift" must not also return
   /// work about the parser that touched something else.
   @Test func structuredFileParameterRestrictsRatherThanWidens() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("both", "refactor the parser", files: "Sources/parser/Lexer.swift"),
                           item("text-only", "refactor the parser", files: "Sources/other/Thing.swift"),
                           item("path-only", "unrelated subject", files: "Sources/parser/Lexer.swift")],
@@ -112,7 +106,7 @@ import Foundation
   /// The path index must honour the same state allow-list the text index does — otherwise a bare
   /// filename would surface archived or muted work the text path correctly hides.
   @Test func pathProbeHonoursTheStateAllowList() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("live", "unrelated", files: "Sources/Shared.swift", nodeID: "n1", state: "active"),
                           item("old", "unrelated", files: "Sources/Shared.swift", nodeID: "n2", state: "archived"),
                           item("hidden", "unrelated", files: "Sources/Shared.swift", nodeID: "n3", state: "muted")],
@@ -123,7 +117,7 @@ import Foundation
   }
 
   @Test func diacriticsAreFoldedBothWays() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("a", "Lösung für Umlaute")], corpusHash: "h")
     #expect(store.search(FTSQueryBuilder.build("losung ")!, limit: 10,
                          includeArchived: false).map(\.itemID) == ["a"])
@@ -132,7 +126,7 @@ import Foundation
   }
 
   @Test func hostileInputReturnsEmptyRatherThanThrowing() {
-    let store = tempStore()
+    let store = tempSearchStore()
     store.rebuild(items: [item("a", "ordinary text")], corpusHash: "h")
     for raw in ["don't ", "C++ ", "a:b ", "\"unbalanced", "* ", "+++ "] {
       guard let query = FTSQueryBuilder.build(raw) else { continue }
@@ -141,7 +135,7 @@ import Foundation
   }
 
   @Test func limitCapsResults() {
-    let store = tempStore()
+    let store = tempSearchStore()
     let items = (0..<20).map { item("i\($0)", "common word \($0)") }
     store.rebuild(items: items, corpusHash: "h")
     #expect(store.search(FTSQueryBuilder.build("common ")!, limit: 5,

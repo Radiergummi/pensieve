@@ -93,11 +93,11 @@ struct ContentListView: View {
   @ViewBuilder private func searchRow(_ hit: SearchHit) -> some View {
     Button { model.selectSearchHit(hit) } label: {
       HStack(spacing: 10) {
-        if hit.kind == "node", let resultNode = model.node(hit.nodeID) {
+        if hit.kind == .node, let resultNode = model.node(hit.nodeID) {
           NodeBadge(node: resultNode, size: 22)
         }
         VStack(alignment: .leading, spacing: 2) {
-          if hit.kind == "node" {
+          if hit.kind == .node {
             // The node IS the hit — lead with its name, and show what matched below it.
             Text(hit.nodeName)
             SnippetText(snippet: hit.snippet).font(.caption).foregroundStyle(.secondary)

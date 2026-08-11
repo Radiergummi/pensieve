@@ -9,24 +9,29 @@ import Foundation
 /// A per-column weight bounds what a path MATCH contributes but does nothing about what a path's
 /// mere PRESENCE costs; only separate tables fix that.
 public struct FTSQuery: Equatable, Sendable {
-  /// For the `documents` (text) table. Empty when the input was purely file-directed.
-  public let match: String
-  /// An explicit path restriction (`files:…`, or the structured `file:` parameter). AND semantics:
-  /// the caller asked for work whose text matches AND whose paths match, so this joins to `match`
-  /// rather than merging with it.
-  public let filesFilter: String?
-  /// An opportunistic path lookup built from the SAME bare terms as `match`, present only when the
-  /// caller gave no explicit path directive. OR semantics: typing `syncrunner` should find commits
-  /// that touched that file even though the word appears in no commit message, so its results are
-  /// merged in below the text hits — never ANDed, which would return nothing.
-  public let filesProbe: String?
+  /// Which of the three legal query shapes this is. A sum type rather than a bag of optionals: the
+  /// combinations those optionals could represent but this cannot (a path restriction AND an
+  /// opportunistic path probe; no expression at all) are not shapes the store knows how to run, and
+  /// the builder is the only thing entitled to decide which shape applies. The store switches
+  /// exhaustively, so a fourth shape — a third table, say transcript passages — is a compile error
+  /// there rather than a silently unhandled `if let`.
+  public enum Shape: Equatable, Sendable {
+    /// Bare terms, no explicit path directive: rank by text, then append rows only the path index
+    /// could find. OR semantics — typing `SyncRunner.swift` must find the commits that touched it
+    /// even though no commit message contains the string, so the same expression is tried against
+    /// paths and its hits appended BELOW the text hits. Never ANDed, which would return nothing.
+    case textWithPathProbe(String)
+    /// An explicit path directive (`files:…`, or the structured `file:` parameter) with nothing to
+    /// match in text: rank by path relevance alone.
+    case pathOnly(String)
+    /// Text AND an explicit path restriction. A join across the two tables, still ranked by TEXT
+    /// relevance — the path narrows the candidate set and contributes no score.
+    case textRestrictedByPath(text: String, path: String)
+  }
+  public let shape: Shape
   public let terms: [String]
 
-  public init(match: String, filesFilter: String? = nil, filesProbe: String? = nil,
-              terms: [String]) {
-    self.match = match; self.filesFilter = filesFilter
-    self.filesProbe = filesProbe; self.terms = terms
-  }
+  public init(shape: Shape, terms: [String]) { self.shape = shape; self.terms = terms }
 }
 
 /// Turns raw user input into an FTS5 `MATCH` expression. Pure — no I/O, no database.
@@ -57,14 +62,18 @@ public enum FTSQueryBuilder {
       fileClauses.append(quoted(file))
       terms.append(file)
     }
-    guard !(textClauses.isEmpty && fileClauses.isEmpty) else { return nil }
-
-    let match = textClauses.joined(separator: " AND ")
+    let text = textClauses.joined(separator: " AND ")
+    let path = fileClauses.joined(separator: " AND ")
     // An explicit path directive restricts; without one, the bare terms are also tried against
     // paths so a filename typed on its own still finds the commits that touched it.
-    let filesFilter = fileClauses.isEmpty ? nil : fileClauses.joined(separator: " AND ")
-    let filesProbe = fileClauses.isEmpty && !match.isEmpty ? match : nil
-    return FTSQuery(match: match, filesFilter: filesFilter, filesProbe: filesProbe, terms: terms)
+    let shape: FTSQuery.Shape
+    switch (text.isEmpty, path.isEmpty) {
+    case (false, true):  shape = .textWithPathProbe(text)
+    case (true, false):  shape = .pathOnly(path)
+    case (false, false): shape = .textRestrictedByPath(text: text, path: path)
+    case (true, true):   return nil   // nothing survived — never run a pointless MATCH
+    }
+    return FTSQuery(shape: shape, terms: terms)
   }
 
   private struct Token { let text: String; let isFileDirected: Bool }

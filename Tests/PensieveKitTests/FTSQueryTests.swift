@@ -3,71 +3,66 @@ import Testing
 
 @Suite struct FTSQueryTests {
   @Test func singleTermGetsQuotedAndPrefixed() {
-    #expect(FTSQueryBuilder.build("pens")?.match == "\"pens\"*")
+    #expect(FTSQueryBuilder.build("pens")?.shape == .textWithPathProbe("\"pens\"*"))
   }
 
   @Test func trailingSpaceMeansTheWordIsFinishedSoNoPrefix() {
-    #expect(FTSQueryBuilder.build("pensieve ")?.match == "\"pensieve\"")
+    #expect(FTSQueryBuilder.build("pensieve ")?.shape == .textWithPathProbe("\"pensieve\""))
   }
 
   @Test func multipleTermsAreAndedAndOnlyTheLastIsAPrefix() {
-    #expect(FTSQueryBuilder.build("focus filter spot")?.match
-            == "\"focus\" AND \"filter\" AND \"spot\"*")
+    #expect(FTSQueryBuilder.build("focus filter spot")?.shape
+            == .textWithPathProbe("\"focus\" AND \"filter\" AND \"spot\"*"))
   }
 
   @Test func apostropheIsNeutralised() {
     let built = FTSQueryBuilder.build("don't ")
-    #expect(built?.match == "\"don't\"")
+    #expect(built?.shape == .textWithPathProbe("\"don't\""))
     #expect(built?.terms == ["don't"])
   }
 
   @Test func embeddedDoubleQuoteIsDoubled() {
-    #expect(FTSQueryBuilder.build("say \"hi ")?.match == "\"say\" AND \"hi\"")
+    #expect(FTSQueryBuilder.build("say \"hi ")?.shape == .textWithPathProbe("\"say\" AND \"hi\""))
   }
 
   @Test func operatorCharactersAreLiteral() {
-    #expect(FTSQueryBuilder.build("C++ ")?.match == "\"C++\"")
-    #expect(FTSQueryBuilder.build("a:b ")?.match == "\"a:b\"")
-    #expect(FTSQueryBuilder.build("* ")?.match == "\"*\"")
+    #expect(FTSQueryBuilder.build("C++ ")?.shape == .textWithPathProbe("\"C++\""))
+    #expect(FTSQueryBuilder.build("a:b ")?.shape == .textWithPathProbe("\"a:b\""))
+    #expect(FTSQueryBuilder.build("* ")?.shape == .textWithPathProbe("\"*\""))
   }
 
   @Test func balancedPhraseStaysOnePhrase() {
-    #expect(FTSQueryBuilder.build("\"background sync\" ")?.match == "\"background sync\"")
+    #expect(FTSQueryBuilder.build("\"background sync\" ")?.shape
+            == .textWithPathProbe("\"background sync\""))
   }
 
   @Test func unbalancedQuoteTakesTheRestAsOnePhrase() {
-    #expect(FTSQueryBuilder.build("\"background sync")?.match == "\"background sync\"*")
+    #expect(FTSQueryBuilder.build("\"background sync")?.shape
+            == .textWithPathProbe("\"background sync\"*"))
   }
 
-  /// Paths live in their own FTS5 table, so a `files:` directive leaves in `filesFilter`, not in
-  /// the text `match` — a `files : …` clause against the text table is now a hard SQLite error.
+  /// Paths live in their own FTS5 table, so a `files:` directive with nothing else to match is a
+  /// path-only query — a `files : …` clause against the text table is now a hard SQLite error.
   @Test func filesPrefixRoutesToTheFilesTable() {
-    let built = FTSQueryBuilder.build("files:SemanticQueries.swift ")
-    #expect(built?.match == "")
-    #expect(built?.filesFilter == "\"SemanticQueries.swift\"")
-    #expect(built?.filesProbe == nil)
+    #expect(FTSQueryBuilder.build("files:SemanticQueries.swift ")?.shape
+            == .pathOnly("\"SemanticQueries.swift\""))
   }
 
+  /// An explicit restriction suppresses the opportunistic probe: text ranks, the path narrows.
   @Test func structuredFileParameterBecomesARestriction() {
-    let built = FTSQueryBuilder.build("refactor ", file: "Sources/A.swift")
-    #expect(built?.match == "\"refactor\"")
-    #expect(built?.filesFilter == "\"Sources/A.swift\"")
-    #expect(built?.filesProbe == nil)   // an explicit restriction suppresses the opportunistic probe
+    #expect(FTSQueryBuilder.build("refactor ", file: "Sources/A.swift")?.shape
+            == .textRestrictedByPath(text: "\"refactor\"", path: "\"Sources/A.swift\""))
   }
 
   @Test func structuredFileParameterAloneIsAValidQuery() {
-    let built = FTSQueryBuilder.build("", file: "Sources/A.swift")
-    #expect(built?.match == "")
-    #expect(built?.filesFilter == "\"Sources/A.swift\"")
+    #expect(FTSQueryBuilder.build("", file: "Sources/A.swift")?.shape
+            == .pathOnly("\"Sources/A.swift\""))
   }
 
   /// Without an explicit directive the bare terms are ALSO tried against paths, so typing a bare
   /// filename still finds the commits that touched it.
   @Test func bareTermsGetAnOpportunisticPathProbe() {
-    let built = FTSQueryBuilder.build("syncrunner ")
-    #expect(built?.match == "\"syncrunner\"")
-    #expect(built?.filesProbe == "\"syncrunner\"")
-    #expect(built?.filesFilter == nil)
+    #expect(FTSQueryBuilder.build("syncrunner ")?.shape == .textWithPathProbe("\"syncrunner\""))
   }
 
   @Test func emptyAndWhitespaceOnlyYieldNil() {
@@ -81,8 +76,8 @@ import Testing
   }
 
   @Test func unicodeInputSurvives() {
-    #expect(FTSQueryBuilder.build("Lösung ")?.match == "\"Lösung\"")
-    #expect(FTSQueryBuilder.build("設計 ")?.match == "\"設計\"")
-    #expect(FTSQueryBuilder.build("🐛 ")?.match == "\"🐛\"")
+    #expect(FTSQueryBuilder.build("Lösung ")?.shape == .textWithPathProbe("\"Lösung\""))
+    #expect(FTSQueryBuilder.build("設計 ")?.shape == .textWithPathProbe("\"設計\""))
+    #expect(FTSQueryBuilder.build("🐛 ")?.shape == .textWithPathProbe("\"🐛\""))
   }
 }

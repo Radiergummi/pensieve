@@ -8,6 +8,11 @@ func tempURL(_ prefix: String, ext: String? = "sqlite") -> URL {
   return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(name)
 }
 
+/// A fresh, empty FTS5 search index in a unique temp file.
+func tempSearchStore() -> SearchIndexStore {
+  SearchIndexStore(url: tempURL("search-index"))
+}
+
 /// Creates a fresh temp git repo with a single commit and returns its path and HEAD hash.
 func makeCommittedRepo(message: String = "first commit") throws -> (repo: URL, hash: String) {
   let repo = tempURL("repo", ext: nil)

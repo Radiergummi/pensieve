@@ -240,9 +240,8 @@ enum PensieveMCP {
     // would filter archived hits back out after the query layer allowed them through.
     let visible = try await database.read { database -> Set<UUID> in
       let nodes = try Node.all.fetchAll(database)
-      return Set(nodes.filter {
-        $0.state == .active || (includeArchived && $0.state == .archived)
-      }.map { $0.id })
+      return Set(nodes.filter { $0.state.isSearchable(includeArchived: includeArchived) }
+                      .map { $0.id })
     }
     let scope = SearchScope(visibleNodeIDs: visible, limit: limit, includeArchived: includeArchived)
     let ranked = SearchQueries.search(query: query, file: file, scope: scope,
@@ -298,7 +297,7 @@ private struct SearchItem: Encodable {
 
   init(hit: SearchHit, engine: String) {
     id = hit.id.uuidString
-    kind = hit.kind
+    kind = hit.kind.rawValue   // the wire format is the raw string, unchanged by the typed boundary
     nodeID = hit.nodeID.uuidString
     nodeName = hit.nodeName
     title = hit.title

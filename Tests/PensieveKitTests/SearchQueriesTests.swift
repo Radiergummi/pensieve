@@ -4,14 +4,8 @@ import SQLiteData
 @testable import PensieveKit
 
 @Suite struct SearchQueriesTests {
-  private func tempStore() -> SearchIndexStore {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("searchq-\(UUID().uuidString).sqlite")
-    return SearchIndexStore(url: url)
-  }
-
   private func indexed(_ database: any DatabaseWriter) -> SearchIndexStore {
-    let store = tempStore()
+    let store = tempSearchStore()
     SearchIndexer(store: store).sync(database)
     return store
   }
@@ -47,7 +41,7 @@ import SQLiteData
                                     scope: SearchScope(visibleNodeIDs: [node.id]),
                                     store: store, database)
     #expect(hits.map(\.id) == [node.id])
-    #expect(hits[0].kind == "node")
+    #expect(hits[0].kind == .node)
     #expect((hits[0].score ?? 0) > 0)
   }
 

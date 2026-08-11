@@ -12,7 +12,7 @@ struct Sync: AsyncParsableCommand {
       database: try openCanonical(),
       provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()),
       projectsDir: PensievePaths.claudeProjectsURL(),
-      searchIndexer: SearchIndexer(store: SearchIndexStore(url: PensievePaths.searchIndexURL()))).run()
+      searchIndexer: .production()).run()
     // ISO-timestamped so a silent daemon failure can be correlated to a time.
     print("""
       \(Date().ISO8601Format()) sync: ingested \(summary.ingested) event(s), discovered \(summary.discovered) \

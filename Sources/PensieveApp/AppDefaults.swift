@@ -24,8 +24,11 @@ enum AppDefaults {
       ? true : UserDefaults.standard.bool(forKey: backgroundSyncEnabledKey)
   }
 
-  /// Semantic (vector) search is OFF by default — see PensieveDefaults.semanticSearchEnabled.
+  /// Semantic (vector) search is OFF by default. Delegates to the Kit reader so the app and the
+  /// CLI/daemon can't drift on the unset default, but pins `.standard` explicitly: inside the app
+  /// that already IS the shared domain, and handing `UserDefaults(suiteName:)` our own bundle
+  /// identifier — which is what the Kit reader's default does — is a no-op macOS warns about.
   static var semanticSearchEnabled: Bool {
-    UserDefaults.standard.bool(forKey: PensieveDefaults.semanticSearchKey)
+    PensieveDefaults.semanticSearchEnabled(.standard)
   }
 }

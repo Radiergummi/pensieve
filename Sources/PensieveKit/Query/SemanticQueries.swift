@@ -62,56 +62,28 @@ public enum SemanticQueries {
   }
 
   /// Filter one KNN page down to at most `limit` grounded, visible, above-floor, non-excluded hits,
-  /// re-resolving each survivor against canonical (the last grounding defense). Deterministic KNN
-  /// ordering makes each larger fetch a superset prefix, so rebuilding from the top is correct.
+  /// resolving each survivor against canonical via the shared `SearchHitResolver` (the last
+  /// grounding defense). Deterministic KNN ordering makes each larger fetch a superset prefix, so
+  /// rebuilding from the top is correct. One read transaction for the whole page.
   private static func buildHits(_ raw: [KNNResult], scope: SemanticSearchScope,
                                 query: String, _ database: any DatabaseReader) -> [SearchHit] {
-    var hits: [SearchHit] = []
-    for result in raw {
-      guard result.similarity >= scope.floor,
-            let nodeID = UUID(uuidString: result.nodeID), scope.visibleNodeIDs.contains(nodeID) else { continue }
-      guard let itemID = UUID(uuidString: result.itemID), !scope.excludingIDs.contains(itemID) else { continue }
-      guard let hit = try? resolve(result, itemID: itemID, includeArchived: scope.includeArchived,
-                                   query: query, database) else { continue }
-      hits.append(hit)
-      if hits.count == scope.limit { break }
-    }
-    return hits
-  }
-
-  /// Re-resolve one index row against canonical — the last grounding defense, so a between-sync
-  /// stale row never surfaces a dead hit. The state predicate MUST mirror the `knn` filter: if the
-  /// index widens to archived but this does not, archived rows pass KNN and are then silently
-  /// dropped here. Same predicate shape as `SearchQueries` uses for exact search.
-  private static func resolve(_ result: KNNResult, itemID: UUID, includeArchived: Bool, query: String,
-                              _ database: any DatabaseReader) throws -> SearchHit? {
-    let kind = result.kind
-    let similarity = result.similarity
-    func eligible(_ node: Node) -> Bool {
-      node.state == .active || (includeArchived && node.state == .archived)
-    }
-    return try database.read { database in
-      switch kind {
-      case "node":
-        guard let node = try Node.where({ $0.id.eq(itemID) }).fetchOne(database), eligible(node) else { return nil }
-        return SearchHit(id: node.id, kind: kind, nodeID: node.id, nodeName: node.name, title: node.name,
-                         snippet: SnippetMaker.make(from: node.description.isEmpty ? node.name : node.description, matching: query),
-                         score: similarity, isArchived: node.state == .archived)
-      case "loose_end":
-        guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) }).fetchOne(database),
-              let node = try Node.where({ $0.id.eq(looseEnd.nodeID) }).fetchOne(database), eligible(node) else { return nil }
-        return SearchHit(id: looseEnd.id, kind: kind, nodeID: looseEnd.nodeID, nodeName: node.name, title: looseEnd.text,
-                         snippet: SnippetMaker.make(from: looseEnd.text, matching: query),
-                         score: similarity, isArchived: node.state == .archived)
-      case "event":
-        guard let event = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),
-              let node = try Node.where({ $0.id.eq(event.nodeID) }).fetchOne(database), eligible(node) else { return nil }
-        let body = (event.workSummary?.isEmpty == false ? event.workSummary! : event.summary)
-        return SearchHit(id: event.id, kind: kind, nodeID: event.nodeID, nodeName: node.name, title: body,
-                         snippet: SnippetMaker.make(from: body, matching: query),
-                         score: similarity, isArchived: node.state == .archived)
-      default: return nil
+    let resolver = SearchHitResolver(includeArchived: scope.includeArchived,
+                                     highlight: { SnippetMaker.make(from: $0, matching: query) })
+    return (try? database.read { database in
+      var hits: [SearchHit] = []
+      for result in raw {
+        guard result.similarity >= scope.floor,
+              let kind = SearchHit.Kind(rawValue: result.kind),
+              let nodeID = UUID(uuidString: result.nodeID),
+              scope.visibleNodeIDs.contains(nodeID) else { continue }
+        guard let itemID = UUID(uuidString: result.itemID),
+              !scope.excludingIDs.contains(itemID) else { continue }
+        guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: result.similarity,
+                                              database) else { continue }
+        hits.append(hit)
+        if hits.count == scope.limit { break }
       }
-    }
+      return hits
+    }) ?? []
   }
 }

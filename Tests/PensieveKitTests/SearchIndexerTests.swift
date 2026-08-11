@@ -4,12 +4,6 @@ import SQLiteData
 @testable import PensieveKit
 
 @Suite struct SearchIndexerTests {
-  private func tempStore() -> SearchIndexStore {
-    let url = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("searchidx-\(UUID().uuidString).sqlite")
-    return SearchIndexStore(url: url)
-  }
-
   private func item(_ itemID: String, text: String, files: String = "",
                     state: String = "active") -> EmbeddableItem {
     EmbeddableItem(itemID: itemID, kind: "event", nodeID: "n1", state: state,
@@ -38,7 +32,7 @@ import SQLiteData
     let database = try openCanonicalDatabase(at: tempURL("searchidx-build"))
     let node = Node(name: "Background sync agent", kind: NodeKind.project)
     try await database.write { database in try Node.insert { node }.execute(database) }
-    let store = tempStore()
+    let store = tempSearchStore()
     SearchIndexer(store: store).sync(database)
     #expect(store.state() == .ready)
     let hits = store.search(FTSQueryBuilder.build("background ")!, limit: 10, includeArchived: false)
@@ -49,7 +43,7 @@ import SQLiteData
     let database = try openCanonicalDatabase(at: tempURL("searchidx-guard"))
     let node = Node(name: "Alpha", kind: NodeKind.project)
     try await database.write { database in try Node.insert { node }.execute(database) }
-    let store = tempStore()
+    let store = tempSearchStore()
     let indexer = SearchIndexer(store: store)
 
     indexer.sync(database)
@@ -87,7 +81,7 @@ import SQLiteData
               detailJSON: "{}", fingerprint: "co")
       }.execute(database)
     }
-    let store = tempStore()
+    let store = tempSearchStore()
     SearchIndexer(store: store).sync(database)
     #expect(store.search(FTSQueryBuilder.build("checkout ")!, limit: 10,
                          includeArchived: false).isEmpty)
