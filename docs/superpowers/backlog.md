@@ -208,6 +208,83 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
+## Claude Design review of the shipped app — 2026-08-11 (four slices, A in flight)
+
+The user ran the live app past Claude Design and got a full redesign proposal back (mockups + a
+"top 5"). Mockups are **medium-resolution intent, not a spec** — the standing instruction is to
+reach the same outcomes through **platform primitives and Liquid Glass**, never by transcribing the
+pixels. Verified against the source before filing: every "current state" claim below was confirmed
+in the repo, and one proposal was **rejected on the evidence**.
+
+Split into four slices. **Slice A is being specced now**; B–D are parked here.
+
+**A — "Where was I" (the reload-context pass) — IN FLIGHT (2026-08-11).**
+Detail-pane order (state line first, loose ends before the recap, recap demoted to a closing
+paragraph), middle-column rows carrying recency + counts instead of the repeated kind label,
+honest localized relative dates, Briefing weighting (moved gets mass, quiet collapses), thumbs
+moved off the permanent row. Confirmed defects it closes: `ContentListView.swift:120` renders
+`kindLabel` as every row's only second line, so the column reads "Projekt / Projekt / Projekt";
+`BriefingView.swift:44-45` hardcodes the English fragments `"dormant \(days)d"` and
+`"\(n) since last visit"`, which are **absent from the String Catalog entirely** and render
+untranslated in a German build (and `dormant 0d` is not a fact anyone needs); `BriefingView.swift:23-28`
+gives `moved` and `quiet` identical cards, so five dormant projects outweigh the one that moved;
+`DetailView.swift` has no state line at all and puts LLM prose above the cited loose ends.
+
+**B — Liquid Glass chrome + the macOS 26 floor.** `project.yml` pins `deploymentTarget.macOS: "15.0"`
+while the machine runs 26.6 with Xcode 26.6. System chrome already inherits Liquid Glass from the
+SDK, but every explicit API the proposal leans on — `.scrollEdgeEffectStyle(.soft, for: .top)`,
+`.glassEffect`, `.buttonStyle(.glass)` — is macOS 26+ and needs `if #available` scaffolding at every
+call site until the floor moves. For a single-user tool on 26.6 the 15.0 floor buys nothing.
+Scope: bump the target, adopt scroll-edge material so content stops bleeding through chrome, revisit
+the sidebar status footer (still the open item #1 from the 2026-07-07 UX carries — `.background(.bar)`
+fixed the clash but it still reads as a bolted-on band), and **rebuild the menu-bar popover**, which is
+the worst-looking surface in the app today: untranslated `"868 open"` / `"288 open · 0d dormant"`,
+node rows with no per-item action. The proposal's shape for it is right — a re-entry point with a
+`Fortsetzen` action per row, not a scoreboard. *Trigger: pair with or follow A.*
+
+**C — Transcript reading: one rail, no nested cards.** The provenance transcript currently nests
+three near-identical gray surfaces (message card inside system card inside HINWEIS/BEFEHL card) with
+the speaker as an 11pt label *outside* the outermost one — it reads as a log, not a conversation.
+Proposal: a **speaker column** carries the structure; only user messages get a filled bubble (they
+are the minority and the thing being hunted for); assistant replies sit free on the page as prose;
+harness events collapse to one folded `DisclosureGroup` line; attached skill documents become a chip,
+not an embedded article; Markdown H1 inside a transcript never renders larger than the app's own
+headings. **Conflict:** this rewrites `LooseEndRow.swift` and `TranscriptSegmentView.swift`, the same
+files the queued 13-task in-node-find plan (`plans/2026-08-11-in-node-find.md`, unstarted) modifies.
+Sequence one behind the other; do not run both. *Trigger: after in-node-find lands, or fold into it
+deliberately.*
+
+**D — Not design at all; each needs its own brainstorm → spec.**
+- **Loose ends can end — three verbs (`open` / `done` / `dropped`).** The single highest-value idea in
+  the whole review, and a data-model change, not chrome. Today a loose end is open forever, so
+  "Als Nächstes 155" and "Ruhend 112" never shrink and neither number means anything. With a
+  resolution verb the list can actually empty, a fourth smart list *Completed* becomes possible, and
+  a project with no open ends and no activity is **finished** rather than neglected. The thumbs stay
+  what they are — extraction feedback, not status. Wants `.swipeActions` + undo via `UndoManager`.
+- **Merge inbox for duplicate nodes.** Not hypothetical: the live sidebar shows **"Agent" twice**.
+  Proposal is an evidence-first review queue (both candidates side by side with created/path/remote/
+  last-touched, a count of what would move, and three non-destructive verbs — merge / nest under /
+  not a duplicate) where **"not a duplicate" is remembered permanently**, so the queue is an inbox
+  rather than a nag. Distinct from the existing *Review Suggestions* list, which reviews loose ends.
+- **Middle column as chronological history across all projects** ("Verlauf") instead of a node list.
+  This is the same idea as **item 5 of the 2026-07-07 App UX & IA polish carries** (the three-pane IA
+  rework), and it overlaps the long-standing *timeline per project* loose end. Still wants its own
+  brainstorm.
+- **Multi-source evidence contract.** A grounded citation always renders as identity + verbatim
+  wording + a way back to the source, and **only the identity strip and the jump-back may vary by
+  source type** — the quote's typography is set once, centrally, so a future source (Linear, browser
+  history, mail) can never restyle a quote. Worth adopting as a written invariant when the second
+  non-git/session source is built; premature before then.
+
+**Rejected on the evidence: "move Recent Activity into a trailing `.inspector`."** The proposal reads
+the empty margin beside the 680pt measure cap as dead space to fill. But the `.inspector` was
+**deliberately removed** in the 2026-07-08 inline-provenance rework (`RootView.swift:41-43`) and the
+queued in-node-find plan builds on that decision. The underlying complaint — a wide window wastes its
+surplus — is legitimate and belongs to slice A as a layout question, but re-adding an inspector is not
+the answer.
+
+---
+
 ## Competitive scan — ideas worth stealing from Contextify (2026-08-02)
 
 [Contextify](https://contextify.sh) (Perch Innovations; free + $8–15/mo) is the closest thing to
