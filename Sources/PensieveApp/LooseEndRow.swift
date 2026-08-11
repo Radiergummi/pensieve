@@ -32,9 +32,21 @@ struct LooseEndRow: View {
   /// `LooseEndView` is an immutable snapshot). nil = show the stored value. The row is filtered out
   /// of the open list on the next reload when confirmed noise.
   @State private var localLabel: String?
+  @State private var hovering = false
 
   /// The label to display: the optimistic local value if the user just tapped, else the stored one.
   private var currentLabel: String { localLabel ?? view.looseEnd.label }
+
+  /// Both the thumb buttons and the context menu write through here.
+  private func setLabel(_ value: String) {
+    localLabel = value
+    onLabel(view.looseEnd.id, value)
+  }
+
+  /// A thumb the user has actually set stays visible unconditionally — a confirmed label is recorded
+  /// state, not an affordance, and hiding it would make the app appear to forget a decision. The
+  /// machine's *suggestion* earns no such permanence.
+  private var showsThumbs: Bool { hovering || !currentLabel.isEmpty }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -57,7 +69,14 @@ struct LooseEndRow: View {
         let roleText = view.looseEnd.role.isEmpty ? String(localized: "captured") : view.looseEnd.role
         VStack(alignment: .leading, spacing: 8) {
           provenanceBody
-          Text("\(roleText) · \(view.occurredAt, format: .dateTime.year().month().day()) · \(view.ageDays)d ago")
+          // Was a hand-built `%lldd ago` whose catalog key said `%@d ago`, so it never matched and
+          // rendered English inside a German window. Foundation formats the date instead — no
+          // interpolated Int, no key, no way to mis-author it.
+          (Text(roleText)
+            + Text(verbatim: " · ")
+            + Text(view.occurredAt, format: .dateTime.year().month().day())
+            + Text(verbatim: " · ")
+            + Text(view.occurredAt, format: .relative(presentation: .named)))
             .metaText()
         }
         .padding(12)
@@ -68,6 +87,16 @@ struct LooseEndRow: View {
       }
     }
     .padding(.vertical, 2)
+    .onHover { hovering = $0 }
+    // Keyboard- and pointer-free access to the same two verbs the hover-revealed thumbs offer.
+    .contextMenu {
+      Button("Mark as a real loose end") { setLabel(LooseEndLabel.salient) }
+      Button("Mark as not a loose end") { setLabel(LooseEndLabel.noise) }
+      if !currentLabel.isEmpty {
+        Divider()
+        Button("Clear rating") { setLabel(LooseEndLabel.unlabeled) }
+      }
+    }
     // Load the surrounding transcript the first time the row is expanded (cached thereafter).
     .task(id: expanded) {
       guard expanded, context == nil else { return }
@@ -119,6 +148,10 @@ struct LooseEndRow: View {
             value: LooseEndLabel.noise, help: String(localized: "Mark as not a loose end"))
     }
     .font(.caption)
+    // Opacity, not `if` — the row must not reflow when the pointer arrives.
+    .opacity(showsThumbs ? 1 : 0)
+    .allowsHitTesting(showsThumbs)
+    .accessibilityHidden(!showsThumbs)
   }
 
   /// One thumb. Filled when the confirmed label matches; a faint pre-highlight when only SUGGESTED
@@ -128,9 +161,7 @@ struct LooseEndRow: View {
     let confirmed = currentLabel == value
     let suggested = currentLabel.isEmpty && view.looseEnd.labelSuggestion == value
     Button {
-      let next = confirmed ? LooseEndLabel.unlabeled : value
-      localLabel = next
-      onLabel(view.looseEnd.id, next)
+      setLabel(confirmed ? LooseEndLabel.unlabeled : value)
     } label: {
       Image(systemName: confirmed ? systemFilled : systemOutline)
         .foregroundStyle(confirmed ? Color.accentColor : (suggested ? Color.accentColor.opacity(0.55) : Color.secondary))
