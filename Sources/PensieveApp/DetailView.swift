@@ -20,9 +20,12 @@ struct DetailView: View {
   @State private var describable = false
   @State private var loadedNodeID: UUID?   // which node the current prose belongs to
   @State private var shareMarkdown = ""   // rebuilt on load/refresh; fed to the toolbar ShareLink
+  @State private var find = NodeFindState()
 
   var body: some View {
-    ScrollViewReader { proxy in
+    VStack(spacing: 0) {
+      if find.isPresented { FindBar(find: find) }
+      ScrollViewReader { proxy in
       ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         // WHAT IT IS
@@ -109,6 +112,10 @@ struct DetailView: View {
       recentEvents = detail.status.recentEvents
       looseEnds = detail.looseEnds
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+      find.reset(nodeID: node.id,
+                 document: NodeFindDocument.make(node: node, narration: nil,
+                                                 looseEnds: looseEnds, events: recentEvents,
+                                                 showsLooseEnds: showsLooseEnds))
       shareMarkdown = RecallMarkdown.render(node: node,
                                             narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
@@ -120,6 +127,11 @@ struct DetailView: View {
       let prose = await model.narration(for: node, events: recentEvents, force: isRefresh)
       guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
       lastWorkDone = prose
+      find.reset(nodeID: node.id,
+                 document: NodeFindDocument.make(node: node,
+                                                 narration: narrationEnabled ? prose : nil,
+                                                 looseEnds: looseEnds, events: recentEvents,
+                                                 showsLooseEnds: showsLooseEnds))
       shareMarkdown = RecallMarkdown.render(node: node, narration: prose,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       isNarrating = false
@@ -129,6 +141,9 @@ struct DetailView: View {
       withAnimation { proxy.scrollTo(id, anchor: .center) }
     }
     }
+    }
+    .focusedSceneValue(\.nodeFind, find)
+    .onExitCommand { if find.isPresented { find.dismiss() } }
   }
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {

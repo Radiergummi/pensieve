@@ -39,6 +39,7 @@ struct PensieveApp: App {
         Button("About Pensieve") { AppInfo.showAboutPanel() }
       }
       SidebarCommands()   // standard Show/Hide Sidebar (⌃⌘S) in the View menu
+      FindCommands()
       CommandGroup(after: .newItem) {
         Button("New Node") { model.presentNewNode(under: nil) }
           .keyboardShortcut("n", modifiers: .command)
@@ -47,8 +48,8 @@ struct PensieveApp: App {
           .disabled(model.selectedNodeID == nil)
       }
       CommandMenu("Go") {
-        Button("Find") { model.focusSearchRequested = true }
-          .keyboardShortcut("f", modifiers: .command)
+        Button("Search Everything") { model.focusSearchRequested = true }
+          .keyboardShortcut("f", modifiers: [.command, .option])
         Divider()
         Button("Refresh") { Task { await model.refreshNow() } }
           .keyboardShortcut("r", modifiers: .command)
