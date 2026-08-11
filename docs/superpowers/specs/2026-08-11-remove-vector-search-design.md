@@ -72,11 +72,13 @@ Settled in conversation before this spec was written:
 - the GRDB `prepareDatabase` registration hook, which existed only for `vec0`
 
 **App:**
-- `AppModel.embedder`, `AppModel.semanticStore`
-- the semantic branch of `AppModel+Search.syncSearchIndexes`
+- `AppModel.embedder`, `AppModel.semanticStore`, `AppModel.semanticHits`
+- the semantic branch of `AppModel+Search.syncSearchIndexes`, and the semantic half of `runSearch`
+- the `ContentListView` "Related (experimental)" section + `semanticHits` in the empty-state condition
 - `AppDefaults.semanticSearchEnabled`
 - the Settings ▸ Intelligence toggle + its explanatory copy
-- its String Catalog entries (en + de)
+- three String Catalog entries (en + de): `Semantic search (experimental)`, its long description, and
+  `Related (experimental)`
 
 **MCP:**
 - the `PensieveDefaults.semanticSearchEnabled()` branch in `handleSearch`
@@ -113,8 +115,11 @@ Two members need a fresh justification once nothing embeds:
 
 ## Consequences worth stating plainly
 
-- **⌘F loses nothing a user will miss** — the semantic "Related" section was already gone (the single
-  ranked list replaced it), so with the toggle off there is no visible UI change.
+- **⌘F loses its "Related (experimental)" section.** Corrected during planning: an earlier draft of this
+  spec claimed the section was already gone, replaced by the single ranked list. It is not —
+  `ContentListView.swift:56` still renders it, gated on the toggle, fed by `AppModel.semanticHits`. So the
+  removal must also delete that section, `semanticHits`, and its two references in the empty-state
+  condition. With the toggle off there is still no *visible* change, because the section is empty.
 - **MCP `search` changes shape**: no `engine` key. `score` remains, documented in the tool description as
   BM25's and not comparable between items.
 - **`semantic-index.sqlite` stops existing.** Already deleted by hand; after this, nothing recreates it.
