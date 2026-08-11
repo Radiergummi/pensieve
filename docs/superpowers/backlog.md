@@ -297,26 +297,25 @@ filters, App Intents, Spotlight, deep links; semantic/vector recall (they appear
 
 ---
 
-## Semantic relevance floor is inert — CLOSED 2026-08-11 as QUARANTINED, not deleted
+## Semantic relevance floor — CLOSED by removing the engine (2026-08-11)
 
-**Read this clause first: the inert floor still exists.** `floor: 0.25` is still passed
-(`AppModel+Search.swift`, `Mcp.swift`) and `SemanticQueries` still applies it, so **turning Settings ▸
-Intelligence ▸ semantic search ON reinstates exactly the measured behaviour below** — gibberish at 0.880
-against a 0.25 cutoff. What closed the defect is that the vector path is no longer the engine and is
-default-**OFF**; the compressed-cosine problem was never solved, it was taken off the default path. If a
-future session enables that toggle and finds relevance unenforced, that is this entry, not a new bug.
+**The floor no longer exists, because the engine no longer exists.** This entry was first closed as
+*quarantined* — the vector path retained but default-off — which meant the compressed-cosine problem had
+been taken off the default path rather than solved, and enabling the toggle reinstated it in full. That
+half-measure is gone: `SemanticQueries`, its `floor: 0.25`, the embedder, the `vec0` store and the
+vendored `sqlite-vec` target were **deleted** (plan `2026-08-11-remove-vector-search.md`). There is no
+toggle left to enable, so nothing can reinstate the behaviour measured below.
 
-**⚠️ THE DEFAULT FLIP DOES NOT MIGRATE AN EXISTING SETTING — observed live 2026-08-11.** Only the *unset*
-default changed; `PensieveDefaults.semanticSearchEnabled` deliberately honours an explicitly stored
-`true`. Semantic search shipped **default-ON** on 2026-07-18, and this machine had `app.semanticSearch =
-1` persisted in `~/Library/Preferences/me.mazetti.pensieve.plist` — so after the BM25 ship the vector
-engine was **still running**, and `pensieve mcp search "focus filter spotlight"` returned two unrelated
-projects at 0.886/0.878 beneath the correct BM25 top hit. So "quarantined behind a default-off toggle"
-was true of the code and false of the only machine that runs it. Check with
-`defaults read me.mazetti.pensieve app.semanticSearch` (absent or `0` = off); turn off in Settings ▸
-Intelligence, or `defaults write me.mazetti.pensieve app.semanticSearch -bool false`. **General lesson:
-flipping a default is not a migration** — a shipped default-on toggle leaves persisted `true`s behind on
-every machine that ever ran it, and no code review can see that.
+**⚠️ Why it was removed rather than left quarantined — observed live 2026-08-11.** Only the *unset*
+default had changed; the reader deliberately honoured an explicitly stored `true`. Semantic search
+shipped **default-ON** on 2026-07-18, and this machine had `app.semanticSearch = 1` persisted in
+`~/Library/Preferences/me.mazetti.pensieve.plist` — so after the BM25 ship the vector engine was **still
+running**, and `pensieve mcp search "focus filter spotlight"` returned two unrelated projects at
+0.886/0.878 beneath the correct BM25 top hit. "Quarantined behind a default-off toggle" was true of the
+code and false of the only machine that runs it. **General lesson: flipping a default is not a
+migration** — a shipped default-on toggle leaves persisted `true`s behind on every machine that ever ran
+it, and no code review can see that. The persisted key is now inert (nothing reads it); clear it with
+`defaults delete me.mazetti.pensieve app.semanticSearch`.
 
 **Resolved, but not the way this entry predicted — read the correction before reusing anything below.**
 The measurements were right and the *diagnosis* was wrong: it was a **ranking failure, not a scale
@@ -327,8 +326,8 @@ calibrating a signal that carries too little information to calibrate.
 
 What shipped instead (spec `2026-07-28-retrieval-eval-harness-design.md`, plan
 `2026-08-03-retrieval-bm25-single-path.md`): **FTS5/BM25 became the search engine**, replacing BOTH the
-inert vector path *and* the old whole-string substring matcher; the vector stack is retained, tested,
-and default-**off** behind the Settings ▸ Intelligence toggle. Measured paired on the real corpus
+inert vector path *and* the old whole-string substring matcher. The vector stack was retained
+default-off at that point and **deleted outright on 2026-08-11**. Measured paired on the real corpus
 (n=1500): BM25 P@1 **0.395** vs vector **0.255**. **The floor is gone rather than retuned** — BM25
 scores are unbounded and per-query-scaled, so a fixed cutoff was never meaningful for it either.
 Relevance is now bounded by rank plus the requirement that a document actually contain the query

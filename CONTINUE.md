@@ -26,14 +26,12 @@ Claude Code session actually calls) has neither the widened `include_archived` s
 **Rebuild + reinstall before trusting anything you see in the live app**, then check
 `ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
 
-**No open defects on the DEFAULT path** — but check your own machine, because the default flip does not
-migrate. The inert semantic floor is closed by replacing the engine, not by calibrating the floor, and it
-is **quarantined, not deleted**: the `0.25` floor and its compressed cosine still run whenever Settings ▸
-Intelligence ▸ semantic search is ON. **Semantic shipped default-ON in July, so a persisted
-`app.semanticSearch = 1` keeps the old behaviour** — that was live on this machine on 2026-08-11 and was
-measurably diluting MCP results. Verify with
-`defaults read me.mazetti.pensieve app.semanticSearch` (absent or `0` = off). See `backlog.md`,
-"Semantic relevance floor is inert — CLOSED as QUARANTINED".
+**No open defects on the retrieval path.** **FTS5/BM25 is the only retrieval path** — the vector stack
+(embedder, `vec0` store, indexer, `SemanticQueries` and its inert `0.25` floor, the vendored `sqlite-vec`
+C target, the Settings toggle, the ⌘F "Related" section, the MCP `engine` field) was **deleted on
+2026-08-11**, so there is no longer a toggle whose persisted `true` can reinstate the old behaviour. The
+`app.semanticSearch` key is inert; clear it with `defaults delete me.mazetti.pensieve app.semanticSearch`.
+See `backlog.md`, "Semantic relevance floor — CLOSED by removing the engine".
 
 ## Most recent ships (newest first)
 
@@ -98,7 +96,8 @@ carries live in the matching `backlog.md` entries.
   **448 tests.** **Post-merge carry:** rebuild + reinstall to `/Applications` (Part C + the app toggle).
   **Human-verify:** the `.searchScopes` bar renders under `.sidebar` (fallback = header Picker, in the
   plan); toggle includes/excludes archived; German in-situ. Spec/plan: `{specs,plans}/2026-07-19-semantic-recall-hardening*`.
-- **Semantic / vector recall — Track C #2** (2026-07-18, merged `e640645`). "Find without exact words"
+- **Semantic / vector recall — Track C #2** (2026-07-18, merged `e640645`) — **REMOVED 2026-08-11** after
+  measuring worse than BM25; kept here as a record of what happened. "Find without exact words"
   across ⌘F ("Related" section) and a unified MCP `search` tool, over one shared Kit kernel. Native
   `NLContextualEmbedding` + vendored `sqlite-vec` (registered **per-connection** — Apple disables the
   process-global path) in a **separate, rebuildable, never-synced `semantic-index.sqlite`**; incremental
@@ -135,14 +134,18 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**⚠️ FIRST — merge the retrieval branch, then reinstall.** It is finished and verified (576 tests,
-SwiftLint `--strict`, `xcodebuild` app+CLI, both Opus reviews' fix wave applied). Steps:
-1. Rebase onto `main` if `main` moved (the user commits there in parallel), merge, then **remove the
-   worktree and delete the branch** — plus the superseded `worktree-retrieval-bm25` and its branch.
+**⚠️ FIRST — merge `remove-vector-search`, then reinstall.** Retrieval P1+P2′ is already on `main`.
+The vector-removal branch is finished and verified (**538 tests** = 576 − 38, SwiftLint `--strict`,
+clean-`.build` `swift build`, `xcodebuild` app+CLI, and the MCP wire shape checked over real stdio:
+no `engine` key, `limit` honoured). Steps:
+1. Merge it, then **remove the stale `.claude/worktrees/retrieval-bm25*` worktrees and their branches**
+   (both superseded). Also pending on its own branch: `fix/bounded-absent-transcript-retry`.
 2. **Rebuild + reinstall to `/Applications`** and re-verify `~/.local/bin/pensieve` is still a symlink.
-   The bundled `pensieve mcp` is what every Claude Code session calls, and it is from 2026-07-19.
-3. Delete the orphaned `~/Library/Application Support/Pensieve/text-index.sqlite` (+ `-wal`/`-shm`) —
-   the abandoned two-path branch's index, now dead weight.
+   The bundled `pensieve mcp` is what every Claude Code session calls, it is from 2026-08-11 pre-removal,
+   and the `search` wire shape changed (`engine` gone, `limit` no longer doubled).
+3. `defaults delete me.mazetti.pensieve app.semanticSearch` — nothing reads it now.
+   (The orphaned `text-index.sqlite` and `semantic-index.sqlite` are **already gone** from the support
+   dir; nothing to clean there.)
 4. Then walk the **human-verify carries** at the bottom of this file — they need the installed app and
    the real store, which no agent can do headlessly.
 
@@ -166,9 +169,10 @@ error surfacing (2026-07-14). Nothing open. (Spec 2's deferred source-management
 editing remain parked in `backlog.md`, not part of Track B.)
 
 **Track C — findability / OS-integration.** In-app find (⌘F), the menu-bar item, `pensieve://`, App
-Intents + Spotlight, Focus filters, **semantic/vector recall (#2, 2026-07-18)**, **Spotlight loose-end
-indexing (1b, 2026-07-19)**, the **semantic-recall hardening batch (2026-07-19)**, **archived content in
-the semantic index (2026-07-19)**, and **transcript readability (2026-07-26)** are all live. Remaining:
+Intents + Spotlight, Focus filters, **Spotlight loose-end indexing (1b, 2026-07-19)**, **transcript
+readability (2026-07-26)** and **retrieval P1+P2′ / BM25 (2026-08-11)** are live. **Semantic/vector
+recall (#2) and its two 2026-07-19 follow-ups were built, measured worse than BM25, and removed on
+2026-08-11** — they hardened an engine that no longer exists. Remaining:
 - **Transcript-passage chunking** — the next corpus increment. **The spec is already written**
   (`specs/2026-07-19-transcript-passage-chunking-design.md`, committed `35b0ed1`) — **no plan yet**, so
   this is the shortest path to shipping. Would also make the Part D `maxFetch=2000` cap worth revisiting.
