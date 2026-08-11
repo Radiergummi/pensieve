@@ -31,6 +31,9 @@ public struct Ingester: Sendable {
 
   enum IngestError: Error { case unattributableSession }
 
+  /// Retry window for a `cc.session` row whose transcript is absent (it may not be written yet).
+  static let absentTranscriptGracePeriod: TimeInterval = 24 * 60 * 60
+
   /// Non-async wrappers so `database.write`/`database.read` resolve to GRDB's synchronous overload even
   /// when called from an `async` context (`ingest`/`nameStrand`) — a bare trailing closure
   /// there is ambiguous with GRDB's `async` `write`/`read` overloads and triggers spurious
@@ -125,14 +128,16 @@ extension Ingester {
     let payload = try JSONDecoder().decode(SessionRefPayload.self, from: data)
     let transcriptURL = URL(fileURLWithPath: payload.transcriptPath)
     let session = TranscriptParser.parse(fileURL: transcriptURL)
-    // No cwd → can't attribute. Distinguish transient from permanent so discovery's
-    // per-cycle re-spool can't loop forever: an empty/unreadable transcript may still fill
-    // later (throw → stays pending, retries next drain); a non-empty transcript that still
-    // has no cwd is corrupt/foreign and will never attribute (drop → drain marks it
-    // ingested, returning 0 events).
+    // No cwd → can't attribute. Distinguish transient from permanent so discovery's per-cycle
+    // re-spool can't loop forever: an empty/absent transcript may still fill (throw → stays
+    // pending) but only inside the grace period, past which it is gone for good and re-parsing
+    // it every drain is waste; a non-empty one with no cwd never will (drop → 0 events).
     guard let cwd = session.cwd else {
       let size = (try? transcriptURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-      if size == 0 { throw IngestError.unattributableSession }
+      if size == 0 {
+        guard row.timestamp > Date().addingTimeInterval(-Self.absentTranscriptGracePeriod) else { return 0 }
+        throw IngestError.unattributableSession
+      }
       return 0
     }
     // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
