@@ -117,7 +117,9 @@ struct ContentListView: View {
         NodeBadge(node: node, size: 26)
         VStack(alignment: .leading, spacing: 2) {
           Text(node.name)
-          Text(AppearanceStyle.kindLabel(node.kind)).font(.caption).foregroundStyle(.secondary)
+          // Was `kindLabel`, which read "Project / Project / Project" down the whole column and so
+          // discriminated nothing. Recency and volume are what tell these rows apart.
+          NodeRowMeta(facts: model.nodeRowFacts[node.id])
         }
       }
       .tag(node.id)
