@@ -225,6 +225,18 @@ monitor** ("watch the AI work"); ours is **reload context after the session scro
 Items below are ordered by value×cheapness for *us*. Items 1–3 are one coherent spec; 4–5 a second,
 much smaller one.
 
+> **Status 2026-08-11 — items 1, 2, 3 SHIPPED and item 4 PARTLY shipped**, as the retrieval
+> P1+P2′ branch (spec `2026-07-28-retrieval-eval-harness-design.md`). **1**: file paths are indexed in
+> their own FTS5 table and reachable from ⌘F and MCP `search`'s structured `file` parameter. **2**: the
+> exact and semantic halves now share **one** corpus (`EmbeddableCorpus`), closing the asymmetry.
+> **3**: FTS5 + `bm25()` replaced the substring matcher outright, so multi-word queries are token-AND
+> ranked instead of all-or-nothing — and it replaced the *vector* path as the default too, which is how
+> the inert-floor defect above got closed. **4**: MCP `search` returns an `index_state` distinguishing
+> an unbuilt index from a real miss; the *daemon-age* half ("last synced 40 min ago") is NOT done.
+> Left open below: **5** (`pensieve doctor`), **6** (folded into transcript chunking), **7** (Live
+> Recall, parked), **8** (skill + researcher subagent). Stemming became P3's `bm25Porter` strategy —
+> our evidence neither supports nor refutes it, so it is measured rather than assumed.
+
 - **1. ⭐ Git-anchored search — find sessions by the files they touched.** *Small; the data is
   already captured.* `Ingester.swift:355` runs `git show --name-only` and stores the changed-file
   list in `Event.detailJSON["files"]` — we capture it and never search it. "What was I doing last
@@ -285,6 +297,32 @@ filters, App Intents, Spotlight, deep links; semantic/vector recall (they appear
 
 ---
 
+## Semantic relevance floor is inert — CLOSED 2026-08-11 (diagnosis changed; BM25 replaced the engine)
+
+**Resolved, but not the way this entry predicted — read the correction before reusing anything below.**
+The measurements were right and the *diagnosis* was wrong: it was a **ranking failure, not a scale
+failure.** Mean-pooled `NLContextualEmbedding` was never a sentence-similarity encoder, so no floor —
+absolute, centered, or percentile-calibrated — could have separated a topical match from gibberish.
+Every remedy this entry proposed (mean-centering, empirical percentile) would have been work spent
+calibrating a signal that carries too little information to calibrate.
+
+What shipped instead (spec `2026-07-28-retrieval-eval-harness-design.md`, plan
+`2026-08-03-retrieval-bm25-single-path.md`): **FTS5/BM25 became the search engine**, replacing BOTH the
+inert vector path *and* the old whole-string substring matcher; the vector stack is retained, tested,
+and default-**off** behind the Settings ▸ Intelligence toggle. Measured paired on the real corpus
+(n=1500): BM25 P@1 **0.395** vs vector **0.255**. **The floor is gone rather than retuned** — BM25
+scores are unbounded and per-query-scaled, so a fixed cutoff was never meaningful for it either.
+Relevance is now bounded by rank plus the requirement that a document actually contain the query
+terms. **A rank cap is not a relevance threshold**, and nothing here claims otherwise.
+
+**The measurement discipline is the reusable part**, not the conclusion: the probes live in
+`docs/superpowers/measurements/2026-07-28-retrieval-recall/`, and the pre-registered verification gate
+*rejected* the plan's own primary design on paired evidence (McNemar p = 0.017) rather than shipping it.
+**Still open — P3**, the one question this did not answer: see the roadmap entry below.
+
+<details>
+<summary>Original entry (2026-07-19) — kept for the measurements, which stand</summary>
+
 ## Semantic relevance floor is inert — OPEN DEFECT (found 2026-07-19, needs its own spec)
 
 **The `floor: 0.25` similarity cutoff never rejects anything.** Measured against the live store via
@@ -316,6 +354,24 @@ of an absolute constant; or hybrid retrieval blending a lexical signal so rare t
 "sqlite-vec" carry weight. **Not a one-line tweak** — a floor change alone would be guesswork without
 a calibration method. *Revisit trigger:* next time semantic recall is touched, or sooner — this is
 live, default-on, and currently diluting the grounded context fed to Claude via MCP.
+
+</details>
+
+## P3 — a paraphrase-only eval harness — OPEN, and blocked on the user
+
+The one retrieval question still unanswered: **does any on-device strategy deliver "find without
+remembering the words"?** Both candidates fail it today — on hand-written short paraphrase queries
+`vector` scored ≈0/8 and `bm25` ≈2/8. BM25 winning the headline metric does not mean it can paraphrase;
+it means it is less bad, and the same-node gold set that measured it uses **full documents as queries**,
+which flatters lexical matching in a way real short typed queries do not.
+
+**Blocked on one input only: 30–50 paraphrase queries the user writes**, from real recall needs, each
+naming the item(s) it should find. That single choice is what dissolves LLM circularity and the leakage
+guard — as sole user, your own queries *are* the ground truth. Design is already written (spec §P3):
+two files (`RetrievalCorpus`, `RetrievalMetrics`), per-query-normalised operating-point search with an
+explicit `NO VIABLE THRESHOLD` verdict, no ROC-AUC, strategies `bm25` / `bm25Porter` / `vector` /
+`hybridRRF`, and a **pre-registered absolute floor** so the report can conclude "the incumbent is
+unusable". *Revisit trigger:* when the gold set exists.
 
 ---
 

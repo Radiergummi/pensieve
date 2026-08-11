@@ -1,4 +1,4 @@
-# CONTINUE — session handoff (2026-07-26)
+# CONTINUE — session handoff (2026-08-11)
 
 Self-contained pickup for a fresh agent. Read `CLAUDE.md` first (project rules + the full shipped
 changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the durable long-term list
@@ -6,26 +6,50 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-Everything is **on `main`**; the tracked tree is clean. **524 tests**, run with `./scripts/test.sh`
-(thin `swift test` passthrough). The full loop is **LIVE and dogfooded**: capture → ingest →
-auto-extract runs unattended via the bundled background-sync agent; the app is a real `Pensieve.app`
-bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The core intelligence gate passed
-long ago. The hard part is done — remaining work is feature breadth, not foundations.
+**576 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
+dogfooded**: capture → ingest → auto-extract runs unattended via the bundled background-sync agent; the
+app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The
+core intelligence gate passed long ago. The hard part is done — remaining work is feature breadth, not
+foundations.
 
-**⚠️ The installed app is stale.** `/Applications/Pensieve.app` was built **2026-07-19** and is four
-ships behind `main` — so the running app has no chat transcript rendering, and the bundled
-`pensieve mcp` (which this and every Claude Code session actually calls) is missing the widened
-`include_archived` search. **Rebuild + reinstall before trusting anything you see in the live app**,
-then check `ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
+**The retrieval branch is the one thing not on `main`.** `worktree-retrieval-bm25-single-path` (worktree
+at `.claude/worktrees/retrieval-bm25-single-path`) holds the BM25 search engine — 13 plan tasks, both
+Opus reviews done and their whole fix wave applied, 576 tests / SwiftLint `--strict` / `xcodebuild`
+all green. **It is ready to merge**; see THE NEXT ACTION. A second worktree,
+`worktree-retrieval-bm25`, is a **SUPERSEDED** two-path attempt (`TextIndexStore` + `RelatedQueries`) —
+do **not** merge or cherry-pick from it. Its docs commit `826c8a5` falsely claims it merged to `main`;
+delete the branch and worktree once the real one lands.
 
-**One OPEN DEFECT is live in production:** the semantic relevance floor is inert — see THE NEXT
-ACTION below and `backlog.md:211`.
+**⚠️ The installed app is badly stale.** `/Applications/Pensieve.app` was built **2026-07-19** — so the
+running app has no chat transcript rendering, and the bundled `pensieve mcp` (which this and every
+Claude Code session actually calls) has neither the widened `include_archived` search nor BM25.
+**Rebuild + reinstall before trusting anything you see in the live app**, then check
+`ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
+
+**No open defects in production.** The inert semantic floor is **closed** — by replacing the engine, not
+by calibrating the floor (`backlog.md`, "Semantic relevance floor is inert — CLOSED").
 
 ## Most recent ships (newest first)
 
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
+- **Retrieval P1 + P2′ — BM25 replaces the search engine** (2026-08-11, branch
+  `worktree-retrieval-bm25-single-path`, **merge pending**). Closed the inert-floor defect by discarding
+  its diagnosis: a **ranking** failure, not a **scale** failure, so no floor could ever have fixed it.
+  FTS5 + `bm25()` (`SearchIndexStore`, schema v2, hash-guarded whole rebuild) + a pure `FTSQueryBuilder`
+  (**raw input never reaches `MATCH`**) replaced **both** the substring matcher **and** the vector index
+  as the default engine; vector is retained, tested, default-**OFF**. **The floor is gone, not retuned**
+  — a rank cap is not a relevance threshold. File paths joined the corpus in their **own** FTS5 table,
+  because the pre-registered gate **rejected** sharing one (FTS5 normalises `bm25()` by the row's TOTAL
+  token count across columns; McNemar p = 0.017 at n=1500). One ranked list + pinned Top Hit across ⌘F
+  and MCP, plus an `index_state` so an unbuilt index ≠ a real miss. BM25 P@1 **0.395** vs vector
+  **0.255**. Grounding unchanged (one shared `SearchHitResolver`, one `NodeState.searchable` allow-list
+  rendered into both the SQL filter and the re-check); **trust gate untouched**. **576 tests.** Two Opus
+  reviews (whole-branch + a focused pass over Tasks 8–13, which had shipped with **no** per-task review)
+  → 0 Critical, and the whole converged fix wave applied — most seriously an index path that ignored
+  `PENSIEVE_DB`, which made the project's own smoke-test recipe wipe the **live** index. Spec/plan:
+  `{specs}/2026-07-28-retrieval-eval-harness-design.md` + `{plans}/2026-08-03-retrieval-bm25-single-path.md`.
 - **Transcript readability — chat rendering + harness vocabulary + type scale** (2026-07-26, merged
   `4b184a3`). The inline provenance view renders a transcript window as readable chat instead of a flat
   list of raw-tagged text. **Kit (tested, pure):** `TranscriptVocabulary` — **two members, not one list**:
@@ -105,16 +129,25 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**⚠️ FIRST — the semantic relevance floor is inert (OPEN DEFECT, in production).** `backlog.md:211`
-has the measurements: gibberish ("banana zeppelin custard velocipede") scores **0.880** cosine; a
-perfect topical match scores **0.936**. The whole usable range is ~0.06 wide and sits far above the
-`0.25` floor (`Mcp.swift:210`, `AppModel.swift:531`), so ⌘F "Related" and MCP `search` **always**
-return a full result set regardless of relevance, and corpus noise outranks true matches. The
-grounding guards hold — every hit is a real cited item, nothing fabricated — but relevance is not
-enforced at all, and this is **live, default-on, and diluting the context fed to Claude via MCP**.
-Likely cause: anisotropy of mean-pooled contextual embeddings (short git-commit subjects amplify it).
-**A floor change alone would be guesswork** — the spec must pick a calibration method (mean-centering
-/ empirical percentile / hybrid lexical blend). Its own brainstorm→spec→plan.
+**⚠️ FIRST — merge the retrieval branch, then reinstall.** It is finished and verified (576 tests,
+SwiftLint `--strict`, `xcodebuild` app+CLI, both Opus reviews' fix wave applied). Steps:
+1. Rebase onto `main` if `main` moved (the user commits there in parallel), merge, then **remove the
+   worktree and delete the branch** — plus the superseded `worktree-retrieval-bm25` and its branch.
+2. **Rebuild + reinstall to `/Applications`** and re-verify `~/.local/bin/pensieve` is still a symlink.
+   The bundled `pensieve mcp` is what every Claude Code session calls, and it is from 2026-07-19.
+3. Delete the orphaned `~/Library/Application Support/Pensieve/text-index.sqlite` (+ `-wal`/`-shm`) —
+   the abandoned two-path branch's index, now dead weight.
+4. Then walk the **human-verify carries** at the bottom of this file — they need the installed app and
+   the real store, which no agent can do headlessly.
+
+**THEN — P3, the paraphrase harness, is the one open retrieval question, and it is blocked on YOU.**
+Both engines fail "find without remembering the words" (`vector` ≈0/8, `bm25` ≈2/8 on short paraphrase
+queries), and the gold set that produced BM25's headline win uses **full documents as queries**, which
+flatters lexical matching in a way real typed queries do not. Unblocking it needs **30–50 paraphrase
+queries you write**, each naming what it should find — deliberately yours, because as sole user your
+queries *are* the ground truth. Design is already written (spec §P3): two files, per-query-normalised
+operating points, an explicit `NO VIABLE THRESHOLD` verdict, and a pre-registered absolute floor so the
+report can conclude "the incumbent is unusable".
 
 **Track A — the three-pane app (the product spine).** Everything through Share-recall, archive, and
 error-surfacing has shipped. Next: **slice 5 (talk-to-system** — describe a strand in natural language →
@@ -225,3 +258,32 @@ the system** (slice 5), statistical **theme discovery**, proactive project sugge
 
 North star throughout: **grounded-with-provenance** — every AI-surfaced item cites real captured text or
 it doesn't appear. The trust gate is sacred; the capture path must never block a git commit.
+
+## Human-verify carries — retrieval / BM25 (needs the reinstalled app + the real store)
+
+From the plan's Post-merge carries plus the review fix wave. None of these can be checked headlessly.
+
+- ⌘F a common term (`sync`, `app`) — does the **Top Hit** pin the node you meant, even when events fill
+  the list? And does it never show a node the list itself would have excluded?
+- ⌘F a multi-word query with no verbatim occurrence (`focus filter spotlight`) — the old matcher returned
+  **nothing** here; it should now return real work.
+- ⌘F a file path (`SemanticQueries.swift`) — do the commits that touched it come back? Note a *bare*
+  filename works via the path probe, while `query` + `file` together mean **both must match**.
+- **Every result row should visibly show why it matched** — this was a review finding. Especially a loose
+  end that matches only inside its cited quote, and a German term typed without umlauts (`losung`
+  matching `Lösung`) — both used to render with nothing highlighted.
+- Type an apostrophe, a colon, `C++`, an unbalanced quote — no crash, no error, no empty-because-broken.
+- Delete `search-index.sqlite` with the app closed, relaunch, search immediately — do you get
+  "building"/"not built" rather than a bare "no results"?
+- **Index freshness (review fix):** with the app open, make a commit in another window and wait for the
+  watcher; the new work should become findable in ⌘F **without** pressing ⌘R.
+- Settings ▸ Intelligence — the vector toggle reads **off** on a machine that never set it; turning it on
+  adds a labelled experimental section below the results.
+- Does the `.searchScopes` bar render under `.sidebar` placement? (Carried from the previous batch;
+  fallback = a segmented Picker in the results header, pre-specified in that plan.)
+- German in-situ (`-AppleLanguages '(de)'`) for the new search strings.
+- `pensieve mcp` from a Claude Code session: `search` returns `items` + `index_state`, the `file`
+  parameter works, and a bare `file` with no `query` now works too.
+- **Confirm the smoke-test fix holds:** run `PENSIEVE_DB=/tmp/x.sqlite pensieve sync`, then check
+  `~/Library/Application Support/Pensieve/search-index.sqlite` is **untouched** (a sibling
+  `/tmp/x-search-index.sqlite` should appear instead). This is the bug that used to wipe the live index.
