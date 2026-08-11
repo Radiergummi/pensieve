@@ -10,7 +10,7 @@ import PensieveKit
 struct LooseEndRow: View {
   let view: LooseEndView
   /// Resolves the surrounding-transcript context off the main actor (file I/O). Pass `model.provenance`.
-  let loadProvenance: (LooseEnd) async -> ProvenanceContext?
+  let loadProvenance: (LooseEnd) async -> LoadedProvenance?
   /// Confirms a salience label for this loose end (👍 salient / 👎 noise / "" clears). Pass
   /// `model.setLooseEndLabel`.
   let onLabel: (UUID, String) -> Void
@@ -26,9 +26,10 @@ struct LooseEndRow: View {
   @State private var provenanceExpanded = false  // the provenance box's own show-more/less
   @State private var context: ProvenanceContext?
   @State private var loading = false
-  /// Segments parallel to `context.messages`, parsed once when the context loads.
-  /// Deliberately NOT a shared cache: `ProvenanceMessage.index` is per-session, so an
-  /// index-keyed cache could serve session A's segments for session B.
+  /// Segments parallel to `context.messages`, supplied by the loader when the context loads. A
+  /// cache keyed on `ProvenanceMessage.index` would be a hazard — that index is per-session, so it
+  /// could serve session A's segments for session B. The loader's cache dodges this: it keys on
+  /// loose-end ID, and a loose end has exactly one `sourceEventID`, hence one session.
   @State private var parsed: [[TranscriptSegment]] = []
 
   /// Optimistic override of the confirmed label so a tap reflects immediately (the injected
@@ -76,8 +77,10 @@ struct LooseEndRow: View {
       guard expanded, context == nil else { return }
       loading = true
       let loaded = await loadProvenance(view.looseEnd)
-      context = loaded
-      parsed = (loaded?.messages ?? []).map { TranscriptMarkup.parse($0.text) }
+      context = loaded?.context
+      // Segments come from the loader, NOT a second TranscriptMarkup.parse here: the find document
+      // indexes these exact arrays by position, so a separate parse could disagree about ordinals.
+      parsed = loaded?.segments ?? []
       loading = false
     }
     .onAppear { if expandedLooseEndID == view.looseEnd.id { expanded = true } }

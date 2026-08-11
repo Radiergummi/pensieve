@@ -124,6 +124,12 @@ final class AppModel {
   @ObservationIgnored var searchTask: Task<Void, Never>?
   @ObservationIgnored var searchToken = 0
   @ObservationIgnored lazy var searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
+  /// Shared across every window and both loose-end surfaces so a transcript is parsed once, not
+  /// once per expanded row. Invalidation is per-entry file-fingerprint, inside the loader.
+  @ObservationIgnored lazy var provenanceLoader: ProvenanceLoader? = {
+    guard let database else { return nil }
+    return ProvenanceLoader(database: database)
+  }()
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
   /// site that branches on search (the middle content, the refresh re-run, the detail one-home
