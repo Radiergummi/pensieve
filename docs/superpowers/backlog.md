@@ -306,6 +306,18 @@ against a 0.25 cutoff. What closed the defect is that the vector path is no long
 default-**OFF**; the compressed-cosine problem was never solved, it was taken off the default path. If a
 future session enables that toggle and finds relevance unenforced, that is this entry, not a new bug.
 
+**⚠️ THE DEFAULT FLIP DOES NOT MIGRATE AN EXISTING SETTING — observed live 2026-08-11.** Only the *unset*
+default changed; `PensieveDefaults.semanticSearchEnabled` deliberately honours an explicitly stored
+`true`. Semantic search shipped **default-ON** on 2026-07-18, and this machine had `app.semanticSearch =
+1` persisted in `~/Library/Preferences/me.mazetti.pensieve.plist` — so after the BM25 ship the vector
+engine was **still running**, and `pensieve mcp search "focus filter spotlight"` returned two unrelated
+projects at 0.886/0.878 beneath the correct BM25 top hit. So "quarantined behind a default-off toggle"
+was true of the code and false of the only machine that runs it. Check with
+`defaults read me.mazetti.pensieve app.semanticSearch` (absent or `0` = off); turn off in Settings ▸
+Intelligence, or `defaults write me.mazetti.pensieve app.semanticSearch -bool false`. **General lesson:
+flipping a default is not a migration** — a shipped default-on toggle leaves persisted `true`s behind on
+every machine that ever ran it, and no code review can see that.
+
 **Resolved, but not the way this entry predicted — read the correction before reusing anything below.**
 The measurements were right and the *diagnosis* was wrong: it was a **ranking failure, not a scale
 failure.** Mean-pooled `NLContextualEmbedding` was never a sentence-similarity encoder, so no floor —

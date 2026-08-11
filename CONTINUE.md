@@ -26,9 +26,13 @@ Claude Code session actually calls) has neither the widened `include_archived` s
 **Rebuild + reinstall before trusting anything you see in the live app**, then check
 `ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
 
-**No open defects on the DEFAULT path.** The inert semantic floor is closed by replacing the engine, not
-by calibrating the floor — but it is **quarantined, not deleted**: the `0.25` floor and its compressed
-cosine still run if you turn Settings ▸ Intelligence ▸ semantic search back ON. See `backlog.md`,
+**No open defects on the DEFAULT path** — but check your own machine, because the default flip does not
+migrate. The inert semantic floor is closed by replacing the engine, not by calibrating the floor, and it
+is **quarantined, not deleted**: the `0.25` floor and its compressed cosine still run whenever Settings ▸
+Intelligence ▸ semantic search is ON. **Semantic shipped default-ON in July, so a persisted
+`app.semanticSearch = 1` keeps the old behaviour** — that was live on this machine on 2026-08-11 and was
+measurably diluting MCP results. Verify with
+`defaults read me.mazetti.pensieve app.semanticSearch` (absent or `0` = off). See `backlog.md`,
 "Semantic relevance floor is inert — CLOSED as QUARANTINED".
 
 ## Most recent ships (newest first)
