@@ -147,10 +147,18 @@ import SQLiteData
                         kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}", fingerprint: "pa1")
   try database.write { database in
     try Event.insert { testEvent }.execute(database)
-    // Every status × label combination the predicate must judge.
+    // Every status × label combination the predicate must judge. Two rows carry
+    // `label: .noise` (one open, one resolved) rather than one: a fixture with exactly one
+    // confirmed-noise row and one suggestion-only-noise row is symmetric under the mutation that
+    // swaps which column is checked (`label` vs `labelSuggestion`) — both spellings then total 3,
+    // just with different membership, so a count-only assertion can't tell them apart. The extra
+    // open+confirmed-noise row breaks that symmetry: the correct predicate still excludes both
+    // confirmed-noise rows (open+resolved) and counts 3, but the mutated one (checking
+    // `labelSuggestion`) would count both of them (their `labelSuggestion` is unset) and drop the
+    // suggestion-only-noise row, totaling 4.
     for (status, label, suggestion) in [
       ("open", "", ""), ("open", LooseEndLabel.salient, ""), ("open", LooseEndLabel.noise, ""),
-      ("open", "", LooseEndLabel.noise), ("resolved", "", ""),
+      ("open", LooseEndLabel.noise, ""), ("open", "", LooseEndLabel.noise), ("resolved", "", ""),
       ("resolved", LooseEndLabel.salient, ""), ("resolved", LooseEndLabel.noise, ""),
     ] {
       try LooseEnd.insert {
