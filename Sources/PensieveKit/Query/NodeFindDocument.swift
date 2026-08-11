@@ -158,3 +158,27 @@ extension NodeFindDocument {
     NodeFindDocument(slots: units.map { .unit($0) })
   }
 }
+
+extension NodeFindDocument {
+  /// Turns a loaded provenance window into findable units. The ONE place transcript anchors are
+  /// minted, so the app cannot invent an ordinal the view doesn't render.
+  ///
+  /// `segment` is the index in the message's FULL segment array — the same array
+  /// `TranscriptMessageView` enumerates by offset. Segments with no displayed text are skipped but
+  /// do NOT shift their neighbours' ordinals.
+  public static func units(from loaded: LoadedProvenance, looseEndID: UUID) -> [FindUnit] {
+    guard loaded.context.transcriptAvailable else { return [] }
+    var units: [FindUnit] = []
+    for (position, message) in loaded.context.messages.enumerated() {
+      guard position < loaded.segments.count else { continue }
+      for (ordinal, segment) in loaded.segments[position].enumerated() {
+        guard let text = segment.findableText else { continue }
+        units.append(FindUnit(anchor: .transcriptSegment(looseEndID: looseEndID,
+                                                          messageIndex: message.index,
+                                                          segment: ordinal),
+                              text: text))
+      }
+    }
+    return units
+  }
+}

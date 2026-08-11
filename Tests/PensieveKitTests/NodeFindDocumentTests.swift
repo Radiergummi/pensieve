@@ -144,3 +144,49 @@ private func makeEvent(summary: String) -> Event {
   #expect(document.unresolvedLooseEndIDs == [looseEnd.looseEnd.id])
   #expect(document.units.map(\.anchor) == [.nodeName, .looseEndText(looseEnd.looseEnd.id)])
 }
+
+@Test func transcriptUnitsCarryMessageIndexAndSegmentOrdinal() {
+  let looseEndID = UUID()
+  let messages = [
+    ProvenanceMessage(index: 4, role: "user", text: "fix the sync gap", isCited: true,
+                      isUserPrompt: true),
+    ProvenanceMessage(index: 5, role: "assistant", text: "on it", isCited: false,
+                      isUserPrompt: false)
+  ]
+  let loaded = LoadedProvenance(
+    context: ProvenanceContext(looseEnd: makeLooseEndView(text: "t", quote: "q").looseEnd,
+                               sourceEvent: makeEvent(summary: "s"), messages: messages,
+                               transcriptAvailable: true),
+    segments: [[.markdown("fix the sync gap")], [.markdown("on it")]])
+  let units = NodeFindDocument.units(from: loaded, looseEndID: looseEndID)
+  #expect(units.count == 2)
+  #expect(units[0].anchor == .transcriptSegment(looseEndID: looseEndID, messageIndex: 4, segment: 0))
+  #expect(units[0].text == "fix the sync gap")
+  #expect(units[1].anchor == .transcriptSegment(looseEndID: looseEndID, messageIndex: 5, segment: 0))
+}
+
+@Test func segmentsWithNoFindableTextContributeNoUnit() {
+  let looseEndID = UUID()
+  let messages = [ProvenanceMessage(index: 1, role: "user", text: "x", isCited: true,
+                                    isUserPrompt: true)]
+  let loaded = LoadedProvenance(
+    context: ProvenanceContext(looseEnd: makeLooseEndView(text: "t", quote: "q").looseEnd,
+                               sourceEvent: makeEvent(summary: "s"), messages: messages,
+                               transcriptAvailable: true),
+    segments: [[.harness(HarnessBlock(kind: .interrupted, raw: "[Request interrupted")),
+                .markdown("real prose")]])
+  let units = NodeFindDocument.units(from: loaded, looseEndID: looseEndID)
+  #expect(units.count == 1)
+  // Segment ORDINAL is the position in the rendered array — 1, not 0 — because the view enumerates
+  // the same array by offset. Renumbering here would scroll to the wrong segment.
+  #expect(units[0].anchor == .transcriptSegment(looseEndID: looseEndID, messageIndex: 1, segment: 1))
+}
+
+@Test func anUnavailableTranscriptYieldsNoUnitsSoTheCallerFallsBackToTheQuote() {
+  let loaded = LoadedProvenance(
+    context: ProvenanceContext(looseEnd: makeLooseEndView(text: "t", quote: "q").looseEnd,
+                               sourceEvent: makeEvent(summary: "s"), messages: [],
+                               transcriptAvailable: false),
+    segments: [])
+  #expect(NodeFindDocument.units(from: loaded, looseEndID: UUID()).isEmpty)
+}
