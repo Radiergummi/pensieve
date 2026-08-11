@@ -26,12 +26,18 @@ extension AppModel {
     guard !isSyncingIndexes else { return }
     isSyncingIndexes = true
     let searchStore = self.searchStore
-    let semanticEnabled = AppDefaults.semanticSearchEnabled
-    let semanticStore = self.semanticStore, embedder = self.embedder
+    // Resolved ONLY when the branch will actually run. `semanticStore` and `embedder` are lazy vars
+    // with real side effects on first touch: the store creates its SQLite file, and its initialiser
+    // reads `embedder.dimension`, which loads the NaturalLanguage model asset. Reading them
+    // unconditionally — as this did briefly — made a DISABLED feature create a semantic-index.sqlite
+    // and load a model on every launch. Verified by deleting the file and relaunching: it must stay
+    // absent while the toggle is off.
+    let semantic: (store: SemanticIndexStore, embedder: NLContextualEmbedder)? =
+      AppDefaults.semanticSearchEnabled ? (semanticStore, embedder) : nil
     Task.detached { [weak self] in
       SearchIndexer(store: searchStore).sync(database)
-      if semanticEnabled {
-        await SemanticIndexer(store: semanticStore, embedder: embedder).sync(database)
+      if let semantic {
+        await SemanticIndexer(store: semantic.store, embedder: semantic.embedder).sync(database)
       }
       // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
       // timeout is the whole reason this work is detached.
