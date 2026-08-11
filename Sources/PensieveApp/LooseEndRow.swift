@@ -147,14 +147,32 @@ struct LooseEndRow: View {
     } else if loading {
       ProgressView().controlSize(.small)
     } else {
-      // Honest fallback: the stored verbatim quote + why there's no surrounding context.
-      Text(view.looseEnd.quote)
-        .prose().italic().padding(.leading, 10)
-        .overlay(alignment: .leading) { Rectangle().fill(.orange).frame(width: 3) }
+      quoteFallback
       if context != nil {
         Text("Surrounding context unavailable (transcript changed or removed).").metaText()
       }
     }
+  }
+
+  /// Honest fallback: the stored verbatim quote + why there's no surrounding context.
+  ///
+  /// A find site like any other text this row renders itself. It has to be: on the measured store 85%
+  /// of loose ends have no surviving transcript and degrade to exactly this quote, so the
+  /// `.looseEndQuote` unit the document mints for them would otherwise be a counted match with nowhere
+  /// to scroll and nothing tinted — the user told a match is here and shown nothing.
+  @ViewBuilder private var quoteFallback: some View {
+    let anchor = FindAnchor.looseEndQuote(view.looseEnd.id)
+    let runs = find?.runs(for: anchor, text: view.looseEnd.quote) ?? []
+    Group {
+      if runs.isEmpty {
+        Text(view.looseEnd.quote)
+      } else {
+        HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor))
+      }
+    }
+    .prose().italic().padding(.leading, 10)
+    .overlay(alignment: .leading) { Rectangle().fill(.orange).frame(width: 3) }
+    .findSite(anchor, find)
   }
 
   @ViewBuilder private var thumbs: some View {

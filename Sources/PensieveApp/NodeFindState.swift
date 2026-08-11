@@ -58,6 +58,10 @@ final class NodeFindState {
     session.clear()
     forcedExpansions = []
     pendingScroll = nil
+    // Bump the generation as well as cancelling: cancellation is cooperative, so a report already
+    // dequeued from the progress stream — or the sweep's tail — can still be mid-flight, and the
+    // generation is what makes those writes provably impossible rather than merely unlikely.
+    generation += 1
     cancelSweep()
   }
 
@@ -83,12 +87,10 @@ final class NodeFindState {
       isPresented = false
     }
     self.nodeID = nodeID
-    // Zeroed on the same-node path too. `reset` rebuilds every provenance slot as unresolved AND
-    // cancels the sweep above, so any in-flight progress describes work whose results are now
-    // dropped — keeping the old numbers would show a bar that never finishes. The caller restarts
-    // the sweep instead (`DetailView.resetFind`), which reports real numbers again.
-    sweepDone = 0
-    sweepTotal = 0
+    // Progress was cleared by `cancelSweep()` above, on the same-node path too. `reset` rebuilds every
+    // provenance slot as unresolved AND cancels the sweep, so any in-flight progress describes work
+    // whose results are now dropped — keeping the old numbers would show a bar that never finishes.
+    // The caller restarts the sweep instead (`DetailView.resetFind`), which reports real numbers again.
     self.document = document
     if isNodeChange {
       session = FindSession(document: document)
@@ -117,9 +119,16 @@ final class NodeFindState {
     sweepTotal = total
   }
 
+  /// Cancels the in-flight sweep AND clears its progress with it, so `isSweeping` can never report a
+  /// sweep that is no longer running — an Esc mid-sweep would otherwise leave the bar showing
+  /// "searching transcripts 1/3" for the rest of the document's life, hiding the "2 of 4" ordinal that
+  /// is its primary feedback. Every cancellation site goes through here, so this is one invariant
+  /// rather than three call sites remembering to zero.
   func cancelSweep() {
     sweepTask?.cancel()
     sweepTask = nil
+    sweepDone = 0
+    sweepTotal = 0
   }
 
   /// Loads every unresolved loose end's provenance and fills its document slot in place, so a phrase
@@ -138,10 +147,9 @@ final class NodeFindState {
     // materialization while `label` is rewritten by a thumbs tap.
     let pendingLooseEnds = looseEnds.map(\.looseEnd).filter { unresolved.contains($0.id) }
     guard !pendingLooseEnds.isEmpty else { return }
+    // Also zeroes the counters, so the monotonic progress guard below — which only ever lets the label
+    // advance — starts from a clean slate rather than a superseded sweep's numbers.
     cancelSweep()
-    // A cancelled sweep's numbers must not survive into this one: the progress guard below is
-    // monotonic within a single total, which only reads correctly from a clean slate.
-    noteSweepProgress(done: 0, total: 0)
     let startedGeneration = generation
     let (progressReports, progressContinuation) = AsyncStream<SweepProgress>.makeStream()
     sweepTask = Task { [weak self] in
@@ -153,15 +161,22 @@ final class NodeFindState {
                                                            reportingTo: progressContinuation)
       for await report in progressReports {
         guard let self, self.generation == startedGeneration else { continue }
-        // `onProgress` reports (pathsDone, pathsTotal) over PENDING UNIQUE TRANSCRIPT PATHS, not
-        // loose ends: the total shrinks as the loader's cache warms, and a fully cached call reports
-        // (0, 0) — which means "nothing to do", not "0%". Within one sweep the total is fixed, and
-        // each report crosses to the main actor independently, so a later one can land first: ignore
-        // anything that would move the bar backwards.
+        // `onProgress` reports (pathsDone, pathsTotal) over PENDING UNIQUE TRANSCRIPT PATHS, not loose
+        // ends: the total shrinks as the loader's cache warms across calls, and a fully cached call
+        // reports (0, 0) — which means "nothing to do", not "0%". The stream is ordered and consumed
+        // serially, so reports cannot arrive out of order; this guard pins that the label only ever
+        // ADVANCES, which is what makes (0, 0) a no-op instead of a visible reset and keeps a future
+        // change to the loader's counting from showing the user a bar that walks backwards.
         guard report.total != self.sweepTotal || report.done > self.sweepDone else { continue }
         self.noteSweepProgress(done: report.done, total: report.total)
       }
       let loaded = await resolved
+      // Cancelled sweeps must NOT write: `ProvenanceLoader.load(all:)` returns a PARTIAL dictionary on
+      // cancellation, and every loose end missing from it would fall to the quote fallback below —
+      // which marks its slot RESOLVED, so `startSweep` would never look at it again. An Esc mid-sweep
+      // would permanently strand the remaining transcripts' text as unfindable, and mint a
+      // `.looseEndQuote` unit for a loose end whose row renders messages instead of that quote.
+      guard !Task.isCancelled else { return }
       guard let self, self.generation == startedGeneration else { return }
       var filled = self.document
       for looseEnd in pendingLooseEnds {
