@@ -18,6 +18,9 @@ struct LooseEndRow: View {
   var expandedLooseEndID: UUID?
   /// True in the middle column, where ~180pt is usable. Drops bubbles and tightens the type scale.
   var compact: Bool = false
+  /// The owning detail pane's find state, when this row participates in find. `nil` in the middle
+  /// column and the Review Suggestions list — neither is find-scoped.
+  var find: NodeFindState?
 
   @State private var expanded = false            // the loose-end row itself
   @State private var provenanceExpanded = false  // the provenance box's own show-more/less
@@ -45,7 +48,7 @@ struct LooseEndRow: View {
           HStack(spacing: 6) {
             Image(systemName: expanded ? "chevron.down" : "chevron.right")
               .font(.caption2).foregroundStyle(.secondary)
-            Text(view.looseEnd.text).prose()
+            looseEndText
           }
         }
         .buttonStyle(.plain)
@@ -81,6 +84,19 @@ struct LooseEndRow: View {
     .onChange(of: expandedLooseEndID) { _, newValue in
       if newValue == view.looseEnd.id { expanded = true }
     }
+  }
+
+  @ViewBuilder private var looseEndText: some View {
+    let anchor = FindAnchor.looseEndText(view.looseEnd.id)
+    let runs = find?.runs(for: anchor, text: view.looseEnd.text) ?? []
+    Group {
+      if runs.isEmpty {
+        Text(view.looseEnd.text).prose()
+      } else {
+        HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor)).prose()
+      }
+    }
+    .findSite(anchor, find)
   }
 
   @ViewBuilder private var provenanceBody: some View {

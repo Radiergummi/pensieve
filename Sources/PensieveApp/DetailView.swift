@@ -32,7 +32,7 @@ struct DetailView: View {
         HStack(alignment: .top, spacing: 12) {
           NodeBadge(node: node, size: 44)
           VStack(alignment: .leading, spacing: 4) {
-            Text(node.name).font(.largeTitle).bold()
+            findableText(node.name, anchor: .nodeName).font(.largeTitle).bold()
             HStack(spacing: 6) {
               Text(AppearanceStyle.kindLabel(node.kind)).foregroundStyle(.secondary)
               Text("·").foregroundStyle(.secondary)
@@ -48,7 +48,7 @@ struct DetailView: View {
         if narrationEnabled, let lastWorkDone, loadedNodeID == node.id {
           section("Last Work Done") {
             VStack(alignment: .leading, spacing: 4) {
-              Text(lastWorkDone).prose()
+              findableText(lastWorkDone, anchor: .narration).prose()
               Label("Generated summary", systemImage: "sparkles")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -69,7 +69,8 @@ struct DetailView: View {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
                 LooseEndRow(view: view, loadProvenance: model.provenance,
                             onLabel: model.setLooseEndLabel,
-                            expandedLooseEndID: model.expandedLooseEndID, compact: false)
+                            expandedLooseEndID: model.expandedLooseEndID, compact: false,
+                            find: find)
                   .id(view.looseEnd.id)
               }
             }
@@ -81,7 +82,7 @@ struct DetailView: View {
           if recentEvents.isEmpty {
             Text("No captured activity.").foregroundStyle(.secondary)
           } else {
-            ActivityTimeline(events: recentEvents)
+            ActivityTimeline(events: recentEvents, find: find)
           }
         }
       }
@@ -145,6 +146,11 @@ struct DetailView: View {
       guard let id else { return }
       withAnimation { proxy.scrollTo(id, anchor: .center) }
     }
+    .onChange(of: find.scrollTarget) { _, anchor in
+      guard let anchor else { return }
+      withAnimation { proxy.scrollTo(anchor, anchor: .center) }
+      find.scrollTarget = nil
+    }
     }
     }
     .focusedSceneValue(\.nodeFind, find)
@@ -158,11 +164,25 @@ struct DetailView: View {
     }
   }
 
+  /// A text site that participates in find: highlighted when the query matches, plain otherwise,
+  /// and always registered as a scroll target.
+  @ViewBuilder private func findableText(_ text: String, anchor: FindAnchor) -> some View {
+    let runs = find.runs(for: anchor, text: text)
+    Group {
+      if runs.isEmpty {
+        Text(text)
+      } else {
+        HighlightedText(runs: runs, currentOffset: find.currentOffset(in: anchor))
+      }
+    }
+    .findSite(anchor, find)
+  }
+
   @ViewBuilder private var descriptionBlock: some View {
     VStack(alignment: .leading, spacing: 4) {
       if !node.description.isEmpty {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-          Text(node.description).prose()
+          findableText(node.description, anchor: .description).prose()
           if describable {
             Button { runDescribe() } label: { Image(systemName: "arrow.clockwise") }
               .buttonStyle(.borderless).controlSize(.small)
@@ -208,6 +228,7 @@ private struct DetailLoadKey: Hashable { let nodeID: UUID; let token: Int }
 /// the source icon+color, the localized source label, and the summary. No avatars (single-user).
 private struct ActivityTimeline: View {
   let events: [Event]
+  var find: NodeFindState?
 
   var body: some View {
     let groups = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.occurredAt) }
@@ -219,7 +240,7 @@ private struct ActivityTimeline: View {
           Text(day, format: .dateTime.weekday(.wide).month().day())
             .font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
           ForEach(Array(items.enumerated()), id: \.element.id) { idx, event in
-            TimelineRow(event: event, isLast: idx == items.count - 1)
+            TimelineRow(event: event, isLast: idx == items.count - 1, find: find)
           }
         }
       }
@@ -230,6 +251,7 @@ private struct ActivityTimeline: View {
 private struct TimelineRow: View {
   let event: Event
   let isLast: Bool
+  var find: NodeFindState?
 
   var body: some View {
     let style = EventSourceStyle.style(for: event.kind)
@@ -248,10 +270,24 @@ private struct TimelineRow: View {
           Text(event.occurredAt, format: .dateTime.hour().minute())
             .metaText().monospacedDigit()
         }
-        Text(event.summary).prose()
+        summaryText
       }
       Spacer()
     }
+  }
+
+  @ViewBuilder private var summaryText: some View {
+    let anchor = FindAnchor.event(event.id)
+    let runs = find?.runs(for: anchor, text: event.summary) ?? []
+    Group {
+      if runs.isEmpty {
+        Text(event.summary)
+      } else {
+        HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor))
+      }
+    }
+    .prose()
+    .findSite(anchor, find)
   }
 
   @ViewBuilder private func sourceIcon(_ sourceStyle: SourceStyle) -> some View {
