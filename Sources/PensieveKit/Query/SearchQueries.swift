@@ -85,7 +85,7 @@ public enum SearchQueries {
   /// True when `prefix` starts the name or starts any word inside it, case- and
   /// diacritic-insensitively. Mid-word matches do not count — "racker" is not navigation intent.
   private static func hasWordPrefix(_ name: String, prefix: String) -> Bool {
-    let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive, .anchored]
+    let options: String.CompareOptions = FindMatcher.options.union(.anchored)
     if name.range(of: prefix, options: options) != nil { return true }
     return name.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
       .contains { $0.range(of: prefix, options: options) != nil }
