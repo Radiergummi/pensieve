@@ -1,4 +1,0 @@
-module CSQLiteVec {
-  header "CSQLiteVec.h"
-  export *
-}
