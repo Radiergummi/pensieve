@@ -39,7 +39,9 @@ import Testing
   let source = "fix the sync gap before the sync ships"
   let runs = FindMatcher.runs(in: source, ranges: FindMatcher.ranges(in: source, query: "sync"))
   let rebuilt = runs.map { run in
-    switch run { case .plain(let text), .match(let text): return text }
+    switch run {
+    case .plain(let text), .match(let text): return text
+    }
   }.joined()
   #expect(rebuilt == source)
   #expect(runs.filter { if case .match = $0 { return true } else { return false } }.count == 2)

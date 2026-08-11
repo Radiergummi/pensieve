@@ -6,7 +6,7 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-**539 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
+**582 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
 dogfooded**: capture → ingest → auto-extract runs unattended via the bundled background-sync agent; the
 app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The
 core intelligence gate passed long ago. The hard part is done — remaining work is feature breadth, not
@@ -37,6 +37,17 @@ See `backlog.md`, "Semantic relevance floor — CLOSED by removing the engine".
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
+- **In-node find (⌘F)** (2026-08-11, branch `worktree-in-node-find`). The detail pane got its own find
+  bar, and **the keybindings swapped: ⌘F is now find-within-the-open-node, ⌥⌘F is search-everything.**
+  Literal substring search over everything the pane renders — name, description, narration, loose-end
+  text, and the **transcript windows behind collapsed provenance rows** — highlighted in place, ⌘G/⇧⌘G
+  in on-screen order. `FindMatcher` is now the **single** definition of Pensieve's compare options
+  (`SnippetMaker` reads it); `NodeFindDocument` fills a **pre-allocated slot per loose end in place** so
+  the async sweep can't reorder ⌘G, and resolves to transcript units **XOR** the quote; `FindSession`
+  tracks the current match by **identity, not ordinal**; `ProvenanceLoader` parses each transcript **once**
+  and invalidates on `(size, mtime)` — **not** `refreshToken`, which never bumps on the watch path.
+  Accepted trade-off: **flatten-on-match** (a matched transcript segment shows raw Markdown syntax while
+  the bar is open — MarkdownUI 2.4.1's AST is `internal`). Trust gate untouched; read-only throughout.
 - **Retrieval P1 + P2′ — BM25 replaces the search engine** (2026-08-11, merged to `main`). Closed the
   inert-floor defect by discarding its diagnosis: a **ranking** failure, not a **scale** failure, so no
   floor could ever have fixed it.
@@ -295,3 +306,39 @@ From the plan's Post-merge carries plus the review fix wave. None of these can b
 - **Confirm the smoke-test fix holds:** run `PENSIEVE_DB=/tmp/x.sqlite pensieve sync`, then check
   `~/Library/Application Support/Pensieve/search-index.sqlite` is **untouched** (a sibling
   `/tmp/x-search-index.sqlite` should appear instead). This is the bug that used to wipe the live index.
+
+> **Note:** every "⌘F" above means the *global* search field, which is now on **⌥⌘F** — see the in-node
+> find carries below.
+
+## Human-verify carries — in-node find (⌘F) (needs the built app + the real store)
+
+The app target has no unit tests, so all of this is eyeball-only. The 122-open-loose-end `Pensieve` node
+is the realistic fixture; only **18** of those have a live transcript, so pick a *recent* loose end when
+testing the transcript path — an old one will correctly fall back to its stored quote.
+
+- **The collapsed-transcript case** (the feature's whole point): ⌘F a phrase that exists only inside a
+  transcript window behind a **collapsed** loose-end row. ⌘G should force-expand that row, scroll to the
+  segment, and highlight the phrase in place. Then ⌘G past it and back — the position must not jump.
+- **A late fill must not move you.** Type a query that matches early (name/description) while the sweep
+  is still running (the bar shows `… searching transcripts N/M`). As transcript matches land *ahead* of
+  you, the count grows and your ordinal renumbers, but you must stay on the **same** match.
+- **Cross-window non-contamination:** ⌘⌥N a recall window, run a different find in each. Each window's
+  bar, count and **force-expanded rows** must be independent — a find in one must not expand rows in the
+  other. Then check Edit ▸ Find acts on whichever window has focus.
+- **The three shipped `scrollTo(UUID)` landings still work** (they share the pane with the new
+  `.id(FindAnchor)` sites): a Spotlight loose-end tap, a `pensieve://looseend/<uuid>` deep link, and an
+  in-app ⌥⌘F result click all still land on and expand the cited row.
+- **Flatten-on-match, deliberately:** ⌘F a word inside a message containing **bold** or a code fence. The
+  matched segment flattens to raw syntax with the phrase highlighted; sibling segments stay Markdown;
+  **closing the bar restores full Markdown everywhere.**
+- **The cited-provenance orange bar still marks the correct message** in all three speaker classes while
+  a find is open.
+- **⌥⌘F muscle memory:** the global field still opens on ⌥⌘F, `Go ▸ Search Everything` reads right, and
+  ⌘F inside the *global* search field still does something sane rather than fighting it.
+- **Edit ▸ Find placement:** the submenu lands in the **Edit** menu (`CommandGroup(after: .textEditing)`),
+  with Find / Find Next / Find Previous correctly enabled and disabled.
+- **German in situ** (`-AppleLanguages '(de)'`), especially the **two interpolated** count strings —
+  `N of M` and the sweep-progress line — plus "Keine Treffer" and the field placeholder.
+- **Diacritic folding in the pane:** typing `losung` must highlight `Lösung` (same rule as the FTS5
+  tokenizer), and `showsLooseEnds` behaviour: on a childless focused strand (loose ends live in the
+  middle column) find must report **no** loose-end matches rather than matches with nowhere to scroll.
