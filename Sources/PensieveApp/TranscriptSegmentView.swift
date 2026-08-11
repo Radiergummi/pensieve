@@ -14,13 +14,22 @@ struct SegmentHighlight {
 /// this file only decides what each segment looks like.
 struct TranscriptSegmentView: View {
   let segment: TranscriptSegment
-  /// Non-nil only while a find is open AND this segment matches. Carried but not yet drawn: painting
-  /// the match means rendering the segment as plain highlighted text instead of Markdown (MarkdownUI
-  /// 2.4.1 exposes no way to style a substring inside a rendered block — its AST types are internal),
-  /// and that trade-off — visible raw syntax until the bar closes — is its own change.
+  /// Non-nil only while a find is open AND this segment matches. When set, the segment renders as
+  /// plain highlighted text instead of Markdown: MarkdownUI 2.4.1 exposes no way to style a
+  /// substring inside a rendered block (its AST types are internal), so this is the only way to
+  /// highlight the phrase in place. The cost is visible raw syntax until the find bar closes.
   var highlight: SegmentHighlight?
 
   var body: some View {
+    if let highlight {
+      HighlightedText(runs: highlight.runs, currentOffset: highlight.currentOffset)
+        .transcriptPlainTextProse()
+    } else {
+      unhighlighted
+    }
+  }
+
+  @ViewBuilder private var unhighlighted: some View {
     switch segment {
     case .markdown(let text):
       Markdown(text).transcriptProse()
@@ -131,6 +140,18 @@ extension HarnessKind {
 }
 
 extension View {
+  /// The body-text half of `transcriptProse()`'s type scale (font 14 / line-spacing 4), for content
+  /// that isn't a MarkdownUI `Markdown` view. `transcriptProse()`'s font/heading sizing goes through
+  /// `.markdownTextStyle`/`.markdownBlockStyle`, which only set the `Theme` environment key that
+  /// `Markdown` itself reads — a plain `Text` (e.g. a flattened, highlighted find match) never
+  /// consults it, so it would silently render at the default system body size instead of matching
+  /// its Markdown siblings. This applies the same two values via native SwiftUI modifiers instead.
+  func transcriptPlainTextProse() -> some View {
+    self
+      .font(.system(size: 14))
+      .lineSpacing(4)
+  }
+
   /// The transcript type scale: h1 22 · h2 18 · h3 16 · h4-h6 15/14/14 semibold · body 14/ls 4.
   /// MarkdownUI's defaults put h1 near 28pt against 14pt body, which reads as shouting in a
   /// chat transcript. Each heading override keeps `Theme.basic`'s margin (`BlockSequence` derives
