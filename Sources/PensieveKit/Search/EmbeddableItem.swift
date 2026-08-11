@@ -4,8 +4,9 @@ import SQLiteData
 public struct EmbeddableItem: Sendable {
   public let itemID: String, kind: String, nodeID: String, state: String, text: String
   /// Newline-joined changed-file paths. Events only; "" everywhere else. Indexed into the FTS5
-  /// search index's SEPARATE `document_files` table, never beside the text — the SEMANTIC path
-  /// ignores this field entirely, because file paths must not enter embedded text.
+  /// search index's SEPARATE `document_files` table, never beside the text: FTS5 normalises `bm25()`
+  /// by the row's TOTAL token count across all columns, so paths sharing a row with text would
+  /// discount every commit's text matches. Measured — see the spec's verification gate.
   public let files: String
   public init(itemID: String, kind: String, nodeID: String, state: String, text: String,
               files: String = "") {
@@ -13,8 +14,10 @@ public struct EmbeddableItem: Sendable {
     self.state = state; self.text = text; self.files = files
   }
   /// Stable across processes/runs (String.hashValue is per-process salted — do NOT use it here).
-  /// Hashes `text` ONLY: `files` is deliberately excluded so adding path indexing does not
-  /// invalidate every embedding. The search index tracks paths through its own corpus hash.
+  /// Hashes `text` ONLY. `files` is excluded so that a change to path indexing does not invalidate
+  /// every item's content hash; `SearchIndexer.corpusHash` folds `files` in separately, so a
+  /// paths-only change is still noticed. (Historically this split existed to avoid re-embedding on
+  /// the retired vector path; the reason is now purely about what the FTS5 rebuild guard tracks.)
   public var contentHash: String {
     var hash = StableHash()
     hash.absorb(text)
@@ -22,14 +25,14 @@ public struct EmbeddableItem: Sendable {
   }
 }
 
-/// v1 producer of the semantic corpus: active AND archived nodes + their open loose ends +
+/// v1 producer of the search corpus: active AND archived nodes + their open loose ends +
 /// their enriched events, each tagged with its owning node's state (the query layer scopes on it).
 /// `muted` is never indexed. The seam future producers (transcript chunks, etc.) extend.
 /// Event hygiene (spec P1): `git.checkout` events are dropped (no work content), and identical
 /// event texts within a node are de-duplicated, keeping the earliest by (occurredAt, id).
 public enum EmbeddableCorpus {
-  /// Degenerate LLM output ("[]", "/", stray punctuation) is not searchable content — it embeds to
-  /// noise and renders as an empty-looking "Related" row. Applies ONLY to model-generated text;
+  /// Degenerate LLM output ("[]", "/", stray punctuation) is not searchable content — it tokenises
+  /// to noise and renders as an empty-looking result row. Applies ONLY to model-generated text;
   /// human-authored text (a git commit subject) is legitimately short. Kept as a second line of
   /// defense: `SessionSummarizer` now refuses to store such output in the first place, but the
   /// store already holds historical rows written before that guard existed.
