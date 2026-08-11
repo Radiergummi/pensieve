@@ -47,3 +47,27 @@ import SQLiteData
   let cards = try BriefingQueries.cards(database, since: Date.distantPast, now: Date())
   #expect(cards.isEmpty)
 }
+
+@Test func briefingCardCarriesTheLatestEventTimestamp() throws {
+  let database = try openCanonicalDatabase(at: tempURL("briefing-timestamp"))
+  let resolver = ProjectResolver(database: database)
+  let (testNode, testNodeSource) = try resolver.resolve(path: "/p/brief-stamp", kind: SourceKind.claudeCode)
+  let older = Calendar.current.date(byAdding: .day, value: -6, to: Date())!
+  let newest = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+  try database.write { database in
+    try Event.insert {
+      Event(nodeID: testNode.id, sourceID: testNodeSource.id, occurredAt: older,
+            kind: CaptureKind.ccSession, summary: "old", detailJSON: "{}", fingerprint: "bt1")
+    }.execute(database)
+    try Event.insert {
+      Event(nodeID: testNode.id, sourceID: testNodeSource.id, occurredAt: newest,
+            kind: CaptureKind.gitCommit, summary: "new", detailJSON: "{}", fingerprint: "bt2")
+    }.execute(database)
+  }
+  let since = Calendar.current.date(byAdding: .day, value: -3, to: Date())!
+  let cards = try BriefingQueries.cards(database, since: since, now: Date())
+  let card = try #require(cards.first { $0.node.id == testNode.id })
+  #expect(abs(card.lastActivityAt.timeIntervalSince(newest)) < 0.001)
+  #expect(card.movedSince == 1)      // only the newest event is after `since`
+  #expect(card.daysDormant == 1)     // unchanged
+}
