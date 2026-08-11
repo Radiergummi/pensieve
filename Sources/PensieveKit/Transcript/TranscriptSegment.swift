@@ -145,7 +145,13 @@ extension TranscriptSegment {
     case .markdown(let text):
       return text.isEmpty ? nil : text
     case .callout(let callout):
-      // The tagName renders as chrome beside a localized severity label, not as prose.
+      // tagName IS on screen — CalloutView renders it unconditionally — so this is not a chrome
+      // exclusion. It's excluded because it's a structural marker repeated across many callouts
+      // in a node (searching "IMPORTANT" would hit every EXTREMELY-IMPORTANT envelope as noise),
+      // and it renders in the callout's chrome row, not its body: indexing it without also
+      // teaching the renderer to highlight that row would be a counted match with no highlight
+      // and no scroll target. Known, deliberate limitation — do not restore it without solving
+      // that.
       return callout.body.isEmpty ? nil : callout.body
     case .harness(let block):
       guard let body = block.kind.displayBody, !body.isEmpty else { return nil }
