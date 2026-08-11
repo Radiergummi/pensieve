@@ -3,8 +3,8 @@ import Foundation
 import SQLiteData
 @testable import PensieveKit
 
-/// `EmbeddableCorpus.gather`'s event hygiene rules (spec P1) — split into its own file to keep
-/// `SemanticIndexerTests.swift` under the file-length limit.
+/// `EmbeddableCorpus.gather`'s event hygiene rules (spec P1) — in their own file to stay under the
+/// file-length limit. The corpus they cover is the one BM25 searches.
 @Suite struct EmbeddableCorpusHygieneTests {
   @Test func gatherSkipsCheckoutEvents() async throws {
     let database = try openCanonicalDatabase(at: tempURL("gather-checkout"))

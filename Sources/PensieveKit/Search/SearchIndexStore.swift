@@ -9,12 +9,12 @@ public struct SearchIndexHit: Sendable {
   public let itemID: String, kind: String, nodeID: String, score: Double
 }
 
-/// A small, disposable, device-local FTS5 index over the same corpus the semantic index uses
+/// A small, disposable, device-local FTS5 index over the corpus `EmbeddableCorpus.gather` produces
 /// (shared across app / CLI / daemon / MCP). Deliberately NOT the canonical store — losing the
 /// file costs only a rebuild, which is milliseconds for the whole corpus.
 ///
-/// FTS5 is reached through raw SQL: it ships in the system SQLite (verified on 3.51.0), so unlike
-/// sqlite-vec it needs no vendored C target and no per-connection registration. GRDB's Swift-level
+/// FTS5 is reached through raw SQL: it ships in the system SQLite (verified on 3.51.0), so it needs
+/// no vendored C target and no per-connection extension registration. GRDB's Swift-level
 /// FTS5 API is conditionally compiled and deliberately unused.
 public struct SearchIndexStore: Sendable {
   private static let schemaVersion = 2
