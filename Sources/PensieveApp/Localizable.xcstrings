@@ -337,6 +337,23 @@
         }
       }
     },
+    "%lld open" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld offen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld open"
+          }
+        }
+      }
+    },
     "%lld Projects" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1528,6 +1545,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Neuer Knoten"
+          }
+        }
+      }
+    },
+    "no activity captured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "noch nichts erfasst"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "no activity captured"
           }
         }
       }

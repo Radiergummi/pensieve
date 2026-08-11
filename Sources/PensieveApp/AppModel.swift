@@ -27,6 +27,10 @@ final class AppModel {
   var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   var briefingCards: [BriefingCard] = []
+  /// Recency + open-count per node, for list rows and the detail header. Refreshed with everything
+  /// else in `refresh()` rather than per view, so one batched query serves every surface. Tracked by
+  /// `@Observable` on purpose — view bodies read it.
+  var nodeRowFacts: [UUID: NodeRowFacts] = [:]
   /// Count of open, unlabeled, machine-suggested loose ends — the "Review Suggestions" badge.
   var reviewCount = 0
   /// Set by the AppDelegate when an external `pensieve://` URL is opened; observed by the
@@ -268,6 +272,7 @@ final class AppModel {
     if let raw = try? BriefingQueries.cards(database, since: briefingSince, now: now) {
       briefingCards = activeFocusContext.isEmpty ? raw : raw.filter { visible.contains($0.node.id) }
     }
+    if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
     if nodesChanged || activeFocusContext != lastForestContext {
       let source = activeFocusContext.isEmpty ? allNodes : allNodes.filter { visible.contains($0.id) }
       forest = NodeForest.build(source.filter { $0.state == .active })
