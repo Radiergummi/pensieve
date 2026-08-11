@@ -19,13 +19,31 @@ public enum PensievePaths {
   /// The disposable, device-local, never-synced semantic index (shared across app / CLI / daemon /
   /// MCP). Losing it costs only a re-index. Drop-and-rebuilt on embedder-version change.
   public static func semanticIndexURL() -> URL {
-    supportDirectory().appendingPathComponent("semantic-index.sqlite")
+    indexURL(named: "semantic-index.sqlite")
   }
   /// The disposable, device-local, never-synced FTS5 search index (shared across app / CLI /
   /// daemon / MCP). Separate from the semantic index on purpose: that one drops and rebuilds its
   /// whole database on an embedder-version change, which has nothing to do with search.
   public static func searchIndexURL() -> URL {
-    supportDirectory().appendingPathComponent("search-index.sqlite")
+    indexURL(named: "search-index.sqlite")
+  }
+  /// An index belongs to the store it was built from, so it MUST follow `PENSIEVE_DB` wherever
+  /// `openCanonical()` does. Without this, the project's own verification recipes — `PENSIEVE_DB=/tmp/x
+  /// pensieve sync`, and the app smoke-launch — point at a throwaway store, find the real index's
+  /// corpus hash stale against it, and `DELETE FROM documents` on the developer's LIVE index. The
+  /// data is disposable, but until the next real sync every surface reports `index_state: ready` over
+  /// an empty index: a silent, total retrieval outage after a routine test run.
+  ///
+  /// With no override the path is unchanged, so existing indexes are not orphaned. Under one, the
+  /// index becomes a sibling of the overridden store prefixed by its name, so two throwaway stores
+  /// in the same directory cannot collide on one index.
+  private static func indexURL(named name: String) -> URL {
+    guard let override = ProcessInfo.processInfo.environment["PENSIEVE_DB"] else {
+      return supportDirectory().appendingPathComponent(name)
+    }
+    let store = URL(fileURLWithPath: override)
+    let prefix = store.deletingPathExtension().lastPathComponent
+    return store.deletingLastPathComponent().appendingPathComponent("\(prefix)-\(name)")
   }
   /// Working directory pinned onto Pensieve's own `claude -p` subprocesses. Inert and empty by
   /// design: the child would otherwise inherit our cwd (`/` under launchd), producing a captured

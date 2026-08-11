@@ -217,6 +217,7 @@ final class AppModel {
   private func refreshFromWatch() async {
     AppLog.app.debug("Canonical watcher fired -> refresh")
     refresh()
+    syncSearchIndexes()   // work just drained must become findable without waiting for ⌘R
     await reindexSpotlight()
   }
 

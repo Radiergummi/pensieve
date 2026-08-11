@@ -69,21 +69,28 @@ public enum SemanticQueries {
                                 query: String, _ database: any DatabaseReader) -> [SearchHit] {
     let resolver = SearchHitResolver(includeArchived: scope.includeArchived,
                                      highlight: { SnippetMaker.make(from: $0, matching: query) })
-    return (try? database.read { database in
-      var hits: [SearchHit] = []
-      for result in raw {
-        guard result.similarity >= scope.floor,
-              let kind = SearchHit.Kind(rawValue: result.kind),
-              let nodeID = UUID(uuidString: result.nodeID),
-              scope.visibleNodeIDs.contains(nodeID) else { continue }
-        guard let itemID = UUID(uuidString: result.itemID),
-              !scope.excludingIDs.contains(itemID) else { continue }
-        guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: result.similarity,
-                                              database) else { continue }
-        hits.append(hit)
-        if hits.count == scope.limit { break }
+    // Logged, not silent, for the same reason as the exact path: this catch is a failure to OPEN a
+    // canonical read, which is an app-wide condition rather than an absence of results.
+    do {
+      return try database.read { database in
+        var hits: [SearchHit] = []
+        for result in raw {
+          guard result.similarity >= scope.floor,
+                let kind = SearchHit.Kind(rawValue: result.kind),
+                let nodeID = UUID(uuidString: result.nodeID),
+                scope.visibleNodeIDs.contains(nodeID) else { continue }
+          guard let itemID = UUID(uuidString: result.itemID),
+                !scope.excludingIDs.contains(itemID) else { continue }
+          guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: result.similarity,
+                                                database) else { continue }
+          hits.append(hit)
+          if hits.count == scope.limit { break }
+        }
+        return hits
       }
-      return hits
-    }) ?? []
+    } catch {
+      Log.semantic.error("SemanticQueries: canonical read failed: \(error, privacy: .public)")
+      return []
+    }
   }
 }

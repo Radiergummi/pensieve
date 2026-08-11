@@ -3,22 +3,38 @@ import Foundation
 import PensieveKit
 
 extension AppModel {
-  /// Index catch-up on the launch + ⌘R cadence (the sync daemon also runs both periodically).
+  /// Index catch-up. Runs on launch + ⌘R **and** on every watch-driven refresh — the search index
+  /// backs the only retrieval path, so anything the app just drained has to become findable without
+  /// waiting for ⌘R or the 300 s agent, which the user may not even have approved.
   ///
-  /// The search index backs the ONLY retrieval path, so it is ungated and run inline rather than
-  /// detached: a whole rebuild is milliseconds of pure SQL with no model to load, and doing it here
-  /// is what makes the search field usable the moment it accepts input on a first launch. The
-  /// vector index stays best-effort, detached and toggle-gated — it loads an NL asset and embeds,
-  /// which is far too slow for the UI path.
+  /// Detached, despite being "just SQL": `gather` reads every node, loose end and event (decoding a
+  /// JSON blob per event) and the rebuild re-tokenizes the whole corpus, which grows with the corpus
+  /// and is the one full-store read that would otherwise sit on the main actor. The store also has a
+  /// 5 s busy timeout because the daemon writes the same file, so a rebuild racing the agent could
+  /// block the main thread for seconds — exactly when overlap is likeliest. Both indexes are
+  /// hash-guarded, so an unchanged corpus costs one gather and one hash.
+  ///
+  /// The state assignment and the search re-run hop back to the main actor afterwards, so a search
+  /// typed before the rebuild lands is re-run against the finished index rather than the stale one.
   func syncSearchIndexes() {
     guard let database else { return }
-    SearchIndexer(store: searchStore).sync(database)
-    searchIndexState = searchStore.state()
-
-    if AppDefaults.semanticSearchEnabled {
-      let store = semanticStore, embedder = self.embedder
-      Task.detached { await SemanticIndexer(store: store, embedder: embedder).sync(database) }
+    let searchStore = self.searchStore
+    let semanticEnabled = AppDefaults.semanticSearchEnabled
+    let semanticStore = self.semanticStore, embedder = self.embedder
+    Task.detached { [weak self] in
+      SearchIndexer(store: searchStore).sync(database)
+      if semanticEnabled {
+        await SemanticIndexer(store: semanticStore, embedder: embedder).sync(database)
+      }
+      await MainActor.run { self?.searchIndexesDidSync(state: searchStore.state()) }
     }
+  }
+
+  /// Back on the main actor with a rebuilt index: publish its state, and re-rank whatever the user
+  /// has already typed so results never reflect an index that has since changed underneath them.
+  private func searchIndexesDidSync(state: SearchIndexState) {
+    searchIndexState = state
+    if isSearching { runSearch() }
   }
 
   /// The keystroke entry point (from the .searchable field). Coalesces rapid typing into one

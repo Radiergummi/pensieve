@@ -5,8 +5,9 @@ import SQLiteData
 ///
 /// Unlike `SemanticIndexer` there is no reconciliation: embedding is expensive, FTS5 insertion is
 /// not, so a full drop-and-reinsert is both simpler and free of staleness bugs. The guard exists
-/// because the app calls this on every debounced refresh — that is every WAL change, including the
-/// daemon's — and an unchanged corpus should not churn the file.
+/// because the app calls this on every refresh that could have changed the corpus — launch, ⌘R, and
+/// every debounced watch refresh, which includes the WAL changes the external daemon makes — and an
+/// unchanged corpus should not churn the file.
 ///
 /// Best-effort throughout: an unavailable store no-ops, a gather failure no-ops, and neither ever
 /// blocks capture or ingest.
@@ -14,9 +15,9 @@ public struct SearchIndexer: Sendable {
   let store: SearchIndexStore
   public init(store: SearchIndexStore) { self.store = store }
 
-  /// The indexer over the real shared index. `SyncRunner` deliberately has no fallback to this —
-  /// a test that constructed one would overwrite the developer's live index with its fixture
-  /// corpus — so every production entry point injects it, and this is the one place that spells it.
+  /// The indexer over the shared index for the store this process is pointed at. `SyncRunner`
+  /// deliberately has no fallback to this — a test that constructed one would rebuild an index it
+  /// never asked for — so every production entry point injects it explicitly.
   public static func production() -> SearchIndexer {
     SearchIndexer(store: SearchIndexStore(url: PensievePaths.searchIndexURL()))
   }
@@ -25,7 +26,11 @@ public struct SearchIndexer: Sendable {
     guard store.isAvailable else { return }
     guard let corpus = try? EmbeddableCorpus.gather(database) else { return }
     let hash = Self.corpusHash(corpus)
-    guard hash != store.storedCorpusHash() else { return }
+    // `.building` also forces a rebuild: the flag is committed in its own transaction before the
+    // rebuild's, so a kill in that window leaves it latched with the corpus hash unchanged. Guarding
+    // on the hash alone would then skip the rebuild forever, and every empty search would claim to
+    // be "building" over an index that was actually fine.
+    guard hash != store.storedCorpusHash() || store.state() == .building else { return }
     store.rebuild(items: corpus, corpusHash: hash)
   }
 

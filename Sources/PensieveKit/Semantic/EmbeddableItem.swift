@@ -86,8 +86,13 @@ public enum EmbeddableCorpus {
   /// The ingester writes {"hash","branch","files"} for a commit, with `files` newline-joined.
   /// Anything else (a session's detail, malformed JSON, an absent key) yields "".
   static func changedFiles(in detailJSON: String) -> String {
-    let detail = (try? JSONDecoder().decode([String: String].self,
-                                            from: Data(detailJSON.utf8))) ?? [:]
-    return detail["files"] ?? ""
+    (try? JSONDecoder().decode(CommitDetail.self, from: Data(detailJSON.utf8)))?.files ?? ""
   }
+
+  /// Only the one key this needs, so a detail payload that grows an unrelated field of ANY type —
+  /// `"additions": 12`, a nested object — keeps decoding. Decoding the whole object as
+  /// `[String: String]` would fail wholesale on the first non-string value and silently drop `files`
+  /// from every commit, with nothing failing except path search itself. `Ingester` happens to emit a
+  /// homogeneous string dictionary today, but nothing makes it keep doing so: `encodeJSON` is generic.
+  private struct CommitDetail: Decodable { let files: String? }
 }

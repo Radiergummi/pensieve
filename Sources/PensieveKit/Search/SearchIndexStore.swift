@@ -218,13 +218,22 @@ public struct SearchIndexStore: Sendable {
     return "\(alias)state IN (\(allowed.map { "'\($0.rawValue)'" }.joined(separator: ",")))"
   }
 
+  /// Logs rather than swallowing silently: every plausible regression in this file — a shape routed
+  /// to the wrong table, a `files :` clause reaching the text table (a hard `no such column`), schema
+  /// drift — surfaces as a hard SQLite error, and without this line it would be indistinguishable
+  /// from "nothing matched" while `state()` still reported `.ready`.
   private func fetch(sql: String, arguments: StatementArguments) -> [SearchIndexHit] {
     guard let database else { return [] }
-    return (try? database.read { database in
-      try Row.fetchAll(database, sql: sql, arguments: arguments).map { row in
-        SearchIndexHit(itemID: row["item_id"], kind: row["kind"], nodeID: row["node_id"],
-                       score: row["score"])
+    do {
+      return try database.read { database in
+        try Row.fetchAll(database, sql: sql, arguments: arguments).map { row in
+          SearchIndexHit(itemID: row["item_id"], kind: row["kind"], nodeID: row["node_id"],
+                         score: row["score"])
+        }
       }
-    }) ?? []
+    } catch {
+      Log.search.error("SearchIndexStore: query failed: \(error, privacy: .public)")
+      return []
+    }
   }
 }

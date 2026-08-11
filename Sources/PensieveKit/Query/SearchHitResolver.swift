@@ -46,9 +46,9 @@ struct SearchHitResolver {
     case .node:
       guard let node = try Node.where({ $0.id.eq(itemID) }).fetchOne(database),
             eligible(node) else { return nil }
-      let body = node.description.isEmpty ? node.name : node.description
       return SearchHit(id: node.id, kind: .node, nodeID: node.id, nodeName: node.name,
-                       title: node.name, snippet: highlight(body),
+                       title: node.name,
+                       snippet: snippet(preferring: [node.description, node.name]),
                        score: score, isArchived: node.state == .archived)
     case .looseEnd:
       guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) })
@@ -57,17 +57,40 @@ struct SearchHitResolver {
             eligible(node) else { return nil }
       return SearchHit(id: looseEnd.id, kind: .looseEnd, nodeID: looseEnd.nodeID,
                        nodeName: node.name, title: looseEnd.text,
-                       snippet: highlight(looseEnd.text),
+                       snippet: snippet(preferring: [looseEnd.text, looseEnd.quote]),
                        score: score, isArchived: node.state == .archived)
     case .event:
       guard let event = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),
             let node = try Node.where({ $0.id.eq(event.nodeID) }).fetchOne(database),
             eligible(node) else { return nil }
+      // COUPLED to `EmbeddableCorpus.gather`, which indexes exactly ONE text per event: the
+      // `workSummary` for a `cc.session` (salience-gated), the `summary` otherwise. This picks the
+      // displayed text by emptiness instead, which agrees today only because extraction never sets
+      // `workSummary` on a git commit. Both bodies are offered to the highlighter so the two rules
+      // diverging cannot cost the row its highlight — but if they diverge on WHICH text is shown,
+      // fix it here rather than papering over it.
       let workSummary = event.workSummary ?? ""
       let body = workSummary.isEmpty ? event.summary : workSummary
       return SearchHit(id: event.id, kind: .event, nodeID: event.nodeID, nodeName: node.name,
-                       title: body, snippet: highlight(body),
+                       title: body,
+                       snippet: snippet(preferring: [body, event.summary]),
                        score: score, isArchived: node.state == .archived)
     }
+  }
+
+  /// The snippet for the first candidate body that actually contains the query, falling back to the
+  /// first non-empty candidate.
+  ///
+  /// Load-bearing because the index concatenates the fields it searches — a loose end is indexed as
+  /// `text — quote`, a node as `name — description` — so a hit can legitimately match in a field the
+  /// row does not lead with. Highlighting only one field then produced a correct hit with NO visible
+  /// reason for being in the results, which is what the substring matcher this replaced avoided by
+  /// tracking a matched field. Worst on loose ends, where the snippet is the row's entire content.
+  private func snippet(preferring candidates: [String]) -> Snippet {
+    for candidate in candidates where !candidate.isEmpty {
+      let snippet = highlight(candidate)
+      if !snippet.match.isEmpty { return snippet }
+    }
+    return highlight(candidates.first { !$0.isEmpty } ?? "")
   }
 }

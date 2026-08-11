@@ -98,20 +98,28 @@ public enum SearchQueries {
                                 scope: SearchScope, _ database: any DatabaseReader) -> [SearchHit] {
     let resolver = SearchHitResolver(includeArchived: scope.includeArchived,
                                      highlight: { SnippetMaker.make(from: $0, matchingAny: terms) })
-    return (try? database.read { database in
-      var hits: [SearchHit] = []
-      for candidate in candidates {
-        guard let kind = SearchHit.Kind(rawValue: candidate.kind),
-              let nodeID = UUID(uuidString: candidate.nodeID),
-              scope.visibleNodeIDs.contains(nodeID) else { continue }
-        guard let itemID = UUID(uuidString: candidate.itemID),
-              !scope.excludingIDs.contains(itemID) else { continue }
-        guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: candidate.score,
-                                              database) else { continue }
-        hits.append(hit)
-        if hits.count == scope.limit { break }
+    // A failure here is failing to OPEN a canonical read — an app-wide condition, not a search
+    // result — so it degrades to empty like every other read, but it is logged rather than mistaken
+    // for "nothing matched". Per-candidate resolve failures stay silent and skip individually.
+    do {
+      return try database.read { database in
+        var hits: [SearchHit] = []
+        for candidate in candidates {
+          guard let kind = SearchHit.Kind(rawValue: candidate.kind),
+                let nodeID = UUID(uuidString: candidate.nodeID),
+                scope.visibleNodeIDs.contains(nodeID) else { continue }
+          guard let itemID = UUID(uuidString: candidate.itemID),
+                !scope.excludingIDs.contains(itemID) else { continue }
+          guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: candidate.score,
+                                                database) else { continue }
+          hits.append(hit)
+          if hits.count == scope.limit { break }
+        }
+        return hits
       }
-      return hits
-    }) ?? []
+    } catch {
+      Log.search.error("SearchQueries: canonical read failed: \(error, privacy: .public)")
+      return []
+    }
   }
 }

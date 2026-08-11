@@ -64,15 +64,21 @@ struct Mcp: AsyncParsableCommand {
            annotations: .init(readOnlyHint: true, openWorldHint: false)),
       Tool(name: "search",
            description: "Find across all your work — by keyword, by phrase, or by the files a commit touched. "
-             + "Every result is a real, cited item.",
+             + "Every result is a real, cited item. `items` is ALREADY in relevance order: read it "
+             + "top-down and do not re-sort or threshold it by `score`, which is not comparable "
+             + "between items. `index_state` distinguishes an unbuilt index from a genuine miss.",
            inputSchema: .object(["type": .string("object"), "properties": .object([
-             "query": .object(["type": .string("string"), "description": .string("what to find")]),
+             "query": .object(["type": .string("string"),
+                               "description": .string("what to find; may be empty when `file` is given")]),
              "file": .object(["type": .string("string"),
-                              "description": .string("restrict to work that touched this file path (or any part of one)")]),
-             "limit": .object(["type": .string("number"), "description": .string("max results (default 8)")]),
+                              "description": .string("NARROWS to work that touched this file path (or any part of "
+                                + "one) — combined with `query` it means both must match. To find everything that "
+                                + "touched a file, pass the filename as `query` on its own.")]),
+             "limit": .object(["type": .string("number"), "minimum": .int(1),
+                               "description": .string("max results (default 8)")]),
              "include_archived": .object(["type": .string("boolean"),
                                           "description": .string("also search archived projects (default false)")]),
-           ]), "required": .array([.string("query")])]),
+           ]), "required": .array([])]),
            annotations: .init(readOnlyHint: true, openWorldHint: false)),
     ]
   }
@@ -123,11 +129,17 @@ struct Mcp: AsyncParsableCommand {
   }
 
   private static func handleSearch(params: CallTool.Parameters) async throws -> CallTool.Result {
-    guard let query = params.arguments?["query"]?.stringValue, !query.isEmpty else {
-      return .init(content: [.text(text: "search requires a non-empty query", annotations: nil, _meta: nil)], isError: true)
-    }
+    let query = params.arguments?["query"]?.stringValue ?? ""
     let file = params.arguments?["file"]?.stringValue
-    let limit = params.arguments?["limit"]?.intValue ?? 8
+    // Either half alone is a real query — a bare `file` means "everything that touched this path",
+    // which previously needed a dummy `query` to reach the path-only shape.
+    guard !query.isEmpty || !(file ?? "").isEmpty else {
+      return .init(content: [.text(text: "search requires a query or a file", annotations: nil, _meta: nil)],
+                   isError: true)
+    }
+    // Clamped, not trusted: `prefix` traps on a negative length, which would take the whole server
+    // down mid-session over one malformed argument.
+    let limit = max(1, params.arguments?["limit"]?.intValue ?? 8)
     let includeArchived = params.arguments?["include_archived"]?.boolValue ?? false
     let json = try await PensieveMCP.searchJSON(query: query, file: file, limit: limit,
                                                 includeArchived: includeArchived)
@@ -291,6 +303,12 @@ private struct SearchItem: Encodable {
   var snippet: String
   /// Ranking score in the PRODUCING engine's units — a BM25 score and a cosine similarity are
   /// never comparable, which is what `engine` is here to make explicit.
+  ///
+  /// It is not reliably comparable WITHIN an engine either: bm25 hits found by path come from a
+  /// different FTS5 table with a different average document length than text hits, and can score
+  /// higher while being less relevant. Array order is the contract — re-sorting by `score` would
+  /// reconstruct exactly the ranking the verification gate rejected on measured evidence. Reported
+  /// because it is informative, and the tool description tells the caller not to rank on it.
   var score: Double?
   var engine: String
   var archived: Bool

@@ -25,11 +25,55 @@ import SQLiteData
     return event
   }
 
-  @Test func shortCircuitsBelowMinLength() throws {
+  /// Over a corpus that WOULD match, and with the node visible — the previous version searched an
+  /// empty database with an empty visible set, so deleting the guard entirely left it green.
+  @Test func shortCircuitsBelowMinLength() async throws {
     let database = try openCanonicalDatabase(at: tempURL("searchq-short"))
+    let node = Node(name: "Alpha", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
     let store = indexed(database)
-    #expect(SearchQueries.search(query: "a", scope: SearchScope(visibleNodeIDs: []),
-                                 store: store, database).isEmpty)
+    let scope = SearchScope(visibleNodeIDs: [node.id])
+    #expect(SearchQueries.search(query: "A", scope: scope, store: store, database).isEmpty)
+    // The same corpus and the same prefix, one character longer: proves the emptiness above came
+    // from the length guard and not from the query failing to match anything.
+    #expect(!SearchQueries.search(query: "Al", scope: scope, store: store, database).isEmpty)
+  }
+
+  /// A path directive typed INTO the query string, rather than passed as the structured `file`
+  /// parameter — the only route into `.textRestrictedByPath` that had no test.
+  @Test func rawFilesDirectiveCombinedWithTextRestrictsToBoth() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-rawfiles"))
+    let node = Node(name: "Retrieval", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let wanted = try makeEvent(database, node: node, summary: "refactor the tokenizer",
+                               files: "Sources/Lexer.swift")
+    _ = try makeEvent(database, node: node, summary: "refactor the resolver",
+                      files: "Sources/Other.swift")
+    _ = try makeEvent(database, node: node, summary: "unrelated work", files: "Sources/Lexer.swift")
+    let store = indexed(database)
+    let hits = SearchQueries.search(query: "refactor tokenizer files:Lexer.swift ",
+                                    scope: SearchScope(visibleNodeIDs: [node.id]), store: store,
+                                    database)
+    #expect(hits.map(\.id) == [wanted.id])
+  }
+
+  /// The matched field drives the snippet: a loose end whose query terms appear only in its cited
+  /// quote must still show WHY it is in the results. Highlighting `text` alone returned a correct hit
+  /// with an empty highlight, which in the UI is a row with no visible reason for being there.
+  @Test func aQuoteOnlyMatchIsHighlightedInTheQuote() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("searchq-quotefield"))
+    let node = Node(name: "Retrieval", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let event = try makeEvent(database, node: node, summary: "groundwork")
+    let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id,
+                            text: "Decide the ranking approach",
+                            quote: "we should try sqlite-vec for this")
+    try await database.write { database in try LooseEnd.insert { looseEnd }.execute(database) }
+    let store = indexed(database)
+    let hits = SearchQueries.search(query: "sqlite-vec ", scope: SearchScope(visibleNodeIDs: [node.id]),
+                                    store: store, database)
+    #expect(hits.map(\.id) == [looseEnd.id])
+    #expect(hits.first?.snippet.match.lowercased() == "sqlite-vec")
   }
 
   @Test func findsANodeByName() async throws {

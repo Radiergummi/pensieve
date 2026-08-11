@@ -125,13 +125,26 @@ import Foundation
                          includeArchived: false).map(\.itemID) == ["a"])
   }
 
-  @Test func hostileInputReturnsEmptyRatherThanThrowing() {
+  /// Asserts POSITIVE hits, not just "no crash". `search` cannot throw — `fetch` degrades a hard
+  /// SQLite error to `[]` — so an all-`isEmpty` version of this test passed identically whether the
+  /// operator characters were neutralised or blew the MATCH expression apart, which made the one test
+  /// named for the injection surface unable to see a regression in it.
+  @Test func hostileInputIsMatchedLiterallyRatherThanAsOperators() {
     let store = tempSearchStore()
-    store.rebuild(items: [item("a", "ordinary text")], corpusHash: "h")
-    for raw in ["don't ", "C++ ", "a:b ", "\"unbalanced", "* ", "+++ "] {
-      guard let query = FTSQueryBuilder.build(raw) else { continue }
-      #expect(store.search(query, limit: 10, includeArchived: false).isEmpty)
+    store.rebuild(items: [item("a", "don't C++ a:b ordinary text")], corpusHash: "h")
+    for raw in ["don't ", "C++ ", "a:b "] {
+      let query = try! #require(FTSQueryBuilder.build(raw))
+      #expect(store.search(query, limit: 10, includeArchived: false).map(\.itemID) == ["a"],
+              "\(raw) should match the document containing it literally")
     }
+    // Pure-operator input tokenizes to nothing, so it matches nothing — but must not error, and must
+    // not leave the index unusable for the next real query.
+    for raw in ["\"unbalanced", "* ", "+++ "] {
+      guard let query = FTSQueryBuilder.build(raw) else { continue }
+      _ = store.search(query, limit: 10, includeArchived: false)
+    }
+    #expect(store.search(FTSQueryBuilder.build("ordinary ")!, limit: 10,
+                         includeArchived: false).map(\.itemID) == ["a"])
   }
 
   @Test func limitCapsResults() {

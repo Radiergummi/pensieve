@@ -70,12 +70,21 @@ import Testing
   #expect(snippet.match == "brown")
 }
 
-/// The regression this pins: the eligibility test used to be diacritic-insensitive while the
-/// highlighting search was not, so a term matching ONLY under the looser comparison was chosen and
-/// then found nothing — swallowing the highlight a later, genuinely matching term would have made.
-@Test func matchingAnyDoesNotLetADiacriticOnlyMatchSwallowTheHighlight() {
+/// The FTS5 index folds diacritics (`remove_diacritics 2`), so `losung` really does retrieve
+/// `Lösung` — the highlighter must fold too, or a genuine hit renders with nothing highlighted.
+/// The ORIGINAL spelling is what gets displayed.
+@Test func snippetMatchesAcrossFoldedDiacritics() {
+  let snippet = SnippetMaker.make(from: "Lösung finden", matching: "losung")
+  #expect(snippet.match == "Lösung")
+  #expect(snippet.leading + snippet.match + snippet.trailing == "Lösung finden")
+}
+
+/// Same rule reached through the term-list path: `uber` folds onto `über`, so the FIRST term wins
+/// here. Pins the folding, not merely the loop — under a case-only comparison `über` would not match
+/// and the highlight would land on `sync` instead.
+@Test func matchingAnyFoldsDiacriticsWhenPickingTheTerm() {
   let snippet = SnippetMaker.make(from: "über sync agent", matchingAny: ["uber", "sync"])
-  #expect(snippet.match == "sync")
+  #expect(snippet.match == "über")
 }
 
 @Test func matchingAnyWithNoMatchingTermYieldsAHeadWindow() {

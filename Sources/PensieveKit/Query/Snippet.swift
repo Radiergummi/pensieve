@@ -14,11 +14,18 @@ public struct Snippet: Equatable, Sendable {
 }
 
 public enum SnippetMaker {
-  /// Case-insensitive first-occurrence match. Windows each side to `window` characters (adding an
-  /// ellipsis when truncated), so `leading + match + trailing` always equals the shown text and
-  /// `match` is exactly the matched substring. No match → a head window of the source in `leading`.
+  /// First-occurrence match, insensitive to both case AND diacritics. Windows each side to `window`
+  /// characters (adding an ellipsis when truncated), so `leading + match + trailing` always equals the
+  /// shown text and `match` is exactly the matched substring. No match → a head window in `leading`.
+  ///
+  /// Diacritic folding is not a nicety — it matches the retrieval engine. The FTS5 index is built with
+  /// `remove_diacritics 2`, so typing `losung` genuinely retrieves `Lösung`; comparing case-only here
+  /// would hand back a real hit that the view then renders with nothing highlighted. `match` is sliced
+  /// out of `source`, so the ORIGINAL spelling is what gets displayed and the round-trip invariant
+  /// (`leading + match + trailing == source`) is unaffected by the looser comparison.
   public static func make(from source: String, matching query: String, window: Int = 80) -> Snippet {
-    guard let matchRange = source.range(of: query, options: .caseInsensitive) else {
+    guard let matchRange = source.range(of: query,
+                                        options: [.caseInsensitive, .diacriticInsensitive]) else {
       let head = String(source.prefix(window * 2))
       let lead = head.count < source.count ? head + "…" : head
       return Snippet(leading: lead, match: "", trailing: "")
@@ -37,9 +44,10 @@ public enum SnippetMaker {
   /// displayed text keeps coming from the canonical store rather than the index.
   public static func make(from source: String, matchingAny terms: [String],
                           window: Int = 80) -> Snippet {
-    // Keep the first term that actually produced a highlight. Testing for a match first and then
-    // re-running the search would search twice per term AND let the two searches disagree on their
-    // options — a term found under one comparison and missed by the other yielded no highlight.
+    // Keep the first term that actually produced a highlight. Asking "does this term occur" and then
+    // separately "where does it occur" searched twice per term AND let the two answers disagree on
+    // their options, so a term found by the first and missed by the second yielded no highlight at
+    // all — and swallowed the highlight a later, genuinely matching term would have produced.
     for term in terms where !term.isEmpty {
       let snippet = make(from: source, matching: term, window: window)
       if !snippet.match.isEmpty { return snippet }
