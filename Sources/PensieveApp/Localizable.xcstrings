@@ -235,74 +235,6 @@
       "extractionState" : "manual",
       "shouldTranslate" : false
     },
-    "%@ · %@ · %@d ago" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(role)@ · %2$(date)@ · vor %3$(days)@ T"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(role)@ · %2$(date)@ · %3$(days)@d ago"
-          }
-        }
-      }
-    },
-    "%@ open" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(count)@ offen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(count)@ open"
-          }
-        }
-      }
-    },
-    "%@ open · %@d dormant" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(count)@ offen · %2$(days)@T ruhend"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(count)@ open · %2$(days)@d dormant"
-          }
-        }
-      }
-    },
-    "%@ since last visit" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(summary)@ seit letztem Besuch"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(summary)@ since last visit"
-          }
-        }
-      }
-    },
     "%lld loose ends" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -367,6 +299,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld open"
+          }
+        }
+      }
+    },
+    "%lld open · %lldd dormant" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld offen · %2$lldT ruhend"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld open · %2$lldd dormant"
           }
         }
       }
@@ -946,23 +895,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ruhend"
-          }
-        }
-      }
-    },
-    "dormant %@d" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ruhend %1$(days)@T"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dormant %1$(days)@d"
           }
         }
       }
