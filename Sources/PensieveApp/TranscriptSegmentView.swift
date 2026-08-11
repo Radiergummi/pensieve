@@ -116,27 +116,6 @@ extension HarnessKind {
     case .unknown: return String(localized: "Harness")
     }
   }
-
-  /// Content — verbatim, never localized. nil when the label alone says everything.
-  var displayBody: String? {
-    switch self {
-    case .command(let name, let message, let args):
-      return [name, message, args].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — ")
-    case .taskNotification(let taskNotification):
-      return [taskNotification.summary, taskNotification.status].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-    case .systemReminder(let segment), .commandCaveat(let segment), .commandOutput(let segment),
-         .toolUses(let segment), .toolUseError(let segment):
-      return segment
-    case .bashIO(let input, let output):
-      return [input, output].compactMap { $0 }.joined(separator: "\n")
-    case .skillPreamble(let path):
-      return path
-    case .interrupted:
-      return nil
-    case .unknown(_, let body):
-      return body
-    }
-  }
 }
 
 extension View {
