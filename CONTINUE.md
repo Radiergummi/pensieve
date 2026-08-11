@@ -6,19 +6,18 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-**576 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
+**539 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
 dogfooded**: capture → ingest → auto-extract runs unattended via the bundled background-sync agent; the
 app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The
 core intelligence gate passed long ago. The hard part is done — remaining work is feature breadth, not
 foundations.
 
-**The retrieval branch is the one thing not on `main`.** `worktree-retrieval-bm25-single-path` (worktree
-at `.claude/worktrees/retrieval-bm25-single-path`) holds the BM25 search engine — 13 plan tasks, both
-Opus reviews done and their whole fix wave applied, 576 tests / SwiftLint `--strict` / `xcodebuild`
-all green. **It is ready to merge**; see THE NEXT ACTION. A second worktree,
-`worktree-retrieval-bm25`, is a **SUPERSEDED** two-path attempt (`TextIndexStore` + `RelatedQueries`) —
-do **not** merge or cherry-pick from it. Its docs commit `826c8a5` falsely claims it merged to `main`;
-delete the branch and worktree once the real one lands.
+**BM25/FTS5 shipped and is the only retrieval path.** `worktree-retrieval-bm25-single-path` merged to
+`main`, and the vector stack it replaced was then deleted outright (see the vector-removal ship below) —
+there is no second engine left to reconcile against. The two `worktree-retrieval-bm25*` worktrees and
+branches are stale leftovers from that work and still exist (`.claude/worktrees/retrieval-bm25` +
+`.claude/worktrees/retrieval-bm25-single-path`, branches `worktree-retrieval-bm25` /
+`worktree-retrieval-bm25-single-path`) — safe to remove.
 
 **⚠️ The installed app is badly stale.** `/Applications/Pensieve.app` was built **2026-07-19** — so the
 running app has no chat transcript rendering, and the bundled `pensieve mcp` (which this and every
@@ -38,9 +37,9 @@ See `backlog.md`, "Semantic relevance floor — CLOSED by removing the engine".
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
-- **Retrieval P1 + P2′ — BM25 replaces the search engine** (2026-08-11, branch
-  `worktree-retrieval-bm25-single-path`, **merge pending**). Closed the inert-floor defect by discarding
-  its diagnosis: a **ranking** failure, not a **scale** failure, so no floor could ever have fixed it.
+- **Retrieval P1 + P2′ — BM25 replaces the search engine** (2026-08-11, merged to `main`). Closed the
+  inert-floor defect by discarding its diagnosis: a **ranking** failure, not a **scale** failure, so no
+  floor could ever have fixed it.
   FTS5 + `bm25()` (`SearchIndexStore`, schema v2, hash-guarded whole rebuild) + a pure `FTSQueryBuilder`
   (**raw input never reaches `MATCH`**) replaced **both** the substring matcher **and** the vector index
   as the default engine; vector is retained, tested, default-**OFF**. **The floor is gone, not retuned**
@@ -134,20 +133,21 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**⚠️ FIRST — merge `remove-vector-search`, then reinstall.** Retrieval P1+P2′ is already on `main`.
-The vector-removal branch is finished and verified (**538 tests** = 576 − 38, SwiftLint `--strict`,
-clean-`.build` `swift build`, `xcodebuild` app+CLI, and the MCP wire shape checked over real stdio:
-no `engine` key, `limit` honoured). Steps:
-1. Merge it, then **remove the stale `.claude/worktrees/retrieval-bm25*` worktrees and their branches**
-   (both superseded). Also pending on its own branch: `fix/bounded-absent-transcript-retry`.
-2. **Rebuild + reinstall to `/Applications`** and re-verify `~/.local/bin/pensieve` is still a symlink.
-   The bundled `pensieve mcp` is what every Claude Code session calls, it is from 2026-08-11 pre-removal,
-   and the `search` wire shape changed (`engine` gone, `limit` no longer doubled).
-3. `defaults delete me.mazetti.pensieve app.semanticSearch` — nothing reads it now.
-   (The orphaned `text-index.sqlite` and `semantic-index.sqlite` are **already gone** from the support
-   dir; nothing to clean there.)
-4. Then walk the **human-verify carries** at the bottom of this file — they need the installed app and
-   the real store, which no agent can do headlessly.
+**Post-merge carry — rebuild + reinstall before doing anything else.** Retrieval P1+P2′ (BM25) and the
+vector-removal that followed it are both on `main`, but `/Applications/Pensieve.app` was last built
+**2026-07-19** — before either. The bundled `pensieve mcp`, which every Claude Code session calls, is
+still advertising the old wire shape: `search` items carry an `engine` key that no longer exists, and
+`limit` doesn't mean `limit` (a `prefix(limit * 2)` over-allocation existed only to fit a second engine's
+results, and that engine is gone). Rebuild + reinstall to `/Applications`, then confirm
+`ls -l ~/.local/bin/pensieve` is still a symlink into `Contents/Helpers/`. Run
+`defaults delete me.mazetti.pensieve app.semanticSearch` — inert now that nothing reads it, but leaving it
+invites a future reader to wonder what does. **Expect the background sync agent to need healing after the
+bundle swap:** a new helper cdhash makes `SMAppService.register()` silently no-op (`EX_CONFIG` /
+"Launch Constraint Violation"). Observed 2026-08-11, and the app's own unregister+register did **not**
+heal it. What worked: quit the app → `launchctl bootout gui/$(id -u)/me.mazetti.pensieve.sync` →
+relaunch → verify `last exit code = 0` and a fresh line in `~/Library/Logs/Pensieve/sync.log`. Then walk
+the **human-verify carries** at the bottom of this file — they need the installed app and the real
+store, which no agent can do headlessly.
 
 **THEN — P3, the paraphrase harness, is the one open retrieval question, and it is blocked on YOU.**
 Both engines fail "find without remembering the words" (`vector` ≈0/8, `bm25` ≈2/8 on short paraphrase
@@ -287,8 +287,6 @@ From the plan's Post-merge carries plus the review fix wave. None of these can b
   "building"/"not built" rather than a bare "no results"?
 - **Index freshness (review fix):** with the app open, make a commit in another window and wait for the
   watcher; the new work should become findable in ⌘F **without** pressing ⌘R.
-- Settings ▸ Intelligence — the vector toggle reads **off** on a machine that never set it; turning it on
-  adds a labelled experimental section below the results.
 - Does the `.searchScopes` bar render under `.sidebar` placement? (Carried from the previous batch;
   fallback = a segmented Picker in the results header, pre-specified in that plan.)
 - German in-situ (`-AppleLanguages '(de)'`) for the new search strings.
