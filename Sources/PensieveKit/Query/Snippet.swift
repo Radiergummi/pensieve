@@ -20,12 +20,14 @@ public enum SnippetMaker {
   ///
   /// Diacritic folding is not a nicety — it matches the retrieval engine. The FTS5 index is built with
   /// `remove_diacritics 2`, so typing `losung` genuinely retrieves `Lösung`; comparing case-only here
-  /// would hand back a real hit that the view then renders with nothing highlighted. `match` is sliced
-  /// out of `source`, so the ORIGINAL spelling is what gets displayed and the round-trip invariant
-  /// (`leading + match + trailing == source`) is unaffected by the looser comparison.
+  /// would hand back a real hit that the view then renders with nothing highlighted. Options come from
+  /// `FindMatcher.options` so this path and in-node find can never disagree about what "matches".
+  /// `match` is sliced out of `source`, so the ORIGINAL spelling is what gets displayed and the
+  /// round-trip invariant (`leading + match + trailing == source`) is unaffected by the looser comparison.
   public static func make(from source: String, matching query: String, window: Int = 80) -> Snippet {
-    guard let matchRange = source.range(of: query,
-                                        options: [.caseInsensitive, .diacriticInsensitive]) else {
+    // First occurrence only — the search-results contract. Options come from `FindMatcher.options`
+    // so this path and in-node find can never disagree about what "matches".
+    guard let matchRange = FindMatcher.ranges(in: source, query: query).first else {
       let head = String(source.prefix(window * 2))
       let lead = head.count < source.count ? head + "…" : head
       return Snippet(leading: lead, match: "", trailing: "")
