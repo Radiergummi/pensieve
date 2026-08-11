@@ -6,6 +6,7 @@ import PensieveKit
 /// project's most-outstanding loose end. Clicking a card drills into that project's detail.
 struct BriefingView: View {
   var model: AppModel
+  @AppStorage("briefing.quiet.expanded") private var quietExpanded = false
 
   private var moved: [BriefingCard] { model.briefingCards.filter { $0.movedSince > 0 } }
   private var quiet: [BriefingCard] { model.briefingCards.filter { $0.movedSince == 0 } }
@@ -23,8 +24,16 @@ struct BriefingView: View {
         if !moved.isEmpty {
           section("Moved") { ForEach(moved) { card(for: $0) } }
         }
+        // Quiet projects get one line each, collapsed. Visual mass should track importance, and five
+        // dormant projects rendered as full cards outweigh the one that actually moved.
         if !quiet.isEmpty {
-          section("Quiet") { ForEach(quiet) { card(for: $0) } }
+          DisclosureGroup(isExpanded: $quietExpanded) {
+            VStack(alignment: .leading, spacing: 0) {
+              ForEach(quiet) { quietRow(for: $0) }
+            }
+          } label: {
+            Text("Quiet").sectionHeader()
+          }
         }
       }
       .padding(24)
@@ -39,11 +48,9 @@ struct BriefingView: View {
         HStack {
           Text(briefingCard.node.name).font(.headline)
           Spacer()
-          if briefingCard.movedSince > 0 {
-            Text("\(briefingCard.movedSince) since last visit").metaText()
-          } else {
-            Text("dormant \(briefingCard.daysDormant)d").font(.system(size: 12)).foregroundStyle(.tertiary)
-          }
+          // `card(for:)` now renders ONLY moved projects, so the dormant branch is gone with its
+          // `dormant %lldd` string — which never matched its `dormant %@d` catalog key anyway.
+          Text("\(briefingCard.movedSince) new").metaText().monospacedDigit()
         }
         if !briefingCard.latestSummary.isEmpty {
           Text(briefingCard.latestSummary).prose().foregroundStyle(.secondary).lineLimit(1)
@@ -55,6 +62,27 @@ struct BriefingView: View {
       .padding(12)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+    }
+    .buttonStyle(.plain)
+  }
+
+  /// One quiet project: name, and how long ago it was last touched. Deliberately a bare relative
+  /// date and not "dormant for N days" — the section header already says these are quiet, and the
+  /// bare date is the only phrasing here that needs no plural rule in either language.
+  private func quietRow(for briefingCard: BriefingCard) -> some View {
+    Button { model.selectedNodeID = briefingCard.node.id } label: {
+      HStack(spacing: 8) {
+        NodeBadge(node: briefingCard.node, size: 16)
+        Text(briefingCard.node.name).font(.system(size: 13))
+        Spacer()
+        NodeMeta.recency(briefingCard.lastActivityAt)
+          .font(.system(size: 12))
+          .foregroundStyle(.secondary)
+          .monospacedDigit()
+      }
+      .padding(.vertical, 5)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
   }

@@ -337,6 +337,23 @@
         }
       }
     },
+    "%lld new" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld neu"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld new"
+          }
+        }
+      }
+    },
     "%lld open" : {
       "extractionState" : "manual",
       "localizations" : {
