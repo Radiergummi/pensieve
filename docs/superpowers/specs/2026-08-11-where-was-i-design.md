@@ -33,17 +33,32 @@ computes `Calendar.dateComponents([.day], from: latestEvent.occurredAt, to: now)
 timestamp. A view holding an `Int` cannot render a relative date, so the app interpolates the integer
 into an English sentence fragment by hand. That produces, verbatim in the shipped app:
 
-| Site | Renders | Wrong how |
-|---|---|---|
-| `BriefingView.swift:45` | `dormant 0d` | Untranslated; and `0d` is not a fact anyone needs |
-| `BriefingView.swift:44` | `1 since last visit` | Untranslated; no plural rule |
-| `LooseEndRow.swift:60` | `39d ago` | Untranslated |
+| Site | Renders | Runtime key | Catalog key |
+|---|---|---|---|
+| `BriefingView.swift:45` | `dormant 0d` | `dormant %lldd` | `dormant %@d` |
+| `BriefingView.swift:44` | `1 since last visit` | `%lld since last visit` | `%@ since last visit` |
+| `LooseEndRow.swift:60` | `39d ago` | `%@ · %@ · %lldd ago` | `%@ · %@ · %@d ago` |
+| `MenuBarView.swift:67` | `0d dormant` | `%lld open · %lldd dormant` | `%@ open · %@d dormant` |
+| `MenuBarView.swift:51` | `868 open` | `%lld open` | `%@ open` |
 
-None of these three strings exists in `Localizable.xcstrings`, so a German build renders them in
-English. They are not translation *misses*; they were never translatable.
+The keys **do exist** in `Localizable.xcstrings` and **are** translated into German. They never match
+at runtime: SwiftUI's `LocalizedStringKey` interpolation renders an `Int` as `%lld`, and every one of
+these entries was hand-authored with `%@`. A key that doesn't match falls back to the literal, so the
+app renders English inside an otherwise German window.
 
-**Fix:** carry the timestamp. `Date` formats itself, in the user's locale, with correct plurals, for
-free.
+This is exactly the trap `CLAUDE.md` already documents — *"`xcodebuild` does not auto-populate the
+source `.xcstrings` (IDE-only) — author/reconcile keys by hand against the Swift literals (`%lld`/`%@`);
+a mis-keyed `de` value silently falls back to English."* It bit every integer-bearing string in the
+app, and every integer-bearing string in the app is a time or a count.
+
+**Fix:** carry the timestamp. `Date` formats itself, in the user's locale, with correct plurals and
+**no interpolated `Int` at all** — so four of the five sites lose the mis-keyable construct rather than
+having it corrected. The fifth (a bare count) is corrected to `%lld` by hand.
+
+Note the two `MenuBarView` sites: the menu-bar popover's *redesign* is slice B, but this defect is not
+a redesign — it is the same one-character key bug, and leaving two known-broken strings in place to
+honour a slice boundary would be pedantry. The keys are fixed here; the popover's structure is not
+touched.
 
 ## Design
 
@@ -196,9 +211,18 @@ Space is reserved in both states so hover does not reflow the row.
 
 ### 7. Localization
 
-Every new string is chrome and goes into `Localizable.xcstrings` in en + de, including plural variants
-for the loose-end and moved counts. Relative dates come from `Text(_, format: .relative(presentation:
-.named))` and are localized by Foundation with no key at all — which is the point of carrying a `Date`.
+Every new string is chrome and goes into `Localizable.xcstrings` in en + de. Relative dates come from
+`Text(_, format: .relative(presentation: .named))` and are localized by Foundation **with no key at
+all** — which is the point of carrying a `Date`.
+
+Counts keep an interpolated `Int` and therefore keep a key, which must be authored as **`%lld`, not
+`%@`** — see the table above for what happens otherwise. The five stale `%@` keys are corrected in
+place, not left beside their replacements.
+
+Neither `open`/`offen` nor `new`/`neu` inflects for plural in either language, so those need no plural
+variants. The Briefing's quiet one-liners deliberately carry a **bare relative date** and no "dormant
+for N days" phrasing — which sidesteps the only construct here that *would* have needed plural rules
+(English `1 day` / `2 days`) while saying the same thing under a section already headed *Quiet*.
 
 Content is never localized: node names, descriptions, loose-end text, quotes, `branchKey`, event
 summaries.
@@ -262,8 +286,9 @@ an xcodebuild-only dependency and `swift test` must stay unaffected.
 4. Middle column reads as recency, not as `Projekt` repeated.
 5. Briefing: moved cards carry the weight, quiet collapses, and no English fragment survives.
 6. A loose end with a confirmed thumb keeps it visible when the pointer is elsewhere.
-7. **Forced-locale German** (`-AppleLanguages '(de)'`) and English — every new string translated,
-   plurals correct at 0, 1 and many.
+7. **Forced-locale German** (`-AppleLanguages '(de)'`) and English. This is the only check that catches
+   a mis-keyed catalog entry, and given that five such entries shipped undetected, it is not optional:
+   every count and date must render German, including the two menu-bar strings.
 
 ## Risks
 
