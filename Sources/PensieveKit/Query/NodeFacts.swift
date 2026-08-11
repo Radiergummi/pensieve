@@ -7,9 +7,17 @@ public struct NodeFacts: Sendable {
   public let node: Node
   public let openLooseEnds: Int
   public let daysDormant: Int   // days since latest Event; 0 if the node has no events
+  /// The latest `Event.occurredAt`, or nil when the node has no captured events.
+  ///
+  /// Carried ALONGSIDE `daysDormant`, never instead of it: `daysDormant` is an input to
+  /// `groundedScore` and to the `SmartLists` thresholds, so replacing it would silently re-rank
+  /// What's Next. Views read this `Date` (it formats itself, in locale); ranking reads the `Int`.
+  /// Both derive from the same event and cannot disagree.
+  public let lastActivityAt: Date?
 
-  public init(node: Node, openLooseEnds: Int, daysDormant: Int) {
+  public init(node: Node, openLooseEnds: Int, daysDormant: Int, lastActivityAt: Date?) {
     self.node = node; self.openLooseEnds = openLooseEnds; self.daysDormant = daysDormant
+    self.lastActivityAt = lastActivityAt
   }
 }
 
@@ -38,6 +46,7 @@ public enum NodeFactsQueries {
       Calendar.current.dateComponents([.day], from: $0.occurredAt, to: now).day ?? 0
     } ?? 0
     let open = try LooseEnd.where { $0.nodeID.eq(node.id) && LooseEnd.isOpen($0) }.fetchCount(database)
-    return NodeFacts(node: node, openLooseEnds: open, daysDormant: dormant)
+    return NodeFacts(node: node, openLooseEnds: open, daysDormant: dormant,
+                     lastActivityAt: latest?.occurredAt)
   }
 }

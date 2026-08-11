@@ -62,3 +62,38 @@ import SQLiteData
   #expect(byID.first?.node.id == archivedID)             // a tap still resolves it
   #expect(byID.first?.daysDormant == 0)                  // no events → 0
 }
+
+@Test func nodeFactsCarriesTheLatestEventTimestamp() throws {
+  let database = try openCanonicalDatabase(at: tempURL("nodefacts-timestamp"))
+  let resolver = ProjectResolver(database: database)
+  let (testNode, testNodeSource) = try resolver.resolve(path: "/p/stamp", kind: SourceKind.claudeCode)
+  let older = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
+  let newest = Calendar.current.date(byAdding: .day, value: -2, to: Date())!
+  try database.write { database in
+    try Event.insert {
+      Event(nodeID: testNode.id, sourceID: testNodeSource.id, occurredAt: older,
+            kind: CaptureKind.ccSession, summary: "old", detailJSON: "{}", fingerprint: "ts1")
+    }.execute(database)
+    try Event.insert {
+      Event(nodeID: testNode.id, sourceID: testNodeSource.id, occurredAt: newest,
+            kind: CaptureKind.gitCommit, summary: "new", detailJSON: "{}", fingerprint: "ts2")
+    }.execute(database)
+  }
+  let facts = try NodeFactsQueries.all(database, now: Date())
+  let testNodeFacts = try #require(facts.first { $0.node.id == testNode.id })
+  let lastActivityAt = try #require(testNodeFacts.lastActivityAt)
+  #expect(abs(lastActivityAt.timeIntervalSince(newest)) < 0.001)
+  #expect(testNodeFacts.daysDormant == 2)   // unchanged: still derived from the same event
+}
+
+@Test func nodeFactsHasNoTimestampWithoutEvents() throws {
+  let database = try openCanonicalDatabase(at: tempURL("nodefacts-no-events"))
+  let emptyID = UUID()
+  try database.write { database in
+    try Node.insert { Node(id: emptyID, name: "Empty") }.execute(database)
+  }
+  let facts = try NodeFactsQueries.facts(for: [emptyID], database, now: Date())
+  let emptyFacts = try #require(facts.first)
+  #expect(emptyFacts.lastActivityAt == nil)   // honest absence, NOT a fake zero
+  #expect(emptyFacts.daysDormant == 0)        // the old integer still reports 0 for ranking
+}
