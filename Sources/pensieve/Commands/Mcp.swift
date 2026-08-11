@@ -112,7 +112,9 @@ struct Mcp: AsyncParsableCommand {
   }
 
   private static func handleWhatsNext(params: CallTool.Parameters) throws -> CallTool.Result {
-    let limit = params.arguments?["limit"]?.intValue ?? 5
+    // Clamped for the same reason as `search`: this reaches a `prefix(limit)`, which traps on a
+    // negative and would take the whole server down over one malformed argument.
+    let limit = max(1, params.arguments?["limit"]?.intValue ?? 5)
     let context = params.arguments?["context"]?.stringValue
     let json = try PensieveMCP.whatsNextJSON(limit: limit, context: context)
     return PensieveMCP.result(json)
@@ -132,8 +134,11 @@ struct Mcp: AsyncParsableCommand {
     let query = params.arguments?["query"]?.stringValue ?? ""
     let file = params.arguments?["file"]?.stringValue
     // Either half alone is a real query — a bare `file` means "everything that touched this path",
-    // which previously needed a dummy `query` to reach the path-only shape.
-    guard !query.isEmpty || !(file ?? "").isEmpty else {
+    // which previously needed a dummy `query` to reach the path-only shape. Trimmed to match
+    // `FTSQueryBuilder`, which trims too: an all-whitespace `file` is not an argument, and without
+    // this it would produce an empty SUCCESS payload rather than the error below.
+    let trimmedFile = (file ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !trimmedFile.isEmpty else {
       return .init(content: [.text(text: "search requires a query or a file", annotations: nil, _meta: nil)],
                    isError: true)
     }

@@ -18,6 +18,13 @@ extension AppModel {
   /// typed before the rebuild lands is re-run against the finished index rather than the stale one.
   func syncSearchIndexes() {
     guard let database else { return }
+    // One rebuild at a time. Now that this runs on every watch refresh rather than only launch/⌘R,
+    // overlapping runs are otherwise possible — and `SearchIndexer` treats a `.building` flag as a
+    // reason to rebuild, so a run that observed another's in-flight window would rebuild redundantly.
+    // Correct either way (a rebuild is one transaction and GRDB serializes writes); this is about not
+    // re-doing whole-corpus work the hash guard exists to avoid.
+    guard !isSyncingIndexes else { return }
+    isSyncingIndexes = true
     let searchStore = self.searchStore
     let semanticEnabled = AppDefaults.semanticSearchEnabled
     let semanticStore = self.semanticStore, embedder = self.embedder
@@ -26,13 +33,17 @@ extension AppModel {
       if semanticEnabled {
         await SemanticIndexer(store: semanticStore, embedder: embedder).sync(database)
       }
-      await MainActor.run { self?.searchIndexesDidSync(state: searchStore.state()) }
+      // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
+      // timeout is the whole reason this work is detached.
+      let state = searchStore.state()
+      await MainActor.run { self?.searchIndexesDidSync(state: state) }
     }
   }
 
   /// Back on the main actor with a rebuilt index: publish its state, and re-rank whatever the user
   /// has already typed so results never reflect an index that has since changed underneath them.
   private func searchIndexesDidSync(state: SearchIndexState) {
+    isSyncingIndexes = false
     searchIndexState = state
     if isSearching { runSearch() }
   }

@@ -50,6 +50,11 @@ import SQLiteData
     _ = try makeEvent(database, node: node, summary: "refactor the resolver",
                       files: "Sources/Other.swift")
     _ = try makeEvent(database, node: node, summary: "unrelated work", files: "Sources/Lexer.swift")
+    // The load-bearing distractor: matches the TEXT fully and the path not at all. Without it the
+    // text clause alone selects `wanted`, so dropping the path restriction — or mis-routing this to
+    // the probe shape, which ORs instead of ANDing — would leave the assertion green.
+    _ = try makeEvent(database, node: node, summary: "refactor the tokenizer again",
+                      files: "Sources/Elsewhere.swift")
     let store = indexed(database)
     let hits = SearchQueries.search(query: "refactor tokenizer files:Lexer.swift ",
                                     scope: SearchScope(visibleNodeIDs: [node.id]), store: store,

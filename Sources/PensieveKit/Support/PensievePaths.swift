@@ -35,13 +35,18 @@ public enum PensievePaths {
   /// an empty index: a silent, total retrieval outage after a routine test run.
   ///
   /// With no override the path is unchanged, so existing indexes are not orphaned. Under one, the
-  /// index becomes a sibling of the overridden store prefixed by its name, so two throwaway stores
-  /// in the same directory cannot collide on one index.
+  /// index becomes a sibling of the overridden store prefixed by the store's base name, so two
+  /// throwaway stores in the same directory do not share an index.
   private static func indexURL(named name: String) -> URL {
-    guard let override = ProcessInfo.processInfo.environment["PENSIEVE_DB"] else {
-      return supportDirectory().appendingPathComponent(name)
-    }
-    let store = URL(fileURLWithPath: override)
+    indexURL(named: name, storeOverride: ProcessInfo.processInfo.environment["PENSIEVE_DB"])
+  }
+
+  /// The rule itself, separated from reading the environment so it is testable: `setenv` is
+  /// process-global and Swift Testing runs suites in parallel, so a test that mutated `PENSIEVE_DB`
+  /// to cover this could perturb every other test reading it.
+  static func indexURL(named name: String, storeOverride: String?) -> URL {
+    guard let storeOverride else { return supportDirectory().appendingPathComponent(name) }
+    let store = URL(fileURLWithPath: storeOverride)
     let prefix = store.deletingPathExtension().lastPathComponent
     return store.deletingLastPathComponent().appendingPathComponent("\(prefix)-\(name)")
   }

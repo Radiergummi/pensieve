@@ -147,25 +147,9 @@ private struct NamingProvider: LLMProvider {
                        includeArchived: false).map(\.itemID) == [node.id.uuidString])
 }
 
-/// The safety property behind `searchIndexer` having NO default: with none injected, `run()` must
-/// index nowhere. Re-adding a `PensievePaths`-based fallback would make every test that constructs a
-/// SyncRunner rebuild a shared index it never asked for, so pin the absence rather than trusting the
-/// comment that explains it.
-@Test func runWithoutASearchIndexerIndexesNothing() async throws {
-  let projects = tmp("projects", ext: "d")
-  try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
-  let spool = try CaptureSpool(at: tmp("sync-noindex-spool", ext: "sqlite"))
-  let database = try openCanonicalDatabase(at: tmp("sync-noindex-canon", ext: "sqlite"))
-  let node = Node(name: "Background sync agent", kind: NodeKind.project)
-  try await database.write { database in try Node.insert { node }.execute(database) }
-
-  // Stands in for the shared index: a store this run was never given must be left untouched.
-  let untouched = SearchIndexStore(url: tmp("sync-noindex-bystander", ext: "sqlite"))
-  #expect(untouched.state() == .absent)
-
-  _ = try await SyncRunner(spool: spool, database: database, provider: NoopProvider(),
-                           projectsDir: projects).run()
-
-  #expect(untouched.state() == .absent)
-  #expect(untouched.storedCorpusHash() == nil)
-}
+// NOTE: "a nil `searchIndexer` writes to no index" is deliberately NOT unit-tested. The obvious test —
+// assert some bystander store is untouched — is vacuous, because `SyncRunner` has no way to reach a
+// fresh temp URL and so passes it whether or not a `PensievePaths` fallback exists. Testing it for
+// real means pointing `PENSIEVE_DB` at a temp path, and `setenv` is process-global while Swift Testing
+// runs suites in parallel. The property is held by the type (`SearchIndexer?`, no `??` in `run()`) and
+// by `PensievePathsTests.indexPathFollowsAnOverriddenStore`, which makes the fallback harmless anyway.

@@ -115,6 +115,9 @@ final class AppModel {
   /// Whether the index can answer at all — distinct from "no matches", so an unbuilt index does
   /// not read as "you never worked on that".
   var searchIndexState: SearchIndexState = .absent
+  /// An index rebuild is in flight. Not observed by any view — it exists only to keep the watch-driven
+  /// refresh from stacking whole-corpus rebuilds on top of each other.
+  @ObservationIgnored var isSyncingIndexes = false
   /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
   var expandedLooseEndID: UUID?
   /// Set by the Find command; RootView observes it to move focus into the .searchable field.

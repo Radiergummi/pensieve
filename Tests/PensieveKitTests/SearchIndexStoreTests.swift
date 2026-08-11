@@ -129,11 +129,11 @@ import Foundation
   /// SQLite error to `[]` — so an all-`isEmpty` version of this test passed identically whether the
   /// operator characters were neutralised or blew the MATCH expression apart, which made the one test
   /// named for the injection surface unable to see a regression in it.
-  @Test func hostileInputIsMatchedLiterallyRatherThanAsOperators() {
+  @Test func hostileInputIsMatchedLiterallyRatherThanAsOperators() throws {
     let store = tempSearchStore()
     store.rebuild(items: [item("a", "don't C++ a:b ordinary text")], corpusHash: "h")
     for raw in ["don't ", "C++ ", "a:b "] {
-      let query = try! #require(FTSQueryBuilder.build(raw))
+      let query = try #require(FTSQueryBuilder.build(raw))
       #expect(store.search(query, limit: 10, includeArchived: false).map(\.itemID) == ["a"],
               "\(raw) should match the document containing it literally")
     }
@@ -143,8 +143,8 @@ import Foundation
       guard let query = FTSQueryBuilder.build(raw) else { continue }
       _ = store.search(query, limit: 10, includeArchived: false)
     }
-    #expect(store.search(FTSQueryBuilder.build("ordinary ")!, limit: 10,
-                         includeArchived: false).map(\.itemID) == ["a"])
+    let stillWorks = try #require(FTSQueryBuilder.build("ordinary "))
+    #expect(store.search(stillWorks, limit: 10, includeArchived: false).map(\.itemID) == ["a"])
   }
 
   @Test func limitCapsResults() {

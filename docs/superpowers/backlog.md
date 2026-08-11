@@ -297,7 +297,14 @@ filters, App Intents, Spotlight, deep links; semantic/vector recall (they appear
 
 ---
 
-## Semantic relevance floor is inert — CLOSED 2026-08-11 (diagnosis changed; BM25 replaced the engine)
+## Semantic relevance floor is inert — CLOSED 2026-08-11 as QUARANTINED, not deleted
+
+**Read this clause first: the inert floor still exists.** `floor: 0.25` is still passed
+(`AppModel+Search.swift`, `Mcp.swift`) and `SemanticQueries` still applies it, so **turning Settings ▸
+Intelligence ▸ semantic search ON reinstates exactly the measured behaviour below** — gibberish at 0.880
+against a 0.25 cutoff. What closed the defect is that the vector path is no longer the engine and is
+default-**OFF**; the compressed-cosine problem was never solved, it was taken off the default path. If a
+future session enables that toggle and finds relevance unenforced, that is this entry, not a new bug.
 
 **Resolved, but not the way this entry predicted — read the correction before reusing anything below.**
 The measurements were right and the *diagnosis* was wrong: it was a **ranking failure, not a scale
