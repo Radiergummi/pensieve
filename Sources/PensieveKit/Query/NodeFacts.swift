@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import SQLiteData
 
 /// Grounded per-node facts for glance surfaces (Spotlight subtitle, rankings). Mirrors the dormancy +
@@ -48,5 +49,55 @@ public enum NodeFactsQueries {
     let open = try LooseEnd.where { $0.nodeID.eq(node.id) && LooseEnd.isOpen($0) }.fetchCount(database)
     return NodeFacts(node: node, openLooseEnds: open, daysDormant: dormant,
                      lastActivityAt: latest?.occurredAt)
+  }
+}
+
+/// Recency + open-count for many nodes at once — the list-row shape, without the node itself.
+public struct NodeRowFacts: Sendable, Equatable {
+  public let lastActivityAt: Date?
+  public let openLooseEnds: Int
+
+  public init(lastActivityAt: Date?, openLooseEnds: Int) {
+    self.lastActivityAt = lastActivityAt
+    self.openLooseEnds = openLooseEnds
+  }
+}
+
+extension NodeFactsQueries {
+  /// Facts for every node at once, as **two grouped aggregates in one read** — deliberately NOT the
+  /// per-node loop `facts(for:)` uses, which is two queries per node and would be ~356 round trips
+  /// against the real store on every middle-column selection change.
+  ///
+  /// A node with neither events nor open loose ends is absent from the result; callers treat a miss
+  /// as "no activity, zero open".
+  public static func rowFacts(_ database: any DatabaseReader) throws -> [UUID: NodeRowFacts] {
+    try database.read { database in
+      var latest: [UUID: Date] = [:]
+      let latestRows = try Row.fetchAll(database, sql: """
+        SELECT "nodeID", MAX("occurredAt") AS "lastActivityAt" FROM "events" GROUP BY "nodeID"
+        """)
+      for row in latestRows {
+        guard let identifier: String = row["nodeID"], let nodeID = UUID(uuidString: identifier),
+              let occurredAt: Date = row["lastActivityAt"] else { continue }
+        latest[nodeID] = occurredAt
+      }
+
+      var open: [UUID: Int] = [:]
+      let openRows = try Row.fetchAll(database, sql: """
+        SELECT "nodeID", COUNT(*) AS "openCount" FROM "looseEnds"
+        WHERE \(LooseEnd.openSQLPredicate) GROUP BY "nodeID"
+        """)
+      for row in openRows {
+        guard let identifier: String = row["nodeID"], let nodeID = UUID(uuidString: identifier),
+              let count: Int = row["openCount"] else { continue }
+        open[nodeID] = count
+      }
+
+      var result: [UUID: NodeRowFacts] = [:]
+      for nodeID in Set(latest.keys).union(open.keys) {
+        result[nodeID] = NodeRowFacts(lastActivityAt: latest[nodeID], openLooseEnds: open[nodeID] ?? 0)
+      }
+      return result
+    }
   }
 }

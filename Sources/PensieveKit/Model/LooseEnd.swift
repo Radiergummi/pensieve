@@ -31,4 +31,10 @@ extension LooseEnd {
   public static func isOpen(_ columns: TableColumns) -> some QueryExpression<Bool> {
     columns.status.eq("open") && columns.label.neq("noise")
   }
+
+  /// The raw-SQL spelling of `isOpen`, for the batched aggregates the typed builder can't express.
+  /// MUST stay logically identical to `isOpen` above; `looseEndOpenPredicatesAgree` in
+  /// `NodeFactsTests` fails the suite if they ever diverge. Interpolated into a SQL literal, so it
+  /// contains no user input and needs no binding.
+  public static let openSQLPredicate = #"("status" = 'open' AND "label" <> 'noise')"#
 }
