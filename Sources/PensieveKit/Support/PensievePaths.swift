@@ -16,18 +16,12 @@ public enum PensievePaths {
   public static func narrationCacheURL() -> URL {
     supportDirectory().appendingPathComponent("narration-cache.sqlite")
   }
-  /// The disposable, device-local, never-synced semantic index (shared across app / CLI / daemon /
-  /// MCP). Losing it costs only a re-index. Drop-and-rebuilt on embedder-version change.
-  public static func semanticIndexURL() -> URL {
-    indexURL(named: "semantic-index.sqlite")
-  }
   /// The disposable, device-local, never-synced FTS5 search index (shared across app / CLI /
-  /// daemon / MCP). Separate from the semantic index on purpose: that one drops and rebuilds its
-  /// whole database on an embedder-version change, which has nothing to do with search.
+  /// daemon / MCP). Losing it costs only a re-index.
   public static func searchIndexURL() -> URL {
     indexURL(named: "search-index.sqlite")
   }
-  /// An index belongs to the store it was built from, so it MUST follow `PENSIEVE_DB` wherever
+  /// The search index belongs to the store it was built from, so it MUST follow `PENSIEVE_DB` wherever
   /// `openCanonical()` does. Without this, the project's own verification recipes — `PENSIEVE_DB=/tmp/x
   /// pensieve sync`, and the app smoke-launch — point at a throwaway store, find the real index's
   /// corpus hash stale against it, and `DELETE FROM documents` on the developer's LIVE index. The

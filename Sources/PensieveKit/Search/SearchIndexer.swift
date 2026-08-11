@@ -3,8 +3,9 @@ import SQLiteData
 
 /// Rebuilds the FTS5 search index from the live canonical corpus. Whole-rebuild, hash-guarded.
 ///
-/// Unlike `SemanticIndexer` there is no reconciliation: embedding is expensive, FTS5 insertion is
-/// not, so a full drop-and-reinsert is both simpler and free of staleness bugs. The guard exists
+/// No per-item reconciliation: FTS5 insertion is cheap, so a full drop-and-reinsert is both simpler
+/// and free of staleness bugs. (The retired vector indexer reconciled because embedding was the
+/// expensive part — that trade-off left with it.) The guard exists
 /// because the app calls this on every refresh that could have changed the corpus — launch, ⌘R, and
 /// every debounced watch refresh, which includes the WAL changes the external daemon makes — and an
 /// unchanged corpus should not churn the file.

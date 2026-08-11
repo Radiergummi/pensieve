@@ -9,9 +9,9 @@ public enum SearchIndexState: String, Sendable, Equatable, Codable {
   case ready
 }
 
-/// One search result. Both engines return this: BM25 (the shipped path) and the vector index
-/// (default-off, experimental). The name deliberately does not claim an engine — `score` is
-/// whatever the producing engine ranks by, and is NEVER comparable across engines.
+/// One search result, from the FTS5/BM25 index — the only retrieval path. The name deliberately does
+/// not claim an engine: `score` is whatever the producing engine ranks by, which keeps the type
+/// reusable if a measured-better engine ever replaces BM25.
 public struct SearchHit: Identifiable, Sendable, Equatable {
   /// What the hit points at. An enum rather than the raw index string: `kind` is compared against
   /// literals at every call site that renders or routes a hit, and this codebase turned
