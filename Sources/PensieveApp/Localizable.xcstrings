@@ -1282,17 +1282,6 @@
         }
       }
     },
-    "Last Work Done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zuletzt erledigt"
-          }
-        }
-      }
-    },
     "LLM provider" : {
       "extractionState" : "manual",
       "localizations" : {

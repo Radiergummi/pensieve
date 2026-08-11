@@ -25,39 +25,18 @@ struct DetailView: View {
     ScrollViewReader { proxy in
       ScrollView {
       VStack(alignment: .leading, spacing: 20) {
-        // WHAT IT IS
+        // WHAT IT IS — name, the adaptive state line, description.
         HStack(alignment: .top, spacing: 12) {
           NodeBadge(node: node, size: 44)
           VStack(alignment: .leading, spacing: 4) {
             Text(node.name).font(.largeTitle).bold()
-            HStack(spacing: 6) {
-              Text(AppearanceStyle.kindLabel(node.kind)).foregroundStyle(.secondary)
-              Text("·").foregroundStyle(.secondary)
-              Circle().fill(AppearanceStyle.stateColor(node.state)).frame(width: 8, height: 8)
-              Text(AppearanceStyle.stateLabel(node.state)).foregroundStyle(.secondary)
-            }
+            NodeMetaLine(node: node, facts: model.nodeRowFacts[node.id])
             descriptionBlock
           }
         }
 
-        // LAST WORK DONE (LLM narration; prose-first — a ready recap always wins over an in-flight
-        // flag — and the section is omitted entirely when there's no genuine narration).
-        if narrationEnabled, let lastWorkDone, loadedNodeID == node.id {
-          section("Last Work Done") {
-            VStack(alignment: .leading, spacing: 4) {
-              Text(lastWorkDone).prose()
-              Label("Generated summary", systemImage: "sparkles")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
-          }
-        } else if narrationEnabled, isNarrating, loadedNodeID == node.id {
-          section("Last Work Done") {
-            ProgressView().controlSize(.small)
-          }
-        }
-
-        // LOOSE ENDS (with inline verbatim provenance) — omitted when the middle already shows them.
+        // LOOSE ENDS — cited and verbatim, so they come BEFORE the best-effort prose below.
+        // Omitted when the middle column already shows them (the one-home rule).
         if showsLooseEnds {
           section("Loose Ends") {
             if looseEnds.isEmpty {
@@ -71,6 +50,22 @@ struct DetailView: View {
               }
             }
           }
+        }
+
+        // RECAP — deliberately headerless. A caps header announces a slot, so an empty slot reads as
+        // a failure; narration is best-effort and returns nil, and its absence must read as nothing.
+        // The attribution line is a trust marker separating best-effort prose from cited content and
+        // is NOT optional.
+        if narrationEnabled, let lastWorkDone, loadedNodeID == node.id {
+          VStack(alignment: .leading, spacing: 4) {
+            Divider()
+            Text(lastWorkDone).prose().padding(.top, 4)
+            Label("Generated summary", systemImage: "sparkles")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+          }
+        } else if narrationEnabled, isNarrating, loadedNodeID == node.id {
+          ProgressView().controlSize(.small)
         }
 
         // RECENT ACTIVITY (GitHub-style rail timeline)
