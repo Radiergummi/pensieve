@@ -24,7 +24,7 @@ struct DetailView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if find.isPresented { FindBar(find: find) }
+      if find.isPresented, find.nodeID == node.id { FindBar(find: find) }
       ScrollViewReader { proxy in
       ScrollView {
       VStack(alignment: .leading, spacing: 20) {
@@ -121,7 +121,12 @@ struct DetailView: View {
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
       if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {
-        lastWorkDone = cached; return
+        lastWorkDone = cached
+        find.reset(nodeID: node.id,
+                   document: NodeFindDocument.make(node: node, narration: cached,
+                                                   looseEnds: looseEnds, events: recentEvents,
+                                                   showsLooseEnds: showsLooseEnds))
+        return
       }
       isNarrating = true
       let prose = await model.narration(for: node, events: recentEvents, force: isRefresh)

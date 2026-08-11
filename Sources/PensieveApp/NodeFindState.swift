@@ -56,10 +56,16 @@ final class NodeFindState {
 
   /// Called when the pane's content loads or the node changes. Bumps the generation so a sweep
   /// started for the previous node can't write into this one.
+  ///
+  /// A genuine node change starts a fresh session (no query, no held position — there is no
+  /// position to hold). A same-node document change (⌘R, narration arriving, later the transcript
+  /// sweep) goes through `updateDocument`/`FindSession.update` instead, which is what preserves the
+  /// user's current match identity across the document mutating underneath them.
   func reset(nodeID: UUID, document: NodeFindDocument) {
     generation += 1
     cancelSweep()
-    if self.nodeID != nodeID {
+    let isNodeChange = self.nodeID != nodeID
+    if isNodeChange {
       query = ""
       forcedExpansions = []
       pendingScroll = nil
@@ -68,8 +74,12 @@ final class NodeFindState {
     self.nodeID = nodeID
     sweepDone = 0
     sweepTotal = 0
-    session = FindSession(document: document)
-    session.setQuery(query)
+    if isNodeChange {
+      session = FindSession(document: document)
+      session.setQuery(query)
+    } else {
+      updateDocument(document)
+    }
   }
 
   func setQuery(_ newQuery: String) {
