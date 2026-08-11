@@ -150,3 +150,11 @@ public struct NodeFindDocument: Equatable, Sendable {
     return found
   }
 }
+
+extension NodeFindDocument {
+  /// Builds a document from bare units, bypassing section ordering. **Test support only** — product
+  /// code must go through `make(node:…)` so document order stays tied to on-screen order.
+  public static func testing(units: [FindUnit]) -> NodeFindDocument {
+    NodeFindDocument(slots: units.map { .unit($0) })
+  }
+}
