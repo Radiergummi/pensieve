@@ -83,14 +83,21 @@ extension AppModel {
     searchToken += 1
     let token = searchToken
     let store = searchStore
+    // Pre-Task locals, read here on the main actor rather than inside the detached closure below.
+    // Off means off: `translationStore`/`translator` are `lazy` and constructing either would open
+    // a file/load a model, so they're touched only when a target is actually resolved.
+    let language = TranslationTarget.resolved()
+    let translations = language.isEmpty ? nil : translationStore
+    let translator = language.isEmpty ? nil : self.translator
     searchTask = Task { [weak self] in
       let hits = await Task.detached {
         // Fully qualified: `AppModel.SearchScope` (the UI's active/all enum) shadows the Kit type
         // of the same name inside this extension.
-        SearchQueries.search(query: rawQuery,
-                             scope: PensieveKit.SearchScope(visibleNodeIDs: visible,
-                                                            includeArchived: includeArchived),
-                             store: store, database)
+        await SearchQueries.searchTranslatingOnEmpty(
+          query: rawQuery,
+          scope: PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived),
+          store: store, translations: translations, language: language, translator: translator,
+          database)
       }.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchHits = hits
