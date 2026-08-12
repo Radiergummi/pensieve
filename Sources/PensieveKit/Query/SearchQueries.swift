@@ -41,6 +41,8 @@ public enum SearchQueries {
                             file: String? = nil,
                             scope: SearchScope,
                             store: SearchIndexStore,
+                            translations: TranslationStore? = nil,
+                            language: String = TranslationTarget.off,
                             _ database: any DatabaseReader) -> [SearchHit] {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard store.isAvailable,
@@ -56,7 +58,8 @@ public enum SearchQueries {
     while true {
       let candidates = store.search(ftsQuery, limit: fetchCount,
                                     includeArchived: scope.includeArchived)
-      let hits = buildHits(candidates, terms: ftsQuery.terms, scope: scope, database)
+      let hits = buildHits(candidates, terms: ftsQuery.terms, scope: scope,
+                           translations: translations, language: language, database)
       if hits.count >= scope.limit || candidates.count < fetchCount || fetchCount >= maxFetch {
         return hits
       }
@@ -95,21 +98,34 @@ public enum SearchQueries {
   /// each survivor against canonical via the shared `SearchHitResolver`. One read transaction for
   /// the whole page rather than one per candidate.
   private static func buildHits(_ candidates: [SearchIndexHit], terms: [String],
-                                scope: SearchScope, _ database: any DatabaseReader) -> [SearchHit] {
-    let resolver = SearchHitResolver(includeArchived: scope.includeArchived,
-                                     highlight: { SnippetMaker.make(from: $0, matchingAny: terms) })
+                                scope: SearchScope,
+                                translations: TranslationStore? = nil,
+                                language: String = TranslationTarget.off,
+                                _ database: any DatabaseReader) -> [SearchHit] {
+    let resolver = SearchHitResolver(
+      includeArchived: scope.includeArchived,
+      highlight: { SnippetMaker.make(from: $0, matchingAny: terms) },
+      translations: { field, sourceText in
+        guard let translations, !language.isEmpty else { return nil }
+        return translations.translation(field: field, sourceText: sourceText, language: language)
+      })
     // A failure here is failing to OPEN a canonical read — an app-wide condition, not a search
     // result — so it degrades to empty like every other read, but it is logged rather than mistaken
     // for "nothing matched". Per-candidate resolve failures stay silent and skip individually.
     do {
       return try database.read { database in
         var hits: [SearchHit] = []
+        // One hit per item, even when both its language documents matched. Deduped BEFORE resolving
+        // so a duplicate costs no canonical read. The `limit` shortfall this can cause is absorbed by
+        // the caller's grow-`k` loop, which already exists for Focus-muting and stale rows.
+        var seenItemIDs = Set<UUID>()
         for candidate in candidates {
           guard let kind = SearchHit.Kind(rawValue: candidate.kind),
                 let nodeID = UUID(uuidString: candidate.nodeID),
                 scope.visibleNodeIDs.contains(nodeID) else { continue }
           guard let itemID = UUID(uuidString: candidate.itemID),
                 !scope.excludingIDs.contains(itemID) else { continue }
+          guard seenItemIDs.insert(itemID).inserted else { continue }
           guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: candidate.score,
                                                 database) else { continue }
           hits.append(hit)
