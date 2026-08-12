@@ -342,3 +342,6 @@ testing the transcript path — an old one will correctly fall back to its store
 - **Diacritic folding in the pane:** typing `losung` must highlight `Lösung` (same rule as the FTS5
   tokenizer), and `showsLooseEnds` behaviour: on a childless focused strand (loose ends live in the
   middle column) find must report **no** loose-end matches rather than matches with nowhere to scroll.
+- **Watch for highlight/count skew** while doing the above — a row can briefly tint matches the count
+  doesn't include and ⌘G can't reach (open, by decision; see `backlog.md` ▸ "In-node find —
+  highlight/document skew"). Whether it's noticeable in practice is the revisit trigger.
