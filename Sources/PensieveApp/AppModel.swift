@@ -103,6 +103,12 @@ final class AppModel {
   /// drainThenRefresh), so this never bumps on background liveness updates.
   private(set) var refreshToken = 0
 
+  /// Bumped when an on-demand translation lands. Its own signal rather than `refreshToken`, because
+  /// a `refreshToken` bump means ⌘R: `DetailView` reads it as `isRefresh` and force-regenerates the
+  /// narration through the LLM. Translating a loose end must repaint the pane, not re-narrate it.
+  /// NOT `private(set)`: bumped from `AppModel+Translation.swift`, a different file in the same module.
+  var translationRevision = 0
+
   // MARK: - In-app find
   var searchText: String = ""
   /// ⌘F search scope. `.all` opts archived nodes into results. Observable → drives the scope bar.

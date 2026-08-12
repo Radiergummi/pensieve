@@ -51,7 +51,8 @@ struct DetailView: View {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
                 LooseEndRow(view: view, loadProvenance: model.provenance,
                             onLabel: model.setLooseEndLabel,
-                            displayedSummary: { model.displayed(field: .looseEndText, sourceText: $0) },
+                            displaySummary: model.displayed(field: .looseEndText,
+                                                            sourceText: view.looseEnd.text),
                             onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
                             expandedLooseEndID: model.expandedLooseEndID, compact: false,
                             find: find)
@@ -148,6 +149,11 @@ struct DetailView: View {
       withAnimation { proxy.scrollTo(anchor, anchor: .center) }
       find.scrollTarget = nil
     }
+    // An on-demand translation landed: repaint with the new text (each row's `displaySummary`
+    // input is recomputed above) and rebuild the find document so ⌘F sees it too — deliberately
+    // NOT a `.task(id:)` rerun, which is keyed on `refreshToken` (⌘R) and would force-regenerate
+    // the narration through the LLM for a change that touched no canonical data.
+    .onChange(of: model.translationRevision) { _, _ in resetFind(narration: lastWorkDone) }
     }
     }
     .focusedSceneValue(\.nodeFind, find)
@@ -166,7 +172,8 @@ struct DetailView: View {
   /// cheap — the loader serves an unchanged transcript from its cache and reports "nothing to do".
   @MainActor private func resetFind(narration: String?) {
     // What the find document indexes for each loose end must match what LooseEndRow actually
-    // renders (`displayedSummary` there) — the same translated-or-English text, by the same fallback.
+    // renders (its `displaySummary` input, built the same way below) — the same translated-or-English
+    // text, by the same fallback.
     let translatedLooseEndText = Dictionary(uniqueKeysWithValues: looseEnds.map {
       ($0.looseEnd.id, model.displayed(field: .looseEndText, sourceText: $0.looseEnd.text))
     })

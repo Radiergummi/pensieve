@@ -14,10 +14,13 @@ struct LooseEndRow: View {
   /// Confirms a salience label for this loose end (👍 salient / 👎 noise / "" clears). Pass
   /// `model.setLooseEndLabel`.
   let onLabel: (UUID, String) -> Void
-  /// The summary actually rendered: the on-demand translation of `view.looseEnd.text` when one is
-  /// stored, else the English original. Pass `{ model.displayed(field: .looseEndText, sourceText: $0) }`.
-  /// Defaults to identity for callers outside the find-scoped detail pane.
-  var displayedSummary: (String) -> String = { $0 }
+  /// The summary as it should render — the on-demand translation when one is stored, else the
+  /// English original. An INPUT rather than a lookup inside this row: a translation landing changes
+  /// no property this row stores, so SwiftUI would be free to skip re-running its body if the text
+  /// were fetched from inside it. Passing it in makes the change a diffable input instead. Pass
+  /// `model.displayed(field: .looseEndText, sourceText: view.looseEnd.text)`. `nil` for callers
+  /// outside the find-scoped detail pane, which fall back to the English original.
+  var displaySummary: String?
   /// Translates this row's summary on demand, then debounced-reindexes. Pass
   /// `{ text in await model.translate(field: .looseEndText, sourceText: text) }`. `nil` hides the
   /// context-menu action outright (as does the target being off) — no caller may show a dead button.
@@ -168,7 +171,7 @@ struct LooseEndRow: View {
     // Computed ONCE and shared by both consumers — the highlight-run lookup and the rendered text —
     // so find can never disagree with what is actually on screen (an English query would silently
     // stop matching a row whose summary was translated, or vice versa).
-    let text = displayedSummary(view.looseEnd.text)
+    let text = displaySummary ?? view.looseEnd.text
     let runs = find?.runs(for: anchor, text: text) ?? []
     Group {
       if runs.isEmpty {

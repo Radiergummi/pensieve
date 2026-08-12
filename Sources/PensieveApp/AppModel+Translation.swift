@@ -18,6 +18,7 @@ extension AppModel {
                                                       from: TranslationTarget.sourceLanguage,
                                                       to: language) else { return }
     translationStore.put(field: field, sourceText: sourceText, language: language, text: translated)
+    translationRevision += 1   // repaint the pane with the new text — NOT a refreshToken bump (see its doc)
     await translationDebouncer.schedule()
   }
 
