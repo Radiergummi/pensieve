@@ -58,17 +58,9 @@ struct MenuBarView: View {
       Text("Nothing queued").font(.callout).foregroundStyle(.secondary)
     } else {
       ForEach(items, id: \.project.id) { item in
-        Button {
+        MenuBarRow(item: item, facts: model.nodeRowFacts[item.project.id]) {
           applyDeepLink(.node(item.project.id), model: model, openWindow: openWindow)
-        } label: {
-          HStack {
-            Text(item.project.name).lineLimit(1)
-            Spacer()
-            Text("\(item.openLooseEnds) open · \(item.daysDormant)d dormant")
-              .font(.caption).foregroundStyle(.secondary)
-          }
         }
-        .buttonStyle(.plain)
       }
     }
   }
@@ -97,6 +89,38 @@ struct MenuBarView: View {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .abbreviated
     return formatter.localizedString(for: date, relativeTo: Date())
+  }
+}
+
+/// One popover row: a re-entry point, not a scoreboard line. The whole row is the action and now
+/// looks like it — a persistent chevron plus a hover fill, rather than five labelled buttons on a
+/// five-row surface. The second line reuses `NodeRowMeta`, the middle column's own component, so the
+/// two surfaces share one implementation instead of agreeing by convention.
+private struct MenuBarRow: View {
+  let item: NextItem
+  let facts: NodeRowFacts?
+  let action: () -> Void
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 1) {
+          Text(item.project.name).lineLimit(1)
+          NodeRowMeta(facts: facts)
+        }
+        Spacer()
+        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+      }
+      // Without this the `Spacer()` between the text and the chevron is dead space to hit-testing —
+      // the same defect slice A's verify pass found in the detail pane's hover thumbs.
+      .rowHitArea()
+    }
+    .buttonStyle(.plain)
+    .padding(.horizontal, 6).padding(.vertical, 4)
+    .background(isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    .onHover { isHovering = $0 }
   }
 }
 
