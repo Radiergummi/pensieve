@@ -108,4 +108,96 @@ import SQLiteData
     #expect(hits.first?.id == looseEnd.id)
     #expect(!(hits.first?.snippet.match.isEmpty ?? true))
   }
+
+  /// A translator that records its calls, so the negative assertion below is real.
+  private actor RecordingTranslator: Translator {
+    private(set) var calls: [String] = []
+    private let mapping: [String: String]
+    init(mapping: [String: String]) { self.mapping = mapping }
+    func translate(_ text: String, from source: String, to target: String) async -> String? {
+      await record(text)
+      return mapping[text]
+    }
+    private func record(_ text: String) { calls.append(text) }
+    func callCount() -> Int { calls.count }
+  }
+
+  @Test func aGermanQueryOverUntranslatedContentIsRetriedInEnglish() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("backstop-canonical"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
+    let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                      kind: CaptureKind.gitCommit, summary: "fix the background sync agent",
+                      detailJSON: "{}", fingerprint: "commit-backstop-1")
+    try await database.write { database in
+      try Node.insert { node }.execute(database)
+      try Source.insert { source }.execute(database)
+      try Event.insert { event }.execute(database)
+    }
+    let store = tempSearchStore()
+    SearchIndexer(store: store).sync(database)
+    let translator = RecordingTranslator(mapping: ["Hintergrund": "background"])
+
+    // A commit subject is captured content and never gets a stored translation, so the literal
+    // German query cannot match — this is exactly the residual gap the backstop exists for.
+    let literal = SearchQueries.search(query: "Hintergrund",
+                                       scope: SearchScope(visibleNodeIDs: [node.id]),
+                                       store: store, database)
+    #expect(literal.isEmpty)
+
+    let hits = await SearchQueries.searchTranslatingOnEmpty(
+      query: "Hintergrund", scope: SearchScope(visibleNodeIDs: [node.id]), store: store,
+      translations: nil, language: "de", translator: translator, database)
+    #expect(hits.contains { $0.nodeID == node.id })
+  }
+
+  /// The safety property, asserted rather than assumed. Mutation-check this both ways: delete the
+  /// `guard hits.isEmpty` in the implementation and this test MUST fail. A test that only checked
+  /// "results came back" would pass with the guard removed.
+  @Test func aQueryThatAlreadyHasResultsNeverReachesTheTranslator() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("backstop-noop-canonical"))
+    let node = Node(name: "Background sync", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let store = tempSearchStore()
+    SearchIndexer(store: store).sync(database)
+    let translator = RecordingTranslator(mapping: [:])
+
+    let hits = await SearchQueries.searchTranslatingOnEmpty(
+      query: "background", scope: SearchScope(visibleNodeIDs: [node.id]), store: store,
+      translations: nil, language: "de", translator: translator, database)
+    #expect(!hits.isEmpty)
+    #expect(await translator.callCount() == 0)
+  }
+
+  @Test func offMeansTheTranslatorIsNeverReachedEvenOnZeroResults() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("backstop-off-canonical"))
+    let node = Node(name: "Background sync", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let store = tempSearchStore()
+    SearchIndexer(store: store).sync(database)
+    let translator = RecordingTranslator(mapping: ["Hintergrund": "background"])
+
+    let hits = await SearchQueries.searchTranslatingOnEmpty(
+      query: "Hintergrund", scope: SearchScope(visibleNodeIDs: [node.id]), store: store,
+      translations: nil, language: TranslationTarget.off, translator: translator, database)
+    #expect(hits.isEmpty)
+    #expect(await translator.callCount() == 0)
+  }
+
+  /// Exactly one retry. A translation that also finds nothing is the end of the road — there is no
+  /// second language to try and no reason to re-query.
+  @Test func theBackstopRetriesAtMostOnce() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("backstop-once-canonical"))
+    let node = Node(name: "Background sync", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let store = tempSearchStore()
+    SearchIndexer(store: store).sync(database)
+    let translator = RecordingTranslator(mapping: ["Nichtvorhanden": "nonexistent"])
+
+    let hits = await SearchQueries.searchTranslatingOnEmpty(
+      query: "Nichtvorhanden", scope: SearchScope(visibleNodeIDs: [node.id]), store: store,
+      translations: nil, language: "de", translator: translator, database)
+    #expect(hits.isEmpty)
+    #expect(await translator.callCount() == 1)
+  }
 }

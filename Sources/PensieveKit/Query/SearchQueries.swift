@@ -67,6 +67,39 @@ public enum SearchQueries {
     }
   }
 
+  /// `search`, plus one retry in English when the literal query found nothing.
+  ///
+  /// A wrapper rather than a change to `search` for two reasons. `search` is synchronous and every
+  /// caller depends on that; and keeping it byte-identical is what makes the safety property
+  /// STRUCTURAL — this can never regress a query that already returns rows, because it only runs when
+  /// the result was already empty.
+  ///
+  /// No language detection. Detection over a two-word query is unreliable, and it is unnecessary:
+  /// translating an already-English query yields a no-op or nonsense, and since there was nothing to
+  /// lose, nothing is lost. The residual value is over content that never gets a stored
+  /// translation — commit subjects, event summaries, file paths — plus German compounding, where a
+  /// typed `Hintergrundsync` misses a stored `Hintergrund-Synchronisierung` under AND semantics.
+  public static func searchTranslatingOnEmpty(query rawQuery: String,
+                                              file: String? = nil,
+                                              scope: SearchScope,
+                                              store: SearchIndexStore,
+                                              translations: TranslationStore? = nil,
+                                              language: String = TranslationTarget.off,
+                                              translator: Translator? = nil,
+                                              _ database: any DatabaseReader) async -> [SearchHit] {
+    let hits = search(query: rawQuery, file: file, scope: scope, store: store,
+                      translations: translations, language: language, database)
+    guard hits.isEmpty, !language.isEmpty, let translator else { return hits }
+    let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard query.count >= minQueryLength,
+          let english = await translator.translate(query, from: language,
+                                                   to: TranslationTarget.sourceLanguage),
+          english.caseInsensitiveCompare(query) != .orderedSame
+    else { return hits }
+    return search(query: english, file: file, scope: scope, store: store,
+                  translations: translations, language: language, database)
+  }
+
   /// The node the user is most likely navigating to, selected by scanning the VISIBLE node set —
   /// never the returned hits. A node crowded out of the result cap by events is equally absent
   /// from any function of those hits, and that happens exactly on the common-term queries where
