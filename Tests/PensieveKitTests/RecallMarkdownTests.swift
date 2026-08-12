@@ -82,6 +82,21 @@ private func event(_ summary: String, on occurrenceDate: Date) -> Event {
   #expect(markdown.contains("## Recent Activity\n\n_No captured activity._"))
 }
 
+/// Share/copy exports what is displayed: a loose end with a stored translation exports the
+/// translation, one with none falls back to the English original — mirroring `NodeFindDocument.make`.
+@Test func exportsTranslatedSummaryWhenPresentAndFallsBackWhenAbsent() {
+  let node = Node(name: "X", kind: .project)
+  let translated = looseEnd("rotate on 401", quote: "SECRET-QUOTE", on: date(2026, 7, 6))
+  let untranslated = looseEnd("do the thing", quote: "OTHER-QUOTE", on: date(2026, 7, 6))
+  let markdown = RecallMarkdown.render(
+    node: node, narration: nil,
+    looseEnds: [translated, untranslated], events: [], now: date(2026, 7, 8),
+    translatedLooseEndText: [translated.looseEnd.id: "auf 401 zurücksetzen"])
+  #expect(markdown.contains("- auf 401 zurücksetzen"))
+  #expect(markdown.contains("- do the thing"))
+  #expect(!markdown.contains("- rotate on 401"))
+}
+
 @Test func omitsDescriptionLineWhenEmpty() {
   let node = Node(name: "X", kind: .project)   // description defaults to ""
   let markdown = RecallMarkdown.render(node: node, narration: nil, looseEnds: [], events: [], now: date(2026, 7, 2))

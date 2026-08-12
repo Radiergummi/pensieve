@@ -4,8 +4,12 @@ import Foundation
 /// no DB, no LLM, no localization. `narration` nil/empty ⇒ the Last Work Done section is omitted.
 /// Emits loose-end SUMMARY text only — a loose end's verbatim `quote` is never included.
 public enum RecallMarkdown {
+  /// `translatedLooseEndText` mirrors `NodeFindDocument.make`'s parameter of the same name: the
+  /// on-demand translation of a loose end's summary, when one is stored, else the English original.
+  /// Defaulted so existing call sites compile untouched.
   public static func render(node: Node, narration: String?, looseEnds: [LooseEndView],
-                            events: [Event], now: Date) -> String {
+                            events: [Event], now: Date,
+                            translatedLooseEndText: [UUID: String] = [:]) -> String {
     var out: [String] = []
     out.append("# \(node.name)")
     out.append("")
@@ -29,7 +33,10 @@ public enum RecallMarkdown {
     if looseEnds.isEmpty {
       out.append("_None open._")
     } else {
-      for looseEnd in looseEnds { out.append("- \(looseEnd.looseEnd.text)") }
+      for looseEnd in looseEnds {
+        let text = translatedLooseEndText[looseEnd.looseEnd.id] ?? looseEnd.looseEnd.text
+        out.append("- \(text)")
+      }
     }
 
     out.append("")

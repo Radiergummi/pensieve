@@ -124,7 +124,8 @@ struct DetailView: View {
       // the same store lookup, so there is exactly one value in flight, not two independent reads.
       let cachedDisplay = narrationEnabled ? model.cachedDisplayNarration(for: node, events: recentEvents) : nil
       shareMarkdown = RecallMarkdown.render(node: node, narration: cachedDisplay,
-                                            looseEnds: looseEnds, events: recentEvents, now: Date())
+                                            looseEnds: looseEnds, events: recentEvents, now: Date(),
+                                            translatedLooseEndText: translatedLooseEndText)
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
       if !isRefresh, let cached = cachedDisplay {
         lastWorkDone = cached
@@ -137,7 +138,8 @@ struct DetailView: View {
       lastWorkDone = prose
       resetFind(narration: narrationEnabled ? prose : nil)
       shareMarkdown = RecallMarkdown.render(node: node, narration: prose,
-                                            looseEnds: looseEnds, events: recentEvents, now: Date())
+                                            looseEnds: looseEnds, events: recentEvents, now: Date(),
+                                            translatedLooseEndText: translatedLooseEndText)
       isNarrating = false
     }
     .onChange(of: model.expandedLooseEndID) { _, id in
@@ -150,10 +152,16 @@ struct DetailView: View {
       find.scrollTarget = nil
     }
     // An on-demand translation landed: repaint with the new text (each row's `displaySummary`
-    // input is recomputed above) and rebuild the find document so ⌘F sees it too — deliberately
-    // NOT a `.task(id:)` rerun, which is keyed on `refreshToken` (⌘R) and would force-regenerate
-    // the narration through the LLM for a change that touched no canonical data.
-    .onChange(of: model.translationRevision) { _, _ in resetFind(narration: lastWorkDone) }
+    // input is recomputed above), rebuild the find document so ⌘F sees it too, and rebuild the share
+    // markdown so Share/Copy exports what is now displayed — deliberately NOT a `.task(id:)` rerun,
+    // which is keyed on `refreshToken` (⌘R) and would force-regenerate the narration through the LLM
+    // for a change that touched no canonical data.
+    .onChange(of: model.translationRevision) { _, _ in
+      resetFind(narration: lastWorkDone)
+      shareMarkdown = RecallMarkdown.render(node: node, narration: lastWorkDone,
+                                            looseEnds: looseEnds, events: recentEvents, now: Date(),
+                                            translatedLooseEndText: translatedLooseEndText)
+    }
     }
     }
     .focusedSceneValue(\.nodeFind, find)
@@ -171,18 +179,21 @@ struct DetailView: View {
   /// transcript matches the sweep had already filled with nothing left to refill them. Restarting is
   /// cheap — the loader serves an unchanged transcript from its cache and reports "nothing to do".
   @MainActor private func resetFind(narration: String?) {
-    // What the find document indexes for each loose end must match what LooseEndRow actually
-    // renders (its `displaySummary` input, built the same way below) — the same translated-or-English
-    // text, by the same fallback.
-    let translatedLooseEndText = Dictionary(uniqueKeysWithValues: looseEnds.map {
-      ($0.looseEnd.id, model.displayed(field: .looseEndText, sourceText: $0.looseEnd.text))
-    })
     find.reset(nodeID: node.id,
                document: NodeFindDocument.make(node: node, narration: narration,
                                                looseEnds: looseEnds, events: recentEvents,
                                                showsLooseEnds: showsLooseEnds,
                                                translatedLooseEndText: translatedLooseEndText))
     find.startSweep(looseEnds: looseEnds, loader: model.provenanceLoader)
+  }
+
+  /// What every loose end's row actually renders (`LooseEndRow`'s `displaySummary` input, built the
+  /// same way) — the on-demand translation when one is stored, else the English original. Shared by
+  /// the find document and the share markdown so neither can disagree with what is on screen.
+  private var translatedLooseEndText: [UUID: String] {
+    Dictionary(uniqueKeysWithValues: looseEnds.map {
+      ($0.looseEnd.id, model.displayed(field: .looseEndText, sourceText: $0.looseEnd.text))
+    })
   }
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {
