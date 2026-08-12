@@ -60,3 +60,14 @@ import Testing
   #expect(snippet.trailing == " brown fox")
   #expect(snippet.leading + snippet.match + snippet.trailing == "the quick brown fox")
 }
+
+@Test func firstRangeAgreesWithTheFullScanItShortCircuits() {
+  // `firstRange` exists only to avoid scanning a whole string for one match; if it ever disagreed
+  // with `ranges`, search snippets and in-node find would highlight different spans.
+  let cases = [("the quick brown fox", "quick"), ("Lösung Lösung", "losung"),
+               ("no match here", "zzz"), ("", "x"), ("something", "")]
+  for (source, query) in cases {
+    #expect(FindMatcher.firstRange(in: source, query: query)
+              == FindMatcher.ranges(in: source, query: query).first)
+  }
+}

@@ -13,12 +13,17 @@ public enum FindAnchor: Hashable, Sendable {
   case transcriptSegment(looseEndID: UUID, messageIndex: Int, segment: Int)
   case event(UUID)
 
-  /// The loose end this anchor belongs to, if any — what the app expands to reach it.
-  public var looseEndID: UUID? {
+  /// The loose end whose row the app must EXPAND to reach this anchor.
+  ///
+  /// Deliberately NOT "the loose end this anchor belongs to": a `.looseEndText` match sits in the
+  /// row's always-visible header, so expanding for it would throw the whole provenance box open on
+  /// every ⌘G through a node's loose-end text. Only the quote fallback and the transcript segments
+  /// live behind the disclosure.
+  public var looseEndIDRequiringExpansion: UUID? {
     switch self {
-    case .looseEndText(let id), .looseEndQuote(let id): return id
+    case .looseEndQuote(let id): return id
     case .transcriptSegment(let id, _, _): return id
-    case .nodeName, .description, .narration, .event: return nil
+    case .looseEndText, .nodeName, .description, .narration, .event: return nil
     }
   }
 }

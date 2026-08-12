@@ -78,6 +78,10 @@ public actor ProvenanceLoader {
     onProgress(0, paths.count)
     for (index, path) in paths.enumerated() {
       if Task.isCancelled { return result }
+      // Yield between files. `loadPath` is synchronous, so without this the whole sweep is one
+      // uninterrupted actor hold and a row the user expands mid-sweep waits behind EVERY remaining
+      // transcript parse before its own (already-cached, usually) load is served.
+      await Task.yield()
       for (looseEndID, loaded) in loadPath(path, group: byPath[path] ?? []) {
         result[looseEndID] = loaded
       }

@@ -14,29 +14,29 @@ struct SegmentHighlight {
 /// this file only decides what each segment looks like.
 struct TranscriptSegmentView: View {
   let segment: TranscriptSegment
-  /// Non-nil only while a find is open AND this segment matches. When set, the segment renders as
-  /// plain highlighted text instead of Markdown: MarkdownUI 2.4.1 exposes no way to style a
+  /// Non-nil only while a find is open AND this segment matches. When set, the segment's BODY renders
+  /// as plain highlighted text instead of Markdown: MarkdownUI 2.4.1 exposes no way to style a
   /// substring inside a rendered block (its AST types are internal), so this is the only way to
   /// highlight the phrase in place. The cost is visible raw syntax until the find bar closes.
+  ///
+  /// Only the body is flattened — a callout keeps its severity chrome and tag name, a harness block
+  /// keeps its kind label and card. Those are what tell the reader WHAT the block is; swapping the
+  /// whole view for bare text would turn a matched `<system-reminder>` into anonymous prose.
   var highlight: SegmentHighlight?
 
   var body: some View {
-    if let highlight {
-      HighlightedText(runs: highlight.runs, currentOffset: highlight.currentOffset)
-        .transcriptPlainTextProse()
-    } else {
-      unhighlighted
-    }
-  }
-
-  @ViewBuilder private var unhighlighted: some View {
     switch segment {
     case .markdown(let text):
-      Markdown(text).transcriptProse()
+      if let highlight {
+        HighlightedText(runs: highlight.runs, currentOffset: highlight.currentOffset)
+          .transcriptPlainTextProse()
+      } else {
+        Markdown(text).transcriptProse()
+      }
     case .callout(let callout):
-      CalloutView(callout: callout)
+      CalloutView(callout: callout, highlight: highlight)
     case .harness(let block):
-      HarnessCardView(block: block)
+      HarnessCardView(block: block, highlight: highlight)
     }
   }
 }
@@ -45,6 +45,7 @@ struct TranscriptSegmentView: View {
 /// (verified against the vendored checkout), so this is hand-drawn.
 private struct CalloutView: View {
   let callout: TranscriptCallout
+  var highlight: SegmentHighlight?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -59,7 +60,12 @@ private struct CalloutView: View {
       .font(.system(size: 12))
       .foregroundStyle(callout.severity.tint)
 
-      Markdown(callout.body).transcriptProse()
+      if let highlight {
+        HighlightedText(runs: highlight.runs, currentOffset: highlight.currentOffset)
+          .transcriptPlainTextProse()
+      } else {
+        Markdown(callout.body).transcriptProse()
+      }
     }
     .padding(10)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -73,6 +79,7 @@ private struct CalloutView: View {
 /// A machine envelope, rendered as a quiet card so it reads as "the harness", not "a person".
 private struct HarnessCardView: View {
   let block: HarnessBlock
+  var highlight: SegmentHighlight?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
@@ -81,7 +88,15 @@ private struct HarnessCardView: View {
         .textCase(.uppercase)
         .tracking(0.5)
         .foregroundStyle(.secondary)
-      if let body = block.kind.displayBody, !body.isEmpty {
+      if let highlight {
+        // No `lineLimit` while highlighted, deliberately: the body is indexed in FULL, so a phrase
+        // past line 12 would otherwise be a counted match clipped out of view — a match the bar
+        // promises and the pane never shows. The cap comes back the moment the find bar closes.
+        HighlightedText(runs: highlight.runs, currentOffset: highlight.currentOffset)
+          .font(.system(size: 12, design: .monospaced))
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      } else if let body = block.kind.displayBody, !body.isEmpty {
         Text(body)                              // CONTENT → verbatim
           .font(.system(size: 12, design: .monospaced))
           .foregroundStyle(.secondary)

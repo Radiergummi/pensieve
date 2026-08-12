@@ -190,3 +190,17 @@ private func makeEvent(summary: String) -> Event {
     segments: [])
   #expect(NodeFindDocument.units(from: loaded, looseEndID: UUID()).isEmpty)
 }
+
+@Test func onlyAnchorsBehindTheDisclosureRequireExpandingTheRow() {
+  let looseEndID = UUID()
+  // The loose end's own text renders in the row's always-visible header, so find must NOT throw the
+  // provenance box open to reach it — only the quote fallback and the transcript segments live there.
+  #expect(FindAnchor.looseEndText(looseEndID).looseEndIDRequiringExpansion == nil)
+  #expect(FindAnchor.looseEndQuote(looseEndID).looseEndIDRequiringExpansion == looseEndID)
+  #expect(FindAnchor.transcriptSegment(looseEndID: looseEndID, messageIndex: 3, segment: 0)
+            .looseEndIDRequiringExpansion == looseEndID)
+  #expect(FindAnchor.nodeName.looseEndIDRequiringExpansion == nil)
+  #expect(FindAnchor.narration.looseEndIDRequiringExpansion == nil)
+  #expect(FindAnchor.description.looseEndIDRequiringExpansion == nil)
+  #expect(FindAnchor.event(UUID()).looseEndIDRequiringExpansion == nil)
+}

@@ -27,7 +27,7 @@ public enum SnippetMaker {
   public static func make(from source: String, matching query: String, window: Int = 80) -> Snippet {
     // First occurrence only — the search-results contract. Options come from `FindMatcher.options`
     // so this path and in-node find can never disagree about what "matches".
-    guard let matchRange = FindMatcher.ranges(in: source, query: query).first else {
+    guard let matchRange = FindMatcher.firstRange(in: source, query: query) else {
       let head = String(source.prefix(window * 2))
       let lead = head.count < source.count ? head + "…" : head
       return Snippet(leading: lead, match: "", trailing: "")

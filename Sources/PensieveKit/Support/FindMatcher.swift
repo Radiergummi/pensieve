@@ -28,6 +28,14 @@ public enum FindMatcher {
   /// here would hand back a real hit that the view then renders with nothing highlighted.
   public static let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
 
+  /// The FIRST occurrence of `query` in `source`, or nil. Same comparison as `ranges` — callers that
+  /// need one match (a search snippet) go through here rather than building every range and taking
+  /// `.first`, which scans the whole string for nothing.
+  public static func firstRange(in source: String, query: String) -> Range<String.Index>? {
+    guard !query.isEmpty, !source.isEmpty else { return nil }
+    return source.range(of: query, options: options)
+  }
+
   /// Every occurrence of `query` in `source`, left to right, non-overlapping. Unicode-safe: all
   /// bounds are `String.Index`. Note a matched range may differ in length from `query` — diacritic
   /// folding compares `Lösung` equal to `losung`.

@@ -227,7 +227,10 @@ struct LooseEndRow: View {
     TranscriptMessageView(message: msg, segments: messageSegments,
                           compact: compact, showsRoleLabel: showsRole,
                           highlights: highlights(for: msg, segments: messageSegments),
-                          anchorForSegment: { ordinal in
+                          // Only on a find-scoped surface: handing an anchor to the middle column or
+                          // Review Suggestions would put an `.id()` on segments that never had one,
+                          // changing their view identity for a scroll target nothing can reach.
+                          anchorForSegment: find == nil ? nil : { ordinal in
                             .transcriptSegment(looseEndID: view.looseEnd.id,
                                                messageIndex: msg.index, segment: ordinal)
                           },

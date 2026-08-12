@@ -75,7 +75,11 @@ final class NodeFindState {
   func reset(nodeID: UUID, document: NodeFindDocument) {
     generation += 1
     cancelSweep()
-    let isNodeChange = self.nodeID != nodeID
+    // A first load (`self.nodeID == nil`) is NOT a node change: the pane has no previous node's
+    // matches to leak, and the user may already have pressed ⌘F and started typing while the detail
+    // was still loading. Treating it as a change would clear that query and slam the bar shut,
+    // silently swallowing the keystroke.
+    let isNodeChange = self.nodeID != nil && self.nodeID != nodeID
     if isNodeChange {
       query = ""
       forcedExpansions = []
@@ -150,6 +154,10 @@ final class NodeFindState {
     // Also zeroes the counters, so the monotonic progress guard below — which only ever lets the label
     // advance — starts from a clean slate rather than a superseded sweep's numbers.
     cancelSweep()
+    // Bump the generation as well as cancelling, for the reason `dismiss()` spells out: cancellation
+    // is cooperative, so a superseded sweep's already-dequeued progress report could still write into
+    // the counters this sweep just zeroed. The generation is what makes that provably impossible.
+    generation += 1
     let startedGeneration = generation
     let (progressReports, progressContinuation) = AsyncStream<SweepProgress>.makeStream()
     sweepTask = Task { [weak self] in
@@ -269,7 +277,7 @@ final class NodeFindState {
   /// Prepares to reveal the current match: force-expands its row and arms the pending scroll.
   private func focusCurrent() {
     guard let current = session.current else { pendingScroll = nil; return }
-    if let looseEndID = current.anchor.looseEndID {
+    if let looseEndID = current.anchor.looseEndIDRequiringExpansion {
       forcedExpansions.insert(looseEndID)
     }
     pendingScroll = current.anchor

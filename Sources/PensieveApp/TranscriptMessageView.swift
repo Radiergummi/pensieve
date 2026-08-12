@@ -24,11 +24,10 @@ struct TranscriptMessageView: View {
   /// Per-segment find highlight, keyed by segment ordinal. Empty when find is closed, when this
   /// surface is not find-scoped, or when nothing in this message matches.
   var highlights: [Int: SegmentHighlight] = [:]
-  /// Builds the find anchor for a segment ordinal. nil from `LooseEndRow.previewRow` — the collapsed
-  /// preview renders a single segment at ordinal 0 whatever its true position, so an anchor there would
-  /// name a site the document does not describe. Every expanded message DOES pass one, including on the
-  /// surfaces that never open a find bar (the middle column, Review Suggestions): they hand `find` nil,
-  /// so the segment gets an `.id(FindAnchor)` nothing ever scrolls to and no `onAppear` report.
+  /// Builds the find anchor for a segment ordinal. nil on the two surfaces that cannot use one: the
+  /// collapsed preview (`LooseEndRow.previewRow`), which renders a single segment at ordinal 0 whatever
+  /// its true position, so an anchor there would name a site the document does not describe; and the
+  /// surfaces with no find bar at all (the middle column, Review Suggestions), which pass `find` nil.
   var anchorForSegment: ((Int) -> FindAnchor)?
   var find: NodeFindState?
 

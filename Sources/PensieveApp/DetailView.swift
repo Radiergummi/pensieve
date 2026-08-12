@@ -24,7 +24,10 @@ struct DetailView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if find.isPresented, find.nodeID == node.id { FindBar(find: find) }
+      // `nodeID == nil` = the detail load hasn't landed yet. The bar still shows, so a ⌘F fired
+      // during the load is not swallowed; it reports "No matches" for the moment, then the load's
+      // `resetFind` hands it the real document and re-runs the query against it.
+      if find.isPresented, find.nodeID == nil || find.nodeID == node.id { FindBar(find: find) }
       ScrollViewReader { proxy in
       ScrollView {
       VStack(alignment: .leading, spacing: 20) {
