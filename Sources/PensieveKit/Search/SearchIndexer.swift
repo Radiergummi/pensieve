@@ -14,18 +14,31 @@ import SQLiteData
 /// blocks capture or ingest.
 public struct SearchIndexer: Sendable {
   let store: SearchIndexStore
-  public init(store: SearchIndexStore) { self.store = store }
+  let translations: TranslationStore?
+  let language: String
+  public init(store: SearchIndexStore, translations: TranslationStore? = nil,
+              language: String = TranslationTarget.off) {
+    self.store = store
+    self.translations = translations
+    self.language = language
+  }
 
   /// The indexer over the shared index for the store this process is pointed at. `SyncRunner`
   /// deliberately has no fallback to this — a test that constructed one would rebuild an index it
   /// never asked for — so every production entry point injects it explicitly.
   public static func production() -> SearchIndexer {
-    SearchIndexer(store: SearchIndexStore(url: PensievePaths.searchIndexURL()))
+    let language = TranslationTarget.resolved()
+    // Off means off: do not even open the translation store, so no file is created.
+    let translations = language.isEmpty ? nil
+      : TranslationStore(url: PensievePaths.translationCacheURL())
+    return SearchIndexer(store: SearchIndexStore(url: PensievePaths.searchIndexURL()),
+                         translations: translations, language: language)
   }
 
   public func sync(_ database: any DatabaseReader) {
     guard store.isAvailable else { return }
-    guard let corpus = try? EmbeddableCorpus.gather(database) else { return }
+    guard let corpus = try? EmbeddableCorpus.gather(database, translations: translations,
+                                                   language: language) else { return }
     let hash = Self.corpusHash(corpus)
     // `.building` also forces a rebuild: the flag is committed in its own transaction before the
     // rebuild's, so a kill in that window leaves it latched with the corpus hash unchanged. Guarding
