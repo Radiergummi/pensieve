@@ -90,16 +90,16 @@ private struct StatusFooter: View {
   let snapshot: MonitorSnapshot
 
   var body: some View {
-    VStack(spacing: 0) {
-      Divider()
-      HStack(spacing: 6) {
-        Circle().fill(color).frame(width: 7, height: 7)
-        Text(label).font(.caption).foregroundStyle(.secondary)
-        Spacer()
-      }
-      .padding(.horizontal, 12).padding(.vertical, 6)
-      .frame(maxWidth: .infinity, alignment: .leading)
+    HStack(spacing: 6) {
+      Circle().fill(color).frame(width: 7, height: 7)
+      Text(label).font(.caption).foregroundStyle(.secondary)
+      Spacer()
     }
+    .padding(.horizontal, 12).padding(.vertical, 6)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    // `.bar` STAYS: it is a translucent material and it is what separates the footer from the
+    // scrolling rows. Only the explicit hairline is gone -- the material's own edge does that job,
+    // and the hairline on top of it is what read as a strip taped under the sidebar.
     .background(.bar)
   }
   private var color: Color {
