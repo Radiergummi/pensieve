@@ -820,18 +820,23 @@ Inside the `database.read` block, add a local helper immediately after `out` is 
 ```swift
       // A translated document, or nothing. Off, no store, or no stored translation all mean "the
       // original is the only document for this item" — sparse translation is the steady state.
-      func translated(_ field: TranslationField, of sourceText: String,
+      //
+      // `kind` is a parameter, not a constant: a translated document MUST carry the same kind as the
+      // original it shadows, because `buildHits` maps `kind` to `SearchHit.Kind` and resolves the item
+      // through that branch. A translated loose end tagged "node" would resolve against the Node
+      // table by a loose-end id and silently vanish.
+      func translated(_ field: TranslationField, of sourceText: String, kind: String,
                       itemID: String, nodeID: String, state: String) -> EmbeddableItem? {
         guard !language.isEmpty, let translations,
               let text = translations.translation(field: field, sourceText: sourceText,
                                                   language: language)
         else { return nil }
-        return EmbeddableItem(itemID: itemID, kind: "node", nodeID: nodeID, state: state,
+        return EmbeddableItem(itemID: itemID, kind: kind, nodeID: nodeID, state: state,
                               text: text, language: language)
       }
 ```
 
-`kind` must match the original's, so pass it rather than hardcoding — change the helper to take `kind: String` and thread it through. In the node loop, after the existing `out.append`:
+The node loop does not use that helper — a node has TWO translatable fields (`name` and `description`) that must be joined into one document the same way the original joins them, so it composes them inline. In the node loop, after the existing `out.append`:
 
 ```swift
         // Name and description are separate fields with separate translations, joined the same way
