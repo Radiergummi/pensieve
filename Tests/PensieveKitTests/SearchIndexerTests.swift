@@ -108,8 +108,10 @@ import SQLiteData
     #expect(SearchIndexer.corpusHash([untagged]) != SearchIndexer.corpusHash([tagged]))
   }
 
-  /// The German document must be findable on its own terms, and must carry the SAME item_id as its
-  /// original so the query layer can dedup on it.
+  /// Two documents sharing an item_id are each independently searchable on their own text — this is
+  /// what Task 7's dedup-by-item_id depends on, and it holds regardless of whether `language` is
+  /// persisted (there is no uniqueness constraint on item_id in the `documents` table). It does NOT
+  /// pin that the `language` column itself is written — see `rebuildPersistsLanguagePerDocument`.
   @Test func aTranslatedDocumentIsIndexedUnderTheOriginalItemID() {
     let store = tempSearchStore()
     let english = EmbeddableItem(itemID: "item-1", kind: "node", nodeID: "n1", state: "active",
@@ -139,5 +141,32 @@ import SQLiteData
     // Reopening at the same version must NOT discard the index.
     let reopened = SearchIndexStore(url: url)
     #expect(reopened.storedCorpusHash() == "hash-a")
+  }
+
+  /// `language` is load-bearing for Task 6 (translated documents) and Task 7 (dedup-by-item_id
+  /// reasoning about pairs), yet no existing assertion reads it back — `SearchIndexStore`'s
+  /// `database` is private, so this opens its own read-only connection to the same index file (the
+  /// store's own `Configuration` uses a 5 s busy timeout precisely because several processes open
+  /// this file, so a second reader is expected usage) and asserts the persisted values directly.
+  @Test func rebuildPersistsLanguagePerDocument() throws {
+    let url = tempURL("searchidx-language")
+    let store = SearchIndexStore(url: url)
+    let english = EmbeddableItem(itemID: "item-1", kind: "node", nodeID: "n1", state: "active",
+                                 text: "Background sync agent")
+    let german = EmbeddableItem(itemID: "item-1", kind: "node", nodeID: "n1", state: "active",
+                                text: "Hintergrund-Synchronisierungsagent", language: "de")
+    store.rebuild(items: [english, german], corpusHash: "hash-1")
+
+    var readOnlyConfiguration = Configuration()
+    readOnlyConfiguration.readonly = true
+    let reader = try DatabaseQueue(path: url.path, configuration: readOnlyConfiguration)
+    let languages = try reader.read { database in
+      try String.fetchAll(database, sql: "SELECT language FROM documents ORDER BY language")
+    }
+    #expect(languages == ["", "de"])
+    let distinctItemIDCount = try reader.read { database in
+      try Int.fetchOne(database, sql: "SELECT COUNT(DISTINCT item_id) FROM documents")
+    }
+    #expect(distinctItemIDCount == 1)
   }
 }
