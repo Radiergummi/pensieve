@@ -50,6 +50,7 @@ struct SidebarView: View {
       }
     }
     .listStyle(.sidebar)
+    .scrollEdgeEffectStyle(.soft, for: .top)
     .safeAreaInset(edge: .bottom) { StatusFooter(snapshot: model.snapshot) }
   }
 
@@ -89,16 +90,15 @@ private struct StatusFooter: View {
   let snapshot: MonitorSnapshot
 
   var body: some View {
-    VStack(spacing: 0) {
-      Divider()
-      HStack(spacing: 6) {
-        Circle().fill(color).frame(width: 7, height: 7)
-        Text(label).font(.caption).foregroundStyle(.secondary)
-        Spacer()
-      }
-      .padding(.horizontal, 12).padding(.vertical, 6)
-      .frame(maxWidth: .infinity, alignment: .leading)
+    HStack(spacing: 6) {
+      Circle().fill(color).frame(width: 7, height: 7)
+      Text(label).font(.caption).foregroundStyle(.secondary)
+      Spacer()
     }
+    .padding(.horizontal, 12).padding(.vertical, 6)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    // The material's own edge separates the footer from the scrolling rows; a hairline on top of it
+    // read as a strip taped under the sidebar.
     .background(.bar)
   }
   private var color: Color {

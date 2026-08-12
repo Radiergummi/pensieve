@@ -39,7 +39,7 @@ struct MenuBarView: View {
       footer
     }
     .padding(12)
-    .frame(width: 300)
+    .frame(width: 320)   // two-line rows need the room
     .task { model.refreshGlance() }   // refresh on open; the always-mounted label is kept live between opens by the liveness watches
   }
 
@@ -58,29 +58,34 @@ struct MenuBarView: View {
       Text("Nothing queued").font(.callout).foregroundStyle(.secondary)
     } else {
       ForEach(items, id: \.project.id) { item in
-        Button {
+        MenuBarRow(item: item, facts: model.nodeRowFacts[item.project.id]) {
           applyDeepLink(.node(item.project.id), model: model, openWindow: openWindow)
-        } label: {
-          HStack {
-            Text(item.project.name).lineLimit(1)
-            Spacer()
-            Text("\(item.openLooseEnds) open · \(item.daysDormant)d dormant")
-              .font(.caption).foregroundStyle(.secondary)
-          }
         }
-        .buttonStyle(.plain)
       }
     }
   }
 
   @ViewBuilder private var footer: some View {
-    HStack {
+    HStack(spacing: 8) {
+      // Full-width primary: German cannot truncate a button that owns the row. `.borderedProminent`
+      // rather than a glass style — the `.window` popover surface is already system glass, so a
+      // glass button on it would be glass on glass. This also picks up the system accent colour.
       Button("Open Pensieve") {
         applyDeepLink(.briefing, model: model, openWindow: openWindow)
       }
-      Spacer()
-      Button("Refresh") { Task { await model.refreshNow() } }
-      Button("Quit") { NSApplication.shared.terminate(nil) }
+      .buttonStyle(.borderedProminent)
+      .frame(maxWidth: .infinity)
+
+      Menu {
+        Button("Refresh") { Task { await model.refreshNow() } }
+        Button("Quit") { NSApplication.shared.terminate(nil) }
+      } label: {
+        Image(systemName: "ellipsis")
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .help("More actions")
+      .accessibilityLabel("More actions")
     }
   }
 
@@ -97,6 +102,37 @@ struct MenuBarView: View {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .abbreviated
     return formatter.localizedString(for: date, relativeTo: Date())
+  }
+}
+
+/// One popover row: a re-entry point, not a scoreboard line — the whole row is the action, and the
+/// chevron plus hover fill say so. The second line reuses `NodeRowMeta`, the middle column's own
+/// component, so the two surfaces share one implementation instead of agreeing by convention.
+private struct MenuBarRow: View {
+  let item: NextItem
+  let facts: NodeRowFacts?
+  let action: () -> Void
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 1) {
+          Text(item.project.name).lineLimit(1)
+          NodeRowMeta(facts: facts)
+        }
+        Spacer()
+        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+      }
+      // The padding stays inside the label (above this call), or the hover fill paints a wider
+      // rectangle than the button actually hit-tests.
+      .padding(.horizontal, 6).padding(.vertical, 4)
+      .rowHitArea()
+    }
+    .buttonStyle(.plain)
+    .background(.quaternary.opacity(isHovering ? 1 : 0),
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    .onHover { isHovering = $0 }
   }
 }
 

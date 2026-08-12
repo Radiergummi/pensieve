@@ -208,7 +208,7 @@ Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print servi
 
 ---
 
-## Claude Design review of the shipped app — 2026-08-11 (four slices, A in flight)
+## Claude Design review of the shipped app — 2026-08-11 (four slices; A and B done, C live, D parked)
 
 The user ran the live app past Claude Design and got a full redesign proposal back (mockups + a
 "top 5"). Mockups are **medium-resolution intent, not a spec** — the standing instruction is to
@@ -216,7 +216,7 @@ reach the same outcomes through **platform primitives and Liquid Glass**, never 
 pixels. Verified against the source before filing: every "current state" claim below was confirmed
 in the repo, and one proposal was **rejected on the evidence**.
 
-Split into four slices. **Slice A is being specced now**; B–D are parked here.
+Split into four slices. **A and B have shipped**; C is unblocked; D is parked here.
 
 **A — "Where was I" (the reload-context pass) — DONE (verified 2026-08-12).**
 Human-verify pass run against the built app and the real store; outcome and two process notes in
@@ -235,12 +235,12 @@ untranslated in a German build (and `dormant 0d` is not a fact anyone needs); `B
 gives `moved` and `quiet` identical cards, so five dormant projects outweigh the one that moved;
 `DetailView.swift` has no state line at all and puts LLM prose above the cited loose ends.
 
-**B — Liquid Glass chrome + the macOS 26 floor.** `project.yml` pins `deploymentTarget.macOS: "15.0"`
-while the machine runs 26.6 with Xcode 26.6. System chrome already inherits Liquid Glass from the
-SDK, but every explicit API the proposal leans on — `.scrollEdgeEffectStyle(.soft, for: .top)`,
-`.glassEffect`, `.buttonStyle(.glass)` — is macOS 26+ and needs `if #available` scaffolding at every
-call site until the floor moves. For a single-user tool on 26.6 the 15.0 floor buys nothing.
-Scope: bump the target, adopt scroll-edge material so content stops bleeding through chrome, revisit
+**B — Liquid Glass chrome + the macOS 26 floor — DONE (2026-08-13).** `project.yml` now pins
+`deploymentTarget.macOS: "26.0"`, so the macOS 26 APIs need no `if #available` scaffolding at the
+call site. Human-verify carries (the checks that need a GUI session and a real store) live in
+`verify/2026-08-12-macos26-floor-human-verify.md`; two carries that outgrew this slice are logged at
+the end of this entry. Original scope, all landed: bump the target, adopt scroll-edge material so
+content stops bleeding through chrome, revisit
 the sidebar status footer (still the open item #1 from the 2026-07-07 UX carries — `.background(.bar)`
 fixed the clash but it still reads as a bolted-on band), and **rebuild the menu-bar popover**, which is
 the worst-looking surface in the app today: node rows with no per-item action. The proposal's shape
@@ -248,7 +248,39 @@ for it is right — a re-entry point with a `Fortsetzen` action per row, not a s
 untranslated `"868 open"` / `"288 open · 0d dormant"` were fixed in slice A; the 2026-08-12 verify
 pass confirmed `869 offen` / `288 offen · 1T ruhend`. What remains there is **layout**: the
 `Pensieve öffnen` button truncates to `Pensieve öf…` because the three-button row is too narrow for
-German — the string is correct, the row is not.) *Trigger: pair with or follow A.*
+German — the string is correct, the row is not.) The footer is now a full-width primary button plus
+an ellipsis `Menu` holding Refresh and Quit, at a 320pt popover, so German cannot truncate it.
+
+**B's two open carries** (found by the cleanup pass on 2026-08-13, both too deep for it):
+
+- **Scroll-edge material is applied per-site and covers 4 of ~9 scroll surfaces.**
+  `.scrollEdgeEffectStyle(.soft, for: .top)` sits on `SidebarView`, `ContentListView`, `BriefingView`
+  and `DetailView`. Untreated: the three Settings `Form`s (`Settings/GeneralSettingsTab.swift:15`,
+  `IntelligenceSettingsTab.swift:61`, `AdvancedSettingsTab.swift:17`), `NodeOrganizing.swift:156`/`:179`
+  (`MovePicker`/`MergePicker` lists scrolling under a `navigationTitle` — the textbook case), the
+  `NodeEditor` `Form` at `NodeOrganizing.swift:27`, and the two `IconPicker` grids (`:102`, `:138`).
+  The four shipped sites already rely on the modifier propagating down a subtree (`ContentListView`
+  attaches it to a `Group`, `DetailView` to a `ScrollViewReader` — neither is the scroll view itself),
+  which is the argument that it can be hoisted: applying it once per scene in `PensieveApp.swift` — on
+  `RootView`, `RecallWindowView`, `SettingsView` — would collapse the four call sites *and* close the
+  gap, so scroll views added later inherit it instead of depending on someone remembering. **Needs a
+  GUI session**, not a green build: propagation into sheet-presented content is the unverified part,
+  and getting it wrong silently removes the effect from surfaces this slice deliberately treated.
+- **`NextItem` lacks `lastActivityAt`, so the popover buys its second line with two whole-database
+  aggregates.** `MenuBarRow` renders recency + open count from `model.nodeRowFacts`, which is why
+  `refreshGlance()` gained a `NodeFactsQueries.rowFacts` call. But `NextQueries.ranked`
+  (`Sources/PensieveKit/Query/NextQueries.swift:22-31`) *already* fetches the latest `Event` per
+  project and discards the `Date`, keeping only `daysDormant`. `NodeFacts.swift:11-17` wrote down
+  exactly this pattern — carry the `Date` alongside the `Int`, views read the `Date`, ranking reads
+  the `Int` — and `NextItem` is simply the struct that never got the field. Adding it lets the row
+  render from the item it already holds and deletes the query from `refreshGlance()` entirely.
+  Adjacent, larger, and **pre-existing**: `ranked` runs `2N` queries per refresh, and `looseEnds` has
+  no index on `nodeID` (only `idx_events_project` exists, `CanonicalStore.swift:88`), so each active
+  node triggers a full table scan of it. At single-user scale that is milliseconds — but the index is
+  the cheap half if this is ever revisited. Kit change; wants its own pass.
+
+*Trigger for the two carries: the scroll-edge hoist wants the next GUI session; the `NextItem` field
+wants the next pass that touches `NextQueries`.*
 
 **C — Transcript reading: one rail, no nested cards.** The provenance transcript currently nests
 three near-identical gray surfaces (message card inside system card inside HINWEIS/BEFEHL card) with

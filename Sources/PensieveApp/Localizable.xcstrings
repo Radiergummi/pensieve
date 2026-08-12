@@ -303,23 +303,6 @@
         }
       }
     },
-    "%lld open · %lldd dormant" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld offen · %2$lldT ruhend"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld open · %2$lldd dormant"
-          }
-        }
-      }
-    },
     "%lld Projects" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1477,6 +1460,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modell"
+          }
+        }
+      }
+    },
+    "More actions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Aktionen"
           }
         }
       }

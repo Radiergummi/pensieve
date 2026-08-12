@@ -105,7 +105,7 @@ The harness earns its keep mostly by *stopping* things. The salience gate above 
 
 ## Building it
 
-**Requirements:** macOS 15+, Xcode 26.6, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (2.45+).
+**Requirements:** macOS 26+, Xcode 26.6, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (2.45+).
 
 The framework and its tests are SwiftPM; the app and CLI are Xcode targets.
 

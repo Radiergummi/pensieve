@@ -222,14 +222,16 @@ out of scope — app-wide and pre-existing — but is named here as a carry rath
 
 ### 6. Localization
 
-Any new or changed chrome string needs an `en` **and** a `de` value in
-`Sources/PensieveApp/Localizable.xcstrings`. Keys are **not** auto-populated by `xcodebuild`; they are
-reconciled by hand.
+A new or changed chrome string needs at least a `de` value in `Sources/PensieveApp/Localizable.xcstrings`.
+The catalog's `sourceLanguage` is `en` and the key itself carries the English text, so most entries —
+159 of 219, measured — are `de`-only by convention; only 58 carry an explicit `en` override as well.
+Keys are **not** auto-populated by `xcodebuild`; they are reconciled by hand.
 
-This slice should add **no new keys** — `NodeRowMeta` reuses the middle column's — and it **orphans
-one**: removing `Text("\(item.openLooseEnds) open · \(item.daysDormant)d dormant")` leaves
-`'%lld open · %lldd dormant'` → `'%1$lld offen · %2$lldT ruhend'` with no Swift literal resolving to
-it. Remove the key with the string.
+A pre-flight scan of this spec amended the plan's original "no new keys" constraint to permit exactly
+one: `More actions`, added `de`-only (`Weitere Aktionen`) per the catalog's dominant convention above.
+This slice also **orphans one**: removing `Text("\(item.openLooseEnds) open · \(item.daysDormant)d dormant")`
+leaves `'%lld open · %lldd dormant'` → `'%1$lld offen · %2$lldT ruhend'` with no Swift literal resolving
+to it. Remove the key with the string.
 
 **Expect a conflict** with the concurrent translation branch, which also edits this catalog; hand-
 resolve at merge time, as `d2df86b` already did once.
@@ -324,17 +326,18 @@ Human-verify (the accessibility sandbox blocks scripting these):
 
 ## Risks
 
-- **`DetailView.swift` is shared with the concurrent translation branch.** As of 2026-08-12 that
-  branch (task 11 of 12) has committed changes to `DetailView.swift`, `LooseEndRow.swift`,
+- **`DetailView.swift` was shared with the on-device-translation branch, which has since merged into
+  `main` (`225c442`).** That branch's commits touched `DetailView.swift`, `LooseEndRow.swift`,
   `AppModel.swift`, `AppModel+Narration.swift` and `NodeFindDocument.swift` — an earlier draft of this
-  spec claimed `Localizable.xcstrings` was the only shared file, and that is no longer true. Its
-  `DetailView` hunks (`:51-58`, `:120-135`, `:149-153`, `:171-180`) do not overlap B's single site at
-  `:32`, so git should auto-merge. **Constraint: B adds a modifier at an existing line and must not
-  reindent or restructure the `ScrollViewReader`/`ScrollView`/`VStack` nesting** — that reindent would
-  span the other branch's hunks, in a file whose `.task` ordering two prior reviews called
-  load-bearing. If B ever needs that restructure, sequence it after translation merges.
-- **`LooseEndRow.swift` is also touched by translation**, which is a *slice C* file. Worth knowing when
-  C is planned; no consequence for B, which does not open it.
+  spec claimed `Localizable.xcstrings` was the only shared file, and that was no longer true even before
+  the merge. Its `DetailView` hunks (`:51-58`, `:120-135`, `:149-153`, `:171-180`) do not overlap B's
+  single site at `:32`, so git should auto-merge when B merges into `main`. **Constraint: B adds a
+  modifier at an existing line and must not reindent or restructure the
+  `ScrollViewReader`/`ScrollView`/`VStack` nesting** — that reindent would span the other branch's
+  hunks, in a file whose `.task` ordering two prior reviews called load-bearing. If B ever needs that
+  restructure, sequence it after B merges into `main`.
+- **`LooseEndRow.swift` was also touched by translation**, which is a *slice C* file, now on `main`.
+  Worth knowing when C is planned; no consequence for B, which does not open it.
 - **`rm -rf .build-xcode` would delete a registered SMAppService bundle.** Standing gotcha, still
   applies.
 - **The 26.0 floor is one-way in practice** — three binaries stop running below 26 without reverting

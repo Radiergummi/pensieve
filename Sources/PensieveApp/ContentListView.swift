@@ -17,6 +17,9 @@ struct ContentListView: View {
         normalContent
       }
     }
+    // On `body`, not `normalContent`: `searchResultsList()` is a sibling of the switch, so attaching
+    // this one level down would leave the search column untreated.
+    .scrollEdgeEffectStyle(.soft, for: .top)
   }
 
   @ViewBuilder private var normalContent: some View {
