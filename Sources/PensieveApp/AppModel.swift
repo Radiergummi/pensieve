@@ -268,6 +268,10 @@ final class AppModel {
   func refreshGlance() {
     snapshot = MonitorSnapshot.gather(canonical: database, spool: spool)
     guard let database else { return }
+    // The popover's rows render `NodeRowMeta`, which reads `nodeRowFacts` -- and this is the ONLY
+    // refresh the popover runs, so without this line it shows whatever the last full `refresh()`
+    // left. Two grouped aggregates, cheaper than the `SmartLists.compute` already on this path.
+    if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
     guard let raw = try? SmartLists.compute(database, now: Date()) else { return }
     let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
     lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
