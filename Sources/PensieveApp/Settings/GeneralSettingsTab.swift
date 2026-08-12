@@ -24,8 +24,14 @@ struct GeneralSettingsTab: View {
       Section("Background sync") {
         Toggle("Keep Pensieve synced in the background", isOn: $backgroundSyncEnabled)
           .onChange(of: backgroundSyncEnabled) { _, newEnabled in
-            if newEnabled { BackgroundSyncService.registerIfNeeded() } else { BackgroundSyncService.unregister() }
-            syncStatus = BackgroundSyncService.status
+            // Registering is asynchronous, so its status must be read AFTER it completes; reading
+            // through would report the pre-registration state. Unregistering is synchronous.
+            if newEnabled {
+              Task { @MainActor in syncStatus = await BackgroundSyncService.register() }
+            } else {
+              BackgroundSyncService.unregister()
+              syncStatus = BackgroundSyncService.status
+            }
           }
         LabeledContent("Status") { Text(statusText) }
         if syncStatus == .requiresApproval {

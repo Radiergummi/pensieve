@@ -8,8 +8,14 @@ enum BackgroundSyncService {
   static var agent: SMAppService { SMAppService.agent(plistName: plistName) }
   static var status: SMAppService.Status { agent.status }
 
-  /// Register (and refresh) the bundled agent. Called on every launch when the preference is on,
-  /// and by the Settings toggle when switched on.
+  /// Register (and refresh) the bundled agent, returning the status it actually lands in.
+  ///
+  /// **Await this whenever anything reads the result.** The work is genuinely asynchronous (see the
+  /// awaited unregister below), so a caller that fires it and then reads `status` observes the state
+  /// from *before* registration — and, because the unregister runs first, usually `.notRegistered`.
+  /// That is what made the Settings toggle report "off" after switching it on until the window was
+  /// reopened. `unregister()` has no such hazard: it is synchronous, so reading `status` straight
+  /// after it is correct. The asymmetry between the two is real, not an oversight.
   ///
   /// This unregisters first, then registers — NOT a bare `register()` — because the app is ad-hoc
   /// signed and rebuilt often. Each rebuild mints a new helper cdhash, and SMAppService pins the
@@ -25,11 +31,18 @@ enum BackgroundSyncService {
   /// synchronous unregister immediately followed by `register()` races — the re-register can land
   /// before the old record is gone, silently keeping the stale LWCR (observed live: the helper
   /// kept dying with "Launch Constraint Violation" across relaunches until the await was added).
-  static func registerIfNeeded() {
-    Task.detached {
+  @discardableResult
+  static func register() async -> SMAppService.Status {
+    await Task.detached { () -> SMAppService.Status in
       try? await agent.unregister()   // throws when nothing is registered — fine, ignore
       do { try agent.register() } catch { AppLog.app.error("SMAppService register failed: \(error, privacy: .public)") }
-    }
+      return agent.status
+    }.value
+  }
+
+  /// Fire-and-forget entry point for launch, where nothing observes the outcome.
+  static func registerIfNeeded() {
+    Task.detached { await register() }
   }
 
   static func unregister() {
