@@ -1,4 +1,8 @@
 import SwiftUI
+// Load-bearing and FILE-SCOPED: `@preconcurrency` suppresses this file's Sendable warnings from the
+// `Translation` framework's un-audited types (e.g. the `.translationTask` view below). It does not
+// carry over to any other file — a future `Translation` use elsewhere gets no free pass and must
+// either import it the same way or handle the warnings itself.
 @preconcurrency import Translation
 import PensieveKit
 

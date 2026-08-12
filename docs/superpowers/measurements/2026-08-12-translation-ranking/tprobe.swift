@@ -239,8 +239,9 @@ func treatedRank(_ queryItemID: String) -> [(String, Double)] {
 evaluate("baseline", ranker: baselineRank)
 evaluate("treated", ranker: treatedRank)
 
-// ---- McNemar, paired on the identical n=1500 query sample. Exact-test code is rprobe4.swift's own,
-// verbatim (log-factorial two-sided exact binomial over the discordant pairs).
+// ---- McNemar, paired on the identical n=1418 query sample (the corpus-size ceiling — 1,500 was the
+// target, not the achieved count; see the README's Sample size section). Exact-test code is
+// rprobe4.swift's own, verbatim (log-factorial two-sided exact binomial over the discordant pairs).
 var onlyBaselineRight = 0, onlyTreatedRight = 0
 for queryItemID in querySample {
   let goldSet = gold(for: queryItemID)

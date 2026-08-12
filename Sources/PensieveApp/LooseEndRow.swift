@@ -15,9 +15,10 @@ struct LooseEndRow: View {
   /// `model.setLooseEndLabel`.
   let onLabel: (UUID, String) -> Void
   /// The summary as it should render — the on-demand translation when one is stored, else the
-  /// English original. An INPUT rather than a lookup inside this row: a translation landing changes
-  /// no property this row stores, so SwiftUI would be free to skip re-running its body if the text
-  /// were fetched from inside it. Passing it in makes the change a diffable input instead. Pass
+  /// English original. An INPUT rather than a lookup inside this row: the backing `translationStore`
+  /// is `@ObservationIgnored` on `AppModel`, so a lookup made from inside this row's body would carry
+  /// no observation dependency of its own, and a translation landing would never trigger a re-render.
+  /// Passing it in as a plain property makes the change a diffable input instead. Pass
   /// `model.displayed(field: .looseEndText, sourceText: view.looseEnd.text)`. `nil` for callers
   /// outside the find-scoped detail pane, which fall back to the English original.
   var displaySummary: String?

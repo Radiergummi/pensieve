@@ -147,7 +147,7 @@ import SQLiteData
     private let mapping: [String: String]
     init(mapping: [String: String]) { self.mapping = mapping }
     func translate(_ text: String, from source: String, to target: String) async -> String? {
-      await record(text)
+      record(text)
       return mapping[text]
     }
     private func record(_ text: String) { calls.append(text) }
