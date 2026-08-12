@@ -26,6 +26,38 @@ import SQLiteData
                    scope: SearchScope(visibleNodeIDs: [node.id]))
   }
 
+  /// Pins the shape of the Finding-1 bug: `SearchIndexer(store: store)` — the defaulted
+  /// initializer `AppModel+Search.swift` used before the fix — silently resolves to
+  /// `translations: nil, language: .off`, so syncing the SAME corpus through it omits every German
+  /// document that an explicitly-configured indexer (the shape `.production()` builds once a target
+  /// is resolved) includes. `.production()` itself is not called here — it reads the real, shared
+  /// `PensieveDefaults.shared()` domain and the real support-directory paths (following `PENSIEVE_DB`
+  /// only when set), and mutating that global state from a parallel test would be the tail wagging
+  /// the dog; the two initializer shapes are what actually diverged, and are what this contrasts.
+  @Test func defaultedIndexerOmitsTranslationsThatAnExplicitlyConfiguredIndexerIncludes() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("defaulted-vs-configured-canonical"))
+    let node = Node(name: "Background sync", kind: NodeKind.project)
+    try await database.write { database in try Node.insert { node }.execute(database) }
+    let translations = TranslationStore(url: tempURL("defaulted-vs-configured-translations"))
+    translations.put(field: .nodeName, sourceText: "Background sync", language: "de",
+                     text: "Hintergrund-Synchronisierung")
+
+    let defaultedStore = tempSearchStore()
+    SearchIndexer(store: defaultedStore).sync(database)   // the bug-site shape
+
+    let configuredStore = tempSearchStore()
+    // What `.production()` builds once `TranslationTarget.resolved()` yields a real target.
+    SearchIndexer(store: configuredStore, translations: translations, language: "de").sync(database)
+
+    let scope = SearchScope(visibleNodeIDs: [node.id])
+    let defaultedHits = SearchQueries.search(query: "Hintergrund", scope: scope,
+                                             store: defaultedStore, database)
+    let configuredHits = SearchQueries.search(query: "Hintergrund", scope: scope, store: configuredStore,
+                                              translations: translations, language: "de", database)
+    #expect(defaultedHits.isEmpty)
+    #expect(configuredHits.map(\.nodeID) == [node.id])
+  }
+
   @Test func aGermanQueryFindsTheNodeThroughItsTranslation() async throws {
     let fixture = try await fixture("german-query")
     let hits = SearchQueries.search(query: "Hintergrund", scope: fixture.scope,

@@ -27,7 +27,13 @@ extension AppModel {
     isSyncingIndexes = true
     let searchStore = self.searchStore
     Task.detached { [weak self] in
-      SearchIndexer(store: searchStore).sync(database)
+      // `.production()`, NOT `SearchIndexer(store: searchStore)`: the defaulted initializer resolves
+      // to `translations: nil, language: .off`, so this rebuild would carry no German rows while the
+      // daemon's own `.production()` rebuild (Sync.swift / PensieveSyncAgent.swift) carries them —
+      // each side's rebuild would then look like a corpus change to the other and undo it, forever.
+      // `.production()` re-reads the target on every call (a Settings change lands without relaunch)
+      // and already skips opening the translation store when the target is off.
+      SearchIndexer.production().sync(database)
       // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
       // timeout is the whole reason this work is detached.
       let state = searchStore.state()
