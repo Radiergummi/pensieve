@@ -93,12 +93,21 @@ extension AppModel {
     return outcome
   }
 
-  /// The narration as it should RENDER: the English prose, or its stored translation when a target
-  /// language is set. Synchronous, so the view can render a cached recap instantly — a point lookup
-  /// against a small local file, the same shape as `isDescribable`'s canonical read.
+  /// The narration as it should RENDER: the English prose when translation is off, its STORED
+  /// translation when a target is set, and `nil` when a target is set but this prose has not been
+  /// translated yet.
+  ///
+  /// That nil is deliberate and load-bearing. Returning the English fallback here would satisfy
+  /// `DetailView`'s `if let cached` fast path, which returns early — so the async `displayNarration`,
+  /// the only path that calls the translator and writes to the store, would never run. Since
+  /// `NarrationCacheKey` folds in events and provider but NOT language, every node narrated before
+  /// the user enabled a target would render English forever, self-healing only on a manual ⌘R.
+  /// Returning nil costs one spinner per node on first open after enabling, then never again.
   func cachedDisplayNarration(for node: Node, events: [Event]) -> String? {
     guard let prose = cachedNarration(for: node, events: events) else { return nil }
-    return displayText(prose)
+    let language = TranslationTarget.resolved()
+    guard !language.isEmpty else { return prose }
+    return translationStore.translation(field: .narration, sourceText: prose, language: language)
   }
 
   /// Generate (or reuse) the narration, then resolve its display form — translating and storing it if
@@ -120,13 +129,5 @@ extension AppModel {
     else { return prose }   // best-effort: the English original is always an acceptable answer
     translationStore.put(field: .narration, sourceText: prose, language: language, text: translated)
     return translated
-  }
-
-  /// A stored translation of `text`, or `text` itself. Never generates — the synchronous callers
-  /// cannot await, and a missing translation must render as English rather than as nothing.
-  private func displayText(_ text: String) -> String {
-    let language = TranslationTarget.resolved()
-    guard !language.isEmpty else { return text }
-    return translationStore.translation(field: .narration, sourceText: text, language: language) ?? text
   }
 }

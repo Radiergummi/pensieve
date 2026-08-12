@@ -117,12 +117,13 @@ struct DetailView: View {
       looseEnds = detail.looseEnds
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       resetFind(narration: nil)
-      shareMarkdown = RecallMarkdown.render(
-        node: node,
-        narration: narrationEnabled ? model.cachedDisplayNarration(for: node, events: recentEvents) : nil,
-        looseEnds: looseEnds, events: recentEvents, now: Date())
+      // Computed once: both the pre-generation share markdown and the cached fast path below read
+      // the same store lookup, so there is exactly one value in flight, not two independent reads.
+      let cachedDisplay = narrationEnabled ? model.cachedDisplayNarration(for: node, events: recentEvents) : nil
+      shareMarkdown = RecallMarkdown.render(node: node, narration: cachedDisplay,
+                                            looseEnds: looseEnds, events: recentEvents, now: Date())
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
-      if !isRefresh, let cached = model.cachedDisplayNarration(for: node, events: recentEvents) {
+      if !isRefresh, let cached = cachedDisplay {
         lastWorkDone = cached
         resetFind(narration: cached)
         return
