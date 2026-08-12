@@ -17,7 +17,7 @@ public struct SearchIndexHit: Sendable {
 /// no vendored C target and no per-connection extension registration. GRDB's Swift-level
 /// FTS5 API is conditionally compiled and deliberately unused.
 public struct SearchIndexStore: Sendable {
-  private static let schemaVersion = 2
+  private static let schemaVersion = 3
   /// Ranking always comes from the TEXT table. Paths never contribute a score to a text query —
   /// `.textRestrictedByPath` uses them to narrow the candidate set, and `.textWithPathProbe`
   /// surfaces rows the text index could not find at all, ranked by their own path relevance in a
@@ -65,6 +65,7 @@ public struct SearchIndexStore: Sendable {
           CREATE VIRTUAL TABLE IF NOT EXISTS documents USING fts5(
             text,
             item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
+            language UNINDEXED,
             tokenize = 'unicode61 remove_diacritics 2')
           """)
         try database.execute(sql: """
@@ -121,14 +122,15 @@ public struct SearchIndexStore: Sendable {
         // Prepared once, not per row: `execute(sql:)` re-compiles its statement on every call, and
         // a whole-corpus rebuild is thousands of identical inserts.
         let documentInsert = try database.cachedStatement(sql: """
-          INSERT INTO documents(text, item_id, kind, node_id, state) VALUES (?, ?, ?, ?, ?)
+          INSERT INTO documents(text, item_id, kind, node_id, state, language)
+          VALUES (?, ?, ?, ?, ?, ?)
           """)
         let fileInsert = try database.cachedStatement(sql: """
           INSERT INTO document_files(files, item_id, kind, node_id, state) VALUES (?, ?, ?, ?, ?)
           """)
         for item in items {
           try documentInsert.execute(
-            arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state])
+            arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state, item.language])
           // Only rows that actually carry paths — an empty row would be dead weight in the path
           // index and would skew its own average document length.
           guard !item.files.isEmpty else { continue }

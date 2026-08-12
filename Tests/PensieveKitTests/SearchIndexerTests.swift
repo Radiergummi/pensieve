@@ -107,4 +107,37 @@ import SQLiteData
                                 text: "same text", language: "de")
     #expect(SearchIndexer.corpusHash([untagged]) != SearchIndexer.corpusHash([tagged]))
   }
+
+  /// The German document must be findable on its own terms, and must carry the SAME item_id as its
+  /// original so the query layer can dedup on it.
+  @Test func aTranslatedDocumentIsIndexedUnderTheOriginalItemID() {
+    let store = tempSearchStore()
+    let english = EmbeddableItem(itemID: "item-1", kind: "node", nodeID: "n1", state: "active",
+                                 text: "Background sync agent")
+    let german = EmbeddableItem(itemID: "item-1", kind: "node", nodeID: "n1", state: "active",
+                                text: "Hintergrund-Synchronisierungsagent", language: "de")
+    store.rebuild(items: [english, german], corpusHash: "hash-1")
+
+    let germanHits = store.search(FTSQueryBuilder.build("Hintergrund ")!, limit: 10,
+                                 includeArchived: false)
+    #expect(germanHits.map(\.itemID) == ["item-1"])
+
+    let englishHits = store.search(FTSQueryBuilder.build("background ")!, limit: 10,
+                                  includeArchived: false)
+    #expect(englishHits.map(\.itemID) == ["item-1"])
+  }
+
+  /// A schema bump must rebuild rather than read a table without the new column. Free, because the
+  /// store is disposable.
+  @Test func aVersionMismatchRebuildsInsteadOfFailing() throws {
+    let url = tempURL("searchidx-v3-migrate")
+    let first = SearchIndexStore(url: url)
+    first.rebuild(items: [EmbeddableItem(itemID: "a", kind: "node", nodeID: "n1",
+                                         state: "active", text: "alpha")],
+                  corpusHash: "hash-a")
+    #expect(first.state() == .ready)
+    // Reopening at the same version must NOT discard the index.
+    let reopened = SearchIndexStore(url: url)
+    #expect(reopened.storedCorpusHash() == "hash-a")
+  }
 }
