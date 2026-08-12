@@ -50,6 +50,16 @@ import Foundation
     #expect(translationStore.translation(field: .nodeName, sourceText: "orphan", language: "de") == nil)
   }
 
+  /// Empty live set deletes everything — the destructive branch needs explicit coverage.
+  @Test func pruningWithEmptyLiveSetDeletesEverything() {
+    let translationStore = store("translation-prune-empty")
+    translationStore.put(field: .nodeName, sourceText: "first", language: "de", text: "Erste")
+    translationStore.put(field: .nodeDescription, sourceText: "second", language: "de", text: "Zweite")
+    translationStore.pruneKeeping(sourceTexts: [])
+    #expect(translationStore.translation(field: .nodeName, sourceText: "first", language: "de") == nil)
+    #expect(translationStore.translation(field: .nodeDescription, sourceText: "second", language: "de") == nil)
+  }
+
   /// The trust gate as a type: there is no case that could name a quote or a transcript message.
   @Test func fieldsAreExactlyTheFourTranslatableOnes() {
     #expect(Set(TranslationField.allCases.map(\.rawValue))

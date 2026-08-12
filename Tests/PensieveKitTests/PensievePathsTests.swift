@@ -24,11 +24,16 @@ import Foundation
           == support + "/search-index.sqlite")
   #expect(PensievePaths.indexURL(named: "semantic-index.sqlite", storeOverride: nil).path
           == support + "/semantic-index.sqlite")
+  #expect(PensievePaths.indexURL(named: "translation-cache.sqlite", storeOverride: nil).path
+          == support + "/translation-cache.sqlite")
 
   // Overridden: a sibling of the throwaway store, never the shared directory.
   #expect(PensievePaths.indexURL(named: "search-index.sqlite",
                                  storeOverride: "/tmp/throwaway.sqlite").path
           == "/tmp/throwaway-search-index.sqlite")
+  #expect(PensievePaths.indexURL(named: "translation-cache.sqlite",
+                                 storeOverride: "/tmp/throwaway.sqlite").path
+          == "/tmp/throwaway-translation-cache.sqlite")
 
   // Two throwaway stores in one directory do not share an index.
   #expect(PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: "/tmp/a.sqlite")
