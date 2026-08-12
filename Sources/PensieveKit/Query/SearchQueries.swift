@@ -99,6 +99,11 @@ public enum SearchQueries {
   /// the whole page rather than one per candidate.
   private static func buildHits(_ candidates: [SearchIndexHit], terms: [String],
                                 scope: SearchScope,
+                                // These two defaults exist ONLY to keep this private function under
+                                // SwiftLint's `function_parameter_count` cap (which excludes defaulted
+                                // parameters from its count). The single call site below still passes
+                                // both explicitly — a future second call site that omits them would
+                                // compile but silently disable translation lookups for that caller.
                                 translations: TranslationStore? = nil,
                                 language: String = TranslationTarget.off,
                                 _ database: any DatabaseReader) -> [SearchHit] {

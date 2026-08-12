@@ -46,11 +46,20 @@ import SQLiteData
     #expect(!hits[0].snippet.match.isEmpty)
   }
 
-  /// Both language documents match "sync" (it appears in the German compound too, and the tokenizer
-  /// is diacritic-insensitive), so the same node must not appear twice.
+  /// Both language documents match "sync" as a prefix — the English document's own token, and the
+  /// leading four characters of the German compound's second token ("Synchronisierung") — so the same
+  /// node must not appear twice. The query is asserted to actually reach the index with two raw
+  /// candidates sharing the node's `itemID` FIRST, so this test cannot go quiet the way its
+  /// predecessor did: querying the full word "Synchronisierung" turns into a 16-character FTS5 prefix
+  /// match that only the German document's token can satisfy, so the English document never became a
+  /// second candidate and the dedup guard was never exercised.
   @Test func aTermMatchingBothLanguagesYieldsOneHit() async throws {
     let fixture = try await fixture("dedup")
-    let hits = SearchQueries.search(query: "Synchronisierung", scope: fixture.scope,
+    let ftsQuery = FTSQueryBuilder.build("sync")!
+    let rawCandidates = fixture.store.search(ftsQuery, limit: 50, includeArchived: false)
+    #expect(rawCandidates.filter { $0.itemID == fixture.node.id.uuidString }.count >= 2)
+
+    let hits = SearchQueries.search(query: "sync", scope: fixture.scope,
                                     store: fixture.store, translations: fixture.translations,
                                     language: "de", fixture.database)
     #expect(hits.filter { $0.nodeID == fixture.node.id }.count == 1)
