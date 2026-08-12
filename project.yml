@@ -6,7 +6,7 @@ options:
     - en
     - de
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "26.0"
 packages:
   PensieveKit:
     path: .
