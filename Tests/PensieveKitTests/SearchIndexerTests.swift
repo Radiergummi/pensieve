@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import SQLiteData
+import GRDB
 @testable import PensieveKit
 
 @Suite struct SearchIndexerTests {
@@ -129,18 +130,57 @@ import SQLiteData
     #expect(englishHits.map(\.itemID) == ["item-1"])
   }
 
-  /// A schema bump must rebuild rather than read a table without the new column. Free, because the
-  /// store is disposable.
-  @Test func aVersionMismatchRebuildsInsteadOfFailing() throws {
-    let url = tempURL("searchidx-v3-migrate")
+  /// Same-version persistence, NOT a version-mismatch test (its previous name claimed the latter,
+  /// with no assertion anywhere near a `schema_version` mismatch — see
+  /// `aVersionMismatchDropsAndRecreatesTheSchema` below for the real thing). Reopening at the same
+  /// version must NOT discard the index.
+  @Test func aSameVersionReopenPreservesTheIndex() throws {
+    let url = tempURL("searchidx-v3-reopen")
     let first = SearchIndexStore(url: url)
     first.rebuild(items: [EmbeddableItem(itemID: "a", kind: "node", nodeID: "n1",
                                          state: "active", text: "alpha")],
                   corpusHash: "hash-a")
     #expect(first.state() == .ready)
-    // Reopening at the same version must NOT discard the index.
     let reopened = SearchIndexStore(url: url)
     #expect(reopened.storedCorpusHash() == "hash-a")
+  }
+
+  /// The real version-mismatch path (`SearchIndexStore.swift`'s `storedVersion != schemaVersion`
+  /// branch): hand-build a v2 index using the OLD 5-column `documents` shape (no `language` column,
+  /// the only new schema in Task 5) and a stale `schema_version`. Reopening through `SearchIndexStore`
+  /// must drop and recreate the table with the current shape — proven by the `language` column now
+  /// existing — and clear the stale hash, so the rebuild guard can't compare against a hash that
+  /// predates a schema it never accounted for. Fails if the drop-and-recreate branch were removed:
+  /// the legacy table would be reused as-is, with no `language` column and the v2 hash intact.
+  @Test func aVersionMismatchDropsAndRecreatesTheSchema() throws {
+    let url = tempURL("searchidx-v2-mismatch")
+    var configuration = Configuration()
+    configuration.busyMode = .timeout(5)
+    let legacyPool = try DatabasePool(path: url.path, configuration: configuration)
+    try legacyPool.write { database in
+      try database.execute(sql: """
+        CREATE VIRTUAL TABLE documents USING fts5(
+          text, item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
+          tokenize = 'unicode61 remove_diacritics 2')
+        """)
+      try database.execute(sql: """
+        CREATE TABLE meta(schema_version INT, corpus_hash TEXT, building INT NOT NULL DEFAULT 0)
+        """)
+      try database.execute(sql: """
+        INSERT INTO meta(schema_version, corpus_hash, building) VALUES (2, 'stale-v2-hash', 0)
+        """)
+    }
+
+    let reopened = SearchIndexStore(url: url)
+    #expect(reopened.storedCorpusHash() == nil)
+
+    var readOnlyConfiguration = Configuration()
+    readOnlyConfiguration.readonly = true
+    let reader = try DatabaseQueue(path: url.path, configuration: readOnlyConfiguration)
+    let columns = try reader.read { database in
+      try Row.fetchAll(database, sql: "PRAGMA table_info(documents)")
+    }
+    #expect(columns.contains { ($0["name"] as String?) == "language" })
   }
 
   /// `language` is load-bearing for Task 6 (translated documents) and Task 7 (dedup-by-item_id
