@@ -92,7 +92,8 @@ public struct NodeFindDocument: Equatable, Sendable {
   }
 
   public static func make(node: Node, narration: String?, looseEnds: [LooseEndView],
-                          events: [Event], showsLooseEnds: Bool) -> NodeFindDocument {
+                          events: [Event], showsLooseEnds: Bool,
+                          translatedLooseEndText: [UUID: String] = [:]) -> NodeFindDocument {
     var slots: [Slot] = []
     slots.append(.unit(FindUnit(anchor: .nodeName, text: node.name)))
     if !node.description.isEmpty {
@@ -102,7 +103,10 @@ public struct NodeFindDocument: Equatable, Sendable {
     // Loose Ends section, so indexing them would produce unreachable matches.
     if showsLooseEnds {
       for view in looseEnds {
-        slots.append(.unit(FindUnit(anchor: .looseEndText(view.looseEnd.id), text: view.looseEnd.text)))
+        // Index what is actually ON SCREEN: the on-demand-translated summary when one is stored,
+        // else the English original — the same fallback `AppModel.displayed` uses to render it.
+        let text = translatedLooseEndText[view.looseEnd.id] ?? view.looseEnd.text
+        slots.append(.unit(FindUnit(anchor: .looseEndText(view.looseEnd.id), text: text)))
         slots.append(.provenance(looseEndID: view.looseEnd.id, resolved: nil))
       }
     }

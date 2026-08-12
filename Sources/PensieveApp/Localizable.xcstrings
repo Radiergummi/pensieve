@@ -2758,6 +2758,17 @@
         }
       }
     },
+    "Translate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen"
+          }
+        }
+      }
+    },
     "Translate generated text to" : {
       "extractionState" : "manual",
       "localizations" : {

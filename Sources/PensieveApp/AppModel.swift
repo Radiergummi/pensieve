@@ -132,6 +132,11 @@ final class AppModel {
   /// ever touched, so no store file is created and no model asset loads.
   @ObservationIgnored lazy var translationStore = TranslationStore(url: PensievePaths.translationCacheURL())
   @ObservationIgnored lazy var translator: Translator? = makeDefaultTranslator()
+  /// Trailing-edge: translating eight loose ends in a row must cause ONE whole-corpus rebuild, not
+  /// eight. The same coalescer the liveness watches run through.
+  @ObservationIgnored lazy var translationDebouncer = Debouncer(interval: 0.4) { [weak self] in
+    await MainActor.run { self?.syncSearchIndexes() }
+  }
   /// Shared across every window and both loose-end surfaces so a transcript is parsed once, not
   /// once per expanded row. Invalidation is per-entry file-fingerprint, inside the loader.
   @ObservationIgnored lazy var provenanceLoader: ProvenanceLoader? = {

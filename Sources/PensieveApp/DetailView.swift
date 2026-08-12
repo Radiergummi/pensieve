@@ -51,6 +51,8 @@ struct DetailView: View {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
                 LooseEndRow(view: view, loadProvenance: model.provenance,
                             onLabel: model.setLooseEndLabel,
+                            displayedSummary: { model.displayed(field: .looseEndText, sourceText: $0) },
+                            onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
                             expandedLooseEndID: model.expandedLooseEndID, compact: false,
                             find: find)
                   .id(view.looseEnd.id)
@@ -163,10 +165,16 @@ struct DetailView: View {
   /// transcript matches the sweep had already filled with nothing left to refill them. Restarting is
   /// cheap — the loader serves an unchanged transcript from its cache and reports "nothing to do".
   @MainActor private func resetFind(narration: String?) {
+    // What the find document indexes for each loose end must match what LooseEndRow actually
+    // renders (`displayedSummary` there) — the same translated-or-English text, by the same fallback.
+    let translatedLooseEndText = Dictionary(uniqueKeysWithValues: looseEnds.map {
+      ($0.looseEnd.id, model.displayed(field: .looseEndText, sourceText: $0.looseEnd.text))
+    })
     find.reset(nodeID: node.id,
                document: NodeFindDocument.make(node: node, narration: narration,
                                                looseEnds: looseEnds, events: recentEvents,
-                                               showsLooseEnds: showsLooseEnds))
+                                               showsLooseEnds: showsLooseEnds,
+                                               translatedLooseEndText: translatedLooseEndText))
     find.startSweep(looseEnds: looseEnds, loader: model.provenanceLoader)
   }
 
