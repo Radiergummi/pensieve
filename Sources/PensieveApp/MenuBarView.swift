@@ -85,6 +85,7 @@ struct MenuBarView: View {
       .menuStyle(.borderlessButton)
       .fixedSize()
       .help("More actions")
+      .accessibilityLabel("More actions")
     }
   }
 
