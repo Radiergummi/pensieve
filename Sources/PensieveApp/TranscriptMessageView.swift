@@ -43,15 +43,19 @@ struct TranscriptMessageView: View {
           RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.10))
         }
       }
-      .overlay(alignment: .leading) {
+      .overlay {
         // The cited-provenance marker. `ProvenanceQueries` hard-guards `citedMessage.isUserPrompt`,
         // so the cited message is ALWAYS the `.you` class — this bar must survive every layout
-        // choice below, which is why both fallbacks in the spec preserve it.
-        if message.isCited { Rectangle().fill(.orange).frame(width: 3) }
-      }
-      .overlay {
-        if message.isCited, bubbled {
-          RoundedRectangle(cornerRadius: 12).strokeBorder(.orange.opacity(0.5))
+        // choice below, which is why both fallbacks in the spec preserve it. The bar is clipped in
+        // the bubble's coordinate space, so its ends follow the corner curve instead of poking out
+        // square-cornered past the rounded border.
+        if message.isCited {
+          ZStack {
+            if bubbled { RoundedRectangle(cornerRadius: 12).strokeBorder(.orange.opacity(0.5)) }
+            Rectangle().fill(.orange).frame(width: 3)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .clipShape(RoundedRectangle(cornerRadius: bubbled ? 12 : 0))
+          }
         }
       }
       .fixedSize(horizontal: false, vertical: true)
