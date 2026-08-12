@@ -263,16 +263,18 @@ final class AppModel {
       recentlyActive: smartLists.recentlyActive.filter { visible.contains($0.project.id) })
   }
 
+  /// The two grouped aggregates every row-shaped surface renders from: the middle column, the detail
+  /// header, and the menu-bar popover's rows. Both refresh paths need them, so both go through here.
+  private func loadNodeRowFacts(_ database: any DatabaseWriter) {
+    if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
+  }
+
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
   /// skipping the briefing cards / forest that only the main window needs.
   func refreshGlance() {
     snapshot = MonitorSnapshot.gather(canonical: database, spool: spool)
     guard let database else { return }
-    // This is the only refresh the popover's `.task` triggers on open (the footer's Refresh button
-    // is a separate, deliberate full `refresh()`). MenuBarView's rows wire `NodeRowMeta` into the
-    // popover, and it reads `nodeRowFacts` -- hence populating it here. Two grouped aggregates,
-    // cheaper than the `SmartLists.compute` already on this path.
-    if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
+    loadNodeRowFacts(database)
     guard let raw = try? SmartLists.compute(database, now: Date()) else { return }
     let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
     lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
@@ -298,7 +300,7 @@ final class AppModel {
     if let raw = try? BriefingQueries.cards(database, since: briefingSince, now: now) {
       briefingCards = activeFocusContext.isEmpty ? raw : raw.filter { visible.contains($0.node.id) }
     }
-    if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
+    loadNodeRowFacts(database)
     if nodesChanged || activeFocusContext != lastForestContext {
       let source = activeFocusContext.isEmpty ? allNodes : allNodes.filter { visible.contains($0.id) }
       forest = NodeForest.build(source.filter { $0.state == .active })

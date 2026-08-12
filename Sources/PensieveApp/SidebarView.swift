@@ -97,9 +97,8 @@ private struct StatusFooter: View {
     }
     .padding(.horizontal, 12).padding(.vertical, 6)
     .frame(maxWidth: .infinity, alignment: .leading)
-    // `.bar` STAYS: it is a translucent material and it is what separates the footer from the
-    // scrolling rows. Only the explicit hairline is gone -- the material's own edge does that job,
-    // and the hairline on top of it is what read as a strip taped under the sidebar.
+    // The material's own edge separates the footer from the scrolling rows; a hairline on top of it
+    // read as a strip taped under the sidebar.
     .background(.bar)
   }
   private var color: Color {

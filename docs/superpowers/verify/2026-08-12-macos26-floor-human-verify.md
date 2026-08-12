@@ -124,14 +124,17 @@ branch has the context this task's execution surfaced.
   already merged (`225c442`) and its hunks land at `DetailView.swift:149-153`, immediately adjacent to
   this one.
 - Two deferred minors from task reviews:
-  - `MenuBarView.swift:136`'s hover fill (`isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)`)
-    is the app's only `AnyShapeStyle` in `Sources/` — confirmed by grep. `.quaternary.opacity(isHovering ? 1 : 0)`
-    would match the `ShapeStyle.opacity` precedent at `BriefingView.swift:65`
-    (`.background(.quaternary.opacity(0.4), in: RoundedRectangle(...))`) instead. (`LooseEndRow.swift:220`
-    is `.opacity(showsThumbs ? 1 : 0)` — *view* opacity, a different API, and not the right precedent.)
+  - ~~`MenuBarView.swift:136`'s hover fill is the app's only `AnyShapeStyle` in `Sources/`.~~
+    **Fixed in the cleanup pass** — it is now `.quaternary.opacity(isHovering ? 1 : 0)`, matching the
+    `ShapeStyle.opacity` precedent at `BriefingView.swift:65`. (`LooseEndRow.swift:220` is
+    `.opacity(showsThumbs ? 1 : 0)` — *view* opacity, a different API, and never the right precedent.)
   - Task 3's commit message (`89b462a`) says "only the Divider goes," but the actual diff
     (`Sources/PensieveApp/SidebarView.swift`) also removed the wrapping `VStack(spacing: 0) { ... }` —
     confirmed by reading the commit's diff. Not a defect, just an imprecise commit message.
+  - Pre-existing, spotted while reviewing this slice and deliberately left alone: `BriefingView.swift:85-86`
+    hand-rolls `frame(maxWidth: .infinity, alignment: .leading)` + `.contentShape(Rectangle())` instead of
+    calling `rowHitArea()` (`ContentListView.swift:211-213`). Predates this branch; the new `MenuBarRow`
+    got it right.
 - Checked and explicitly **not** defects, recorded so a later review doesn't re-raise them:
   - The new popover-row chevron (`MenuBarView.swift:126`) is not `accessibilityHidden` — checked and
     left as-is. Neither its enclosing `Button` nor `LooseEndRow.swift`'s disclosure `Button` (`:58-67`,

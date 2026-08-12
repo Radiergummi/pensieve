@@ -105,10 +105,9 @@ struct MenuBarView: View {
   }
 }
 
-/// One popover row: a re-entry point, not a scoreboard line. The whole row is the action and now
-/// looks like it — a persistent chevron plus a hover fill, rather than five labelled buttons on a
-/// five-row surface. The second line reuses `NodeRowMeta`, the middle column's own component, so the
-/// two surfaces share one implementation instead of agreeing by convention.
+/// One popover row: a re-entry point, not a scoreboard line — the whole row is the action, and the
+/// chevron plus hover fill say so. The second line reuses `NodeRowMeta`, the middle column's own
+/// component, so the two surfaces share one implementation instead of agreeing by convention.
 private struct MenuBarRow: View {
   let item: NextItem
   let facts: NodeRowFacts?
@@ -125,15 +124,13 @@ private struct MenuBarRow: View {
         Spacer()
         Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
       }
-      .padding(.horizontal, 6).padding(.vertical, 4)
-      // Without this the `Spacer()` between the text and the chevron is dead space to hit-testing —
-      // the same defect slice A's verify pass found in the detail pane's hover thumbs. The padding
-      // above must stay inside the label (before this call), or the hover fill paints a wider
+      // The padding stays inside the label (above this call), or the hover fill paints a wider
       // rectangle than the button actually hit-tests.
+      .padding(.horizontal, 6).padding(.vertical, 4)
       .rowHitArea()
     }
     .buttonStyle(.plain)
-    .background(isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+    .background(.quaternary.opacity(isHovering ? 1 : 0),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     .onHover { isHovering = $0 }
   }
