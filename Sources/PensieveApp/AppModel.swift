@@ -128,6 +128,10 @@ final class AppModel {
   @ObservationIgnored var searchTask: Task<Void, Never>?
   @ObservationIgnored var searchToken = 0
   @ObservationIgnored lazy var searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
+  /// `lazy` matters: with the translation target off, neither this store nor the translator below is
+  /// ever touched, so no store file is created and no model asset loads.
+  @ObservationIgnored lazy var translationStore = TranslationStore(url: PensievePaths.translationCacheURL())
+  @ObservationIgnored lazy var translator: Translator? = makeDefaultTranslator()
   /// Shared across every window and both loose-end surfaces so a transcript is parsed once, not
   /// once per expanded row. Invalidation is per-entry file-fingerprint, inside the loader.
   @ObservationIgnored lazy var provenanceLoader: ProvenanceLoader? = {

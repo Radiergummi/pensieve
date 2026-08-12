@@ -92,4 +92,41 @@ extension AppModel {
     refresh()
     return outcome
   }
+
+  /// The narration as it should RENDER: the English prose, or its stored translation when a target
+  /// language is set. Synchronous, so the view can render a cached recap instantly — a point lookup
+  /// against a small local file, the same shape as `isDescribable`'s canonical read.
+  func cachedDisplayNarration(for node: Node, events: [Event]) -> String? {
+    guard let prose = cachedNarration(for: node, events: events) else { return nil }
+    return displayText(prose)
+  }
+
+  /// Generate (or reuse) the narration, then resolve its display form — translating and storing it if
+  /// this is the first time this prose has been seen in the target language.
+  ///
+  /// Translation happens BEFORE the view first renders the prose, giving one atomic spinner → German
+  /// transition. An English→German flicker would be worse, and would add a second stale-render window
+  /// to a state machine that needed two adversarial reviews plus an Opus review to get right.
+  func displayNarration(for node: Node, events: [Event], force: Bool = false) async -> String? {
+    guard let prose = await narration(for: node, events: events, force: force) else { return nil }
+    let language = TranslationTarget.resolved()
+    guard !language.isEmpty else { return prose }
+    if let stored = translationStore.translation(field: .narration, sourceText: prose,
+                                                 language: language) { return stored }
+    guard let translator,
+          let translated = await translator.translate(prose,
+                                                      from: TranslationTarget.sourceLanguage,
+                                                      to: language)
+    else { return prose }   // best-effort: the English original is always an acceptable answer
+    translationStore.put(field: .narration, sourceText: prose, language: language, text: translated)
+    return translated
+  }
+
+  /// A stored translation of `text`, or `text` itself. Never generates — the synchronous callers
+  /// cannot await, and a missing translation must render as English rather than as nothing.
+  private func displayText(_ text: String) -> String {
+    let language = TranslationTarget.resolved()
+    guard !language.isEmpty else { return text }
+    return translationStore.translation(field: .narration, sourceText: text, language: language) ?? text
+  }
 }

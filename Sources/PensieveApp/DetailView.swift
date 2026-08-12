@@ -117,17 +117,18 @@ struct DetailView: View {
       looseEnds = detail.looseEnds
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       resetFind(narration: nil)
-      shareMarkdown = RecallMarkdown.render(node: node,
-                                            narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
-                                            looseEnds: looseEnds, events: recentEvents, now: Date())
+      shareMarkdown = RecallMarkdown.render(
+        node: node,
+        narration: narrationEnabled ? model.cachedDisplayNarration(for: node, events: recentEvents) : nil,
+        looseEnds: looseEnds, events: recentEvents, now: Date())
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
-      if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {
+      if !isRefresh, let cached = model.cachedDisplayNarration(for: node, events: recentEvents) {
         lastWorkDone = cached
         resetFind(narration: cached)
         return
       }
       isNarrating = true
-      let prose = await model.narration(for: node, events: recentEvents, force: isRefresh)
+      let prose = await model.displayNarration(for: node, events: recentEvents, force: isRefresh)
       guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
       lastWorkDone = prose
       resetFind(narration: narrationEnabled ? prose : nil)
