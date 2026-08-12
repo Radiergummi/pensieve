@@ -8,10 +8,16 @@ public struct EmbeddableItem: Sendable {
   /// by the row's TOTAL token count across all columns, so paths sharing a row with text would
   /// discount every commit's text matches. Measured — see the spec's verification gate.
   public let files: String
+  /// "" for the original text, a BCP-47 code ("de") for a translation of it. A translation is a
+  /// SEPARATE document sharing the original's `itemID`, never an extra column beside it: FTS5
+  /// normalises `bm25()` by a row's TOTAL token count across all columns, so German text sharing a
+  /// row with English would discount every English match. The index carries this as
+  /// `language UNINDEXED`, which contributes no tokens.
+  public let language: String
   public init(itemID: String, kind: String, nodeID: String, state: String, text: String,
-              files: String = "") {
+              files: String = "", language: String = "") {
     self.itemID = itemID; self.kind = kind; self.nodeID = nodeID
-    self.state = state; self.text = text; self.files = files
+    self.state = state; self.text = text; self.files = files; self.language = language
   }
   /// Stable across processes/runs (String.hashValue is per-process salted — do NOT use it here).
   /// Hashes `text` ONLY. `files` is excluded so that a change to path indexing does not invalidate

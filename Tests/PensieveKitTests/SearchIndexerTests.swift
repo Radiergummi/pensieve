@@ -86,4 +86,25 @@ import SQLiteData
     #expect(store.search(FTSQueryBuilder.build("checkout ")!, limit: 10,
                          includeArchived: false).isEmpty)
   }
+
+  /// Two documents share an `item_id` once a translation exists, and `corpusHash` sorts by `itemID`.
+  /// Swift's sort is NOT stable, so without `language` in the sort key the hash depends on input
+  /// order — and the rebuild guard (`hash != storedCorpusHash()`) would then fire on every sync,
+  /// rebuilding the whole index forever.
+  @Test func corpusHashIsOrderIndependentForItemsSharingAnItemID() {
+    let english = EmbeddableItem(itemID: "a", kind: "node", nodeID: "n1", state: "active",
+                                 text: "Background sync")
+    let german = EmbeddableItem(itemID: "a", kind: "node", nodeID: "n1", state: "active",
+                                text: "Hintergrund-Synchronisierung", language: "de")
+    #expect(SearchIndexer.corpusHash([english, german])
+            == SearchIndexer.corpusHash([german, english]))
+  }
+
+  @Test func corpusHashNoticesALanguageOnlyChange() {
+    let untagged = EmbeddableItem(itemID: "a", kind: "node", nodeID: "n1", state: "active",
+                                  text: "same text")
+    let tagged = EmbeddableItem(itemID: "a", kind: "node", nodeID: "n1", state: "active",
+                                text: "same text", language: "de")
+    #expect(SearchIndexer.corpusHash([untagged]) != SearchIndexer.corpusHash([tagged]))
+  }
 }

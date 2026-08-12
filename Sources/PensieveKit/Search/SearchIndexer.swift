@@ -35,15 +35,21 @@ public struct SearchIndexer: Sendable {
     store.rebuild(items: corpus, corpusHash: hash)
   }
 
-  /// FNV-1a over every field the index stores, sorted by item id so gather order cannot change the
-  /// hash. `contentHash` covers `text`; `files` is folded in separately because `contentHash`
-  /// deliberately excludes it (paths must never force a re-embed on the semantic side).
+  /// FNV-1a over every field the index stores, sorted by (item id, language) so gather order cannot
+  /// change the hash. `contentHash` covers `text`; `files` is folded in separately because
+  /// `contentHash` deliberately excludes it (paths must never force a re-embed on the semantic side).
+  ///
+  /// The sort key is a PAIR, not just `itemID`: a translated document shares its original's item id,
+  /// and Swift's sort is not stable, so sorting on the id alone would hash those two rows in
+  /// arbitrary order. The rebuild guard compares this hash to the stored one, so a non-deterministic
+  /// hash means a whole-corpus rebuild on every single sync.
   public static func corpusHash(_ items: [EmbeddableItem]) -> String {
     var hash = StableHash()
-    for item in items.sorted(by: { $0.itemID < $1.itemID }) {
+    for item in items.sorted(by: { ($0.itemID, $0.language) < ($1.itemID, $1.language) }) {
       hash.absorbField(item.itemID); hash.absorbField(item.contentHash)
       hash.absorbField(item.files); hash.absorbField(item.kind)
       hash.absorbField(item.nodeID); hash.absorbField(item.state)
+      hash.absorbField(item.language)
     }
     return hash.hexValue
   }
