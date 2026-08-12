@@ -193,6 +193,47 @@ private func makeEvent(summary: String) -> Event {
   #expect(NodeFindDocument.units(from: loaded, looseEndID: UUID()).isEmpty)
 }
 
+@Test func translatedLooseEndTextIsIndexedInsteadOfTheEnglish() {
+  // The find document must index what is actually ON SCREEN. When a loose end's summary has been
+  // translated on demand, the document has to hold the German text — else ⌘F highlights nothing (a
+  // query for the German phrase) or the wrong span (a query for the English original, which is no
+  // longer rendered).
+  let looseEnd = makeLooseEndView(text: "ship the find bar", quote: "we should ship the find bar")
+  let document = NodeFindDocument.make(node: makeNode(name: "n", description: ""), narration: nil,
+                                       looseEnds: [looseEnd], events: [], showsLooseEnds: true,
+                                       translatedLooseEndText: [looseEnd.looseEnd.id: "die Suchleiste versenden"])
+  #expect(document.text(for: .looseEndText(looseEnd.looseEnd.id)) == "die Suchleiste versenden")
+  #expect(document.matches(query: "Suchleiste").count == 1)
+  #expect(document.matches(query: "ship").isEmpty)
+}
+
+@Test func absentTranslatedEntryFallsBackToTheEnglishText() {
+  let looseEnd = makeLooseEndView(text: "ship the find bar", quote: "we should ship the find bar")
+  // No entry for this loose end's id — the default empty map, and a map with unrelated entries,
+  // must both fall back to the loose end's own English text.
+  let document = NodeFindDocument.make(node: makeNode(name: "n", description: ""), narration: nil,
+                                       looseEnds: [looseEnd], events: [], showsLooseEnds: true)
+  #expect(document.text(for: .looseEndText(looseEnd.looseEnd.id)) == "ship the find bar")
+}
+
+@Test func documentOrderFollowsOnScreenOrderWithATranslatedLooseEnd() {
+  // The on-screen-order contract (documentOrderFollowsOnScreenOrder above) must hold whether the
+  // loose end's text is translated or not — translation swaps the TEXT of a slot, never its position.
+  let node = makeNode(name: "Pensieve", description: "a recall tool")
+  let looseEnd = makeLooseEndView(text: "ship the find bar", quote: "we should ship the find bar")
+  let event = makeEvent(summary: "feat: find bar")
+  let document = NodeFindDocument.make(node: node, narration: "worked on find",
+                                       looseEnds: [looseEnd], events: [event], showsLooseEnds: true,
+                                       translatedLooseEndText: [looseEnd.looseEnd.id: "die Suchleiste versenden"])
+  let anchors = document.units.map(\.anchor)
+  #expect(anchors.first == .nodeName)
+  #expect(anchors[1] == .description)
+  #expect(anchors[2] == .looseEndText(looseEnd.looseEnd.id))
+  #expect(anchors[3] == .narration)
+  #expect(anchors.last == .event(event.id))
+  #expect(document.units[2].text == "die Suchleiste versenden")
+}
+
 @Test func onlyAnchorsBehindTheDisclosureRequireExpandingTheRow() {
   let looseEndID = UUID()
   // The loose end's own text renders in the row's always-visible header, so find must NOT throw the

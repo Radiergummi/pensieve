@@ -41,6 +41,8 @@ public enum SearchQueries {
                             file: String? = nil,
                             scope: SearchScope,
                             store: SearchIndexStore,
+                            translations: TranslationStore? = nil,
+                            language: String = TranslationTarget.off,
                             _ database: any DatabaseReader) -> [SearchHit] {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard store.isAvailable,
@@ -56,12 +58,46 @@ public enum SearchQueries {
     while true {
       let candidates = store.search(ftsQuery, limit: fetchCount,
                                     includeArchived: scope.includeArchived)
-      let hits = buildHits(candidates, terms: ftsQuery.terms, scope: scope, database)
+      let hits = buildHits(candidates, terms: ftsQuery.terms, scope: scope,
+                           translations: translations, language: language, database)
       if hits.count >= scope.limit || candidates.count < fetchCount || fetchCount >= maxFetch {
         return hits
       }
       fetchCount = min(fetchCount * 4, maxFetch)
     }
+  }
+
+  /// `search`, plus one retry in English when the literal query found nothing.
+  ///
+  /// A wrapper rather than a change to `search` for two reasons. `search` is synchronous and every
+  /// caller depends on that; and keeping it byte-identical is what makes the safety property
+  /// STRUCTURAL — this can never regress a query that already returns rows, because it only runs when
+  /// the result was already empty.
+  ///
+  /// No language detection. Detection over a two-word query is unreliable, and it is unnecessary:
+  /// translating an already-English query yields a no-op or nonsense, and since there was nothing to
+  /// lose, nothing is lost. The residual value is over content that never gets a stored
+  /// translation — commit subjects, event summaries, file paths — plus German compounding, where a
+  /// typed `Hintergrundsync` misses a stored `Hintergrund-Synchronisierung` under AND semantics.
+  public static func searchTranslatingOnEmpty(query rawQuery: String,
+                                              file: String? = nil,
+                                              scope: SearchScope,
+                                              store: SearchIndexStore,
+                                              translations: TranslationStore? = nil,
+                                              language: String = TranslationTarget.off,
+                                              translator: Translator? = nil,
+                                              _ database: any DatabaseReader) async -> [SearchHit] {
+    let hits = search(query: rawQuery, file: file, scope: scope, store: store,
+                      translations: translations, language: language, database)
+    guard hits.isEmpty, !language.isEmpty, let translator else { return hits }
+    let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard query.count >= minQueryLength,
+          let english = await translator.translate(query, from: language,
+                                                   to: TranslationTarget.sourceLanguage),
+          english.caseInsensitiveCompare(query) != .orderedSame
+    else { return hits }
+    return search(query: english, file: file, scope: scope, store: store,
+                  translations: translations, language: language, database)
   }
 
   /// The node the user is most likely navigating to, selected by scanning the VISIBLE node set —
@@ -95,21 +131,39 @@ public enum SearchQueries {
   /// each survivor against canonical via the shared `SearchHitResolver`. One read transaction for
   /// the whole page rather than one per candidate.
   private static func buildHits(_ candidates: [SearchIndexHit], terms: [String],
-                                scope: SearchScope, _ database: any DatabaseReader) -> [SearchHit] {
-    let resolver = SearchHitResolver(includeArchived: scope.includeArchived,
-                                     highlight: { SnippetMaker.make(from: $0, matchingAny: terms) })
+                                scope: SearchScope,
+                                // These two defaults exist ONLY to keep this private function under
+                                // SwiftLint's `function_parameter_count` cap (which excludes defaulted
+                                // parameters from its count). The single call site below still passes
+                                // both explicitly — a future second call site that omits them would
+                                // compile but silently disable translation lookups for that caller.
+                                translations: TranslationStore? = nil,
+                                language: String = TranslationTarget.off,
+                                _ database: any DatabaseReader) -> [SearchHit] {
+    let resolver = SearchHitResolver(
+      includeArchived: scope.includeArchived,
+      highlight: { SnippetMaker.make(from: $0, matchingAny: terms) },
+      translations: { field, sourceText in
+        guard let translations, !language.isEmpty else { return nil }
+        return translations.translation(field: field, sourceText: sourceText, language: language)
+      })
     // A failure here is failing to OPEN a canonical read — an app-wide condition, not a search
     // result — so it degrades to empty like every other read, but it is logged rather than mistaken
     // for "nothing matched". Per-candidate resolve failures stay silent and skip individually.
     do {
       return try database.read { database in
         var hits: [SearchHit] = []
+        // One hit per item, even when both its language documents matched. Deduped BEFORE resolving
+        // so a duplicate costs no canonical read. The `limit` shortfall this can cause is absorbed by
+        // the caller's grow-`k` loop, which already exists for Focus-muting and stale rows.
+        var seenItemIDs = Set<UUID>()
         for candidate in candidates {
           guard let kind = SearchHit.Kind(rawValue: candidate.kind),
                 let nodeID = UUID(uuidString: candidate.nodeID),
                 scope.visibleNodeIDs.contains(nodeID) else { continue }
           guard let itemID = UUID(uuidString: candidate.itemID),
                 !scope.excludingIDs.contains(itemID) else { continue }
+          guard seenItemIDs.insert(itemID).inserted else { continue }
           guard let hit = try? resolver.resolve(kind: kind, itemID: itemID, score: candidate.score,
                                                 database) else { continue }
           hits.append(hit)

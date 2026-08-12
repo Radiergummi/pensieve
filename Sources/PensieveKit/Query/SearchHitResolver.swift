@@ -37,6 +37,11 @@ struct SearchHitResolver {
   /// engines diverge (BM25 highlights the query's unstemmed terms, the vector index the raw query
   /// string).
   let highlight: (String) -> Snippet
+  /// A stored translation of one generated field, or nil. Present so a match found ONLY in a
+  /// translated document still highlights: this resolver re-reads canonical, which holds English, and
+  /// `snippet(preferring:)` returns the first candidate that actually contains the query — so without
+  /// the translated body in that list a German hit renders with no visible reason for being there.
+  var translations: (TranslationField, String) -> String? = { _, _ in nil }
 
   func resolve(kind: SearchHit.Kind, itemID: UUID, score: Double,
                _ database: Database) throws -> SearchHit? {
@@ -48,7 +53,9 @@ struct SearchHitResolver {
             eligible(node) else { return nil }
       return SearchHit(id: node.id, kind: .node, nodeID: node.id, nodeName: node.name,
                        title: node.name,
-                       snippet: snippet(preferring: [node.description, node.name]),
+                       snippet: snippet(preferring: [node.description, node.name,
+                                                     translations(.nodeDescription, node.description) ?? "",
+                                                     translations(.nodeName, node.name) ?? ""]),
                        score: score, isArchived: node.state == .archived)
     case .looseEnd:
       guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) })
@@ -57,7 +64,8 @@ struct SearchHitResolver {
             eligible(node) else { return nil }
       return SearchHit(id: looseEnd.id, kind: .looseEnd, nodeID: looseEnd.nodeID,
                        nodeName: node.name, title: looseEnd.text,
-                       snippet: snippet(preferring: [looseEnd.text, looseEnd.quote]),
+                       snippet: snippet(preferring: [looseEnd.text, looseEnd.quote,
+                                                     translations(.looseEndText, looseEnd.text) ?? ""]),
                        score: score, isArchived: node.state == .archived)
     case .event:
       guard let event = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),

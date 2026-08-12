@@ -14,6 +14,18 @@ struct LooseEndRow: View {
   /// Confirms a salience label for this loose end (👍 salient / 👎 noise / "" clears). Pass
   /// `model.setLooseEndLabel`.
   let onLabel: (UUID, String) -> Void
+  /// The summary as it should render — the on-demand translation when one is stored, else the
+  /// English original. An INPUT rather than a lookup inside this row: the backing `translationStore`
+  /// is `@ObservationIgnored` on `AppModel`, so a lookup made from inside this row's body would carry
+  /// no observation dependency of its own, and a translation landing would never trigger a re-render.
+  /// Passing it in as a plain property makes the change a diffable input instead. Pass
+  /// `model.displayed(field: .looseEndText, sourceText: view.looseEnd.text)`. `nil` for callers
+  /// outside the find-scoped detail pane, which fall back to the English original.
+  var displaySummary: String?
+  /// Translates this row's summary on demand, then debounced-reindexes. Pass
+  /// `{ text in await model.translate(field: .looseEndText, sourceText: text) }`. `nil` hides the
+  /// context-menu action outright (as does the target being off) — no caller may show a dead button.
+  var onTranslate: ((String) async -> Void)?
   /// When this equals the row's loose end, the row starts/auto-expands (a search hit landing here).
   var expandedLooseEndID: UUID?
   /// True in the middle column, where ~180pt is usable. Drops bubbles and tightens the type scale.
@@ -104,6 +116,12 @@ struct LooseEndRow: View {
         Divider()
         Button("Clear rating") { setLabel(LooseEndLabel.unlabeled) }
       }
+      if let onTranslate, TranslationTarget.resolved() != TranslationTarget.off {
+        Divider()
+        Button(LocalizedStringKey("Translate")) {
+          Task { await onTranslate(view.looseEnd.text) }
+        }
+      }
     }
     // Load the surrounding transcript the first time the row is expanded (cached thereafter).
     .task(id: expanded) {
@@ -151,10 +169,14 @@ struct LooseEndRow: View {
 
   @ViewBuilder private var looseEndText: some View {
     let anchor = FindAnchor.looseEndText(view.looseEnd.id)
-    let runs = find?.runs(for: anchor, text: view.looseEnd.text) ?? []
+    // Computed ONCE and shared by both consumers — the highlight-run lookup and the rendered text —
+    // so find can never disagree with what is actually on screen (an English query would silently
+    // stop matching a row whose summary was translated, or vice versa).
+    let text = displaySummary ?? view.looseEnd.text
+    let runs = find?.runs(for: anchor, text: text) ?? []
     Group {
       if runs.isEmpty {
-        Text(view.looseEnd.text).prose()
+        Text(text).prose()
       } else {
         HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor)).prose()
       }

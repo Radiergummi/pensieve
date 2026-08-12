@@ -134,6 +134,9 @@ struct ContentListView: View {
     List {
       ForEach(looseEnds, id: \.looseEnd.id) { view in
         LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel,
+                    displaySummary: model.displayed(field: .looseEndText,
+                                                    sourceText: view.looseEnd.text),
+                    onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
                     compact: true)
       }
     }
@@ -150,6 +153,9 @@ struct ContentListView: View {
             Text(name).font(.caption).foregroundStyle(.secondary)
           }
           LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel,
+                      displaySummary: model.displayed(field: .looseEndText,
+                                                      sourceText: view.looseEnd.text),
+                      onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
                       compact: true)
         }
       }

@@ -92,4 +92,42 @@ extension AppModel {
     refresh()
     return outcome
   }
+
+  /// The narration as it should RENDER: the English prose when translation is off, its STORED
+  /// translation when a target is set, and `nil` when a target is set but this prose has not been
+  /// translated yet.
+  ///
+  /// That nil is deliberate and load-bearing. Returning the English fallback here would satisfy
+  /// `DetailView`'s `if let cached` fast path, which returns early — so the async `displayNarration`,
+  /// the only path that calls the translator and writes to the store, would never run. Since
+  /// `NarrationCacheKey` folds in events and provider but NOT language, every node narrated before
+  /// the user enabled a target would render English forever, self-healing only on a manual ⌘R.
+  /// Returning nil costs one spinner per node on first open after enabling, then never again.
+  func cachedDisplayNarration(for node: Node, events: [Event]) -> String? {
+    guard let prose = cachedNarration(for: node, events: events) else { return nil }
+    let language = TranslationTarget.resolved()
+    guard !language.isEmpty else { return prose }
+    return translationStore.translation(field: .narration, sourceText: prose, language: language)
+  }
+
+  /// Generate (or reuse) the narration, then resolve its display form — translating and storing it if
+  /// this is the first time this prose has been seen in the target language.
+  ///
+  /// Translation happens BEFORE the view first renders the prose, giving one atomic spinner → German
+  /// transition. An English→German flicker would be worse, and would add a second stale-render window
+  /// to a state machine that needed two adversarial reviews plus an Opus review to get right.
+  func displayNarration(for node: Node, events: [Event], force: Bool = false) async -> String? {
+    guard let prose = await narration(for: node, events: events, force: force) else { return nil }
+    let language = TranslationTarget.resolved()
+    guard !language.isEmpty else { return prose }
+    if let stored = translationStore.translation(field: .narration, sourceText: prose,
+                                                 language: language) { return stored }
+    guard let translator,
+          let translated = await translator.translate(prose,
+                                                      from: TranslationTarget.sourceLanguage,
+                                                      to: language)
+    else { return prose }   // best-effort: the English original is always an acceptable answer
+    translationStore.put(field: .narration, sourceText: prose, language: language, text: translated)
+    return translated
+  }
 }

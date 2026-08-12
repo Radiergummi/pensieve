@@ -51,6 +51,9 @@ struct DetailView: View {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
                 LooseEndRow(view: view, loadProvenance: model.provenance,
                             onLabel: model.setLooseEndLabel,
+                            displaySummary: model.displayed(field: .looseEndText,
+                                                            sourceText: view.looseEnd.text),
+                            onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
                             expandedLooseEndID: model.expandedLooseEndID, compact: false,
                             find: find)
                   .id(view.looseEnd.id)
@@ -117,22 +120,26 @@ struct DetailView: View {
       looseEnds = detail.looseEnds
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       resetFind(narration: nil)
-      shareMarkdown = RecallMarkdown.render(node: node,
-                                            narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
-                                            looseEnds: looseEnds, events: recentEvents, now: Date())
+      // Computed once: both the pre-generation share markdown and the cached fast path below read
+      // the same store lookup, so there is exactly one value in flight, not two independent reads.
+      let cachedDisplay = narrationEnabled ? model.cachedDisplayNarration(for: node, events: recentEvents) : nil
+      shareMarkdown = RecallMarkdown.render(node: node, narration: cachedDisplay,
+                                            looseEnds: looseEnds, events: recentEvents, now: Date(),
+                                            translatedLooseEndText: translatedLooseEndText)
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
-      if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {
+      if !isRefresh, let cached = cachedDisplay {
         lastWorkDone = cached
         resetFind(narration: cached)
         return
       }
       isNarrating = true
-      let prose = await model.narration(for: node, events: recentEvents, force: isRefresh)
+      let prose = await model.displayNarration(for: node, events: recentEvents, force: isRefresh)
       guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
       lastWorkDone = prose
       resetFind(narration: narrationEnabled ? prose : nil)
       shareMarkdown = RecallMarkdown.render(node: node, narration: prose,
-                                            looseEnds: looseEnds, events: recentEvents, now: Date())
+                                            looseEnds: looseEnds, events: recentEvents, now: Date(),
+                                            translatedLooseEndText: translatedLooseEndText)
       isNarrating = false
     }
     .onChange(of: model.expandedLooseEndID) { _, id in
@@ -143,6 +150,17 @@ struct DetailView: View {
       guard let anchor else { return }
       withAnimation { proxy.scrollTo(anchor, anchor: .center) }
       find.scrollTarget = nil
+    }
+    // An on-demand translation landed: repaint with the new text (each row's `displaySummary`
+    // input is recomputed above), rebuild the find document so ⌘F sees it too, and rebuild the share
+    // markdown so Share/Copy exports what is now displayed — deliberately NOT a `.task(id:)` rerun,
+    // which is keyed on `refreshToken` (⌘R) and would force-regenerate the narration through the LLM
+    // for a change that touched no canonical data.
+    .onChange(of: model.translationRevision) { _, _ in
+      resetFind(narration: lastWorkDone)
+      shareMarkdown = RecallMarkdown.render(node: node, narration: lastWorkDone,
+                                            looseEnds: looseEnds, events: recentEvents, now: Date(),
+                                            translatedLooseEndText: translatedLooseEndText)
     }
     }
     }
@@ -164,8 +182,18 @@ struct DetailView: View {
     find.reset(nodeID: node.id,
                document: NodeFindDocument.make(node: node, narration: narration,
                                                looseEnds: looseEnds, events: recentEvents,
-                                               showsLooseEnds: showsLooseEnds))
+                                               showsLooseEnds: showsLooseEnds,
+                                               translatedLooseEndText: translatedLooseEndText))
     find.startSweep(looseEnds: looseEnds, loader: model.provenanceLoader)
+  }
+
+  /// What every loose end's row actually renders (`LooseEndRow`'s `displaySummary` input, built the
+  /// same way) — the on-demand translation when one is stored, else the English original. Shared by
+  /// the find document and the share markdown so neither can disagree with what is on screen.
+  private var translatedLooseEndText: [UUID: String] {
+    Dictionary(uniqueKeysWithValues: looseEnds.map {
+      ($0.looseEnd.id, model.displayed(field: .looseEndText, sourceText: $0.looseEnd.text))
+    })
   }
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {

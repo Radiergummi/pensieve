@@ -8,10 +8,16 @@ public struct EmbeddableItem: Sendable {
   /// by the row's TOTAL token count across all columns, so paths sharing a row with text would
   /// discount every commit's text matches. Measured — see the spec's verification gate.
   public let files: String
+  /// "" for the original text, a BCP-47 code ("de") for a translation of it. A translation is a
+  /// SEPARATE document sharing the original's `itemID`, never an extra column beside it: FTS5
+  /// normalises `bm25()` by a row's TOTAL token count across all columns, so German text sharing a
+  /// row with English would discount every English match. The index carries this as
+  /// `language UNINDEXED`, which contributes no tokens.
+  public let language: String
   public init(itemID: String, kind: String, nodeID: String, state: String, text: String,
-              files: String = "") {
+              files: String = "", language: String = "") {
     self.itemID = itemID; self.kind = kind; self.nodeID = nodeID
-    self.state = state; self.text = text; self.files = files
+    self.state = state; self.text = text; self.files = files; self.language = language
   }
   /// Stable across processes/runs (String.hashValue is per-process salted — do NOT use it here).
   /// Hashes `text` ONLY. `files` is excluded so that a change to path indexing does not invalidate
@@ -38,9 +44,34 @@ public enum EmbeddableCorpus {
   /// store already holds historical rows written before that guard existed.
   static func isSearchable(_ text: String) -> Bool { TextQuality.isProse(text) }
 
-  public static func gather(_ database: any DatabaseReader) throws -> [EmbeddableItem] {
+  /// `translations` + `language` add a SECOND document per item whose generated text has a stored
+  /// translation, sharing the original's `itemID`. Defaulted to off, so a caller that has no opinion
+  /// (every test, the CLI paths that only read) produces exactly the corpus it did before.
+  public static func gather(_ database: any DatabaseReader,
+                            translations: TranslationStore? = nil,
+                            language: String = TranslationTarget.off) throws -> [EmbeddableItem] {
     try database.read { database in
       var out: [EmbeddableItem] = []
+      // A translated document, or nothing, appended directly. Off, no store, or no stored translation
+      // all mean "the original is the only document for this item" — sparse translation is the
+      // steady state. Appends internally (rather than returning an optional for the caller to
+      // branch on) to keep `gather`'s own cyclomatic complexity down; the branch just moves here.
+      //
+      // `kind` is a parameter, not a constant: a translated document MUST carry the same kind as the
+      // original it shadows, because `buildHits` maps `kind` to `SearchHit.Kind` and resolves the item
+      // through that branch. A translated loose end tagged "node" would resolve against the Node
+      // table by a loose-end id and silently vanish. Takes the loose end itself (not its id/nodeID
+      // separately) to stay within SwiftLint's parameter-count limit.
+      func appendTranslatedLooseEnd(_ field: TranslationField, of sourceText: String, kind: String,
+                                    from looseEnd: LooseEnd, state: String) {
+        guard !language.isEmpty, let translations,
+              let text = translations.translation(field: field, sourceText: sourceText,
+                                                  language: language)
+        else { return }
+        out.append(EmbeddableItem(itemID: looseEnd.id.uuidString, kind: kind,
+                                  nodeID: looseEnd.nodeID.uuidString, state: state,
+                                  text: text, language: language))
+      }
       // Active AND archived: archiving hides work from the normal views, it does not make the work
       // unrecallable. `muted` stays out of the corpus entirely. Each item carries its owning node's
       // real state, which is what lets the query layer scope results per search scope.
@@ -51,12 +82,18 @@ public enum EmbeddableCorpus {
       for node in nodes {
         out.append(.init(itemID: node.id.uuidString, kind: "node", nodeID: node.id.uuidString,
                          state: node.state.rawValue, text: [node.name, node.description].filter { !$0.isEmpty }.joined(separator: " — ")))
+        appendTranslatedNodeDocument(for: node, into: &out, translations: translations, language: language)
       }
       let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       for looseEnd in ends {
         guard let state = stateByNodeID[looseEnd.nodeID] else { continue }
         out.append(.init(itemID: looseEnd.id.uuidString, kind: "loose_end", nodeID: looseEnd.nodeID.uuidString,
                          state: state, text: [looseEnd.text, looseEnd.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
+        // Text ONLY — never the quote. The original document is "text — quote"; a translated
+        // document that re-appended the English quote would manufacture a duplicate hit, and the
+        // quote is verbatim provenance that must never be adjacent to a translation.
+        appendTranslatedLooseEnd(.looseEndText, of: looseEnd.text, kind: "loose_end",
+                                 from: looseEnd, state: state)
       }
       // Hygiene (spec P1). Two rules, both bounded to events:
       //  1. `git.checkout` carries no work content — 261 of 1,686 rows were bare "checkout <branch>",
@@ -84,6 +121,27 @@ public enum EmbeddableCorpus {
       }
       return out
     }
+  }
+
+  /// A node has TWO translatable fields (`name`, `description`), unlike the single-field
+  /// `appendTranslatedLooseEnd` helper `gather` uses for loose ends, so it composes them into ONE
+  /// document the same way the original joins them (" — ", empties filtered) rather than reusing
+  /// that helper. Appends a document when EITHER field has a translation, filling the untranslated
+  /// half from the original — appends directly (rather than returning an optional for the caller to
+  /// branch on) to keep `gather`'s own cyclomatic complexity down.
+  private static func appendTranslatedNodeDocument(for node: Node, into items: inout [EmbeddableItem],
+                                                   translations: TranslationStore?, language: String) {
+    guard !language.isEmpty else { return }
+    let translatedName = translations?.translation(field: .nodeName, sourceText: node.name,
+                                                   language: language)
+    let translatedDescription = node.description.isEmpty ? nil
+      : translations?.translation(field: .nodeDescription, sourceText: node.description,
+                                  language: language)
+    guard translatedName != nil || translatedDescription != nil else { return }
+    let text = [translatedName ?? node.name, translatedDescription ?? node.description]
+      .filter { !$0.isEmpty }.joined(separator: " — ")
+    items.append(EmbeddableItem(itemID: node.id.uuidString, kind: "node", nodeID: node.id.uuidString,
+                                state: node.state.rawValue, text: text, language: language))
   }
 
   /// The ingester writes {"hash","branch","files"} for a commit, with `files` newline-joined.

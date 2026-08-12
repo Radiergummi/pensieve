@@ -27,7 +27,13 @@ extension AppModel {
     isSyncingIndexes = true
     let searchStore = self.searchStore
     Task.detached { [weak self] in
-      SearchIndexer(store: searchStore).sync(database)
+      // `.production()`, NOT `SearchIndexer(store: searchStore)`: the defaulted initializer resolves
+      // to `translations: nil, language: .off`, so this rebuild would carry no German rows while the
+      // daemon's own `.production()` rebuild (Sync.swift / PensieveSyncAgent.swift) carries them —
+      // each side's rebuild would then look like a corpus change to the other and undo it, forever.
+      // `.production()` re-reads the target on every call (a Settings change lands without relaunch)
+      // and already skips opening the translation store when the target is off.
+      SearchIndexer.production().sync(database)
       // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
       // timeout is the whole reason this work is detached.
       let state = searchStore.state()
@@ -77,14 +83,21 @@ extension AppModel {
     searchToken += 1
     let token = searchToken
     let store = searchStore
+    // Pre-Task locals, read here on the main actor rather than inside the detached closure below.
+    // Off means off: `translationStore`/`translator` are `lazy` and constructing either would open
+    // a file/load a model, so they're touched only when a target is actually resolved.
+    let language = TranslationTarget.resolved()
+    let translations = language.isEmpty ? nil : translationStore
+    let translator = language.isEmpty ? nil : self.translator
     searchTask = Task { [weak self] in
       let hits = await Task.detached {
         // Fully qualified: `AppModel.SearchScope` (the UI's active/all enum) shadows the Kit type
         // of the same name inside this extension.
-        SearchQueries.search(query: rawQuery,
-                             scope: PensieveKit.SearchScope(visibleNodeIDs: visible,
-                                                            includeArchived: includeArchived),
-                             store: store, database)
+        await SearchQueries.searchTranslatingOnEmpty(
+          query: rawQuery,
+          scope: PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived),
+          store: store, translations: translations, language: language, translator: translator,
+          database)
       }.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchHits = hits

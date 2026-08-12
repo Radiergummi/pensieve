@@ -2746,6 +2746,72 @@
           }
         }
       }
+    },
+    "Translation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung"
+          }
+        }
+      }
+    },
+    "Translate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen"
+          }
+        }
+      }
+    },
+    "Translate generated text to" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generierte Texte übersetzen nach"
+          }
+        }
+      }
+    },
+    "Prepare translation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung vorbereiten"
+          }
+        }
+      }
+    },
+    "Translation requires macOS 26 or later." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung erfordert macOS 26 oder neuer."
+          }
+        }
+      }
+    },
+    "Generated summaries are translated on this device. Captured text, cited quotes and transcripts are never translated." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generierte Zusammenfassungen werden auf diesem Gerät übersetzt. Erfasste Texte, zitierte Passagen und Transkripte werden nie übersetzt."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

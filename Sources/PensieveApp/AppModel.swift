@@ -103,6 +103,12 @@ final class AppModel {
   /// drainThenRefresh), so this never bumps on background liveness updates.
   private(set) var refreshToken = 0
 
+  /// Bumped when an on-demand translation lands. Its own signal rather than `refreshToken`, because
+  /// a `refreshToken` bump means ⌘R: `DetailView` reads it as `isRefresh` and force-regenerates the
+  /// narration through the LLM. Translating a loose end must repaint the pane, not re-narrate it.
+  /// NOT `private(set)`: bumped from `AppModel+Translation.swift`, a different file in the same module.
+  var translationRevision = 0
+
   // MARK: - In-app find
   var searchText: String = ""
   /// ⌘F search scope. `.all` opts archived nodes into results. Observable → drives the scope bar.
@@ -128,6 +134,15 @@ final class AppModel {
   @ObservationIgnored var searchTask: Task<Void, Never>?
   @ObservationIgnored var searchToken = 0
   @ObservationIgnored lazy var searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
+  /// `lazy` matters: with the translation target off, neither this store nor the translator below is
+  /// ever touched, so no store file is created and no model asset loads.
+  @ObservationIgnored lazy var translationStore = TranslationStore(url: PensievePaths.translationCacheURL())
+  @ObservationIgnored lazy var translator: Translator? = makeDefaultTranslator()
+  /// Trailing-edge: translating eight loose ends in a row must cause ONE whole-corpus rebuild, not
+  /// eight. The same coalescer the liveness watches run through.
+  @ObservationIgnored lazy var translationDebouncer = Debouncer(interval: 0.4) { [weak self] in
+    await MainActor.run { self?.syncSearchIndexes() }
+  }
   /// Shared across every window and both loose-end surfaces so a transcript is parsed once, not
   /// once per expanded row. Invalidation is per-entry file-fingerprint, inside the loader.
   @ObservationIgnored lazy var provenanceLoader: ProvenanceLoader? = {

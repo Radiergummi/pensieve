@@ -21,6 +21,12 @@ public enum PensievePaths {
   public static func searchIndexURL() -> URL {
     indexURL(named: "search-index.sqlite")
   }
+  /// Disposable, never synced, rebuildable by re-translating. Sibling of the narration cache and the
+  /// search index. Must follow `PENSIEVE_DB` like `searchIndexURL()` does, so that disposable indexes
+  /// belong to the store they were built from and are not clobbered by test/verification recipes.
+  public static func translationCacheURL() -> URL {
+    indexURL(named: "translation-cache.sqlite")
+  }
   /// The search index belongs to the store it was built from, so it MUST follow `PENSIEVE_DB` wherever
   /// `openCanonical()` does. Without this, the project's own verification recipes — `PENSIEVE_DB=/tmp/x
   /// pensieve sync`, and the app smoke-launch — point at a throwaway store, find the real index's
