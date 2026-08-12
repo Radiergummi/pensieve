@@ -816,6 +816,72 @@ once. If a spike is ever run: sign with the team, add the App Group entitlement 
 `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` resolves non-nil in BOTH the app and the
 widget, and that the widget can read a file the app wrote there — that go/no-go gates everything else.
 
+**A third surface joined this gate on 2026-08-12: background sync itself.** See the next entry.
+
+---
+
+## Background sync is dead — launchd won't spawn the agent (2026-08-12)
+
+**Status: OPEN, root cause NOT proven.** Seven hypotheses tested and refuted; the surviving explanation is
+the Team-ID gate above, which the user plans to clear with a paid membership. **Decision (2026-08-12): rely
+on the app's self-drain for now, do not build a workaround.**
+
+**Symptom.** The agent last ran at `2026-08-11T23:29:36Z` and has not run since. `launchctl print` shows the
+job registered and `enabled`, with `runatload` set, `run interval = 300 seconds`, and
+`pended nondemand spawn` — a spawn launchd wants to perform and never performs (`runs = 0`). Forcing it with
+`launchctl kickstart` produces:
+
+```
+xpcproxy exited due to OS_REASON_CODESIGNING | Launch Constraint Violation,
+error info: c[5]p[1]m[1]e[0], (Constraint not matched) launch type 0
+```
+
+with `codeSigningTeamID` empty and `codeSigningValidationCategory: 10` in the `.ips` report. So the pending
+spawn and the forced kill are the same rejection seen from two sides.
+
+**The helper itself is fine.** Run directly it does real work
+(`/Applications/Pensieve.app/Contents/Library/Helpers/PensieveSyncAgent` → a normal `sync.log` line).
+`codesign -v --deep --strict` passes on the bundle. This is launchd refusing to start a working binary.
+
+**Refuted, with the evidence — do not re-test these:**
+1. *Caused by reinstalling the app.* No — it stopped 11 h before that day's install, with `last exit code = 0`.
+2. *The overnight gap was sleep.* No — `pmset -g log` has **zero** Sleep/Wake transitions on 2026-08-12.
+3. *Ad-hoc signing is categorically incompatible.* No — `sync.log` shows 12 runs/hour through all of
+   2026-08-11 under this identical ad-hoc scheme. It worked, then stopped.
+4. *Needs Login Items approval.* No — `sfltool dumpbtm` says `[enabled, allowed, notified]`, and
+   `launchctl print-disabled` says `enabled`.
+5. *`unregister()` + `register()` heals a stale LWCR* (what `BackgroundSyncService`'s doc comment claims).
+   No — done via the Settings toggle, no spawn followed. **That comment is now known to be at least
+   incomplete; it describes a heal that no longer works.**
+6. *The BTM record was stale/corrupt.* No. `unregister()` **demotes rather than deletes** — the record
+   survived every cycle with a stable UUID (`FD0B5CD7…`), only flipping disposition `0xb ↔ 0xa` and bumping
+   its generation. So the label was renamed to force a genuinely fresh record (`23A69ABB…`) — **identical
+   failure**. The rename was then reverted; it bought nothing.
+7. *The parent app's BTM record being `disabled` blocks the child.* No — `WeatherMenu`,
+   `PasswordsMenuBarExtra` and `Podcasts` all run with exactly that parent state.
+
+**What points at the Team-ID gate.** Every other third-party background item in `sfltool dumpbtm` belongs to
+a Developer-ID-signed app. Pensieve is the only ad-hoc one, and the only one launchd refuses. The failure is
+literally a *launch constraint* on a binary with no Team ID. **Unexplained by this theory:** why it worked
+all of 2026-08-11 — best guess is a cached validation that expired, and it is only a guess.
+
+**Impact is smaller than it looks.** The app self-drains whenever it is open (FSEvents spool watch →
+`drainThenRefresh`), so capture and extraction keep running. Only the unattended path is lost.
+
+**A fallback exists if it ever becomes urgent** (deliberately NOT built): `sync.log` starts `2026-07-05`,
+eleven days of successful runs under the hand-installed `com.pensieve.sync` LaunchAgent before the
+2026-07-16 move to `SMAppService`. A plain `~/Library/LaunchAgents` plist running `~/.local/bin/pensieve
+sync` is not a bundled helper and carries no launch constraint; `DaemonInstaller` is still in the tree.
+That architecture demonstrably worked on this machine.
+
+**Litter this investigation left:** two orphaned BTM records (`me.mazetti.pensieve.sync` from before, and
+`me.mazetti.pensieve.backgroundsync` from the rename experiment), both inert and `disabled`. macOS prunes
+them when the app is removed; `sfltool resetbtm` would clear them but is system-wide and not worth it.
+
+*Revisit trigger:* the paid Apple Developer membership lands (same trigger as Widgets/CloudKit/Focus
+filters — **one gate now unblocks four things**). First check after signing with a real Team ID: does the
+agent spawn? If yes, this entry closes and the `registerIfNeeded()` doc comment needs correcting.
+
 ---
 
 ## Narration-cache carry — ✅ DONE (2026-07-19, app-quality cleanup pass)

@@ -249,9 +249,13 @@ membership is in hand. See `backlog.md` "Widgets — DEFERRED".
 - **CLI:** bundled inside `Pensieve.app` at `Contents/Helpers/pensieve`; `~/.local/bin/pensieve` is the
   app-managed symlink external callers (git hooks, `~/.claude/settings.json`, `claude mcp add`) resolve.
   Keep `~/.local/bin` on `PATH`. No manual CLI rebuild/reinstall anymore — updating the app updates it.
-- **Background sync:** the bundled `SMAppService.agent` `me.mazetti.pensieve.sync`, registered from
-  `/Applications/Pensieve.app` (approve once in System Settings ▸ Login Items). Watch:
-  `tail -f ~/Library/Logs/Pensieve/sync.log`.
+- **Background sync: ⚠️ NOT RUNNING since 2026-08-11T23:29Z.** The bundled `SMAppService.agent`
+  `me.mazetti.pensieve.sync` is registered and enabled, and launchd **refuses to spawn it** — see
+  "Background sync is dead" in `backlog.md` for the full investigation. **Ingestion still happens:** the
+  app self-drains whenever it is open (FSEvents spool watch → `drainThenRefresh`), which for this user is
+  most of the time. What is lost is the unattended 300 s path while the app is closed. Watch:
+  `tail -f ~/Library/Logs/Pensieve/sync.log` — a line only appears when the app drains or the helper is
+  run by hand (`/Applications/Pensieve.app/Contents/Library/Helpers/PensieveSyncAgent`, which works).
 - **Hooks** in `~/.claude/settings.json`: SessionStart (`capture-session-start` + `pensieve prime`) +
   SessionEnd. **MCP:** `pensieve mcp` registered at user scope (`claude mcp get pensieve` → Connected).
 - **Real stores:** `~/Library/Application Support/Pensieve/{pensieve,capture}.sqlite`.
@@ -279,6 +283,14 @@ Design-first, subagent-driven. The proven loop, per feature:
 ## Gotchas
 
 **Process / environment**
+- **`log` is shadowed by a shell function here — always use `/usr/bin/log`.** A bare
+  `log show --predicate …` fails with `(eval):log:1: too many arguments` and prints **nothing**, which
+  reads exactly like "no matching events". This cost a wrong conclusion during the background-sync
+  investigation (2026-08-12): the code-signing kills were in the log the whole time. The commands in
+  the **Observability** section of `CLAUDE.md` are affected — prefix them.
+- **`xcodebuild … | tail` reports `tail`'s exit code, not the build's.** `echo "exit=$?"` after a pipe
+  is meaningless; a failed build looked successful this way (2026-08-12). Redirect to a log, check `$?`
+  unpiped, and grep for the `** BUILD SUCCEEDED **` marker.
 - **Work each feature in an isolated `git worktree`** (`git worktree add ../pensieve-<slice> -b feat/<name>`);
   remove on merge. Two efforts in the *same* checkout collided badly once. Confirm no stray `claude`
   process before subagent-driven runs in a shared worktree (a ghost SDD controller once ran a plan in
