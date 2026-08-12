@@ -269,8 +269,8 @@ final class AppModel {
     snapshot = MonitorSnapshot.gather(canonical: database, spool: spool)
     guard let database else { return }
     // This is the only refresh the popover's `.task` triggers on open (the footer's Refresh button
-    // is a separate, deliberate full `refresh()`). Task 5 wires `NodeRowMeta` into the popover's
-    // rows, and it reads `nodeRowFacts` -- hence populating it here. Two grouped aggregates,
+    // is a separate, deliberate full `refresh()`). MenuBarView's rows wire `NodeRowMeta` into the
+    // popover, and it reads `nodeRowFacts` -- hence populating it here. Two grouped aggregates,
     // cheaper than the `SmartLists.compute` already on this path.
     if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
     guard let raw = try? SmartLists.compute(database, now: Date()) else { return }

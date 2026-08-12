@@ -83,9 +83,14 @@ open ./.build-xcode/Build/Products/Debug/Pensieve.app
 Recorded here so a later review doesn't re-litigate them, and so the next task that touches this
 branch has the context this task's execution surfaced.
 
-- Bump `Package.swift` to `.macOS(.v26)` **after** the translation branch merges, and delete
-  PensieveKit's four `if #available` sites (`DefaultProvider.swift:52`, `FoundationModelsProbe.swift:15,26`,
-  `ModelProviderFactory.swift:15`) plus the two `Translator.swift` adds.
+- Bump `Package.swift` to `.macOS(.v26)` **after this branch merges into `main`** (the on-device-
+  translation branch has already merged, as `225c442`), and delete PensieveKit's four `if #available`
+  sites (`DefaultProvider.swift:52`, `FoundationModelsProbe.swift:15,26`, `ModelProviderFactory.swift:15`)
+  plus the two `Translator.swift` adds.
+- **Test count**: this branch measures 589 (see below), with zero PensieveKit changes. `main` has since
+  gained Kit tests from the translation merge, so the post-merge tree's count will be higher than 589 —
+  589 is this branch's number, not the merged tree's. Don't read a higher count after merging as a
+  regression in the other direction.
 - Promote `/tmp/xcstrings-check.py` into `scripts/` if the three-leg check proves worth keeping. Its
   leg 2 (format-specifier parity between `en` and `de`) currently reports false positives on German
   values that reorder arguments with positional specifiers (`%1$@`/`%2$@`) for grammar — confirmed by
@@ -115,20 +120,28 @@ branch has the context this task's execution surfaced.
   through line 146), and **line 147 closes the `ScrollViewReader`**. `.scrollEdgeEffectStyle(.soft, for: .top)`
   sits at line 148, immediately after the `ScrollViewReader`'s close — the plan's sanctioned fallback
   placement, correct in effect even though the line numbers in the plan don't match what's on disk.
-  Whoever resolves the merge with `worktree-on-device-translation` needs this: that branch has hunks
-  at `DetailView.swift:149-153`, immediately adjacent to this one.
+  Whoever resolves this branch's merge into `main` needs this: `worktree-on-device-translation` has
+  already merged (`225c442`) and its hunks land at `DetailView.swift:149-153`, immediately adjacent to
+  this one.
 - Two deferred minors from task reviews:
-  - `MenuBarView.swift:134`'s hover fill (`isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)`)
+  - `MenuBarView.swift:136`'s hover fill (`isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)`)
     is the app's only `AnyShapeStyle` in `Sources/` — confirmed by grep. `.quaternary.opacity(isHovering ? 1 : 0)`
-    would match the opacity-toggle precedent at `LooseEndRow.swift:220` instead.
+    would match the `ShapeStyle.opacity` precedent at `BriefingView.swift:65`
+    (`.background(.quaternary.opacity(0.4), in: RoundedRectangle(...))`) instead. (`LooseEndRow.swift:220`
+    is `.opacity(showsThumbs ? 1 : 0)` — *view* opacity, a different API, and not the right precedent.)
   - Task 3's commit message (`89b462a`) says "only the Divider goes," but the actual diff
     (`Sources/PensieveApp/SidebarView.swift`) also removed the wrapping `VStack(spacing: 0) { ... }` —
     confirmed by reading the commit's diff. Not a defect, just an imprecise commit message.
 - Checked and explicitly **not** defects, recorded so a later review doesn't re-raise them:
-  - The decorative expand/collapse chevron (`LooseEndRow.swift:62`) is not `accessibilityHidden` —
-    checked and left as-is, since the enclosing `Button` already carries an accessibility label that
-    covers the icon; this is unlike the loose-end thumbs, whose `accessibilityHidden` toggle exists
-    for a different reason (keeping a hidden, unrated control out of the focus ring).
+  - The new popover-row chevron (`MenuBarView.swift:126`) is not `accessibilityHidden` — checked and
+    left as-is. Neither its enclosing `Button` nor `LooseEndRow.swift`'s disclosure `Button` (`:58-67`,
+    whose own decorative chevron sits at `:62`) carries an explicit accessibility label — confirmed by
+    `grep -n "accessibilityLabel" Sources/PensieveApp/LooseEndRow.swift`, which returns exactly one hit,
+    at line 239, inside the unrelated `thumb(...)` helper. Both `Button`s instead get an *implicit*
+    label synthesized from their `Text` descendant, and both are `.plain`-styled, so the new chevron
+    simply matches existing, working precedent; this is unlike the loose-end thumbs, whose
+    `accessibilityHidden` toggle exists for a different reason (keeping a hidden, unrated control out
+    of the focus ring).
   - The popover row no longer shows the exact `daysDormant` integer, by design — it renders relative
     recency instead — while `daysDormant` still drives ranking via `groundedScore`
     (`Sources/PensieveKit/Query/NextQueries.swift:14-15`), confirmed by reading the function.

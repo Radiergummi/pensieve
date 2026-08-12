@@ -125,12 +125,14 @@ private struct MenuBarRow: View {
         Spacer()
         Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
       }
+      .padding(.horizontal, 6).padding(.vertical, 4)
       // Without this the `Spacer()` between the text and the chevron is dead space to hit-testing —
-      // the same defect slice A's verify pass found in the detail pane's hover thumbs.
+      // the same defect slice A's verify pass found in the detail pane's hover thumbs. The padding
+      // above must stay inside the label (before this call), or the hover fill paints a wider
+      // rectangle than the button actually hit-tests.
       .rowHitArea()
     }
     .buttonStyle(.plain)
-    .padding(.horizontal, 6).padding(.vertical, 4)
     .background(isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     .onHover { isHovering = $0 }
