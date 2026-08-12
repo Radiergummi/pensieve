@@ -18,6 +18,8 @@
 
 Each task therefore closes on a **build + lint + smoke** gate plus a **named human check** that goes into the carry list in Task 9. Do not invent a test target. Do not add a PensieveKit test to make a task feel complete — if a task seems to need one, the task is wrong, so stop and report instead.
 
+**Tasks 7 and 8 may legitimately produce no commit.** Both are verification tasks whose code change is conditional on what the verification finds. If nothing needed fixing, the deliverable is the *report* — the three recorded appearance outcomes (Task 7) or the triaged catalog findings (Task 8). Report `DONE` with an empty commit list and the outcomes in the report file; do not manufacture a change to have something to commit, and do not treat an empty diff as a failed task.
+
 ## Global Constraints
 
 Every task's requirements implicitly include all of these.
@@ -28,7 +30,7 @@ Every task's requirements implicitly include all of these.
 - **Never change `Prose.measure`** (`Sources/PensieveApp/ProseStyle.swift:10`, currently `760`). It is slice C's to set.
 - **`DetailView.swift` is shared with the concurrent `worktree-on-device-translation` branch.** Add modifiers on new lines only. **Never reindent or restructure the `ScrollViewReader` / `ScrollView` / `VStack` nesting** (opens `:31-33`, closes `:147-148`) — that reindent would span the other branch's hunks in a file whose `.task` ordering two prior reviews called load-bearing.
 - **Zero PensieveKit changes.** `swift test` must report **589** tests at every commit. If a change seems to need Kit, stop and report.
-- **No new String Catalog keys.** Keys are not auto-populated by `xcodebuild`; they are reconciled by hand, `en` + `de`.
+- **Exactly one new String Catalog key is permitted:** `More actions` (Task 6, the ellipsis menu's accessible label). Any *other* new key means the task is wrong — stop and report. Keys are not auto-populated by `xcodebuild`; they are reconciled by hand, `en` + `de`.
 - **Never pipe `xcodebuild` to `tail`** (or `head`, or `grep`) — the pipeline reports the last command's exit code, so a failed build reads as a success (`cfc1189`). Redirect to a file and inspect the file.
 - **Never set `PENSIEVE_DB` / `PENSIEVE_CAPTURE_DB` against the live store.** Smoke launches MUST set both to throwaway `/tmp` paths.
 - **`swiftlint --strict`** must report 0 violations. It caps files at 400 lines.
