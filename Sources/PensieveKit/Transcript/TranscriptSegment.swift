@@ -106,3 +106,56 @@ public struct TaskNotificationBlock: Equatable, Sendable {
     self.unrecognisedChildren = unrecognisedChildren
   }
 }
+
+extension HarnessKind {
+  /// Content — verbatim, never localized. nil when the label alone says everything.
+  ///
+  /// Lives in Kit rather than beside the view because it is also the FINDABLE projection of a
+  /// harness block: find must index exactly what the card renders, and two copies of this would
+  /// drift into highlighting text that isn't on screen.
+  public var displayBody: String? {
+    switch self {
+    case .command(let name, let message, let args):
+      return [name, message, args].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — ")
+    case .taskNotification(let taskNotification):
+      return [taskNotification.summary, taskNotification.status].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    case .systemReminder(let segment), .commandCaveat(let segment), .commandOutput(let segment),
+         .toolUses(let segment), .toolUseError(let segment):
+      return segment
+    case .bashIO(let input, let output):
+      return [input, output].compactMap { $0 }.joined(separator: "\n")
+    case .skillPreamble(let path):
+      return path
+    case .interrupted:
+      return nil
+    case .unknown(_, let body):
+      return body
+    }
+  }
+}
+
+extension TranscriptSegment {
+  /// The text a find should search for this segment — **what the app displays**, never `raw`.
+  ///
+  /// `raw` is the exact source substring, pinned by the no-loss property, and includes tag markup
+  /// plus `unrecognisedChildren` that no view renders. Indexing it would produce matches in
+  /// invisible bytes and inflate the count. nil when the segment renders no body at all.
+  public var findableText: String? {
+    switch self {
+    case .markdown(let text):
+      return text.isEmpty ? nil : text
+    case .callout(let callout):
+      // tagName IS on screen — CalloutView renders it unconditionally — so this is not a chrome
+      // exclusion. It's excluded because it's a structural marker repeated across many callouts
+      // in a node (searching "IMPORTANT" would hit every EXTREMELY-IMPORTANT envelope as noise),
+      // and it renders in the callout's chrome row, not its body: indexing it without also
+      // teaching the renderer to highlight that row would be a counted match with no highlight
+      // and no scroll target. Known, deliberate limitation — do not restore it without solving
+      // that.
+      return callout.body.isEmpty ? nil : callout.body
+    case .harness(let block):
+      guard let body = block.kind.displayBody, !body.isEmpty else { return nil }
+      return body
+    }
+  }
+}

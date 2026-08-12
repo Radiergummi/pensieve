@@ -128,6 +128,12 @@ final class AppModel {
   @ObservationIgnored var searchTask: Task<Void, Never>?
   @ObservationIgnored var searchToken = 0
   @ObservationIgnored lazy var searchStore = SearchIndexStore(url: PensievePaths.searchIndexURL())
+  /// Shared across every window and both loose-end surfaces so a transcript is parsed once, not
+  /// once per expanded row. Invalidation is per-entry file-fingerprint, inside the loader.
+  @ObservationIgnored lazy var provenanceLoader: ProvenanceLoader? = {
+    guard let database else { return nil }
+    return ProvenanceLoader(database: database)
+  }()
 
   /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
   /// site that branches on search (the middle content, the refresh re-run, the detail one-home
@@ -350,49 +356,7 @@ final class AppModel {
     return true
   }
 
-  // MARK: - Organizing writes (metadata only; each calls the op then refreshes explicitly, because
-  // Node-only writes don't change the Event count the liveness ValueObservation tracks). The
-  // shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers live in
-  // AppModel+Organizing.swift alongside the rest of the organizing writes; commitNewNode/updateNode
-  // stay here.
-
-  /// Commit the New Node modal: insert fully-formed, select it.
-  func commitNewNode(parent parentID: UUID?, fields: NodeFields) {
-    guard let database else { return }
-    let trimmed = fields.name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
-    do {
-      // nil ⇒ the parent id didn't resolve (deleted under the menu). Name the PARENT: the new node
-      // doesn't exist yet, so its own name would be meaningless in the copy.
-      guard let new = try NodeCommands.add(database, name: trimmed, kind: fields.kind,
-                                           parent: parentID?.uuidString, description: "",
-                                           icon: fields.icon, colorTag: fields.colorTag, context: fields.context) else {
-        let parentName = parentID.map { displayName($0) } ?? String(localized: "the top level")
-        refresh()
-        presentedError = .cannotAddUnder(parentName)
-        return
-      }
-      refresh()
-      sidebarSelection = .node(new.id); selectedNodeID = new.id
-    } catch {
-      fail(String(localized: "create"), trimmed, error)
-    }
-  }
-
-  /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
-  func updateNode(_ nodeID: UUID, fields: NodeFields) {
-    guard let database else { return }
-    let trimmed = fields.name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
-    let label = displayName(nodeID)
-    do {
-      var trimmedFields = fields
-      trimmedFields.name = trimmed
-      let succeeded = try NodeCommands.update(database, nodeID: nodeID, fields: trimmedFields)
-      if succeeded { refresh() } else { refuse(String(localized: "rename"), label) }
-    } catch {
-      fail(String(localized: "rename"), label, error)
-    }
-  }
-
+  // MARK: - Organizing writes
+  // All of them — including the two modal commits — live in AppModel+Organizing.swift, alongside the
+  // shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers.
 }

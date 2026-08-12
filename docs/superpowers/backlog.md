@@ -492,6 +492,35 @@ unusable". *Revisit trigger:* when the gold set exists.
 
 ---
 
+## In-node find — highlight/document skew — OPEN, needs thinking (2026-08-12)
+
+Raised by the whole-branch review of `worktree-in-node-find` and **deliberately left unchanged** — the
+obvious fix trades the bug for a worse one, so this wants a design, not a patch.
+
+`NodeFindState.runs(for:text:)` takes an `anchor` and **ignores it**: highlighting is derived purely
+from the text handed to it. So during the window between a provenance row rendering its transcript and
+`noteRenderedProvenance` landing in the document, that row tints matches that are **not** in the "N
+matches" count and that ⌘G cannot reach. The count and the highlights disagree, briefly.
+
+**Why the one-line fix was rejected:** gating `runs` on document membership makes the same window show
+*no* highlights on text that visibly contains the query — a reader watching the phrase they typed go
+unmarked reads as broken, where a slightly-early highlight reads as fine. Missing highlights are the
+worse failure, so the skew was kept and flagged.
+
+**The real question is which of two models the pane should hold**, and it isn't a rendering detail:
+either the document is the single authority (and rows must not render until they're indexed — needs the
+sweep and the mount path to converge, or a placeholder), or highlights are locally derived and the
+*count* becomes the approximation (which weakens ⌘G's promise that the count is walkable). Note the
+transcript path is only 18 of 122 loose ends on the `Pensieve` node, so the window is rarer in practice
+than it looks in the code. *Revisit trigger:* the eyeball pass shows the skew is actually noticeable,
+or a future find surface makes the count load-bearing beyond ⌘G.
+
+**Settled at the same time, no work needed:** ⌘F on the Briefing **stays inert**. `FindCommands`
+disables it with no focused node and it does not fall back to the global field — that is the intended
+behaviour after the keybinding swap, not an oversight.
+
+---
+
 ## Transcript rendering — deferred siblings (2026-07-19, split out of the readability spec)
 
 Raised together while dogfooding the inline provenance view; **sub-project #1 (transcript

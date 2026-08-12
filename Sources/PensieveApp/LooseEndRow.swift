@@ -10,7 +10,7 @@ import PensieveKit
 struct LooseEndRow: View {
   let view: LooseEndView
   /// Resolves the surrounding-transcript context off the main actor (file I/O). Pass `model.provenance`.
-  let loadProvenance: (LooseEnd) async -> ProvenanceContext?
+  let loadProvenance: (LooseEnd) async -> LoadedProvenance?
   /// Confirms a salience label for this loose end (👍 salient / 👎 noise / "" clears). Pass
   /// `model.setLooseEndLabel`.
   let onLabel: (UUID, String) -> Void
@@ -18,14 +18,18 @@ struct LooseEndRow: View {
   var expandedLooseEndID: UUID?
   /// True in the middle column, where ~180pt is usable. Drops bubbles and tightens the type scale.
   var compact: Bool = false
+  /// The owning detail pane's find state, when this row participates in find. `nil` in the middle
+  /// column and the Review Suggestions list — neither is find-scoped.
+  var find: NodeFindState?
 
   @State private var expanded = false            // the loose-end row itself
   @State private var provenanceExpanded = false  // the provenance box's own show-more/less
   @State private var context: ProvenanceContext?
   @State private var loading = false
-  /// Segments parallel to `context.messages`, parsed once when the context loads.
-  /// Deliberately NOT a shared cache: `ProvenanceMessage.index` is per-session, so an
-  /// index-keyed cache could serve session A's segments for session B.
+  /// Segments parallel to `context.messages`, supplied by the loader when the context loads. A
+  /// cache keyed on `ProvenanceMessage.index` would be a hazard — that index is per-session, so it
+  /// could serve session A's segments for session B. The loader's cache dodges this: it keys on
+  /// loose-end ID, and a loose end has exactly one `sourceEventID`, hence one session.
   @State private var parsed: [[TranscriptSegment]] = []
 
   /// Optimistic override of the confirmed label so a tap reflects immediately (the injected
@@ -57,7 +61,7 @@ struct LooseEndRow: View {
           HStack(spacing: 6) {
             Image(systemName: expanded ? "chevron.down" : "chevron.right")
               .font(.caption2).foregroundStyle(.secondary)
-            Text(view.looseEnd.text).prose()
+            looseEndText
           }
         }
         .buttonStyle(.plain)
@@ -106,14 +110,56 @@ struct LooseEndRow: View {
       guard expanded, context == nil else { return }
       loading = true
       let loaded = await loadProvenance(view.looseEnd)
-      context = loaded
-      parsed = (loaded?.messages ?? []).map { TranscriptMarkup.parse($0.text) }
+      context = loaded?.context
+      // Segments come from the loader, NOT a second TranscriptMarkup.parse here: the find document
+      // indexes these exact arrays by position, so a separate parse could disagree about ordinals.
+      parsed = loaded?.segments ?? []
       loading = false
+      // The window this row renders is the truth. The sweep may have recorded a different one — the
+      // loader re-slices a transcript that grew since — so let the rendered window correct the
+      // document, keeping its segment ordinals and the on-screen ordinals the same numbers.
+      find?.noteRenderedProvenance(looseEndID: view.looseEnd.id, loaded: loaded,
+                                   quote: view.looseEnd.quote)
     }
-    .onAppear { if expandedLooseEndID == view.looseEnd.id { expanded = true } }
+    .onAppear {
+      if expandedLooseEndID == view.looseEnd.id { expanded = true }
+      if isFindTarget { revealForFind() }
+    }
     .onChange(of: expandedLooseEndID) { _, newValue in
       if newValue == view.looseEnd.id { expanded = true }
     }
+    // The per-window find channel, ALONGSIDE the app-wide `expandedLooseEndID` above and never
+    // instead of it: that property is read by the detail pane in every open window, so driving find
+    // through it would expand this row in every ⌘⌥N recall window and clobber a pending search or
+    // Spotlight landing.
+    .onChange(of: isFindTarget) { _, forced in
+      if forced { revealForFind() }
+    }
+  }
+
+  /// True while find has force-expanded this row to reveal a match inside it.
+  private var isFindTarget: Bool { find?.forcedExpansions.contains(view.looseEnd.id) ?? false }
+
+  /// Opens the row AND its provenance disclosure for a find target — both, unconditionally. The
+  /// collapsed preview renders a SINGLE segment (`previewSegments`) at view-ordinal 0 whatever that
+  /// segment's true position is, so a document anchor for any other segment has no on-screen site to
+  /// highlight or scroll to while the disclosure is shut.
+  private func revealForFind() {
+    expanded = true
+    provenanceExpanded = true
+  }
+
+  @ViewBuilder private var looseEndText: some View {
+    let anchor = FindAnchor.looseEndText(view.looseEnd.id)
+    let runs = find?.runs(for: anchor, text: view.looseEnd.text) ?? []
+    Group {
+      if runs.isEmpty {
+        Text(view.looseEnd.text).prose()
+      } else {
+        HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor)).prose()
+      }
+    }
+    .findSite(anchor, find)
   }
 
   @ViewBuilder private var provenanceBody: some View {
@@ -134,14 +180,32 @@ struct LooseEndRow: View {
     } else if loading {
       ProgressView().controlSize(.small)
     } else {
-      // Honest fallback: the stored verbatim quote + why there's no surrounding context.
-      Text(view.looseEnd.quote)
-        .prose().italic().padding(.leading, 10)
-        .overlay(alignment: .leading) { Rectangle().fill(.orange).frame(width: 3) }
+      quoteFallback
       if context != nil {
         Text("Surrounding context unavailable (transcript changed or removed).").metaText()
       }
     }
+  }
+
+  /// Honest fallback: the stored verbatim quote + why there's no surrounding context.
+  ///
+  /// A find site like any other text this row renders itself. It has to be: on the measured store 85%
+  /// of loose ends have no surviving transcript and degrade to exactly this quote, so the
+  /// `.looseEndQuote` unit the document mints for them would otherwise be a counted match with nowhere
+  /// to scroll and nothing tinted — the user told a match is here and shown nothing.
+  @ViewBuilder private var quoteFallback: some View {
+    let anchor = FindAnchor.looseEndQuote(view.looseEnd.id)
+    let runs = find?.runs(for: anchor, text: view.looseEnd.quote) ?? []
+    Group {
+      if runs.isEmpty {
+        Text(view.looseEnd.quote)
+      } else {
+        HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor))
+      }
+    }
+    .prose().italic().padding(.leading, 10)
+    .overlay(alignment: .leading) { Rectangle().fill(.orange).frame(width: 3) }
+    .findSite(anchor, find)
   }
 
   @ViewBuilder private var thumbs: some View {
@@ -194,8 +258,35 @@ struct LooseEndRow: View {
   }
 
   @ViewBuilder private func messageRow(_ msg: ProvenanceMessage, showsRole: Bool) -> some View {
-    TranscriptMessageView(message: msg, segments: segments(for: msg),
-                          compact: compact, showsRoleLabel: showsRole)
+    let messageSegments = segments(for: msg)
+    TranscriptMessageView(message: msg, segments: messageSegments,
+                          compact: compact, showsRoleLabel: showsRole,
+                          highlights: highlights(for: msg, segments: messageSegments),
+                          // Only on a find-scoped surface: handing an anchor to the middle column or
+                          // Review Suggestions would put an `.id()` on segments that never had one,
+                          // changing their view identity for a scroll target nothing can reach.
+                          anchorForSegment: find == nil ? nil : { ordinal in
+                            .transcriptSegment(looseEndID: view.looseEnd.id,
+                                               messageIndex: msg.index, segment: ordinal)
+                          },
+                          find: find)
+  }
+
+  /// Highlight runs per segment ordinal — only for the segments that actually match. The ordinal is
+  /// the position in the FULL segment array, the same number the document's anchors carry.
+  private func highlights(for msg: ProvenanceMessage,
+                          segments: [TranscriptSegment]) -> [Int: SegmentHighlight] {
+    guard let find, !find.query.isEmpty else { return [:] }
+    var result: [Int: SegmentHighlight] = [:]
+    for (ordinal, segment) in segments.enumerated() {
+      guard let text = segment.findableText else { continue }
+      let anchor = FindAnchor.transcriptSegment(looseEndID: view.looseEnd.id,
+                                               messageIndex: msg.index, segment: ordinal)
+      let runs = find.runs(for: anchor, text: text)
+      guard !runs.isEmpty else { continue }
+      result[ordinal] = SegmentHighlight(runs: runs, currentOffset: find.currentOffset(in: anchor))
+    }
+    return result
   }
 
   /// Segments for a message, by position in the parallel `parsed` array. Falls back to a single

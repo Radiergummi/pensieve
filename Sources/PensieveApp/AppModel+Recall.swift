@@ -46,11 +46,12 @@ extension AppModel {
     }
   }
 
-  /// Surrounding-transcript provenance for a loose end, resolved off the main actor (file I/O).
-  /// nil only when the source event is missing; a present-but-unavailable transcript returns a
-  /// ProvenanceContext with `transcriptAvailable == false`.
-  func provenance(for looseEnd: LooseEnd) async -> ProvenanceContext? {
-    guard let database else { return nil }
-    return try? await Task.detached { try ProvenanceQueries.context(database, looseEnd: looseEnd) }.value
+  /// Surrounding-transcript provenance for a loose end, plus its parsed segments — resolved off the
+  /// main actor (file I/O) by a shared `ProvenanceLoader`, so N rows from one session cost one parse.
+  /// nil only when there is no database or the source event is missing; a present-but-unavailable
+  /// transcript returns a context with `transcriptAvailable == false`.
+  func provenance(for looseEnd: LooseEnd) async -> LoadedProvenance? {
+    guard let provenanceLoader else { return nil }
+    return await provenanceLoader.load(looseEnd)
   }
 }

@@ -20,16 +20,22 @@ struct DetailView: View {
   @State private var describable = false
   @State private var loadedNodeID: UUID?   // which node the current prose belongs to
   @State private var shareMarkdown = ""   // rebuilt on load/refresh; fed to the toolbar ShareLink
+  @State private var find = NodeFindState()
 
   var body: some View {
-    ScrollViewReader { proxy in
+    VStack(spacing: 0) {
+      // `nodeID == nil` = the detail load hasn't landed yet. The bar still shows, so a ⌘F fired
+      // during the load is not swallowed; it reports "No matches" for the moment, then the load's
+      // `resetFind` hands it the real document and re-runs the query against it.
+      if find.isPresented, find.nodeID == nil || find.nodeID == node.id { FindBar(find: find) }
+      ScrollViewReader { proxy in
       ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         // WHAT IT IS — name, the adaptive state line, description.
         HStack(alignment: .top, spacing: 12) {
           NodeBadge(node: node, size: 44)
           VStack(alignment: .leading, spacing: 4) {
-            Text(node.name).font(.largeTitle).bold()
+            findableText(node.name, anchor: .nodeName).font(.largeTitle).bold()
             NodeMetaLine(node: node, facts: model.nodeRowFacts[node.id])
             descriptionBlock
           }
@@ -45,7 +51,8 @@ struct DetailView: View {
               ForEach(looseEnds, id: \.looseEnd.id) { view in
                 LooseEndRow(view: view, loadProvenance: model.provenance,
                             onLabel: model.setLooseEndLabel,
-                            expandedLooseEndID: model.expandedLooseEndID, compact: false)
+                            expandedLooseEndID: model.expandedLooseEndID, compact: false,
+                            find: find)
                   .id(view.looseEnd.id)
               }
             }
@@ -59,7 +66,7 @@ struct DetailView: View {
         if narrationEnabled, let lastWorkDone, loadedNodeID == node.id {
           VStack(alignment: .leading, spacing: 4) {
             Divider()
-            Text(lastWorkDone).prose().padding(.top, 4)
+            findableText(lastWorkDone, anchor: .narration).prose().padding(.top, 4)
             Label("Generated summary", systemImage: "sparkles")
               .font(.caption2)
               .foregroundStyle(.secondary)
@@ -78,7 +85,7 @@ struct DetailView: View {
           if recentEvents.isEmpty {
             Text("No captured activity.").foregroundStyle(.secondary)
           } else {
-            ActivityTimeline(events: recentEvents)
+            ActivityTimeline(events: recentEvents, find: find)
           }
         }
       }
@@ -109,17 +116,21 @@ struct DetailView: View {
       recentEvents = detail.status.recentEvents
       looseEnds = detail.looseEnds
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+      resetFind(narration: nil)
       shareMarkdown = RecallMarkdown.render(node: node,
                                             narration: narrationEnabled ? model.cachedNarration(for: node, events: recentEvents) : nil,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       guard narrationEnabled else { lastWorkDone = nil; isNarrating = false; return }
       if !isRefresh, let cached = model.cachedNarration(for: node, events: recentEvents) {
-        lastWorkDone = cached; return
+        lastWorkDone = cached
+        resetFind(narration: cached)
+        return
       }
       isNarrating = true
       let prose = await model.narration(for: node, events: recentEvents, force: isRefresh)
       guard !Task.isCancelled else { return }   // superseded: new task owns state; don't touch isNarrating
       lastWorkDone = prose
+      resetFind(narration: narrationEnabled ? prose : nil)
       shareMarkdown = RecallMarkdown.render(node: node, narration: prose,
                                             looseEnds: looseEnds, events: recentEvents, now: Date())
       isNarrating = false
@@ -128,7 +139,33 @@ struct DetailView: View {
       guard let id else { return }
       withAnimation { proxy.scrollTo(id, anchor: .center) }
     }
+    .onChange(of: find.scrollTarget) { _, anchor in
+      guard let anchor else { return }
+      withAnimation { proxy.scrollTo(anchor, anchor: .center) }
+      find.scrollTarget = nil
     }
+    }
+    }
+    .focusedSceneValue(\.nodeFind, find)
+    .onChange(of: find.isPresented) { _, presented in
+      // Opening the bar is what pays for the transcript sweep: it reads every referenced transcript
+      // off the main actor, so nothing loads it until the user actually asks to find something.
+      if presented { find.startSweep(looseEnds: looseEnds, loader: model.provenanceLoader) }
+    }
+    .onExitCommand { if find.isPresented { find.dismiss() } }
+  }
+
+  /// Rebuilds the find document for what is currently on screen, then restarts the transcript sweep.
+  /// The two belong together: `reset` rebuilds every provenance slot as unresolved AND cancels the
+  /// in-flight sweep, so a same-node rebuild (⌘R, narration arriving) would otherwise drop the
+  /// transcript matches the sweep had already filled with nothing left to refill them. Restarting is
+  /// cheap — the loader serves an unchanged transcript from its cache and reports "nothing to do".
+  @MainActor private func resetFind(narration: String?) {
+    find.reset(nodeID: node.id,
+               document: NodeFindDocument.make(node: node, narration: narration,
+                                               looseEnds: looseEnds, events: recentEvents,
+                                               showsLooseEnds: showsLooseEnds))
+    find.startSweep(looseEnds: looseEnds, loader: model.provenanceLoader)
   }
 
   @ViewBuilder private func section(_ title: LocalizedStringResource, @ViewBuilder content: () -> some View) -> some View {
@@ -138,11 +175,25 @@ struct DetailView: View {
     }
   }
 
+  /// A text site that participates in find: highlighted when the query matches, plain otherwise,
+  /// and always registered as a scroll target.
+  @ViewBuilder private func findableText(_ text: String, anchor: FindAnchor) -> some View {
+    let runs = find.runs(for: anchor, text: text)
+    Group {
+      if runs.isEmpty {
+        Text(text)
+      } else {
+        HighlightedText(runs: runs, currentOffset: find.currentOffset(in: anchor))
+      }
+    }
+    .findSite(anchor, find)
+  }
+
   @ViewBuilder private var descriptionBlock: some View {
     VStack(alignment: .leading, spacing: 4) {
       if !node.description.isEmpty {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-          Text(node.description).prose()
+          findableText(node.description, anchor: .description).prose()
           if describable {
             Button { runDescribe() } label: { Image(systemName: "arrow.clockwise") }
               .buttonStyle(.borderless).controlSize(.small)
@@ -188,6 +239,7 @@ private struct DetailLoadKey: Hashable { let nodeID: UUID; let token: Int }
 /// the source icon+color, the localized source label, and the summary. No avatars (single-user).
 private struct ActivityTimeline: View {
   let events: [Event]
+  var find: NodeFindState?
 
   var body: some View {
     let groups = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.occurredAt) }
@@ -199,7 +251,7 @@ private struct ActivityTimeline: View {
           Text(day, format: .dateTime.weekday(.wide).month().day())
             .font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
           ForEach(Array(items.enumerated()), id: \.element.id) { idx, event in
-            TimelineRow(event: event, isLast: idx == items.count - 1)
+            TimelineRow(event: event, isLast: idx == items.count - 1, find: find)
           }
         }
       }
@@ -210,6 +262,7 @@ private struct ActivityTimeline: View {
 private struct TimelineRow: View {
   let event: Event
   let isLast: Bool
+  var find: NodeFindState?
 
   var body: some View {
     let style = EventSourceStyle.style(for: event.kind)
@@ -228,10 +281,24 @@ private struct TimelineRow: View {
           Text(event.occurredAt, format: .dateTime.hour().minute())
             .metaText().monospacedDigit()
         }
-        Text(event.summary).prose()
+        summaryText
       }
       Spacer()
     }
+  }
+
+  @ViewBuilder private var summaryText: some View {
+    let anchor = FindAnchor.event(event.id)
+    let runs = find?.runs(for: anchor, text: event.summary) ?? []
+    Group {
+      if runs.isEmpty {
+        Text(event.summary)
+      } else {
+        HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor))
+      }
+    }
+    .prose()
+    .findSite(anchor, find)
   }
 
   @ViewBuilder private func sourceIcon(_ sourceStyle: SourceStyle) -> some View {

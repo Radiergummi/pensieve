@@ -5,20 +5,19 @@ import PensieveKit
 extension AppModel {
   /// A refusal: the view was stale, so REFRESH (that's the remedy — the phantom node disappears and
   /// the "try again" copy becomes true), then surface the alert. Post-write state changes are skipped.
-  /// NOT private: AppModel.swift's commitNewNode/updateNode also call it.
+  /// NOT private: AppModel+Recall.swift's loose-end label write also calls it.
   func refuse(_ verb: String, _ name: String) {
     refresh()
     presentedError = .refusal(verb, name)
   }
 
   /// A throw: a real DB error. Do NOT refresh — an error tells us nothing about staleness.
-  /// NOT private: AppModel.swift's commitNewNode/updateNode also call it.
+  /// NOT private: AppModel+Recall.swift's loose-end label write also calls it.
   func fail(_ verb: String, _ name: String, _ error: Error) {
     presentedError = .failure(verb, name, error)
   }
 
   /// The display name for a node id, falling back to a neutral word when it's already gone.
-  /// NOT private: AppModel.swift's updateNode also calls it.
   func displayName(_ id: UUID) -> String {
     node(id)?.name ?? String(localized: "this item")
   }
@@ -153,5 +152,44 @@ extension AppModel {
         """)
     }
     return String(localized: "Delete “\(node.name)”? Its captured activity and loose ends are removed. This can’t be undone.")
+  }
+
+  /// Commit the New Node modal: insert fully-formed, select it.
+  func commitNewNode(parent parentID: UUID?, fields: NodeFields) {
+    guard let database else { return }
+    let trimmed = fields.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    do {
+      // nil ⇒ the parent id didn't resolve (deleted under the menu). Name the PARENT: the new node
+      // doesn't exist yet, so its own name would be meaningless in the copy.
+      guard let new = try NodeCommands.add(database, name: trimmed, kind: fields.kind,
+                                           parent: parentID?.uuidString, description: "",
+                                           icon: fields.icon, colorTag: fields.colorTag, context: fields.context) else {
+        let parentName = parentID.map { displayName($0) } ?? String(localized: "the top level")
+        refresh()
+        presentedError = .cannotAddUnder(parentName)
+        return
+      }
+      refresh()
+      sidebarSelection = .node(new.id); selectedNodeID = new.id
+    } catch {
+      fail(String(localized: "create"), trimmed, error)
+    }
+  }
+
+  /// Commit the Edit modal: atomic name/kind/icon/colorTag update.
+  func updateNode(_ nodeID: UUID, fields: NodeFields) {
+    guard let database else { return }
+    let trimmed = fields.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    let label = displayName(nodeID)
+    do {
+      var trimmedFields = fields
+      trimmedFields.name = trimmed
+      let succeeded = try NodeCommands.update(database, nodeID: nodeID, fields: trimmedFields)
+      if succeeded { refresh() } else { refuse(String(localized: "rename"), label) }
+    } catch {
+      fail(String(localized: "rename"), label, error)
+    }
   }
 }

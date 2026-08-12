@@ -187,14 +187,20 @@ private struct ArchivedBadge: View {
   }
 }
 
-/// Renders a grounded snippet with the matched run highlighted — three Text runs, zero index math.
+/// Renders a grounded snippet with the matched run highlighted. A `Snippet` is the N=1 case of
+/// `FindRun`, so this delegates to the app's one highlight renderer (in its `.snippet` style —
+/// bold + accent, no background, matching this view's shipped look) rather than building a second.
 struct SnippetText: View {
   let snippet: Snippet
   var body: some View {
-    (Text(snippet.leading)
-      + Text(snippet.match).bold().foregroundColor(.accentColor)
-      + Text(snippet.trailing))
-      .lineLimit(2)
+    HighlightedText(runs: runs, style: .snippet).lineLimit(2)
+  }
+
+  /// `snippet.match` is `""` when nothing matched — omit the `.match` run entirely rather than
+  /// emit an empty one, so `runs.isEmpty` still means "no match" for anyone who tests it later.
+  private var runs: [FindRun] {
+    guard !snippet.match.isEmpty else { return [.plain(snippet.leading), .plain(snippet.trailing)] }
+    return [.plain(snippet.leading), .match(snippet.match), .plain(snippet.trailing)]
   }
 }
 
