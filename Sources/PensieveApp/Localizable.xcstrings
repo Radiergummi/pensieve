@@ -1464,6 +1464,17 @@
         }
       }
     },
+    "More actions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Aktionen"
+          }
+        }
+      }
+    },
     "move" : {
       "extractionState" : "manual",
       "localizations" : {

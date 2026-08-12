@@ -39,7 +39,7 @@ struct MenuBarView: View {
       footer
     }
     .padding(12)
-    .frame(width: 300)
+    .frame(width: 320)   // two-line rows need the room
     .task { model.refreshGlance() }   // refresh on open; the always-mounted label is kept live between opens by the liveness watches
   }
 
@@ -66,13 +66,25 @@ struct MenuBarView: View {
   }
 
   @ViewBuilder private var footer: some View {
-    HStack {
+    HStack(spacing: 8) {
+      // Full-width primary: German cannot truncate a button that owns the row. `.borderedProminent`
+      // rather than a glass style — the `.window` popover surface is already system glass, so a
+      // glass button on it would be glass on glass. This also picks up the system accent colour.
       Button("Open Pensieve") {
         applyDeepLink(.briefing, model: model, openWindow: openWindow)
       }
-      Spacer()
-      Button("Refresh") { Task { await model.refreshNow() } }
-      Button("Quit") { NSApplication.shared.terminate(nil) }
+      .buttonStyle(.borderedProminent)
+      .frame(maxWidth: .infinity)
+
+      Menu {
+        Button("Refresh") { Task { await model.refreshNow() } }
+        Button("Quit") { NSApplication.shared.terminate(nil) }
+      } label: {
+        Image(systemName: "ellipsis")
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .help("More actions")
     }
   }
 
