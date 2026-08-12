@@ -1,4 +1,4 @@
-# CONTINUE — session handoff (2026-08-11)
+# CONTINUE — session handoff (2026-08-12)
 
 Self-contained pickup for a fresh agent. Read `CLAUDE.md` first (project rules + the full shipped
 changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the durable long-term list
@@ -6,24 +6,34 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-**582 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
+**589 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
 dogfooded**: capture → ingest → auto-extract runs unattended via the bundled background-sync agent; the
 app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The
 core intelligence gate passed long ago. The hard part is done — remaining work is feature breadth, not
 foundations.
 
+**Nothing is in flight. `main` is clean and every branch is merged.** The two design slices that were
+open at the last handoff both landed: **"where was I"** (design slice A, merged and human-verified
+2026-08-12) and **in-node find** (merged 2026-08-12 — see the merge note below, it was not mechanical).
+Stale leftovers still on disk: `.claude/worktrees/remove-vector` (branch
+`fix/post-vector-removal-cleanup`, fully merged — safe to remove) and `.claude/worktrees/retrieval-bm25`
+(branch `worktree-retrieval-bm25`, **8 commits NOT in `main`** — abandoned two-path work, so removing it
+discards those commits; that is a decision, not cleanup).
+
 **BM25/FTS5 shipped and is the only retrieval path.** `worktree-retrieval-bm25-single-path` merged to
 `main`, and the vector stack it replaced was then deleted outright (see the vector-removal ship below) —
-there is no second engine left to reconcile against. The two `worktree-retrieval-bm25*` worktrees and
-branches are stale leftovers from that work and still exist (`.claude/worktrees/retrieval-bm25` +
-`.claude/worktrees/retrieval-bm25-single-path`, branches `worktree-retrieval-bm25` /
-`worktree-retrieval-bm25-single-path`) — safe to remove.
+there is no second engine left to reconcile against.
 
-**⚠️ The installed app is badly stale.** `/Applications/Pensieve.app` was built **2026-07-19** — so the
-running app has no chat transcript rendering, and the bundled `pensieve mcp` (which this and every
-Claude Code session actually calls) has neither the widened `include_archived` search nor BM25.
-**Rebuild + reinstall before trusting anything you see in the live app**, then check
+**⚠️ Rebuild + reinstall before trusting the live app.** `/Applications/Pensieve.app` was built
+**2026-08-11 13:38**, which is *after* BM25 + the vector removal (so the bundled `pensieve mcp` every
+Claude Code session calls is current on retrieval) but *before* **both** design slices. The running app
+therefore has none of the "where was I" pass and no in-node find, and its ⌘F is still the **global**
+search field rather than the new find-within-node. After reinstalling, check
 `ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
+
+**`xcodegen generate` is required after pulling this merge** — the checked-in project is generated and
+gitignored, and the in-node-find merge adds five app files. A build without it fails with
+`cannot find 'FindCommands' in scope`, which reads like a code error and is not one.
 
 **No open defects on the retrieval path.** **FTS5/BM25 is the only retrieval path** — the vector stack
 (embedder, `vec0` store, indexer, `SemanticQueries` and its inert `0.25` floor, the vendored `sqlite-vec`
@@ -37,7 +47,19 @@ See `backlog.md`, "Semantic relevance floor — CLOSED by removing the engine".
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
-- **In-node find (⌘F)** (2026-08-11, branch `worktree-in-node-find`). The detail pane got its own find
+- **"Where was I" — design slice A, the reload-context pass** (2026-08-12, merged to `main`;
+  human-verified the same day, outcome in `docs/superpowers/verify/2026-08-11-where-was-i-human-verify.md`).
+  Detail pane leads with an **adaptive state line** (`NodeMetaLine`) instead of the repeated kind/state
+  pair, **cited loose ends now come BEFORE the recap** and the recap is a headerless closing paragraph
+  (a caps header announces a slot, and narration is allowed to be nil); middle-column rows carry
+  **recency + open count** instead of "Projekt / Projekt / Projekt"; Briefing **weights moved work and
+  collapses the quiet**; thumbs moved off the permanent row onto hover. Kit grew `lastActivityAt` on
+  `NodeFacts`/`BriefingCard` and a batched `NodeRowFacts` (two grouped aggregates). The verify pass found
+  **one real defect, fixed**: hover-revealed thumbs were unreachable because the `Spacer()` between text
+  and thumbs is dead space to hit-testing (`.contentShape(Rectangle())`). Four findings that belong
+  elsewhere were logged to `backlog.md` — see "What the verify pass turned up" below.
+- **In-node find (⌘F)** (merged to `main` 2026-08-12; built 2026-08-11 on `worktree-in-node-find`). The
+  detail pane got its own find
   bar, and **the keybindings swapped: ⌘F is now find-within-the-open-node, ⌥⌘F is search-everything.**
   Literal substring search over everything the pane renders — name, description, narration, loose-end
   text, and the **transcript windows behind collapsed provenance rows** — highlighted in place, ⌘G/⇧⌘G
@@ -48,6 +70,13 @@ carries live in the matching `backlog.md` entries.
   and invalidates on `(size, mtime)` — **not** `refreshToken`, which never bumps on the watch path.
   Accepted trade-off: **flatten-on-match** (a matched transcript segment shows raw Markdown syntax while
   the bar is open — MarkdownUI 2.4.1's AST is `internal`). Trust gate untouched; read-only throughout.
+  **The merge with slice A was not mechanical, and one defect existed only in the combination:** slice A
+  moved the recap below the loose ends, but `NodeFindDocument.make` still emitted the narration slot
+  *before* them. ⌘G walks document order and the type's own contract is "order matches on-screen order",
+  so the slot moved and `documentOrderFollowsOnScreenOrder` now pins the new order. Neither branch could
+  have caught it alone. The merge also pushed `AppModel.swift` to 404 lines (`swiftlint --strict`, which
+  CI runs, caps files at 400), so `commitNewNode`/`updateNode` moved into `AppModel+Organizing.swift`
+  where the rest of the organizing writes already live.
 - **Retrieval P1 + P2′ — BM25 replaces the search engine** (2026-08-11, merged to `main`). Closed the
   inert-floor defect by discarding its diagnosis: a **ranking** failure, not a **scale** failure, so no
   floor could ever have fixed it.
@@ -144,23 +173,40 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**Post-merge carry — rebuild + reinstall before doing anything else.** Retrieval P1+P2′ (BM25) and the
-vector-removal that followed it are both on `main`, but `/Applications/Pensieve.app` was last built
-**2026-07-19** — before either. The bundled `pensieve mcp`, which every Claude Code session calls, is
-still advertising the old wire shape: `search` items carry an `engine` key that no longer exists, and
-`limit` doesn't mean `limit` (a `prefix(limit * 2)` over-allocation existed only to fit a second engine's
-results, and that engine is gone). Rebuild + reinstall to `/Applications`, then confirm
-`ls -l ~/.local/bin/pensieve` is still a symlink into `Contents/Helpers/`. Run
-`defaults delete me.mazetti.pensieve app.semanticSearch` — inert now that nothing reads it, but leaving it
-invites a future reader to wonder what does. **Expect the background sync agent to need healing after the
-bundle swap:** a new helper cdhash makes `SMAppService.register()` silently no-op (`EX_CONFIG` /
-"Launch Constraint Violation"). Observed 2026-08-11, and the app's own unregister+register did **not**
-heal it. What worked: quit the app → `launchctl bootout gui/$(id -u)/me.mazetti.pensieve.sync` →
-relaunch → verify `last exit code = 0` and a fresh line in `~/Library/Logs/Pensieve/sync.log`. Then walk
-the **human-verify carries** at the bottom of this file — they need the installed app and the real
-store, which no agent can do headlessly.
+**Post-merge carry — `xcodegen generate`, then rebuild + reinstall, before doing anything else.** The
+in-node-find merge adds five app files to a **generated, gitignored** project, so a build without
+`xcodegen generate` fails with `cannot find 'FindCommands' in scope`. `/Applications/Pensieve.app` was
+built **2026-08-11 13:38** — current on BM25/vector-removal, but predating **both** design slices, so the
+installed app has neither the "where was I" pass nor in-node find, and its ⌘F is still the global search
+field. After reinstalling, confirm `ls -l ~/.local/bin/pensieve` is still a symlink into
+`Contents/Helpers/`. Run `defaults delete me.mazetti.pensieve app.semanticSearch` — inert now that
+nothing reads it, but leaving it invites a future reader to wonder what does. **Expect the background
+sync agent to need healing after the bundle swap:** a new helper cdhash makes `SMAppService.register()`
+silently no-op (`EX_CONFIG` / "Launch Constraint Violation"). Observed 2026-08-11, and the app's own
+unregister+register did **not** heal it. What worked: quit the app →
+`launchctl bootout gui/$(id -u)/me.mazetti.pensieve.sync` → relaunch → verify `last exit code = 0` and a
+fresh line in `~/Library/Logs/Pensieve/sync.log`. Then walk the **human-verify carries** at the bottom of
+this file — in-node find's are entirely unrun, and they need the installed app and the real store, which
+no agent can do headlessly.
 
-**THEN — P3, the paraphrase harness, is the one open retrieval question, and it is blocked on YOU.**
+**THEN — the honest shortlist.** Nothing is half-built, so the next move is a genuine choice:
+
+- **Design slice B — Liquid Glass chrome + the macOS 26 floor** (`backlog.md`, "Claude Design review").
+  The backlog's own trigger says *pair with or follow A*, and A just landed. Bump `deploymentTarget.macOS`
+  15.0 → 26 (the machine runs 26.6; the 15.0 floor buys a single-user tool nothing and forces
+  `if #available` scaffolding at every call site), adopt scroll-edge material, revisit the sidebar status
+  footer, and **rebuild the menu-bar popover** — the worst-looking surface in the app, with node rows that
+  have no per-item action, plus the `Pensieve öffnen` → `Pensieve öf…` truncation the verify pass found.
+- **Design slice C — transcript reading: one rail, no nested cards.** It was explicitly sequenced
+  *behind* in-node find because both rewrite `LooseEndRow.swift` and `TranscriptSegmentView.swift`. That
+  block is now gone, so C is unblocked — and in-node find's flatten-on-match trade-off lives in exactly
+  those files, so C is the natural place to revisit it.
+- **Loose ends can end — three verbs (`open`/`done`/`dropped`).** `backlog.md` calls it "the single
+  highest-value idea in the whole review", and it is a data-model change, not chrome: today a loose end is
+  open forever, so "Als Nächstes 155" and "Ruhend 112" never shrink and neither number means anything.
+- **Track A slice 5 — talk-to-system.** Still the product spine (see Track A below).
+
+**AND — P3, the paraphrase harness, is the one open retrieval question, and it is blocked on YOU.**
 Both engines fail "find without remembering the words" (`vector` ≈0/8, `bm25` ≈2/8 on short paraphrase
 queries), and the gold set that produced BM25's headline win uses **full documents as queries**, which
 flatters lexical matching in a way real typed queries do not. Unblocking it needs **30–50 paraphrase
@@ -173,15 +219,17 @@ report can conclude "the incumbent is unusable".
 error-surfacing has shipped. Next: **slice 5 (talk-to-system** — describe a strand in natural language →
 structured create via `LLMProvider`), then **slice 6 (forks** — gated on the unbuilt fork-capture backend;
 brainstorm that backend first). Design: `specs/2026-07-05-pensieve-app-three-pane-design.md`.
-**This is the recommended next feature.**
+**Still the product spine — but the design slices above have first claim now that A is verified.**
 
 **Track B — DONE.** Both threads shipped: the cloud/API `LLMProvider` (2026-07-09) and organizing-writes
 error surfacing (2026-07-14). Nothing open. (Spec 2's deferred source-management GUI + daemon-interval
 editing remain parked in `backlog.md`, not part of Track B.)
 
-**Track C — findability / OS-integration.** In-app find (⌘F), the menu-bar item, `pensieve://`, App
+**Track C — findability / OS-integration.** The global search field (now **⌥⌘F**), the menu-bar item,
+`pensieve://`, App
 Intents + Spotlight, Focus filters, **Spotlight loose-end indexing (1b, 2026-07-19)**, **transcript
-readability (2026-07-26)** and **retrieval P1+P2′ / BM25 (2026-08-11)** are live. **Semantic/vector
+readability (2026-07-26)**, **retrieval P1+P2′ / BM25 (2026-08-11)** and **in-node find (⌘F,
+2026-08-12)** are live. **Semantic/vector
 recall (#2) and its two 2026-07-19 follow-ups were built, measured worse than BM25, and removed on
 2026-08-11** — they hardened an engine that no longer exists. Remaining:
 - **Transcript-passage chunking** — the next corpus increment. **The spec is already written**
@@ -279,6 +327,34 @@ the system** (slice 5), statistical **theme discovery**, proactive project sugge
 
 North star throughout: **grounded-with-provenance** — every AI-surfaced item cites real captured text or
 it doesn't appear. The trust gate is sacred; the capture path must never block a git commit.
+
+## What the slice-A verify pass turned up (2026-08-12) — all four filed in `backlog.md`
+
+None of these blocked the slice; each wants its own decision, and they are easy to lose because they
+were found by eye, not by a test.
+
+- **Narration can still emit a facts-dump.** A real recap read *"Recent work on the cetacean project
+  consisted of eight `cc.session` sessions. The sessions included 41, 54, 107, 41, 349, 28, and 410, and
+  1 prompts."* No fabrication and no trust-gate issue — but slice A just promoted the recap to the
+  closing paragraph of the detail pane, so the bar is higher. Wants a quality gate in
+  `SummaryBuilder.narrate`: **prefer `nil` over prose that only restates event metadata.**
+- **`Du` vs `user` in the same message.** The transcript bubble header renders the localized speaker
+  class while the provenance footer directly below shows the raw role. Both are as-specified (header is
+  chrome, role is content) — on screen they read as two labels for one speaker. **Needs a decision, not
+  a fix.**
+- **`Pensieve öffnen` truncates to `Pensieve öf…`** in the menu-bar popover. The string is correct; the
+  three-button row is too narrow for German. Folded into design slice B, which rebuilds that surface.
+- **Full Keyboard Access tab order is erratic** — the middle column is not reliably reachable.
+  Pre-existing and app-wide, not specific to slice A.
+
+**Two process notes from the same pass, worth not re-learning:** (1) `open ./.build-xcode/…` from the
+main checkout launches **main's** app, not a worktree's — confirm with
+`pgrep -lf Pensieve.app/Contents/MacOS/Pensieve` before concluding a branch regressed. (2) String
+Catalog coverage is checkable **without eyes and more thoroughly** — parse `Localizable.xcstrings` for
+keys missing a `de` value, compare format specifiers between `en` and `de`, and diff the localizable
+Swift literals against the catalog's keys. That covers all 219 keys instead of five surfaces, and it is
+what would have caught the six mis-keyed entries before they shipped. Forced-locale launch is still
+worth doing for **layout**, just not for key coverage.
 
 ## Human-verify carries — retrieval / BM25 (needs the reinstalled app + the real store)
 

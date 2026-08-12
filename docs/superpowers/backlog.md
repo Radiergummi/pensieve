@@ -257,10 +257,11 @@ Proposal: a **speaker column** carries the structure; only user messages get a f
 are the minority and the thing being hunted for); assistant replies sit free on the page as prose;
 harness events collapse to one folded `DisclosureGroup` line; attached skill documents become a chip,
 not an embedded article; Markdown H1 inside a transcript never renders larger than the app's own
-headings. **Conflict:** this rewrites `LooseEndRow.swift` and `TranscriptSegmentView.swift`, the same
-files the queued 13-task in-node-find plan (`plans/2026-08-11-in-node-find.md`, unstarted) modifies.
-Sequence one behind the other; do not run both. *Trigger: after in-node-find lands, or fold into it
-deliberately.*
+headings. **Conflict — now cleared:** this rewrites `LooseEndRow.swift` and `TranscriptSegmentView.swift`,
+the same files in-node find (`plans/2026-08-11-in-node-find.md`) modifies, so the two were sequenced
+rather than run together. **In-node find merged to `main` on 2026-08-12**, so C is unblocked — and its
+accepted flatten-on-match trade-off lives in exactly those two files, which makes C the natural place to
+revisit it. *Trigger: live now.*
 
 **D — Not design at all; each needs its own brainstorm → spec.**
 - **Loose ends can end — three verbs (`open` / `done` / `dropped`).** The single highest-value idea in
@@ -300,8 +301,8 @@ deliberately.*
 
 **Rejected on the evidence: "move Recent Activity into a trailing `.inspector`."** The proposal reads
 the empty margin beside the 680pt measure cap as dead space to fill. But the `.inspector` was
-**deliberately removed** in the 2026-07-08 inline-provenance rework (`RootView.swift:41-43`) and the
-queued in-node-find plan builds on that decision. The underlying complaint — a wide window wastes its
+**deliberately removed** in the 2026-07-08 inline-provenance rework (`RootView.swift:41-43`) and in-node
+find (shipped 2026-08-12) builds on that decision. The underlying complaint — a wide window wastes its
 surplus — is legitimate and belongs to slice A as a layout question, but re-adding an inspector is not
 the answer.
 
