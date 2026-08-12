@@ -218,7 +218,12 @@ in the repo, and one proposal was **rejected on the evidence**.
 
 Split into four slices. **Slice A is being specced now**; B–D are parked here.
 
-**A — "Where was I" (the reload-context pass) — IN FLIGHT (2026-08-11).**
+**A — "Where was I" (the reload-context pass) — DONE (verified 2026-08-12).**
+Human-verify pass run against the built app and the real store; outcome and two process notes in
+`verify/2026-08-11-where-was-i-human-verify.md`. One real defect found and fixed (hover-revealed
+thumbs were unreachable — the `Spacer()` between text and thumbs was dead space, so hover ended
+before the pointer arrived; `.contentShape(Rectangle())`). Four items found that belong elsewhere are
+logged below.
 Detail-pane order (state line first, loose ends before the recap, recap demoted to a closing
 paragraph), middle-column rows carrying recency + counts instead of the repeated kind label,
 honest localized relative dates, Briefing weighting (moved gets mass, quiet collapses), thumbs
@@ -238,9 +243,12 @@ call site until the floor moves. For a single-user tool on 26.6 the 15.0 floor b
 Scope: bump the target, adopt scroll-edge material so content stops bleeding through chrome, revisit
 the sidebar status footer (still the open item #1 from the 2026-07-07 UX carries — `.background(.bar)`
 fixed the clash but it still reads as a bolted-on band), and **rebuild the menu-bar popover**, which is
-the worst-looking surface in the app today: untranslated `"868 open"` / `"288 open · 0d dormant"`,
-node rows with no per-item action. The proposal's shape for it is right — a re-entry point with a
-`Fortsetzen` action per row, not a scoreboard. *Trigger: pair with or follow A.*
+the worst-looking surface in the app today: node rows with no per-item action. The proposal's shape
+for it is right — a re-entry point with a `Fortsetzen` action per row, not a scoreboard. (The
+untranslated `"868 open"` / `"288 open · 0d dormant"` were fixed in slice A; the 2026-08-12 verify
+pass confirmed `869 offen` / `288 offen · 1T ruhend`. What remains there is **layout**: the
+`Pensieve öffnen` button truncates to `Pensieve öf…` because the three-button row is too narrow for
+German — the string is correct, the row is not.) *Trigger: pair with or follow A.*
 
 **C — Transcript reading: one rail, no nested cards.** The provenance transcript currently nests
 three near-identical gray surfaces (message card inside system card inside HINWEIS/BEFEHL card) with
@@ -269,7 +277,21 @@ deliberately.*
 - **Middle column as chronological history across all projects** ("Verlauf") instead of a node list.
   This is the same idea as **item 5 of the 2026-07-07 App UX & IA polish carries** (the three-pane IA
   rework), and it overlaps the long-standing *timeline per project* loose end. Still wants its own
-  brainstorm.
+  brainstorm. **Related ask (2026-08-12):** previous/next navigation — reloading context means a lot
+  of jumping between nodes, and there is no way to step through a list without returning to it.
+- **Narration can still emit a facts-dump** (found 2026-08-12). A real recap read: *"Recent work on
+  the cetacean project consisted of eight `cc.session` sessions. The sessions included 41, 54, 107,
+  41, 349, 28, and 410, and 1 prompts."* No fabrication and no trust-gate issue — narration is
+  best-effort and outside the cited gate — but enumerating prompt counts is not a recap, and slice A
+  just promoted the recap to the closing paragraph of the detail pane. Wants a quality bar in
+  `SummaryBuilder.narrate`: prefer `nil` over prose that only restates event metadata.
+- **`Du` vs `user` in the same message** (found 2026-08-12). The transcript bubble header renders the
+  localized speaker class (`Du`) while the provenance footer directly below shows the raw role
+  (`user`). Both are as-specified — the header is chrome, the role is content per CLAUDE.md — but on
+  screen they read as two different labels for the same speaker. Needs a decision, not a fix.
+- **Full Keyboard Access tab order is erratic** (found 2026-08-12). The middle column is not reliably
+  reachable without tabbing-and-spacing at random. Pre-existing and app-wide, not specific to the
+  loose-end rows whose `accessibilityHidden` guard prompted the check.
 - **Multi-source evidence contract.** A grounded citation always renders as identity + verbatim
   wording + a way back to the source, and **only the identity strip and the jump-back may vary by
   source type** — the quote's typography is set once, centrally, so a future source (Linear, browser

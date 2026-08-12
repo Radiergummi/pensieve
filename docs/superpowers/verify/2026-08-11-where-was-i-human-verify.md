@@ -1,5 +1,7 @@
 # "Where was I" (slice A) — human-verify carries
 
+**RUN 2026-08-12 — see "Outcome" at the end. One real defect found and fixed; everything else passed.**
+
 Everything below needs the built app, a real store, and a pair of eyes. Subagents implemented and
 reviewed this branch without a GUI, so no visual or interactive claim was made by anyone. These are
 the checks nobody could perform, not a list of suspected problems.
@@ -91,3 +93,40 @@ Shipped as-is because the spec's own table says "visible, filled" at the row lev
 ambiguous. Flipping it is a two-line change: move `.opacity`/`.allowsHitTesting` from the `HStack`
 down into `thumb(…)`, gated on `confirmed || hovering`. Layout is fixed-width either way, so no
 reflow.
+
+## Outcome — run 2026-08-12
+
+Sections 1–4 passed. Section 5 found **one real defect, now fixed**.
+
+**The defect: hover-revealed thumbs were unreachable.** `.onHover` sat on the row's outer `VStack`,
+but SwiftUI only hit-tests *rendered* content — the `Spacer()` between the loose-end text and the
+thumbs is dead space. Hovering the text revealed the thumbs; moving the pointer horizontally toward
+them crossed the gap, hover ended, and they vanished before they could be clicked. The feature was
+reachable only by right-click. Fixed with `.contentShape(Rectangle())` above `.onHover`
+(`LooseEndRow.swift`). **Still needs one human confirm** — synthetic pointer events do not trigger
+SwiftUI hover on an unfocused window, so this fix has not been seen working.
+
+**Two process notes worth keeping:**
+
+- The first English pass tested the **wrong binary** — `open ./.build-xcode/…` from the main checkout
+  launches main's app, not the worktree's. It showed `Strand`/`Project` kind labels, `dormant 0d` and
+  `2 since last visit`, i.e. exactly the defects this branch fixes, which reads as a total regression.
+  Always confirm with `pgrep -lf Pensieve.app/Contents/MacOS/Pensieve` that the path is the worktree's.
+- Section 1's substance is checkable **without eyes and more thoroughly**: parse `Localizable.xcstrings`
+  for keys missing a `de` value, compare format specifiers between `en` and `de`, and diff the
+  localizable Swift literals against the catalog's keys. That covers all 211 keys instead of five
+  surfaces, and it is what would have caught the six mis-keyed entries before they shipped. The
+  forced-locale launch is still worth doing for layout (see the truncation below), just not for
+  key coverage.
+
+**Verified passing:** German Briefing (`BEWEGT`/`RUHIG`, `2 neu`, collapsed on first launch, expansion
+survives quit+relaunch, no `dormant 0d`); menu-bar `869 offen` and `288 offen · 1T ruhend` (the two
+mis-keyed strings); middle-column recency+count rows; detail state line for strand / project /
+archived; `noch nichts erfasst` for a node with no events; no gap when narration is absent; context
+menu with `Clear rating` correctly absent on an unrated row; expanded footer
+`user · 20. Juli 2026 · vor 3 Wochen`; English intact on the same surfaces.
+
+**Found but out of scope for this branch** (logged in `backlog.md`): the menu-bar popover's
+`Pensieve öffnen` truncates to `Pensieve öf…` in German; narration can still emit a facts-dump; the
+transcript bubble header is localized (`Du`) while the footer shows the raw role (`user`); Full
+Keyboard Access tab order is erratic and the middle column is not reliably reachable.
