@@ -87,6 +87,10 @@ struct LooseEndRow: View {
       }
     }
     .padding(.vertical, 2)
+    // Without this the row's hit region is only its rendered glyphs — the `Spacer()` between the
+    // text and the thumbs is dead space, so moving the pointer horizontally toward a thumb left
+    // the hover region and the thumb vanished before it could be clicked.
+    .contentShape(Rectangle())
     .onHover { hovering = $0 }
     // Keyboard- and pointer-free access to the same two verbs the hover-revealed thumbs offer.
     .contextMenu {
