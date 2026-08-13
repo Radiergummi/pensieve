@@ -30,6 +30,19 @@ extension AppModel {
 
   /// Open the New Node modal (replaces the old immediate-insert + inline-rename flow → fixes #3).
   func presentNewNode(under parentID: UUID?) { editingNode = NodeEditRequest(mode: .new(parent: parentID)) }
+
+  /// Open the New Node modal parented at what the user is currently looking at. An archived
+  /// selection falls back to the top level: a child of an archived node would be created `active`
+  /// and immediately read as a phantom root, which is why the context menu hides "New Child…"
+  /// on archived rows too.
+  func presentNewNodeAtSelection() {
+    guard let selectedNodeID, let selected = node(selectedNodeID), selected.state != .archived else {
+      presentNewNode(under: nil)
+      return
+    }
+    presentNewNode(under: selected.id)
+  }
+
   /// Open the Edit modal for an existing node.
   func presentEditNode(_ node: Node) { editingNode = NodeEditRequest(mode: .edit(node)) }
 

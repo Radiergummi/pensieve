@@ -45,7 +45,7 @@ struct RootView: View {
         .navigationSplitViewColumnWidth(min: 360, ideal: 800)   // floor only; no max → stays flexible
         .toolbar {
           ToolbarItem(placement: .navigation) {
-            Button { model.presentNewNode(under: nil) } label: { Image(systemName: "plus") }
+            Button { model.presentNewNodeAtSelection() } label: { Image(systemName: "plus") }
               .help("New Node")
           }
           // Refresh lives on ⌘R and Go ▸ Refresh — kept off the toolbar so the native sidebar toggle

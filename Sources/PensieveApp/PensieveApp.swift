@@ -42,7 +42,7 @@ struct PensieveApp: App {
       FindCommands()
       LooseEndResolveCommands()
       CommandGroup(after: .newItem) {
-        Button("New Node") { model.presentNewNode(under: nil) }
+        Button("New Node") { model.presentNewNodeAtSelection() }
           .keyboardShortcut("n", modifiers: .command)
         Button("Open in New Window") { model.openNodeRequest = model.selectedNodeID }
           .keyboardShortcut("n", modifiers: [.command, .option])
