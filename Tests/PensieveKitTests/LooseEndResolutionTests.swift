@@ -204,6 +204,30 @@ private func seedIn(_ database: any DatabaseWriter, nodeState: NodeState,
   #expect(try LooseEndQueries.closed(database, nodeID: noisy.node, now: Date()).isEmpty)
 }
 
+@Test func bulkCloseClosesOnlyThisNodesOpenEndsAndReportsThem() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-bulk"))
+  let mine = try seedIn(database, nodeState: .active, status: .open)
+  let other = try seedIn(database, nodeState: .active, status: .open)
+  let alreadyClosed = try database.write { database -> UUID in
+    let event = try Event.where { $0.nodeID.eq(mine.node) }.fetchOne(database)!
+    let looseEnd = LooseEnd(nodeID: mine.node, sourceEventID: event.id, text: "t", quote: "already",
+                            status: .dropped,
+                            resolvedAt: Date(timeIntervalSince1970: 1_700_000_000))
+    try LooseEnd.insert { looseEnd }.execute(database)
+    return looseEnd.id
+  }
+
+  let closed = try LooseEndCommands.resolveAllOpen(database, nodeID: mine.node, status: .done,
+                                                   now: Date())
+  #expect(closed == [mine.looseEnd])   // only the OPEN one, and only on this node
+
+  let stored = try database.read { try LooseEnd.all.fetchAll($0) }
+  #expect(stored.first { $0.id == other.looseEnd }?.status == .open)      // other node untouched
+  #expect(stored.first { $0.id == alreadyClosed }?.status == .dropped)    // not re-stamped
+  #expect(stored.first { $0.id == alreadyClosed }?.resolvedAt
+            .map { Int($0.timeIntervalSince1970) } == 1_700_000_000)
+}
+
 /// Closing the last open end must remove a node from What's Next but NOT from Dormant — it is
 /// finished, not neglected, and the two lists answer different questions.
 @Test func closingTheLastEndLeavesWhatsNextButStaysDormant() throws {

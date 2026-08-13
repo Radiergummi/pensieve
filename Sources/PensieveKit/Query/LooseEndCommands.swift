@@ -44,6 +44,28 @@ public enum LooseEndCommands {
     }
   }
 
+  /// Close every OPEN loose end on one node, returning the ids it changed so the caller can register
+  /// a single undo that reopens exactly that set. Already-closed ends are left alone — re-stamping
+  /// their `resolvedAt` would move work you finished weeks ago to the top of the Completed feed.
+  ///
+  /// 👎-labelled ends ARE included: they are open by `status`, and leaving them behind would mean the
+  /// count in the confirmation dialog disagreed with what the node's open feed shows.
+  @discardableResult
+  public static func resolveAllOpen(_ database: any DatabaseWriter, nodeID: UUID,
+                                    status: LooseEndStatus, now: Date = Date()) throws -> [UUID] {
+    try database.write { database in
+      let open = try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq(LooseEndStatus.open) }
+        .fetchAll(database)
+      guard !open.isEmpty else { return [] }
+      let stamp: Date? = status.isClosed ? now : nil
+      try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq(LooseEndStatus.open) }.update {
+        $0.status = #bind(status)
+        $0.resolvedAt = #bind(stamp)
+      }.execute(database)
+      return open.map(\.id)
+    }
+  }
+
   /// Record a machine suggestion. Never touches the confirmed `label`. Returns false if unknown.
   @discardableResult
   public static func suggest(_ database: any DatabaseWriter, id: UUID, label: String) throws -> Bool {
