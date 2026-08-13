@@ -5,6 +5,7 @@ import PensieveKit
 struct RootView: View {
   @Bindable var model: AppModel
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.undoManager) private var undoManager
   // Bound column visibility so the native NavigationSplitView sidebar toggle (in the sidebar, like
   // Mail) works. The sidebar is fully independent of the provenance panel now.
   @State private var columns = NavigationSplitViewVisibility.all
@@ -86,6 +87,20 @@ struct RootView: View {
     ) { id in
       Button("Delete", role: .destructive) { model.deleteNode(id) }
       Button("Cancel", role: .cancel) {}
+    }
+    .confirmationDialog(
+      model.bulkCloseConfirmationText(),
+      isPresented: Binding(get: { model.pendingBulkCloseNodeID != nil },
+                           set: { if !$0 { model.pendingBulkCloseNodeID = nil } }),
+      titleVisibility: .visible,
+      presenting: model.pendingBulkCloseNodeID
+    ) { id in
+      Button("Mark as Done", role: .destructive) {
+        model.closeAllLooseEnds(onNode: id, undoManager: undoManager)
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: { _ in
+      Text("They can be reopened individually or with ⌘Z.")
     }
     .alert(
       model.presentedError?.title ?? "",

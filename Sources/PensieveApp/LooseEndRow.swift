@@ -26,6 +26,9 @@ struct LooseEndRow: View {
   /// `{ text in await model.translate(field: .looseEndText, sourceText: text) }`. `nil` hides the
   /// context-menu action outright (as does the target being off) — no caller may show a dead button.
   var onTranslate: ((String) async -> Void)?
+  /// Resolves this loose end: `(looseEndID, newStatus, previousStatus)`. `nil` in surfaces that do
+  /// not offer resolution — no caller may show a dead button.
+  var onResolve: ((UUID, LooseEndStatus, LooseEndStatus) -> Void)?
   /// When this equals the row's loose end, the row starts/auto-expands (a search hit landing here).
   var expandedLooseEndID: UUID?
   /// True in the middle column, where ~180pt is usable. Drops bubbles and tightens the type scale.
@@ -49,14 +52,24 @@ struct LooseEndRow: View {
   /// of the open list on the next reload when confirmed noise.
   @State private var localLabel: String?
   @State private var hovering = false
+  /// Optimistic override of the status so a tap reflects immediately (the injected `LooseEndView` is
+  /// an immutable snapshot). nil = show the stored value.
+  @State private var localStatus: LooseEndStatus?
 
   /// The label to display: the optimistic local value if the user just tapped, else the stored one.
   private var currentLabel: String { localLabel ?? view.looseEnd.label }
+  private var currentStatus: LooseEndStatus { localStatus ?? view.looseEnd.status }
 
   /// Both the thumb buttons and the context menu write through here.
   private func setLabel(_ value: String) {
     localLabel = value
     onLabel(view.looseEnd.id, value)
+  }
+
+  private func resolve(_ newStatus: LooseEndStatus) {
+    let previous = currentStatus
+    localStatus = newStatus
+    onResolve?(view.looseEnd.id, newStatus, previous)
   }
 
   /// A thumb the user has actually set stays visible unconditionally — a confirmed label is recorded
@@ -110,6 +123,12 @@ struct LooseEndRow: View {
     .onHover { hovering = $0 }
     // Keyboard- and pointer-free access to the same two verbs the hover-revealed thumbs offer.
     .contextMenu {
+      // Resolution first: it is the common action, and it answers a different question from the
+      // salience verbs below the divider.
+      if onResolve != nil {
+        LooseEndStatusMenu(status: currentStatus, resolve: resolve)
+        Divider()
+      }
       Button("Mark as a real loose end") { setLabel(LooseEndLabel.salient) }
       Button("Mark as not a loose end") { setLabel(LooseEndLabel.noise) }
       if !currentLabel.isEmpty {
@@ -121,6 +140,19 @@ struct LooseEndRow: View {
         Button(LocalizedStringKey("Translate")) {
           Task { await onTranslate(view.looseEnd.text) }
         }
+      }
+    }
+    // Swipe is a pointer affordance in the List-backed feeds; the context menu is the discoverable
+    // one everywhere; the keyboard verbs in `LooseEndCommands` are the burn-down one. All three
+    // render the same two commands so they cannot drift apart.
+    //
+    // NOTE: this is INERT in `DetailView`, which renders loose ends in a VStack inside a ScrollView
+    // rather than a List. That is expected, not a regression — the detail pane is covered by the
+    // context menu and the menu commands.
+    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+      if onResolve != nil, currentStatus == .open {
+        Button("Mark as done") { resolve(.done) }.tint(.green)
+        Button("Drop") { resolve(.dropped) }.tint(.orange)
       }
     }
     // Load the surrounding transcript the first time the row is expanded (cached thereafter).
@@ -294,10 +326,15 @@ struct LooseEndRow: View {
                           find: find)
   }
 
+}
+
+/// The transcript-rendering helpers, in an extension so the struct body stays inside SwiftLint's
+/// `type_body_length` cap — which the resolve verbs pushed it past.
+extension LooseEndRow {
   /// Highlight runs per segment ordinal — only for the segments that actually match. The ordinal is
   /// the position in the FULL segment array, the same number the document's anchors carry.
-  private func highlights(for msg: ProvenanceMessage,
-                          segments: [TranscriptSegment]) -> [Int: SegmentHighlight] {
+  fileprivate func highlights(for msg: ProvenanceMessage,
+                              segments: [TranscriptSegment]) -> [Int: SegmentHighlight] {
     guard let find, !find.query.isEmpty else { return [:] }
     var result: [Int: SegmentHighlight] = [:]
     for (ordinal, segment) in segments.enumerated() {
@@ -313,7 +350,7 @@ struct LooseEndRow: View {
 
   /// Segments for a message, by position in the parallel `parsed` array. Falls back to a single
   /// raw markdown segment if the arrays ever disagree — never renders nothing.
-  private func segments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
+  fileprivate func segments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
     guard let ctx = context,
           let pos = ctx.messages.firstIndex(where: { $0.index == msg.index }),
           pos < parsed.count
@@ -325,13 +362,13 @@ struct LooseEndRow: View {
   /// message that classifies `.system` (e.g. all-`<tool_uses>`) must not be conflated with a
   /// following prose `assistant` message that classifies `.claude`, or the caption is wrongly
   /// suppressed and the reader misattributes the speaker.
-  private func speakerClass(for msg: ProvenanceMessage) -> SpeakerClass {
+  fileprivate func speakerClass(for msg: ProvenanceMessage) -> SpeakerClass {
     .of(msg, segments: segments(for: msg))
   }
 
   /// The preview shows only the first meaningful segment — a harness envelope alone would tell the
   /// reader nothing about why this loose end exists.
-  private func previewSegments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
+  fileprivate func previewSegments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
     let all = segments(for: msg)
     let firstProse = all.first { segment in
       switch segment {

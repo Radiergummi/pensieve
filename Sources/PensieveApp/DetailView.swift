@@ -13,6 +13,8 @@ struct DetailView: View {
   // (calling `model.detail(for:)` in the body would hit the DB on every render).
   @State private var recentEvents: [Event] = []
   @State private var looseEnds: [LooseEndView] = []
+  @State private var closedLooseEnds: [LooseEndView] = []
+  @Environment(\.undoManager) private var undoManager
   @State private var lastWorkDone: String?
   @State private var isNarrating = false
   @State private var isDescribing = false
@@ -54,6 +56,10 @@ struct DetailView: View {
                             displaySummary: model.displayed(field: .looseEndText,
                                                             sourceText: view.looseEnd.text),
                             onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
+                            onResolve: { id, status, previous in
+                              model.resolveLooseEnd(id, status, previous: previous,
+                                                    undoManager: undoManager)
+                            },
                             expandedLooseEndID: model.expandedLooseEndID, compact: false,
                             find: find)
                   .id(view.looseEnd.id)
@@ -91,6 +97,38 @@ struct DetailView: View {
             ActivityTimeline(events: recentEvents, find: find)
           }
         }
+
+        // THE RECORD, collapsed. LAST in the pane, which is load-bearing: in-node ⌘F indexes
+        // per-loose-end slots in on-screen order, so closed rows placed inside the Loose Ends
+        // section above would sit before `.narration` and every `.event` in the document while
+        // rendering after them — the exact slice-A × in-node-find defect. Rendering last keeps the
+        // deferral of find-indexing (spec §7.1) honest and compatible.
+        //
+        // Rendered only when non-empty: an always-present "Done · 0" would announce a slot that is
+        // usually empty, the same failure the recap's removed caps header had. Gated on
+        // `showsLooseEnds` so a childless focused strand does not grow a stray section.
+        if showsLooseEnds, !closedLooseEnds.isEmpty {
+          DisclosureGroup {
+            ForEach(closedLooseEnds, id: \.looseEnd.id) { view in
+              HStack(alignment: .top, spacing: 8) {
+                LooseEndStatusBadge(status: view.looseEnd.status)
+                LooseEndRow(view: view, loadProvenance: model.provenance,
+                            onLabel: model.setLooseEndLabel,
+                            displaySummary: model.displayed(field: .looseEndText,
+                                                            sourceText: view.looseEnd.text),
+                            onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
+                            onResolve: { id, status, previous in
+                              model.resolveLooseEnd(id, status, previous: previous,
+                                                    undoManager: undoManager)
+                            },
+                            compact: false)
+              }
+            }
+          } label: {
+            Text("Done · \(closedLooseEnds.count)").font(.callout).foregroundStyle(.secondary)
+          }
+          .padding(.top, 4)
+        }
       }
       .padding(24)
       .frame(maxWidth: Prose.measure, alignment: .leading)
@@ -118,6 +156,7 @@ struct DetailView: View {
       describable = model.isDescribable(node)
       recentEvents = detail.status.recentEvents
       looseEnds = detail.looseEnds
+      closedLooseEnds = model.closedLooseEnds(forNode: node.id)
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       resetFind(narration: nil)
       // Computed once: both the pre-generation share markdown and the cached fast path below read

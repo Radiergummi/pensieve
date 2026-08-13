@@ -135,6 +135,13 @@ struct NodeContextMenu: View {
     Button("Move to…") { model.movePickerNodeID = node.id }
     Button("Merge into…") { model.mergePickerNodeID = node.id }
     Divider()
+    // 288 open ends sit on one node in this store, so item-by-item is not a path for that tail.
+    // Reversible (individually or with one ⌘Z), but it still confirms and names the count.
+    Button("Close all open loose ends…", role: .destructive) {
+      model.pendingBulkCloseNodeID = node.id
+    }
+    .disabled(model.nodeRowFacts[node.id]?.openLooseEnds ?? 0 == 0)
+    Divider()
     if node.state == .archived {
       Button("Unarchive") { model.unarchive(node.id) }
     } else {

@@ -68,9 +68,13 @@ extension AppModel {
       expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
       return
     }
-    let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
+    let visible = visibleNodeIDs()
     // Pre-Task locals: reading self off-main is an isolation violation.
+    // One control, two dimensions. The kernel keeps `includeArchived` and `includeClosed` separate
+    // because they are orthogonal — an archived node's open end and an active node's closed end are
+    // different things — but the UI offers one widening, so both are driven from it.
     let includeArchived = (searchScope == .all)
+    let includeClosed = (searchScope == .all)
     let rawQuery = searchText
     let scopedNodes = allNodes.filter {
       visible.contains($0.id) && $0.state.isSearchable(includeArchived: includeArchived)
@@ -95,7 +99,8 @@ extension AppModel {
         // of the same name inside this extension.
         await SearchQueries.searchTranslatingOnEmpty(
           query: rawQuery,
-          scope: PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived),
+          scope: PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived,
+                                         includeClosed: includeClosed),
           store: store, translations: translations, language: language, translator: translator,
           database)
       }.value

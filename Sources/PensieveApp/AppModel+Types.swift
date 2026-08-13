@@ -39,16 +39,25 @@ enum SmartListKind: String, CaseIterable, Hashable {
 enum SidebarSelection: Hashable {
   case briefing
   case reviewSuggestions
+  /// The burn-down queue: every open loose end, suggested-salient first then oldest.
+  case triage
+  /// The record: loose ends already done or dropped, most recently closed first.
+  case completed
   case smartList(SmartListKind)
   case node(UUID)
 }
 
 /// What the middle column shows for the current sidebar selection. `.looseEndsOf` carries the node id
 /// so the view loads its loose ends off-`body` (via `.task`), never in a `body` DB query.
+/// `.triage` / `.completed` are NOT `SmartListKind` cases: that enum's `itemsKeyPath` returns
+/// `[NextItem]` (nodes), and these two buckets hold loose ends. `.reviewSuggestions` set the
+/// precedent for a sidebar row that is not a smart list, so `DeepLink` stays untouched.
 enum MiddleKind: Equatable {
   case nodes([Node])
   case looseEndsOf(UUID)
   case reviewSuggestions
+  case triage
+  case completed
 }
 
 /// A New/Edit modal request. Identifiable so it drives `.sheet(item:)`.

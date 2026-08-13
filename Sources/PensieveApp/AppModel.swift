@@ -22,6 +22,9 @@ final class AppModel {
   var mergePickerNodeID: UUID?
   /// Non-nil while the delete confirmation is presented for that node. Mounted in RootView.
   var pendingDeleteNodeID: UUID?
+  /// The node whose open loose ends a bulk close is about to close. Drives the confirmation on
+  /// `RootView`, not a dialog inside the context menu — menu content is dismissed with the menu.
+  var pendingBulkCloseNodeID: UUID?
   /// The one surfaced organizing-write failure. Mounted as a single `.alert` in RootView.
   var presentedError: AppError?
   var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
@@ -33,6 +36,10 @@ final class AppModel {
   var nodeRowFacts: [UUID: NodeRowFacts] = [:]
   /// Count of open, unlabeled, machine-suggested loose ends — the "Review Suggestions" badge.
   var reviewCount = 0
+  /// Open loose ends across every visible, active node — the Loose Ends sidebar row's count.
+  /// Completed deliberately has no counterpart: it grows without bound, and a number there invites
+  /// reading it as a score.
+  var triageCount = 0
   /// Set by the AppDelegate when an external `pensieve://` URL is opened; observed by the
   /// always-mounted menu-bar label, which applies it and clears it back to nil.
   var pendingDeepLink: DeepLink?
@@ -276,8 +283,7 @@ final class AppModel {
     guard let database else { return }
     loadNodeRowFacts(database)
     guard let raw = try? SmartLists.compute(database, now: Date()) else { return }
-    let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
-    lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
+    lists = activeFocusContext.isEmpty ? raw : filtered(raw, visibleNodeIDs())
   }
 
   func refresh() {
@@ -292,7 +298,7 @@ final class AppModel {
       allNodes = fetched
       pruneNarrationCache()
     }
-    let visible = NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
+    let visible = visibleNodeIDs()
 
     if let raw = try? SmartLists.compute(database, now: now) {
       lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
@@ -308,7 +314,16 @@ final class AppModel {
       lastForestContext = activeFocusContext
     }
     reviewCount = (try? SalienceReviewQueries.pendingCount(database)) ?? 0
+    triageCount = (try? LooseEndQueries.openAcrossNodes(database, visibleNodeIDs: visible,
+                                                        now: now).count) ?? 0
     if isSearching { runSearch() }
+  }
+
+  /// The Focus-visible node set. Extracted because five surfaces now need it (both refreshes, search
+  /// and the two cross-node loose-end feeds) and an inlined copy that drifted would scope one list
+  /// differently from the rest.
+  func visibleNodeIDs() -> Set<UUID> {
+    NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
   }
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
@@ -316,24 +331,6 @@ final class AppModel {
   /// Count of top-level project nodes, for the content-column header.
   var projectCount: Int {
     allNodes.filter { $0.parentID == nil && $0.kind == .project && $0.state == .active }.count
-  }
-
-  /// The middle column's content for the current `sidebarSelection`. Pure/in-memory (children reads
-  /// `allNodes`); the leaf case defers its loose-ends DB read to the view's `.task`.
-  func middleKind() -> MiddleKind {
-    switch sidebarSelection {
-    case .briefing:
-      return .nodes(briefingCards.map(\.node))
-    case .reviewSuggestions:
-      return .reviewSuggestions
-    case .smartList(let kind):
-      return .nodes(lists[keyPath: kind.itemsKeyPath].map(\.project))
-    case .node(let id):
-      let kids = visibleChildren(of: id)
-      return kids.isEmpty ? .looseEndsOf(id) : .nodes(kids)
-    case nil:
-      return .nodes([])
-    }
   }
 
   /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
@@ -348,35 +345,9 @@ final class AppModel {
     return children(of: id).filter { ($0.state == .archived) == showArchived }
   }
 
-  /// A middle-column node tap. In tree mode this DRILLS — the tapped node becomes the focused node, so
-  /// the middle re-populates with its contents; from a smart list / briefing it only sets the detail
-  /// node, leaving the triage list in place.
-  func selectMiddleNode(_ id: UUID) {
-    expandedLooseEndID = nil
-    if case .node = sidebarSelection {
-      sidebarSelection = .node(id)
-    }
-    selectedNodeID = id
-  }
-
-  /// The middle column's title: the focused node's name in tree mode, else the app name. The app name
-  /// is a proper noun — NOT localized.
-  var middleTitle: String {
-    if case .node(let id) = sidebarSelection, let resultNode = node(id) { return resultNode.name }
-    return "Pensieve"
-  }
-
-  /// The detail recall shows its Loose Ends section EXCEPT when the middle is already showing this same
-  /// node's loose ends (the focused leaf) — the one-home rule (no duplication). While searching, the
-  /// middle shows results (never a leaf's loose ends), so the one-home premise is void and the detail
-  /// always shows its loose ends — including the row a search hit auto-expands into.
-  var detailShowsLooseEnds: Bool {
-    if isSearching { return true }
-    if case .node(let fid) = sidebarSelection, selectedNodeID == fid, visibleChildren(of: fid).isEmpty {
-      return false
-    }
-    return true
-  }
+  // MARK: - What the middle column shows
+  // `middleKind()`, `selectMiddleNode`, `middleTitle` and `detailShowsLooseEnds` live in
+  // AppModel+Middle.swift — moved there when the loose-end feeds pushed this file past the 400-line cap.
 
   // MARK: - Organizing writes
   // All of them — including the two modal commits — live in AppModel+Organizing.swift, alongside the

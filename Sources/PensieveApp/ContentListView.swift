@@ -7,6 +7,12 @@ struct ContentListView: View {
   // A focused leaf's loose ends, loaded off-`body` via `.task` (never a DB query in `body`).
   @State private var looseEnds: [LooseEndView] = []
   @State private var reviewItems: [LooseEndView] = []
+  @State private var triageItems: [LooseEndView] = []
+  @State private var completedItems: [LooseEndView] = []
+  /// The feed row the detail pane is currently showing. Local to the column, not on `AppModel`:
+  /// it is a cursor into this list, and a recall window opened from here must not inherit it.
+  @State private var focusedFeedID: UUID?
+  @Environment(\.undoManager) private var undoManager
 
   var body: some View {
     Group {
@@ -29,6 +35,8 @@ struct ContentListView: View {
       case .nodes(let items): nodeList(items)
       case .looseEndsOf: looseEndList()
       case .reviewSuggestions: reviewList()
+      case .triage: crossNodeList(triageItems, showsStatusBadge: false)
+      case .completed: crossNodeList(completedItems, showsStatusBadge: true)
       }
     }
     .navigationTitle(model.middleTitle)
@@ -39,9 +47,14 @@ struct ContentListView: View {
       switch kind {
       case .looseEndsOf(let id): looseEnds = model.looseEnds(forNode: id)
       case .reviewSuggestions: reviewItems = model.reviewItems()
-      case .nodes: looseEnds = []; reviewItems = []
+      case .triage: triageItems = model.triageItems()
+      case .completed: completedItems = model.completedItems()
+      case .nodes: looseEnds = []; reviewItems = []; triageItems = []; completedItems = []
       }
     }
+    // Published ONLY while a feed is showing, so the Edit-menu verbs are disabled elsewhere rather
+    // than acting on a stale selection.
+    .focusedValue(\.looseEndSelection, feedSelection(for: kind))
   }
 
   @ViewBuilder private func searchResultsList() -> some View {
@@ -79,7 +92,7 @@ struct ContentListView: View {
   @ViewBuilder private func searchScopePicker() -> some View {
     Picker("", selection: Binding(get: { model.searchScope }, set: { model.searchScope = $0 })) {
       Text("Active").tag(AppModel.SearchScope.active)
-      Text("Include Archived").tag(AppModel.SearchScope.all)
+      Text("Include Archived & Closed").tag(AppModel.SearchScope.all)
     }
     .pickerStyle(.segmented)
     .labelsHidden()
@@ -105,7 +118,11 @@ struct ContentListView: View {
             SnippetText(snippet: hit.snippet)
           }
         }
-        if hit.isArchived { Spacer(); ArchivedBadge() }
+        // The `Spacer()` is hoisted out of the archived branch: both badges can show on one row, and
+        // pushing twice would leave a gap between them.
+        if hit.isArchived || hit.status.isClosed { Spacer() }
+        if hit.isArchived { ArchivedBadge() }
+        if hit.status.isClosed { LooseEndStatusBadge(status: hit.status) }
       }
       .rowHitArea()
     }
@@ -170,6 +187,77 @@ struct ContentListView: View {
     }
   }
 
+  /// The two cross-node loose-end feeds. Rows carry the owning node's name (they come from
+  /// everywhere) and offer the resolve verbs; the Completed feed additionally badges each row with
+  /// the verb that closed it, which is the only consumer that distinguishes done from dropped.
+  ///
+  /// A sibling of `reviewList()` rather than a generalization of it: that list is find-unscoped,
+  /// resolve-less and has its own empty state, and folding three surfaces into one builder with
+  /// three flags would be harder to read than one small duplicate.
+  @ViewBuilder private func crossNodeList(_ items: [LooseEndView],
+                                          showsStatusBadge: Bool) -> some View {
+    // A `List(selection:)` rather than plain rows: ↑↓ then walks the queue and the detail pane
+    // follows, which is the whole burn-down loop. It also avoids fighting `LooseEndRow`'s own tap,
+    // which toggles its inline provenance — a row-level `.onTapGesture` would swallow that.
+    List(selection: Binding(
+      get: { focusedFeedID },
+      set: { newValue in
+        focusedFeedID = newValue
+        if let newValue, let match = items.first(where: { $0.looseEnd.id == newValue }) {
+          model.focusLooseEnd(match.looseEnd)
+        }
+      })) {
+      ForEach(items, id: \.looseEnd.id) { view in
+        VStack(alignment: .leading, spacing: 2) {
+          HStack {
+            if let name = model.node(view.looseEnd.nodeID)?.name {
+              Text(name).font(.caption).foregroundStyle(.secondary)
+            }
+            if showsStatusBadge {
+              Spacer()
+              LooseEndStatusBadge(status: view.looseEnd.status)
+            }
+          }
+          LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel,
+                      displaySummary: model.displayed(field: .looseEndText,
+                                                      sourceText: view.looseEnd.text),
+                      onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
+                      onResolve: { id, status, previous in
+                        model.resolveLooseEnd(id, status, previous: previous, undoManager: undoManager)
+                      },
+                      compact: true)
+        }
+        .tag(view.looseEnd.id)
+      }
+    }
+    .overlay {
+      if items.isEmpty {
+        if showsStatusBadge {
+          ContentUnavailableView("Nothing completed yet", systemImage: "checkmark.circle")
+        } else {
+          ContentUnavailableView("No open loose ends", systemImage: "tray")
+        }
+      }
+    }
+  }
+
+  /// The focused-value payload for the Edit-menu verbs: the selected feed row, or nil when the middle
+  /// column is showing anything else.
+  private func feedSelection(for kind: MiddleKind) -> LooseEndSelection? {
+    let items: [LooseEndView]
+    switch kind {
+    case .triage: items = triageItems
+    case .completed: items = completedItems
+    case .nodes, .looseEndsOf, .reviewSuggestions: return nil
+    }
+    guard let id = focusedFeedID, let match = items.first(where: { $0.looseEnd.id == id })
+    else { return nil }
+    let previous = match.looseEnd.status
+    return LooseEndSelection(looseEndID: id, status: previous) { newStatus in
+      model.resolveLooseEnd(id, newStatus, previous: previous, undoManager: undoManager)
+    }
+  }
+
   private func subtitle(for kind: MiddleKind) -> String {
     switch kind {
     case .nodes(let items):
@@ -179,6 +267,10 @@ struct ContentListView: View {
       return String(localized: "\(looseEnds.count) loose ends")
     case .reviewSuggestions:
       return String(localized: "\(reviewItems.count) to review")
+    case .triage:
+      return String(localized: "\(triageItems.count) open")
+    case .completed:
+      return String(localized: "\(completedItems.count) closed")
     }
   }
 }
@@ -224,13 +316,15 @@ extension View {
 /// A Hashable `.task` id for the middle. Derived from `MiddleKind` WITHOUT hashing the node array —
 /// only the leaf id + refresh token matter for reloading loose ends.
 private struct MiddleLoadKey: Hashable {
-  enum Tag: Hashable { case nodes, looseEnds(UUID), review }
+  enum Tag: Hashable { case nodes, looseEnds(UUID), review, triage, completed }
   let tag: Tag
   let token: Int
   init(kind: MiddleKind, token: Int) {
     switch kind {
     case .looseEndsOf(let id): tag = .looseEnds(id)
     case .reviewSuggestions: tag = .review
+    case .triage: tag = .triage
+    case .completed: tag = .completed
     case .nodes: tag = .nodes
     }
     self.token = token
