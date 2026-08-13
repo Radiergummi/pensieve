@@ -105,3 +105,101 @@ private func seedLooseEnd(_ database: any DatabaseWriter, text: String = "t", qu
   #expect(stored?.status == .dropped)
   #expect(stored?.resolvedAt.map { Int($0.timeIntervalSince1970) } == 1_700_009_999)
 }
+
+/// Seeds a node in a given state with one loose end, returning both ids.
+private func seedIn(_ database: any DatabaseWriter, nodeState: NodeState,
+                    status: LooseEndStatus, resolvedAt: Date? = nil, label: String = "",
+                    suggestion: String = "", daysAgo: Int = 0) throws -> (node: UUID, looseEnd: UUID) {
+  let node = Node(name: "N", state: nodeState)
+  let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
+  let when = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: when,
+                    kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}")
+  let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t", quote: "q",
+                          status: status, label: label, labelSuggestion: suggestion,
+                          resolvedAt: resolvedAt)
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { source }.execute(database)
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert { looseEnd }.execute(database)
+  }
+  return (node.id, looseEnd.id)
+}
+
+@Test func openAcrossNodesIsOldestFirstAndActiveVisibleOnly() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-feed-open"))
+  let newer = try seedIn(database, nodeState: .active, status: .open, daysAgo: 1)
+  let older = try seedIn(database, nodeState: .active, status: .open, daysAgo: 30)
+  let archived = try seedIn(database, nodeState: .archived, status: .open, daysAgo: 10)
+  let muted = try seedIn(database, nodeState: .muted, status: .open, daysAgo: 10)
+  let hidden = try seedIn(database, nodeState: .active, status: .open, daysAgo: 5)
+  try seedIn(database, nodeState: .active, status: .done, daysAgo: 2)   // closed: never in this feed
+
+  let visible: Set<UUID> = [newer.node, older.node, archived.node, muted.node]
+  let feed = try LooseEndQueries.openAcrossNodes(database, visibleNodeIDs: visible, now: Date())
+  #expect(feed.map(\.looseEnd.id) == [older.looseEnd, newer.looseEnd])   // oldest source first
+  #expect(!feed.map(\.looseEnd.id).contains(archived.looseEnd))          // archived node excluded
+  #expect(!feed.map(\.looseEnd.id).contains(muted.looseEnd))             // muted node excluded
+  #expect(!feed.map(\.looseEnd.id).contains(hidden.looseEnd))            // outside the Focus set
+}
+
+/// The measured reason the queue is not pure oldest-first: a machine-suggested-salient item leads,
+/// so the scarce positives come forward instead of grinding through the oldest three repos.
+@Test func openAcrossNodesLeadsWithSuggestedSalient() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-feed-salient"))
+  let olderPlain = try seedIn(database, nodeState: .active, status: .open, daysAgo: 30)
+  let newerSuggested = try seedIn(database, nodeState: .active, status: .open,
+                                  suggestion: LooseEndLabel.salient, daysAgo: 1)
+  let visible: Set<UUID> = [olderPlain.node, newerSuggested.node]
+  let feed = try LooseEndQueries.openAcrossNodes(database, visibleNodeIDs: visible, now: Date())
+  #expect(feed.map(\.looseEnd.id) == [newerSuggested.looseEnd, olderPlain.looseEnd])
+}
+
+@Test func closedAcrossNodesIsMostRecentlyResolvedFirst() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-feed-closed"))
+  let old = try seedIn(database, nodeState: .active, status: .done,
+                       resolvedAt: Date(timeIntervalSince1970: 1_700_000_000))
+  let recent = try seedIn(database, nodeState: .active, status: .dropped,
+                          resolvedAt: Date(timeIntervalSince1970: 1_700_009_999))
+  let stillOpen = try seedIn(database, nodeState: .active, status: .open)
+
+  let visible: Set<UUID> = [old.node, recent.node, stillOpen.node]
+  let feed = try LooseEndQueries.closedAcrossNodes(database, visibleNodeIDs: visible, now: Date())
+  #expect(feed.map(\.looseEnd.id) == [recent.looseEnd, old.looseEnd])
+}
+
+@Test func closedForOneNodeReturnsOnlyThatNodesClosedEnds() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-feed-node"))
+  let mine = try seedIn(database, nodeState: .active, status: .done,
+                        resolvedAt: Date(timeIntervalSince1970: 1_700_000_000))
+  let other = try seedIn(database, nodeState: .active, status: .done,
+                         resolvedAt: Date(timeIntervalSince1970: 1_700_000_500))
+  let openOnMine = try database.write { database -> UUID in
+    let looseEnd = LooseEnd(nodeID: mine.node,
+                            sourceEventID: try Event.where { $0.nodeID.eq(mine.node) }
+                              .fetchOne(database)!.id,
+                            text: "t", quote: "open", status: .open)
+    try LooseEnd.insert { looseEnd }.execute(database)
+    return looseEnd.id
+  }
+  let feed = try LooseEndQueries.closed(database, nodeID: mine.node, now: Date())
+  #expect(feed.map(\.looseEnd.id) == [mine.looseEnd])
+  #expect(!feed.map(\.looseEnd.id).contains(other.looseEnd))
+  #expect(!feed.map(\.looseEnd.id).contains(openOnMine))
+}
+
+/// A 👎 item the user declared was never a loose end has no place in a record of their own work.
+/// Both closed feeds must exclude it — the per-node one and the cross-node one.
+@Test func bothClosedFeedsExcludeNoiseLabelledEnds() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-feed-noise"))
+  let kept = try seedIn(database, nodeState: .active, status: .done,
+                        resolvedAt: Date(timeIntervalSince1970: 1_700_000_000))
+  let noisy = try seedIn(database, nodeState: .active, status: .done,
+                         resolvedAt: Date(timeIntervalSince1970: 1_700_009_999),
+                         label: LooseEndLabel.noise)
+  let across = try LooseEndQueries.closedAcrossNodes(database, visibleNodeIDs: [kept.node, noisy.node],
+                                                     now: Date())
+  #expect(across.map(\.looseEnd.id) == [kept.looseEnd])
+  #expect(try LooseEndQueries.closed(database, nodeID: noisy.node, now: Date()).isEmpty)
+}
