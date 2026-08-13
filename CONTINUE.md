@@ -37,13 +37,17 @@ them sit on a single node.
 `main`, and the vector stack it replaced was then deleted outright (see the vector-removal ship below) —
 there is no second engine left to reconcile against.
 
-**⚠️ Rebuild + reinstall — one ship stale again.** `/Applications/Pensieve.app` is the **2026-08-13
-12:50** build, so it *does* have the macOS 26 floor / Liquid Glass pass, but it predates the loose-end
-merge (verified: its binary contains no `LooseEndStatusMenu`). The running app therefore has no resolve
-verbs, no **Loose Ends** / **Completed** buckets, no Done · N record, and ⌥⌘F's scope bar still reads
-"Include Archived". Its bundled `pensieve mcp` also predates `search`'s `closed` flag, which every Claude
-Code session calls. `make install` (or `make run`) does the whole thing; afterwards check
-`ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
+**✅ Reinstall done — `/Applications/Pensieve.app` is current as of 2026-08-13 22:56**, built from
+`8d2ba0b` by `make run` after a green `make all`. It now has loose-end resolution *and* slice 5
+(verified by localized-key probe: `Loose Ends`, `Completed`, `Done · %lld`, `Description` all present in
+`Contents/Resources/en.lproj/Localizable.strings`), and its bundled `pensieve mcp` carries `search`'s
+`closed` flag. `~/.local/bin/pensieve` is still the symlink. Background sync needed one extra relaunch
+to clear a stale LWCR and is confirmed running (see the LIVE deployment state note).
+
+**Note on version probes:** `strings`/`nm` on the app binary do **not** surface Swift type names like
+`LooseEndStatusMenu` — a freshly-built binary that certainly contains that code reads ABSENT too, so
+that probe produces false "stale" verdicts. Probe the **localized keys** in
+`Contents/Resources/en.lproj/Localizable.strings` instead.
 
 **`xcodegen generate` is required after pulling this merge** — the checked-in project is generated and
 gitignored, and the loose-end merge adds three app files (`AppModel+Middle.swift`,
@@ -292,6 +296,16 @@ membership is in hand. See `backlog.md` "Widgets — DEFERRED".
   which installs and relaunches together; `make install` alone leaves the registration stale.** Resolution
   in "Background sync is dead" in `backlog.md`. Watch: `tail -f ~/Library/Logs/Pensieve/sync.log`, or
   `launchctl print gui/$(id -u)/me.mazetti.pensieve.sync | grep -E 'runs|last exit'`.
+  **`make run` is necessary but not always sufficient — always verify, then relaunch once more.**
+  Observed 2026-08-13T21:15Z: the `open` that `make run` fires lands immediately after `ditto`, and the
+  `registerIfNeeded()` it triggers built an LWCR that launchd still reported as
+  `needs LWCR update` — the helper then spawn-failed three times (`OS_REASON_CODESIGNING`, then twice
+  `EX_CONFIG`). The register cycle itself was correct in the log (`unregister` → error 113 "no such
+  service" → a fresh job), so this is not the bare-`register()` no-op the code already guards against;
+  it looks like the registration racing a bundle that has only just been written. **A plain quit +
+  `open` afterwards cleared it on the first try.** So after any install: check
+  `launchctl print … | grep properties` — if it still says `needs LWCR update`, quit and relaunch; a
+  healthy agent reads `job state = running` with no such flag, and writes a `sync.log` line within 300 s.
 - **Hooks** in `~/.claude/settings.json`: SessionStart (`capture-session-start` + `pensieve prime`) +
   SessionEnd. **MCP:** `pensieve mcp` registered at user scope (`claude mcp get pensieve` → Connected).
 - **Real stores:** `~/Library/Application Support/Pensieve/{pensieve,capture}.sqlite`.
