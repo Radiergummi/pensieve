@@ -26,10 +26,19 @@ public struct SalienceSuggester {
   private struct Item { let id: UUID; let quote: String; let context: String }
 
   public func run(_ database: any DatabaseWriter, limit: Int?, force: Bool) async throws -> Summary {
-    // 1. Candidates: open + unlabeled; skip already-suggested unless `force`. Deterministic order
-    //    (createdAt) so `--limit` is reproducible.
+    // 1. Candidates: unlabeled, ANY status; skip already-suggested unless `force`. Deterministic
+    //    order (createdAt) so `--limit` is reproducible.
+    //
+    //    Deliberately NOT filtered by `status`, the same call spec D9 makes for
+    //    `SalienceReviewQueries` and for the same reason — this is the other door into that failure.
+    //    Review Suggestions only surfaces ends that already carry a `labelSuggestion`, so a closed end
+    //    the suggester never proposed for can never be audited: burning the backlog down would destroy
+    //    a training example that was never collected. "Was the extractor right" is a question about the
+    //    extractor, and closing an item does not answer it.
+    //
+    //    The human `label` still gates candidacy: an end the user has judged needs no machine guess.
     let candidates: [LooseEnd] = try await database.read { database in
-      let rows = try LooseEnd.where { $0.status.eq(LooseEndStatus.open) && $0.label.eq(LooseEndLabel.unlabeled) }.fetchAll(database)
+      let rows = try LooseEnd.where { $0.label.eq(LooseEndLabel.unlabeled) }.fetchAll(database)
       return rows.filter { force || $0.labelSuggestion.isEmpty }
                  .sorted { $0.createdAt < $1.createdAt }
     }

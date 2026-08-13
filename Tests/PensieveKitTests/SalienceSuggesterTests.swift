@@ -103,3 +103,31 @@ private let noMessages: @Sendable (URL) -> ParsedSession = { _ in
   #expect(summary.candidates == 2)
   #expect(summary.suggested == 2)
 }
+
+/// Spec D9's other door. Review Suggestions shows only ends that already carry a `labelSuggestion`,
+/// so if the suggester never proposes one for a CLOSED end, burning the backlog down still destroys
+/// the training example — the very outcome dropping the status filter from `SalienceReviewQueries`
+/// exists to prevent. "Was the extractor right" stays answerable after "is this handled" is answered.
+@Test func suggesterProposesForClosedEndsToo() async throws {
+  let database = try openCanonicalDatabase(at: tempURL("sug-closed"))
+  let (open, _) = try seedLE(database, quote: "still open work to consider here")
+  let (done, _) = try seedLE(database, quote: "finished work worth judging later", status: .done)
+  let (dropped, _) = try seedLE(database, quote: "abandoned work worth judging too", status: .dropped)
+  let summary = try await SalienceSuggester(provider: DropSet(drop: []), parse: noMessages)
+    .run(database, limit: nil, force: false)
+  #expect(summary.candidates == 3)
+  for id in [open, done, dropped] {
+    #expect(try labelOf(database, id).suggestion == LooseEndLabel.salient)
+  }
+}
+
+/// The human `label` still gates candidacy — status widened, the confirmed-label rule did not. An end
+/// the user has already judged needs no machine guess, closed or not.
+@Test func suggesterStillSkipsHumanLabelledEndsWhateverTheirStatus() async throws {
+  let database = try openCanonicalDatabase(at: tempURL("sug-closed-labelled"))
+  try seedLE(database, quote: "closed and already judged by a human",
+             label: LooseEndLabel.noise, status: .done)
+  let summary = try await SalienceSuggester(provider: DropSet(drop: []), parse: noMessages)
+    .run(database, limit: nil, force: false)
+  #expect(summary.candidates == 0)
+}
