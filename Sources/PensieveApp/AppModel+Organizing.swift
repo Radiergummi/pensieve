@@ -154,6 +154,14 @@ extension AppModel {
     return String(localized: "Delete “\(node.name)”? Its captured activity and loose ends are removed. This can’t be undone.")
   }
 
+  /// A suggested node name for a typed description, off-main via the retained provider.
+  /// Best-effort: returns nil only for empty input, so the caller always has something to show.
+  /// Reuses `descriptionProvider` — the same resolved provider `rebuildSummaryBuilder()` keeps
+  /// current — rather than holding a second one whose configuration could drift.
+  func suggestName(for typed: String) async -> String? {
+    await NodeLabeler.label(for: typed, provider: descriptionProvider)
+  }
+
   /// Commit the New Node modal: insert fully-formed, select it.
   func commitNewNode(parent parentID: UUID?, fields: NodeFields) {
     guard let database else { return }
@@ -163,7 +171,7 @@ extension AppModel {
       // nil ⇒ the parent id didn't resolve (deleted under the menu). Name the PARENT: the new node
       // doesn't exist yet, so its own name would be meaningless in the copy.
       guard let new = try NodeCommands.add(database, name: trimmed, kind: fields.kind,
-                                           parent: parentID?.uuidString, description: "",
+                                           parent: parentID?.uuidString, description: fields.description,
                                            icon: fields.icon, colorTag: fields.colorTag, context: fields.context) else {
         let parentName = parentID.map { displayName($0) } ?? String(localized: "the top level")
         refresh()
