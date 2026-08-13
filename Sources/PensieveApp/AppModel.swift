@@ -281,8 +281,13 @@ final class AppModel {
       recentlyActive: smartLists.recentlyActive.filter { visible.contains($0.project.id) })
   }
 
-  /// The two grouped aggregates every row-shaped surface renders from: the middle column, the detail
-  /// header, and the menu-bar popover's rows. Both refresh paths need them, so both go through here.
+  /// The two grouped aggregates every row-shaped surface in the MAIN WINDOW renders from: the middle
+  /// column, the detail header, the merge-picker's enablement, and `AppModel+Recall`.
+  ///
+  /// Written only by `refresh()`, not by `refreshGlance()` — the menu-bar popover used to be the fifth
+  /// consumer and now renders from `NextItem.lastActivityAt` instead, which the ranking query already
+  /// had. Anything added to the popover that reaches for `nodeRowFacts` will read a map the glance
+  /// path never refreshes; take the facts from the item, or call this.
   private func loadNodeRowFacts(_ database: any DatabaseWriter) {
     if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
   }
@@ -292,7 +297,6 @@ final class AppModel {
   func refreshGlance() {
     snapshot = MonitorSnapshot.gather(canonical: database, spool: spool)
     guard let database else { return }
-    loadNodeRowFacts(database)
     guard let raw = try? SmartLists.compute(database, now: Date()) else { return }
     lists = activeFocusContext.isEmpty ? raw : filtered(raw, visibleNodeIDs())
   }

@@ -5,14 +5,26 @@ public struct NextItem: Sendable {
   public let project: Node
   public let openLooseEnds: Int
   public let closedLooseEnds: Int
+  /// When this project last did anything. Not optional: `ranked` skips a project with no captured
+  /// activity outright, so an item without a date is a state the query cannot produce.
+  ///
+  /// The same event that yields `daysDormant`, kept rather than discarded — the pattern `NodeRowFacts`
+  /// already uses. Views render the `Date` (a real "vor 3 Tagen"), ranking reads the `Int`. Before
+  /// this field existed the menu-bar popover had to buy its second line back with two whole-database
+  /// aggregates, having thrown this one away.
+  public let lastActivityAt: Date
   public let daysDormant: Int
   public let score: Double
 
+  /// `lastActivityAt` is deliberately NOT defaulted. A default here would be a plausible-looking
+  /// `Date()` silently standing in for "we don't know", at call sites nobody revisits — the failure
+  /// mode `NodeFields.description` was just changed to avoid. There is one construction site.
   public init(project: Node, openLooseEnds: Int, closedLooseEnds: Int = 0,
-              daysDormant: Int, score: Double) {
+              lastActivityAt: Date, daysDormant: Int, score: Double) {
     self.project = project
     self.openLooseEnds = openLooseEnds
     self.closedLooseEnds = closedLooseEnds
+    self.lastActivityAt = lastActivityAt
     self.daysDormant = daysDormant
     self.score = score
   }
@@ -58,7 +70,7 @@ public enum NextQueries {
           .fetchCount(database)
         let score = groundedScore(openLooseEnds: open, daysDormant: dormant)
         items.append(NextItem(project: project, openLooseEnds: open, closedLooseEnds: closed,
-                              daysDormant: dormant, score: score))
+                              lastActivityAt: latest.occurredAt, daysDormant: dormant, score: score))
       }
       return items.sorted { $0.score > $1.score }
     }

@@ -58,7 +58,7 @@ struct MenuBarView: View {
       Text("Nothing queued").font(.callout).foregroundStyle(.secondary)
     } else {
       ForEach(items, id: \.project.id) { item in
-        MenuBarRow(item: item, facts: model.nodeRowFacts[item.project.id]) {
+        MenuBarRow(item: item) {
           applyDeepLink(.node(item.project.id), model: model, openWindow: openWindow)
         }
       }
@@ -108,10 +108,18 @@ struct MenuBarView: View {
 /// One popover row: a re-entry point, not a scoreboard line — the whole row is the action, and the
 /// chevron plus hover fill say so. The second line reuses `NodeRowMeta`, the middle column's own
 /// component, so the two surfaces share one implementation instead of agreeing by convention.
+///
+/// The facts come from the `NextItem` itself. `NextQueries.ranked` already reads the latest event to
+/// derive `daysDormant` and now keeps its `Date`, so the row needs nothing the list did not already
+/// fetch — which is what lets `refreshGlance()` skip the two whole-database aggregates it used to run
+/// to rebuild `nodeRowFacts` for this one line.
 private struct MenuBarRow: View {
   let item: NextItem
-  let facts: NodeRowFacts?
   let action: () -> Void
+
+  private var facts: NodeRowFacts {
+    NodeRowFacts(lastActivityAt: item.lastActivityAt, openLooseEnds: item.openLooseEnds)
+  }
   @State private var isHovering = false
 
   var body: some View {

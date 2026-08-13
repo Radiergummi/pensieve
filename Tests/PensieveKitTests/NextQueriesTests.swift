@@ -50,3 +50,36 @@ import SQLiteData
   let item = try #require(ranked.first { $0.project.id == nodeA.id })
   #expect(item.openLooseEnds == 2)   // confirmed-noise excluded; unlabeled + suggestion-only-noise kept
 }
+
+/// `ranked` already fetches the latest event to derive `daysDormant`; it now keeps the `Date` too, so
+/// the menu-bar row renders recency from the item instead of a second whole-database aggregate.
+///
+/// Three events, inserted OUT of chronological order on purpose. A query that dropped the `order`
+/// clause, or read the first row instead of the last, still returns a non-nil `Date` on a
+/// single-event fixture — so asserting "carries a date" would pass on a broken implementation. This
+/// pins WHICH date.
+@Test func rankedCarriesTheLatestActivityDateNotTheFirst() throws {
+  let database = try openCanonicalDatabase(at: tempURL("next-last-activity"))
+  let resolver = ProjectResolver(database: database)
+  let (node, source) = try resolver.resolve(path: "/p/recency", kind: SourceKind.claudeCode)
+  let middle = Calendar.current.date(byAdding: .day, value: -5, to: Date())!
+  let oldest = Calendar.current.date(byAdding: .day, value: -12, to: Date())!
+  let newest = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+  try database.write { database in
+    for (index, occurredAt) in [middle, newest, oldest].enumerated() {
+      try Event.insert {
+        Event(nodeID: node.id, sourceID: source.id, occurredAt: occurredAt, kind: CaptureKind.ccSession,
+              summary: "s", detailJSON: "{}", fingerprint: "recency-\(index)")
+      }.execute(database)
+    }
+  }
+  let item = try #require(try NextQueries.ranked(database, now: Date()).first { $0.project.id == node.id })
+  // Tolerance, not equality: a Date does not survive the SQLite round-trip bit-for-bit (the stored
+  // form has second resolution), so `==` fails against two values that both print as the same
+  // instant. One second still separates the three fixtures, which sit a day or more apart — the
+  // discrimination this test exists for is intact.
+  #expect(abs(item.lastActivityAt.timeIntervalSince(newest)) < 1)
+  // The derived Int and the carried Date must describe the same event, or the row and the ranking
+  // would disagree about how stale the same project is.
+  #expect(item.daysDormant == 1)
+}
