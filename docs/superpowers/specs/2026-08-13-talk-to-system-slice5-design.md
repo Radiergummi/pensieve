@@ -97,7 +97,8 @@ it was a shortening rather than an invention. Stated honestly instead:
 | Field | Origin | Model can invent it? |
 |---|---|---|
 | `description` | the user's typed text, **verbatim** | No — copied, never sent for rewriting |
-| `name` | model-authored label, **gated** by `sanitizeStrandName` | Yes, within ≤60 chars and one sentence |
+| `name`, English input | model-authored label, **gated** by `sanitizeLabel` | Yes, within ≤60 chars and one sentence |
+| `name`, any other language | **deterministic** word-boundary shortening of the user's text | No — the model is not called |
 | `kind` | derived: `defaultKind(under: parent)` | No — not a model output |
 | `parent` | the current selection, or the invocation site's | No — not a model output |
 
@@ -123,18 +124,37 @@ Two properties hold, and both are checkable rather than asserted:
 calls), with `Ingester`'s single call site updated. Justified by the shape now genuinely recurring —
 not a speculative extraction. Its existing tests move with it.
 
-### 2. `NodeLabeler` — the naming unit
+### 2. `NodeLabeler` — the naming unit, routed by language
 
-One small unit: given the typed text and a provider, return a gated label or `nil`.
+Given the typed text and a provider, return a label. **Measured design** — see
+`measurements/2026-08-13-slice5-label-quality/`:
 
-- One `complete` call. **No new `LLMProvider` method, no `GenerationSchema`, no indices** — the
-  first draft's machinery existed only to constrain `kind` and `parent`, which are no longer model
-  outputs.
-- The prompt asks for a 3–6-word label on one line, mirroring `nameStrand`'s proven shape.
-- The result goes through `TextQuality.sanitizeLabel`. **`nil` on:** no provider, a throw, empty
-  output, or a label that fails the gate. `SummaryBuilder.narrate` is the precedent — best-effort
-  units return `nil`, never a plausible-looking fallback.
-- `Sendable`, so the `@MainActor` app can await it off-main.
+**English input → the model.** One `complete` call asking for a 3–6-word label, mirroring
+`nameStrand`'s proven prompt shape, then through `TextQuality.sanitizeLabel`. **No new
+`LLMProvider` method, no `GenerationSchema`, no indices** — the first draft's machinery existed only
+to constrain `kind` and `parent`, which are no longer model outputs.
+
+**Any other language → deterministic word-boundary shortening**, never the model. The measurement is
+unambiguous: the on-device model *translates* German input to English, once producing an outright
+error (`die Bahn-Reklamation …` → "Train Advertisement Claim"; a *Reklamation* is a complaint), and
+a "same language, do not translate" instruction **does not fix it** — the model either ignores it or
+emits broken German ("Später Zuganzeige Einreichen"). Translating also violates the project rule
+that node names are content and are never localized.
+
+**Routing** uses `NLLanguageRecognizer` (first-party, on-device, pure): 11/11 correct in the probe,
+confidence ≥0.92 on every multi-word input. Ambiguous or undetected → treat as non-English and take
+the deterministic path, so the fallback is the safe default rather than the model.
+
+**The deterministic path is good, not a consolation.** Quick-add sentences are usually already
+inside the 60-char cap — nine of eleven probe inputs were — so the shortening returns them whole, in
+the user's own words, guaranteed correct. Only very long input truncates awkwardly, which is the
+known and accepted cost.
+
+**Therefore the name is never empty**, so a provider failure never leaves `Save` disabled: any
+model failure (no provider, throw, empty output, gate rejection) falls through to the same
+deterministic shortening. The unit returns `nil` only for empty input.
+
+`Sendable`, so the `@MainActor` app can await it off-main.
 
 ### 3. `description` becomes writable
 
@@ -174,14 +194,16 @@ a monotonic token, pre-`Task` locals, and a token re-check before assigning.
 **only if the user has not edited `Name` since submitting.** The task is held in `@State` and
 cancelled on dismiss.
 
-### Failure is lossless, and honestly described
+### Failure is lossless, and the modal stays committable
 
-Provider unavailable, a throw, or a gate rejection: the typed sentence is already in `Description`
-verbatim, and `Name` stays empty. Nothing is lost and no alert fires — this is best-effort.
+Provider unavailable, a throw, an empty response, or a gate rejection all fall through to the
+**deterministic shortening** — the same path non-English input takes. The typed sentence is already
+in `Description` verbatim, and `Name` holds a correct-by-construction label from the user's own
+words. Nothing is lost, no alert fires, and `Save` is never stuck disabled.
 
-**Stated precisely:** `Save` is `.disabled` on an empty name, so a failed suggestion still leaves the
-user to type a name. That is exactly today's modal plus their sentence — no worse, but not
-"immediately committable".
+This is a change from the first draft, which left `Name` empty on failure and so ran into
+`Save`'s `.disabled` guard (`NodeOrganizing.swift:65`) — a review finding. Having a deterministic
+path for language reasons removes the failure-path problem for free.
 
 **Not gated by the Settings ▸ Intelligence narration toggle** — that governs narration, and reusing
 it would make one control mean two things. A dedicated toggle is YAGNI until asked for.
@@ -225,7 +247,11 @@ content and are never localized**.
 
 - `TextQuality.sanitizeLabel` after the move: existing strand-name cases still pass; ≤60-char cap;
   multi-sentence rejection; list-marker and quote stripping.
-- `NodeLabeler` returns `nil` on: no provider, throw, empty output, gate rejection.
+- The deterministic shortening: input already ≤ cap returns whole; longer input breaks on a **word**
+  boundary, never mid-word; a single word longer than the cap still yields something; empty → `nil`.
+- `NodeLabeler` routing: German input **never calls the provider** (assert with a provider double
+  that fails the test if invoked); English input does; a provider throw still yields the
+  deterministic label rather than `nil`.
 - `NodeCommands.update` writes a description **and** leaves an unedited one intact.
 - `NodeCommands.add` persists a description end-to-end.
 - `NodeFields` gaining a member breaks no existing caller.
@@ -235,7 +261,8 @@ content and are never localized**.
 
 ### Human-verify carries (built app at `/Applications`, real store)
 
-- A typed sentence yields a readable label; the sentence itself is the description, verbatim.
+- A typed **English** sentence yields a readable label; the sentence itself is the description.
+- A typed **German** sentence yields a **German** name — never an English translation.
 - Editing `Name` while the suggestion is in flight — your text survives (the clobber rule).
 - Provider unavailable (select cloud with no key): sentence in Description, no error, `Save`
   enabled once a name is typed.
@@ -268,9 +295,14 @@ content and are never localized**.
 
 ## Risks
 
-- **On-device label quality is unmeasured**, and is now the *whole* model contribution. Cheap to
-  check before building: 20 typed sentences through `complete` + `sanitizeLabel`, eyeballed. Worth
-  doing first — it needs no schema, no provider method, and no eval harness.
+- **On-device label quality is measured and good** for English (21/21 gated, 16/16 usable) — see
+  `measurements/2026-08-13-slice5-label-quality/`. Two residual notes: the model sometimes drops the
+  distinguishing term (`loose end resolution verbs` → "CLI Migration"), and the gate rejected
+  **0 of 21**, so `isTerseLabel` is tail insurance here rather than a working filter. Neither
+  changes the design; both are reasons the field stays editable.
+- **The German failure is non-deterministic**, which is why routing beats prompting. The same input
+  produced a wrong label on one run and a correct one on another, so this class of error will not
+  reliably appear in testing and cannot be prompted away.
 - **The slice's success criterion narrows.** The three-pane spec says "correctly-typed, sensibly
   parented"; here "sensibly parented" means *the selection*, and correctness of kind is derived
   rather than judged. Both are defensible on the 281/281 measurement, but the narrowing is
@@ -297,3 +329,15 @@ before folding in. What they overturned:
   write one.
 - **Return-versus-`.defaultAction`**, the **clobber race** against user edits, and the stale
   sequencing note (that branch merged mid-review) were all real and are fixed above.
+
+## What the pre-build spike changed
+
+One reviewer recommended measuring on-device label quality before committing to any of the
+machinery, since it is now the whole model contribution. Run before writing the plan; probes and
+full results committed under `measurements/2026-08-13-slice5-label-quality/`.
+
+It confirmed the English path and **found a defect the design would otherwise have shipped**: the
+model translates non-English input, once producing a wrong label, and no prompt instruction fixes
+it. That turned naming from one path into two, routed by `NLLanguageRecognizer` — and the
+deterministic arm then closed the failure-path finding for free, because a name that is never empty
+is a `Save` button that is never disabled.
