@@ -77,8 +77,8 @@ answers precisely.
 
 ## Architecture
 
-Four components plus the skill. Nothing here touches PensieveKit's shipped behaviour except one small,
-tested isolation seam (§3.1).
+Four components plus the skill. **No production code changes** — the only additions to `Sources/` are the
+fixture seeder and its test (§3), and §3.1 explains why the isolation problem needs no shipped seam.
 
 ### 1. `uiprobe` — the live-app driver
 
@@ -144,20 +144,33 @@ and events at **fixed offsets from an injected `now`** (−2 h, −3 d, −40 d)
 *"vor 3 Stunden"* and dormancy buckets stay stable across runs. Node UUIDs are fixed constants so tests and
 `pensieve://` deep links can address them directly.
 
-#### 3.1 Defaults isolation — the one production change
+#### 3.1 Defaults isolation — no production change
 
-`PensieveDefaults.shared()` returns `UserDefaults(suiteName: appDomain)`. A UI-test launch would therefore
-read **and write** the user's real preference domain: it would inherit whatever Focus context is active
-(silently filtering the fixture), and — worse — the app writes `lastOpenedAt` on open, which would **shift
-the user's real Briefing "since last visit" baseline every time the suite runs.**
+**Corrected at plan time against the code.** An earlier draft of this section proposed a
+`PENSIEVE_DEFAULTS_SUITE` override on `PensieveDefaults.shared()`. That would have isolated the wrong
+process: `shared()` exists for the *CLI and daemon* to read the app's domain cross-process, and the app
+itself does not call it. The app uses `UserDefaults.standard` directly in ~10 places plus `@AppStorage`
+bindings. The seam would have shipped, been tested, and isolated nothing.
 
-A verification harness that corrupts the thing being verified is not acceptable, so `PensieveDefaults`
-gains a `PENSIEVE_DEFAULTS_SUITE` environment override, mirroring the `PENSIEVE_DB` override the project
-already uses for exactly this purpose. Five lines, one test, consistent with the existing pattern.
+The hazard it was meant to address is real. A UI-test launch inherits whatever Focus context is active
+(silently filtering the fixture), and the app writes `lastOpenedAt` on open — which would **shift the real
+Briefing "since last visit" baseline on every suite run.** Reads and writes need different answers:
 
-Reading defaults could alternatively be forced through the `NSArgumentDomain` (`launchArguments`), which
-needs no production change — but that fixes reads only and leaves the `lastOpenedAt` write pollution
-untouched. Rejected for that reason.
+- **Reads → the argument domain.** `NSArgumentDomain` sits at the top of every `UserDefaults` search list,
+  including `.standard` and `@AppStorage`, and `XCUIApplication.launchArguments` becomes the process argv.
+  So the suite pins the Focus context, narration and dock-icon keys per launch. This is the same mechanism
+  as the forced-locale launch already documented in `CLAUDE.md` (`-AppleLanguages '(de)'`), which the
+  German test needs anyway.
+- **Writes → export and restore around the suite.** `make uitest` runs `defaults export me.mazetti.pensieve`
+  to a temp plist before the suite and `defaults import` after. It covers every key, including ones a
+  future slice adds and nobody remembers to pin. It is **best-effort**: a crash mid-suite skips the
+  restore, but the export is still on disk to recover from.
+
+Rejected: routing all app defaults through one injectable store. That is a real refactor of 10+ call sites
+and every `@AppStorage` binding, carried by the shipped app, purely for test isolation — against this
+project's surgical-change discipline.
+
+Net effect: **the harness needs no production code change at all.**
 
 ### 4. `make uitest` and two Makefile corrections
 
@@ -173,7 +186,9 @@ Two existing rules need narrowing, both correct independent of this work:
 
 - `TEST_INPUTS` globs all of `Tests/`, so adding `Tests/PensieveUITests` would make every UI-test edit
   re-run the whole SwiftPM suite. `swift test` never builds the UI target; narrow to `Tests/PensieveKitTests`.
-- `SWIFT_SOURCES` (the lint input) should gain `Tools` so the probe is linted like everything else.
+- Linting `Tools/` takes **two** edits, not one: `.swiftlint.yml` scopes the run with its own
+  `included: [Sources, Tests]`, so it needs `Tools` there to lint at all, and `SWIFT_SOURCES` needs it too
+  or the `.make/lint` record won't invalidate when the probe changes.
 
 ### 5. The skill
 
@@ -203,8 +218,8 @@ excluded, so the fix must take the two-line form:
 ## Testing strategy
 
 - **Seeder:** unit-tested in `PensieveKitTests` against the seeded store's shape.
-- **Defaults isolation:** unit-tested — the override is honoured, and absent the env var the real domain is
-  still returned.
+- **Defaults isolation:** nothing to unit-test — it is launch arguments plus a Makefile guard (§3.1). It is
+  verified by the German-locale test, which only passes if the argument domain reaches the app.
 - **`uiprobe`:** not unit-tested. It is AX-API glue whose only meaningful assertion requires a live app; a
   mock would test the mock. It is verified by use, and its failure mode is loud (non-zero exit, empty tree).
   This is a deliberate exception to the project's testing discipline and is recorded as such.
