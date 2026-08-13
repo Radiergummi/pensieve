@@ -67,7 +67,16 @@ trigger. Order is a recommendation, not a commitment.
    - ✅ **Visual identity & UX polish** (merged 2026-07-07): per-kind/source icon+color system (migration v8),
      Reminders-style New/Edit modal, manual delete (guarded against strand resurrection), badges + state orb +
      GitHub-style timeline, German l10n. *Follow-up UX/IA carries in the dated section below.*
-   - ⏳ **Slice 5 — talk-to-system stage 1:** describe a strand → structured create.
+   - ✅ **Slice 5 — talk-to-system stage 1** (this branch, 2026-08-13; not yet merged to `main`): describe
+     a strand in a sentence → structured create. `NodeLabeler` routes by detected language — English to
+     the on-device model, everything else to a deterministic word-boundary shortener — because
+     measurement showed the model *translates* non-English input rather than labeling it. The New/Edit
+     modal gained a Description field + Suggest button; a new node lands under the current selection.
+     **Model-assisted parenting is deferred, not shipped:** the spec's own measurement found
+     `FTSQueryBuilder`'s AND-join makes typed-sentence retrieval return zero candidates; a working
+     alternative (OR-aggregate across hit kinds) is recorded for its own measurement-gated follow-up (see
+     "Deferred, with triggers" in `specs/2026-08-13-talk-to-system-slice5-design.md`). Spec/plan:
+     `{specs,plans}/2026-08-13-talk-to-system-slice5*`.
    - ⏳ **Slice 6 — forks surface:** ancestry trail + siblings + "Roads Not Taken" list. **Gated on the
      fork-capture backend** (see "Forks as first-class" below — that backend is a separate spec, still the
      long pole).
