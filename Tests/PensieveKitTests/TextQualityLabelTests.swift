@@ -21,3 +21,29 @@ import Testing
   #expect(TextQuality.sanitizeLabel("v3.1 migration") == "v3.1 migration")
   #expect(TextQuality.sanitizeLabel("Fix auth.middleware") == "Fix auth.middleware")
 }
+
+@Test func shortenReturnsShortInputWhole() {
+  // The measured common case: quick-add sentences usually already fit, so most inputs
+  // pass through untouched. Nine of eleven probe inputs were <= the cap.
+  #expect(TextQuality.shorten("look into why the sync agent stopped") == "look into why the sync agent stopped")
+  #expect(TextQuality.shorten("Steuerunterlagen für 2025 zusammenstellen") == "Steuerunterlagen für 2025 zusammenstellen")
+  #expect(TextQuality.shorten("  padded  ") == "padded")
+}
+
+@Test func shortenBreaksOnWordBoundariesNeverMidWord() throws {
+  let long = "I want to eventually get around to reconsidering whether projects and strands are the same kind of thing"
+  let shortened = try #require(TextQuality.shorten(long))
+  #expect(shortened.count <= TextQuality.labelLengthCap)
+  // Every kept word must be a whole word from the input — a cut word reads as corruption.
+  let inputWords = Set(long.split(separator: " ").map(String.init))
+  #expect(shortened.split(separator: " ").allSatisfy { inputWords.contains(String($0)) })
+  #expect(long.hasPrefix(shortened))
+}
+
+@Test func shortenHandlesASingleOverlongWordAndEmptyInput() {
+  // No boundary to preserve, so cutting is the only option.
+  let oneWord = String(repeating: "a", count: 80)
+  #expect(TextQuality.shorten(oneWord)?.count == TextQuality.labelLengthCap)
+  #expect(TextQuality.shorten("") == nil)
+  #expect(TextQuality.shorten("   \n  ") == nil)
+}

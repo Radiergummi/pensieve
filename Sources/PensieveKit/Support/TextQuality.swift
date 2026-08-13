@@ -63,4 +63,29 @@ enum TextQuality {
     guard isTerseLabel(sanitized) else { return nil }
     return sanitized
   }
+
+  /// A label built from the user's own words: the text itself when it already fits, otherwise as
+  /// many whole words as fit within `cap`. Never cuts mid-word — a broken word reads as corruption
+  /// — except for a single word longer than the cap, where there is no boundary to keep. Returns
+  /// nil only for empty input.
+  ///
+  /// This is `NodeLabeler`'s non-English and provider-failure arm. It is not a consolation prize:
+  /// most quick-add sentences already fit, so it usually returns them whole, in the user's own
+  /// words, guaranteed correct. See `measurements/2026-08-13-slice5-label-quality/`.
+  static func shorten(_ text: String, cap: Int = labelLengthCap) -> String? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    guard trimmed.count > cap else { return trimmed }
+    var kept = ""
+    for word in trimmed.split(separator: " ") {
+      if kept.isEmpty {
+        kept = String(word)
+      } else if kept.count + 1 + word.count <= cap {
+        kept += " " + word
+      } else {
+        break
+      }
+    }
+    return kept.count <= cap ? kept : String(kept.prefix(cap))
+  }
 }
