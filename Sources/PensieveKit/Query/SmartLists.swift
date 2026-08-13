@@ -17,12 +17,15 @@ public struct SmartLists: Sendable {
                              dormantAfterDays: Int = 14,
                              activeWithinDays: Int = 3) throws -> SmartLists {
     let ranked = try NextQueries.ranked(database, now: now)
+    // Dormant and Recently Active deliberately keep every ranked node: a finished project is still
+    // quiet and still recently touched. Only "what should I pick up" requires something to pick up.
+    let whatsNext = ranked.filter(\.isActionable)
     let dormant = ranked
       .filter { $0.daysDormant >= dormantAfterDays }
       .sorted { $0.daysDormant > $1.daysDormant }
     let recentlyActive = ranked
       .filter { $0.daysDormant <= activeWithinDays }
       .sorted { $0.daysDormant < $1.daysDormant }
-    return SmartLists(whatsNext: ranked, dormant: dormant, recentlyActive: recentlyActive)
+    return SmartLists(whatsNext: whatsNext, dormant: dormant, recentlyActive: recentlyActive)
   }
 }

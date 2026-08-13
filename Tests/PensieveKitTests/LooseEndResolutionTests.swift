@@ -203,3 +203,58 @@ private func seedIn(_ database: any DatabaseWriter, nodeState: NodeState,
   #expect(across.map(\.looseEnd.id) == [kept.looseEnd])
   #expect(try LooseEndQueries.closed(database, nodeID: noisy.node, now: Date()).isEmpty)
 }
+
+/// Closing the last open end must remove a node from What's Next but NOT from Dormant — it is
+/// finished, not neglected, and the two lists answer different questions.
+@Test func closingTheLastEndLeavesWhatsNextButStaysDormant() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-actionable"))
+  let node = Node(name: "Finished")
+  let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/repo/\(UUID().uuidString)")
+  let longAgo = Calendar.current.date(byAdding: .day, value: -40, to: Date())!
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: longAgo,
+                    kind: CaptureKind.gitCommit, summary: "s", detailJSON: "{}")
+  let looseEnd = LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t", quote: "q")
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { source }.execute(database)
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert { looseEnd }.execute(database)
+  }
+
+  var lists = try SmartLists.compute(database, now: Date())
+  #expect(lists.whatsNext.map(\.project.id).contains(node.id))
+  #expect(lists.dormant.map(\.project.id).contains(node.id))
+
+  #expect(try LooseEndCommands.resolve(database, id: looseEnd.id, status: .done))
+
+  lists = try SmartLists.compute(database, now: Date())
+  #expect(!lists.whatsNext.map(\.project.id).contains(node.id))   // nothing to pick up
+  #expect(lists.dormant.map(\.project.id).contains(node.id))      // still quiet, still listed
+}
+
+@Test func rankedContextOmitsNodesWithNoOpenEnds() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-ranked-context"))
+  let withWork = try seedIn(database, nodeState: .active, status: .open, daysAgo: 5)
+  let finished = try seedIn(database, nodeState: .active, status: .done, daysAgo: 5)
+  let items = try SessionContextQueries.rankedContext(limit: 10, context: nil, database, now: Date())
+  #expect(items.map(\.nodeID).contains(withWork.node))
+  #expect(!items.map(\.nodeID).contains(finished.node))
+}
+
+/// THE test that guards the 123-node case. A git-only node never produces a loose end, so "no open
+/// ends" cannot mean "finished" for it — it means never measured, and unmeasured work must keep
+/// showing up. Without this, the naive predicate removes 130 of 162 nodes on day one.
+@Test func aNodeThatNeverHadALooseEndStaysInWhatsNext() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-never-measured"))
+  let node = Node(name: "Git only")
+  let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/repo/\(UUID().uuidString)")
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                    kind: CaptureKind.gitCommit, summary: "commit", detailJSON: "{}")
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { source }.execute(database)
+    try Event.insert { event }.execute(database)
+  }
+  let lists = try SmartLists.compute(database, now: Date())
+  #expect(lists.whatsNext.map(\.project.id).contains(node.id))
+}

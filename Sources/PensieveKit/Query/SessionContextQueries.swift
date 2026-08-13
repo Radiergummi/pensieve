@@ -147,7 +147,7 @@ public enum SessionContextQueries {
   /// `limit`, each carrying its oldest open loose end's verbatim quote.
   public static func rankedContext(limit: Int, context: String?,
                                    _ database: any DatabaseReader, now: Date) throws -> [WhatsNextItem] {
-    let items = try NextQueries.ranked(database, now: now)
+    let items = try NextQueries.ranked(database, now: now).filter(\.isActionable)
     var filtered = items
     if let context, !context.isEmpty {
       let all = try ProjectQueries.all(database)
