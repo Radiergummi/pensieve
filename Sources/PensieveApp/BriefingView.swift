@@ -40,7 +40,6 @@ struct BriefingView: View {
       .frame(maxWidth: Prose.measure, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .center)   // center the capped reading column in a wide pane
     }
-    .scrollEdgeEffectStyle(.soft, for: .top)
   }
 
   private func card(for briefingCard: BriefingCard) -> some View {

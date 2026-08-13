@@ -30,6 +30,7 @@ struct PensieveApp: App {
         // widest always-reachable config (inspector open, sidebar auto-collapsed). This floors the
         // window so no state clips; the sidebar (200) fits on top whenever the window is wider.
         .frame(minWidth: 860, minHeight: 480)
+        .softScrollEdges()
         .task { model.start() }   // idempotent (guarded in AppModel)
     }
     .defaultSize(width: 1040, height: 660)
@@ -58,11 +59,14 @@ struct PensieveApp: App {
     }
 
     WindowGroup("Recall", id: "recall", for: UUID.self) { $nodeID in
-      if let nodeID {
-        RecallWindowView(model: model, nodeID: nodeID)
-      } else {
-        ContentUnavailableView("No project", systemImage: "questionmark.folder")
+      Group {
+        if let nodeID {
+          RecallWindowView(model: model, nodeID: nodeID)
+        } else {
+          ContentUnavailableView("No project", systemImage: "questionmark.folder")
+        }
       }
+      .softScrollEdges()
     }
 
     MenuBarExtra {
@@ -74,6 +78,27 @@ struct PensieveApp: App {
 
     Settings {
       SettingsView(model: model)
+        .softScrollEdges()
     }
   }
+}
+
+/// Scroll-edge material, applied once per scene rather than per scroll view.
+///
+/// `.scrollEdgeEffectStyle` propagates to the scroll views *below* it — the four call sites this
+/// replaced already relied on that, attaching to a `Group` and a `ScrollViewReader` rather than to
+/// any scroll view itself. Hoisting it to the scene root is the same mechanism at a wider radius, and
+/// it closes the gap the per-site version left: the Settings forms, the Move/Merge pickers (lists
+/// scrolling under a `navigationTitle`), the node editor, and the icon-picker grids were all
+/// untreated, and a scroll view added tomorrow inherits this instead of depending on someone
+/// remembering.
+///
+/// **This is the part a green build cannot check.** If propagation does not reach a surface — the
+/// sheet- and popover-presented content is the unverified case — the effect silently disappears from
+/// columns that used to have it, and the failure looks exactly like success, because the
+/// `.automatic` default also renders something. The honest test is a comparison: toggle `.soft` to
+/// `.hard` here, rebuild, and confirm the top band visibly changes on each surface. If it does not
+/// hold up, reverting to the four per-site calls is clean and loses nothing but the inheritance.
+private extension View {
+  func softScrollEdges() -> some View { scrollEdgeEffectStyle(.soft, for: .top) }
 }

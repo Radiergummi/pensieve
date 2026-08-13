@@ -70,7 +70,6 @@ struct SidebarView: View {
       }
     }
     .listStyle(.sidebar)
-    .scrollEdgeEffectStyle(.soft, for: .top)
     .safeAreaInset(edge: .bottom) { StatusFooter(snapshot: model.snapshot) }
   }
 

@@ -197,7 +197,6 @@ struct DetailView: View {
                                             translatedLooseEndText: translatedLooseEndText)
     }
     }
-    .scrollEdgeEffectStyle(.soft, for: .top)
     }
     .focusedSceneValue(\.nodeFind, find)
     .onChange(of: find.isPresented) { _, presented in
