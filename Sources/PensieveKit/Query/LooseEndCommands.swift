@@ -10,10 +10,12 @@ public enum LooseEndLabel {
   public static let noise = "noise"
 }
 
-/// The only writer of `LooseEnd.label` / `.labelSuggestion`. `Ingester.drain()` stays the only
-/// writer of the rest of a loose end. `label` is set by the user (👍/👎); `labelSuggestion` by a
-/// machine (the one-off script now, the trained classifier in Phase 2). The corpus reads confirmed
-/// labels only.
+/// The only writer of `LooseEnd.label` / `.labelSuggestion` / `.status` / `.resolvedAt`.
+/// `Ingester.drain()` stays the only writer of the rest of a loose end. `label` is set by the user
+/// (👍/👎) and answers "was the extractor right"; `status` is set by the user and answers "is this
+/// handled" — two orthogonal axes that must not be conflated, because `label` feeds the salience
+/// training corpus and `status` does not. `labelSuggestion` is set by a machine (the one-off script
+/// now, the trained classifier in Phase 2). The corpus reads confirmed labels only.
 public enum LooseEndCommands {
   /// Confirm the user's label. `label == ""` clears it. Returns false (writing nothing) if unknown.
   @discardableResult
@@ -21,6 +23,23 @@ public enum LooseEndCommands {
     try database.write { database in
       guard try LooseEnd.where({ $0.id.eq(id) }).fetchOne(database) != nil else { return false }
       try LooseEnd.where { $0.id.eq(id) }.update { $0.label = label }.execute(database)
+      return true
+    }
+  }
+
+  /// Resolve (or reopen) a loose end. Stamps `resolvedAt` when closing and clears it when reopening,
+  /// so a reopened end is indistinguishable from one never closed. Returns false, writing nothing,
+  /// if the id is unknown — the caller surfaces that as a refusal (stale state), not a failure.
+  @discardableResult
+  public static func resolve(_ database: any DatabaseWriter, id: UUID,
+                             status: LooseEndStatus, now: Date = Date()) throws -> Bool {
+    try database.write { database in
+      guard try LooseEnd.where({ $0.id.eq(id) }).fetchOne(database) != nil else { return false }
+      let stamp: Date? = status.isClosed ? now : nil
+      try LooseEnd.where { $0.id.eq(id) }.update {
+        $0.status = #bind(status)
+        $0.resolvedAt = #bind(stamp)
+      }.execute(database)
       return true
     }
   }

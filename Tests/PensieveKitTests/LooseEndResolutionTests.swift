@@ -69,3 +69,39 @@ private func seedLooseEnd(_ database: any DatabaseWriter, text: String = "t", qu
   #expect(stored.filter { $0.resolvedAt == nil }.count == 1)
   #expect(stored.compactMap(\.resolvedAt).first.map { Int($0.timeIntervalSince1970) } == 1_700_000_000)
 }
+
+@Test func resolveStampsResolvedAtAndClearsItOnReopen() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-resolve"))
+  let id = try seedLooseEnd(database, quote: "work item")
+  let closedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+  #expect(try LooseEndCommands.resolve(database, id: id, status: .done, now: closedAt))
+  var stored = try database.read { try LooseEnd.where { $0.id.eq(id) }.fetchOne($0) }
+  #expect(stored?.status == .done)
+  #expect(stored?.resolvedAt.map { Int($0.timeIntervalSince1970) } == 1_700_000_000)
+
+  #expect(try LooseEndCommands.resolve(database, id: id, status: .open, now: Date()))
+  stored = try database.read { try LooseEnd.where { $0.id.eq(id) }.fetchOne($0) }
+  #expect(stored?.status == .open)
+  #expect(stored?.resolvedAt == nil)   // a reopened end is indistinguishable from one never closed
+}
+
+@Test func resolveRefusesAnUnknownLooseEndWithoutWriting() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-resolve-unknown"))
+  let id = try seedLooseEnd(database, quote: "real one")
+  #expect(try LooseEndCommands.resolve(database, id: UUID(), status: .done) == false)
+  let stored = try database.read { try LooseEnd.where { $0.id.eq(id) }.fetchOne($0) }
+  #expect(stored?.status == .open)     // the real row is untouched
+}
+
+@Test func resolveSwitchesBetweenDoneAndDroppedAndRestamps() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-resolve-flip"))
+  let id = try seedLooseEnd(database, quote: "flip me")
+  let first = Date(timeIntervalSince1970: 1_700_000_000)
+  let second = Date(timeIntervalSince1970: 1_700_009_999)
+  #expect(try LooseEndCommands.resolve(database, id: id, status: .done, now: first))
+  #expect(try LooseEndCommands.resolve(database, id: id, status: .dropped, now: second))
+  let stored = try database.read { try LooseEnd.where { $0.id.eq(id) }.fetchOne($0) }
+  #expect(stored?.status == .dropped)
+  #expect(stored?.resolvedAt.map { Int($0.timeIntervalSince1970) } == 1_700_009_999)
+}
