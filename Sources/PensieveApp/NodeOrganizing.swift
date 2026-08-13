@@ -16,6 +16,8 @@ struct NodeEditor: View {
   @State private var colorTag = ""          // palette name
   @State private var icon = ""              // stored form "sf:x" / "emoji:x"
   @State private var context = ""           // "" = unset (inherit); else NodeContext.work/.personal
+  @State private var nodeDescription = ""   // NOT `description` — that shadows CustomStringConvertible
+  @State private var isSuggesting = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -34,6 +36,26 @@ struct NodeEditor: View {
               Text("Work").tag(NodeContext.work)
               Text("Personal").tag(NodeContext.personal)
             }
+          }
+          VStack(alignment: .leading, spacing: 6) {
+            HStack {
+              Text("Description").font(.caption).foregroundStyle(.secondary)
+              Spacer()
+              Button {
+                Task { await suggestName() }
+              } label: {
+                if isSuggesting {
+                  ProgressView().controlSize(.small)
+                } else {
+                  Text("Suggest name")
+                }
+              }
+              .buttonStyle(.link)
+              .disabled(isSuggesting || nodeDescription.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            TextField("What is this about?", text: $nodeDescription, axis: .vertical)
+              .lineLimit(2...5)
+              .textFieldStyle(.roundedBorder)
           }
           VStack(alignment: .leading, spacing: 6) {
             Text("Color").font(.caption).foregroundStyle(.secondary)
@@ -95,6 +117,7 @@ struct NodeEditor: View {
       icon = style.icon
       name = ""
       context = ""
+      nodeDescription = ""
     case .edit(let node):
       name = node.name
       kind = node.kind
@@ -102,11 +125,26 @@ struct NodeEditor: View {
       colorTag = appearance.colorTag
       icon = appearance.icon.storedString
       context = node.context
+      nodeDescription = node.description
     }
   }
 
+  /// Fill `name` from the typed description. The suggestion is discarded if the user edited the
+  /// name while it was in flight — comparing against the value captured before the await is all
+  /// the bookkeeping that needs, and it means their typing always wins.
+  private func suggestName() async {
+    let typed = nodeDescription
+    let nameBeforeSuggesting = name
+    isSuggesting = true
+    defer { isSuggesting = false }
+    guard let suggested = await model.suggestName(for: typed) else { return }
+    guard name == nameBeforeSuggesting else { return }
+    name = suggested
+  }
+
   private func commit() {
-    let fields = NodeFields(name: name, kind: kind, description: "", icon: icon, colorTag: colorTag, context: context)
+    let fields = NodeFields(name: name, kind: kind, description: nodeDescription,
+                            icon: icon, colorTag: colorTag, context: context)
     switch request.mode {
     case .new(let parent):
       model.commitNewNode(parent: parent, fields: fields)
