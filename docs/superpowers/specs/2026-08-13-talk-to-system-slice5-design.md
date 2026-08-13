@@ -221,16 +221,16 @@ already covers it; no new error surface.
    user-typed description is byte-indistinguishable from a model-authored one. **Accepted as-is:**
    the action's entire purpose is to re-derive, and it is explicit. Recorded so it is a decision
    rather than a surprise; a `descriptionAuthored` marker in `metadataJSON` is the fix if it bites.
-2. **Eval registration.** `CLAUDE.md` requires a new model-backed task to register an `EvalTask`.
-   This task is the *same shape* as `nameStrand`, which **is not registered** — so registering only
-   this one would leave the older, higher-volume path uncovered while implying naming is measured.
-   **Proposed:** do not register a bespoke task here; log the pre-existing naming-coverage gap in
-   `backlog.md` as its own item covering **both** call sites. Reviewer evidence: a new task needs a
-   fourth `CorpusItem` case plus DTO, exhaustive-switch updates, **two hardcoded task lists in
-   `CorpusBuilder` that the registry↔config test does not check** (so a task can register, pass the
-   suite, and silently load zero corpus items), and a gold set that cannot live in gitignored
-   `.eval/`. **This is the one place the spec proposes not following a stated project rule, so it
-   needs the user's ruling.**
+2. **Eval registration — DECIDED 2026-08-13: no bespoke task here.** `CLAUDE.md` requires a new
+   model-backed task to register an `EvalTask`. This task is the *same shape* as `nameStrand`, which
+   **is not registered**, so registering only this one would leave the older, higher-volume path
+   (99 of 281 names) uncovered while implying naming is measured. Quality is instead pinned by the
+   committed probes in `measurements/2026-08-13-slice5-label-quality/` — for a single-prompt task,
+   the more reproducible artifact. The gap is logged in `backlog.md` ▸ "Naming has no eval coverage"
+   as its own item covering **both** call sites, together with a second finding from the same
+   review: **`CorpusBuilder` names its tasks in two hardcoded lists that the registry↔config test
+   does not check**, so a registered task can pass the suite and silently load zero corpus items.
+   Registering naming before that hole is fixed would be the riskier path, not the safer one.
 3. **Focus scoping** is not applicable here (no candidate retrieval), but the deferred parenting
    increment must pass `visibleNodeIDs` like every other surface, or a Work Focus could be offered a
    Personal parent.

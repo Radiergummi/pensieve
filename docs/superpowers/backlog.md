@@ -531,6 +531,37 @@ unusable". *Revisit trigger:* when the gold set exists.
 
 ---
 
+## Naming has no eval coverage, and the harness has a silent hole (2026-08-13)
+
+**Two findings, one entry.** Raised by an adversarial review of the slice-5 spec and confirmed
+against the code.
+
+**1. Strand naming was never eval-registered.** `eval-config.json` carries three bars —
+`extraction`, `narration`, `description` — and `Ingester.nameStrand`
+(`Sources/PensieveKit/Ingest/Ingester.swift:366-389`) is not among them, despite being a real
+model-backed task with its own prompt that writes a **name and description onto a canonical node**.
+So `CLAUDE.md`'s "new LLM-backed tasks must register an `EvalTask`" rule has a pre-existing
+exception nobody chose, on the highest-volume naming path in the app (99 of 281 node names).
+
+**Decision for slice 5 (2026-08-13):** its labeler does **not** register a bespoke task. Registering
+only the new path would leave the older, higher-volume one uncovered while implying naming is
+measured. Its quality is instead pinned by committed probes
+(`measurements/2026-08-13-slice5-label-quality/`), which for a single-prompt task is the more
+reproducible artifact anyway. **If naming gets a bar, it should cover both call sites at once.**
+
+**2. `CorpusBuilder` has two hardcoded task lists the guardrail does not check.** The
+registry↔config test (`Sources/PensieveKit/Eval/EvalTask.swift:22-30`, asserted by
+`Tests/PensieveKitTests/EvalConfigConsistencyTests.swift`) only checks that every task has a bar and
+every bar has a task. It does **not** check that a registered task can load corpus items — and
+`CorpusBuilder` names its tasks by hand in two places. **A task can register, have a bar, pass the
+whole suite, and silently load zero items, reporting nothing while looking healthy.** That is a
+guardrail with a hole in the exact shape of the mistake it exists to catch.
+
+*Revisit trigger:* the next time an `EvalTask` is added or the harness is touched — fix (2) then
+regardless, since it is a few lines and it currently makes (1) harder to close safely.
+
+---
+
 ## In-node find — highlight/document skew — OPEN, needs thinking (2026-08-12)
 
 Raised by the whole-branch review of `worktree-in-node-find` and **deliberately left unchanged** — the
