@@ -209,15 +209,14 @@ Append to `Tests/PensieveKitTests/TextQualityLabelTests.swift`:
   #expect(TextQuality.shorten("  padded  ") == "padded")
 }
 
-@Test func shortenBreaksOnWordBoundariesNeverMidWord() {
+@Test func shortenBreaksOnWordBoundariesNeverMidWord() throws {
   let long = "I want to eventually get around to reconsidering whether projects and strands are the same kind of thing"
-  let shortened = TextQuality.shorten(long)
-  #expect(shortened != nil)
-  #expect(shortened!.count <= TextQuality.labelLengthCap)
+  let shortened = try #require(TextQuality.shorten(long))
+  #expect(shortened.count <= TextQuality.labelLengthCap)
   // Every kept word must be a whole word from the input — a cut word reads as corruption.
   let inputWords = Set(long.split(separator: " ").map(String.init))
-  #expect(shortened!.split(separator: " ").allSatisfy { inputWords.contains(String($0)) })
-  #expect(long.hasPrefix(shortened!))
+  #expect(shortened.split(separator: " ").allSatisfy { inputWords.contains(String($0)) })
+  #expect(long.hasPrefix(shortened))
 }
 
 @Test func shortenHandlesASingleOverlongWordAndEmptyInput() {
