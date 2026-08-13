@@ -35,10 +35,16 @@ public struct SearchHit: Identifiable, Sendable, Equatable {
   public let score: Double?
   /// The owning node is archived — the view badges the row. Always false unless the caller opted in.
   public let isArchived: Bool
+  /// The loose end's own lifecycle state, so the view can badge a closed row. Always `.open` for
+  /// node and event hits, which have no lifecycle of their own — the same shape as `isArchived`,
+  /// which is always false unless the caller opted in.
+  public let status: LooseEndStatus
 
   public init(id: UUID, kind: Kind, nodeID: UUID, nodeName: String, title: String,
-              snippet: Snippet, score: Double?, isArchived: Bool) {
+              snippet: Snippet, score: Double?, isArchived: Bool,
+              status: LooseEndStatus = .open) {
     self.id = id; self.kind = kind; self.nodeID = nodeID; self.nodeName = nodeName
     self.title = title; self.snippet = snippet; self.score = score; self.isArchived = isArchived
+    self.status = status
   }
 }

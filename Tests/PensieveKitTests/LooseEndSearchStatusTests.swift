@@ -118,6 +118,65 @@ private func seedLooseEnd(_ database: any DatabaseWriter, text: String = "t", qu
   #expect(documents.allSatisfy { $0.status == LooseEndStatus.done.rawValue })
 }
 
+/// The index filter and the canonical re-check must agree for every scope. If they disagree, rows
+/// pass the SQL query and are then dropped by the resolver — the page shrinks and nothing fails.
+/// Asserted end-to-end through the real query path rather than by comparing the two rules by eye.
+@Test func indexAndResolverAgreeAboutClosedEndsInEveryScope() throws {
+  let database = try openCanonicalDatabase(at: tempURL("agree-closed"))
+  let openID = try seedLooseEnd(database, text: "kestrel migration", quote: "kestrel migration")
+  let doneID = try seedLooseEnd(database, text: "kestrel rollout", quote: "kestrel rollout",
+                                status: .done)
+  let store = SearchIndexStore(url: tempURL("agree-closed-index"))
+  let corpus = try EmbeddableCorpus.gather(database)
+  store.rebuild(items: corpus, corpusHash: SearchIndexer.corpusHash(corpus))
+  let visible = Set(try database.read { try Node.all.fetchAll($0) }.map(\.id))
+
+  let narrow = SearchQueries.search(
+    query: "kestrel",
+    scope: SearchScope(visibleNodeIDs: visible, includeArchived: false, includeClosed: false),
+    store: store, database)
+  #expect(narrow.map(\.id).contains(openID))
+  #expect(!narrow.map(\.id).contains(doneID))
+
+  let wide = SearchQueries.search(
+    query: "kestrel",
+    scope: SearchScope(visibleNodeIDs: visible, includeArchived: false, includeClosed: true),
+    store: store, database)
+  #expect(Set(wide.map(\.id)) == [openID, doneID])
+  #expect(wide.first { $0.id == doneID }?.status == .done)
+  #expect(wide.first { $0.id == openID }?.status == .open)
+}
+
+/// The same agreement, reached through the TRANSLATION path — the only route by which a closed end
+/// can enter the index tagged open (`EmbeddableItem.status` defaults to "open"). A German query
+/// matches the translated document; the resolver re-reads English canonical and must still apply the
+/// allow-list, so the closed end is absent in the narrow scope and present in the wide one.
+@Test func aTranslatedClosedEndObeysTheScopeThroughTheQueryPath() throws {
+  let database = try openCanonicalDatabase(at: tempURL("agree-translated"))
+  let closedID = try seedLooseEnd(database, text: "Ship the sync agent", quote: "ship it",
+                                  status: .done)
+  let translations = TranslationStore(url: tempURL("agree-translated-cache"))
+  translations.put(field: .looseEndText, sourceText: "Ship the sync agent", language: "de",
+                   text: "Den Sync-Agenten ausliefern")
+  let store = SearchIndexStore(url: tempURL("agree-translated-index"))
+  let corpus = try EmbeddableCorpus.gather(database, translations: translations, language: "de")
+  store.rebuild(items: corpus, corpusHash: SearchIndexer.corpusHash(corpus))
+  let visible = Set(try database.read { try Node.all.fetchAll($0) }.map(\.id))
+
+  let narrow = SearchQueries.search(query: "Sync-Agenten",
+                                    scope: SearchScope(visibleNodeIDs: visible),
+                                    store: store, translations: translations, language: "de",
+                                    database)
+  #expect(!narrow.map(\.id).contains(closedID))
+
+  let wide = SearchQueries.search(query: "Sync-Agenten",
+                                  scope: SearchScope(visibleNodeIDs: visible, includeClosed: true),
+                                  store: store, translations: translations, language: "de",
+                                  database)
+  #expect(wide.map(\.id) == [closedID])
+  #expect(wide.first?.status == .done)
+}
+
 /// After a close, the default-scope page must not silently shrink. The agreement test builds index
 /// and canonical together and so cannot catch a write path that updates only one of them.
 @Test func aClosedEndLeavesTheDefaultScopeWithoutShrinkingThePage() throws {
