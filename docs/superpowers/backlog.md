@@ -540,6 +540,29 @@ unusable". *Revisit trigger:* when the gold set exists.
 
 ---
 
+## `TextQuality.shorten` — two weak tests on correct code (2026-08-13)
+
+Parked at the end of the slice-5 run rather than fixed, because the process allows exactly one fix wave
+after the whole-branch review and these arrived in its scoped re-review. **Both are test-strength issues;
+the shipped implementation was traced correct three times independently.** Together they are ~3 lines.
+Recorded because this project has twice shipped vacuous tests and caught them only by mutation.
+
+- **The maximality assertion cannot catch the `+1`-dropped mutant.** `shortenBreaksOnWordBoundariesNeverMidWord`
+  gained an assertion that demonstrably kills the first-word-only mutant (mutation-verified both
+  directions). But a reviewer hand-traced that with *this* test input, dropping the `+1` for the joining
+  space produces a **byte-identical** 56-character output — so the assertion is structurally insensitive to
+  it, not merely unverified. *Smallest fix: a second input whose break margin is exactly one character.*
+  Failure mode if it regresses: labels come back one word short.
+- **`shortenNeverFusesWordsAcrossAnEmbeddedNewline` is vacuous against its own claim.** Its assertions only
+  check for the literal absence of `\n`, which its two sibling tests already prove by pinning exact strings.
+  A delete-only mutant (`replacingOccurrences(of: "\n", with: "")`) would fuse `agent`+`and` and still pass
+  it. *Smallest fix: assert the fused token is absent, or pin the exact string as its siblings do.*
+
+*Revisit trigger:* the next edit to `TextQuality.shorten`'s join arithmetic, or any pass that touches these
+tests.
+
+---
+
 ## Naming has no eval coverage, and the harness has a silent hole (2026-08-13)
 
 **Two findings, one entry.** Raised by an adversarial review of the slice-5 spec and confirmed
