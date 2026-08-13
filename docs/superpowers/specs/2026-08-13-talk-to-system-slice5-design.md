@@ -1,298 +1,299 @@
-# Talk to the system, stage 1 — describe a strand, get a strand (three-pane slice 5)
+# Talk to the system, stage 1 — describe it, get a node (three-pane slice 5)
 
 **Date:** 2026-08-13
-**Status:** design approved, plan not yet written
+**Status:** design approved; **revised after two adversarial reviews** (see "What the reviews changed")
 **Slice:** Track A / three-pane app, slice 5 of 6 (`specs/2026-07-05-pensieve-app-three-pane-design.md:170`)
-**Backlog entry:** "App: capture & instruct by talking to the system" (`backlog.md:1291`)
+**Backlog entry:** "App: capture & instruct by talking to the system" (§ heading, ~`backlog.md:1345`)
 
 ## Purpose
 
-Type a sentence describing a thing you are about to work on; get a correctly-named,
-correctly-typed, sensibly-parented node. The lightweight counterpart to auto-birth from ≥2
-captured events — that path waits for evidence, this one starts from intent.
+Type a sentence describing something you are about to work on; get a node whose **name** is a
+readable label, whose **description** is your sentence verbatim, and whose **kind** and **parent**
+are derived deterministically. The lightweight counterpart to auto-birth from ≥2 captured events —
+that path waits for evidence, this one starts from intent.
 
-This is **stage 1 only**. Stage 2 (an embedded conversational agent driving organizing verbs
-and grounded Q&A) stays deferred to its own spec, unchanged by this document.
+**Stage 2** (an embedded conversational agent driving organizing verbs and grounded Q&A) stays
+deferred to its own spec, unchanged by this document.
 
-## Why this needs a design rather than a patch
+## What this slice is deliberately NOT
 
-**This is Pensieve's first LLM write path into the canonical store.** Every shipped model call is
-read-only in effect: extraction *proposes* loose ends that a verbatim gate then disposes of;
-narration returns best-effort prose or `nil`; `NodeDescriber` writes a description but only for a
-node that already exists, derived from local git signals rather than model invention.
+**Model-assisted parenting is out of scope, on measured evidence.** The first draft had BM25 retrieve
+~8 candidate parents from the typed sentence and the model pick among them. That cannot work:
+`FTSQueryBuilder` **AND-joins every term** (`Sources/PensieveKit/Search/FTSQuery.swift:65`), so a
+sentence retrieves only documents containing *every* word. Measured against the live index
+(2,962 docs — 281 node, 875 loose_end, 1,806 event):
 
-Here, model output determines a row's identity — its name, its type, and its place in the tree the
-whole app renders. That is a new interface, so it gets an invariant rather than a prompt.
+| query as the builder emits it | rows | node rows |
+|---|---|---|
+| `"look" AND "into" AND "why" AND "background" AND "sync" AND "stopped" AND "spawning"*` | **0** | 0 |
+| `"add" AND "a" AND "settings" AND "tab" AND "for" AND "source" AND "management"*` | **0** | 0 |
+| `"pensieve" AND "widget"*` | **0** | 0 |
+| `"background" AND "sync"*` | 7 | **0** |
+| `"pensieve"` (single term, for contrast) | 53 | — |
 
-## What already exists (verified in the tree, 2026-08-13)
+Every realistic quick-add sentence retrieves **nothing**, so the parent suggestion would always fall
+through to its default — inert by construction, not merely weak.
 
-- **`LLMProvider`** (`Sources/PensieveKit/LLM/LLMProvider.swift`) has exactly one required method,
-  `complete`. Three structured methods layer on top as protocol extensions that decode JSON from
-  `complete`; `FoundationModelsProvider` overrides each with guided generation. Adding a fourth
-  structured method is the established shape, and costs the cloud and `claude -p` providers nothing.
-- **Guided generation uses runtime `GenerationSchema`**, deliberately not the `@Generable` macro
-  (whose plugin fails to load in this machine's test build — see the comment at
-  `FoundationModelsProvider.swift:8-15`). Every existing call site uses only object, array, `String`
-  and `Int` schemas. **No call site uses `anyOf`**, so string-enum constraint is unproven here.
-- **Two classifiers already return indices** (`classifyGenuineIndices`,
-  `classifyNonSalientIndices`) and are proven reliable on-device. This is the pattern to copy.
-- **The on-device context window is small and real.** `LooseEndExtractor` chunks at a 2,500-char
-  budget and recursively re-splits on an `exceededContextWindowSize` error
-  (`LooseEndExtractor.swift:55-72`).
-- **BM25/FTS5 is the only retrieval path** (`SearchIndexStore`, `FTSQueryBuilder`), indexing node
-  names and descriptions among other content. Raw input never reaches `MATCH`.
-- **`NodeCommands.add`** (`Sources/PensieveKit/Query/NodeCommands.swift`) already takes
-  `name`/`kind`/`parent`/`description` and resolves the parent by UUID or name inside its write
-  transaction. It needs no change.
+The replacement that *does* work is recorded for the follow-up increment: aggregating owning nodes
+across **all three** hit kinds under OR semantics produces a concentrated winner (measured: 18/5/4
+and 20/12/5 for two probe sentences), because topic vocabulary lives in events and loose ends —
+2,681 of 2,962 documents — while node documents are `name — description`, i.e. what a project *is*
+rather than what a task *is about*.
+
+**That increment is gated on a measurement, not on an argument.** See "Deferred, with triggers".
+
+## What already exists (verified against `main` at `8a97a0f`)
+
+- **`Ingester.nameStrand`** (`Sources/PensieveKit/Ingest/Ingester.swift:366-389`) already writes a
+  **model-authored `name` and `description`** onto a canonical `Node`. So this feature is **not**
+  Pensieve's first model-written identity — it is the second, and the first *user-initiated* one.
+- **The label gate already exists.** `Ingester.sanitizeStrandName` (`:257-270`) strips list markers
+  and quotes, then requires `TextQuality.isTerseLabel` (`Support/TextQuality.swift:37-41`): non-empty,
+  ≤ 60 chars, and no multi-sentence shape. Its scar comment (`:265-268`) records the exact failure
+  this feature would otherwise rediscover — a 101-char, commit-message-shaped name in the sidebar.
+- **`LLMProvider`** (`LLM/LLMProvider.swift`) requires only `complete`; three structured methods are
+  protocol extensions overridden by `FoundationModelsProvider`. **This slice adds no method** — a
+  label is free text, so `complete` is the whole seam.
+- **`NodeCommands.add`** (`Query/NodeCommands.swift:34-45`) accepts `name`/`kind`/`parent`/
+  `description` and resolves the parent inside its write transaction. Unchanged.
+- **`NodeFields`** (`:7-21`) has **no `description` member**, and **`NodeCommands.update`**
+  (`:107-119`) explicitly *"leaves description … untouched"*. Both need changing — see Kit below.
 - **The New/Edit modal** (`Sources/PensieveApp/NodeOrganizing.swift:9`) edits name, kind, context,
-  colour and icon. It has **no description field and no parent picker**;
-  `AppModel+Organizing.swift:166` passes `description: ""` unconditionally, and the parent is fixed
-  by the call site via `NodeEditRequest.mode = .new(parent:)`. **So the app cannot set a
-  description at all today.**
+  colour, icon. No description field, no parent picker. `AppModel+Organizing.swift:167` passes
+  `description: ""` unconditionally, so **the app cannot set a description today**.
+- **Both fast create paths pass `nil` as the parent** — ⌘N (`PensieveApp.swift:45`) and the toolbar
+  "+" (`RootView.swift:48`) — so every quick-add currently lands at **top level**, regardless of what
+  you are looking at.
+- **The commit button is `"Save"`**, `.keyboardShortcut(.defaultAction)`, and `.disabled` on an empty
+  trimmed name (`NodeOrganizing.swift:63-65`); `commitNewNode` also returns early on one.
+- **Eval registers three tasks** — `extraction`, `narration`, `description` (`eval-config.json`
+  bars; `EvalTask.swift:22-30` fails the suite on a registry/config mismatch). **Strand naming is
+  not among them**, despite being a real model-backed task.
 
-### Measured facts that shaped the design
+### Measured facts
 
-Read from the live store (`pensieve.sqlite`, read-only) on 2026-08-13:
+Live store, read-only, 2026-08-13:
 
 | Fact | Value | Consequence |
 |---|---|---|
-| Nodes | 281 (280 active, 1 archived) | The tree cannot go in the prompt |
-| Kinds in use | `project` 182, `strand` 99 | `domain`, `concept`, `initiative`, `task`, `topic` have **zero** rows |
-| Extraction chunk budget | 2,500 chars | 281 names ≈ 3× that, before any instruction text |
-| BM25 on short queries | ≈2/8 (P3 measurements) | A single top-hit parent guess would often be wrong |
+| Nodes | 281 (280 active, 1 archived) | — |
+| Kind vs parent | `project` at top level **182**; `strand` under a `project` **99** | **281 of 281.** Kind is a pure function of parent |
+| Kinds in use | `project`, `strand` only | `domain`, `concept`, `initiative`, `task`, `topic`: zero rows |
+| Sentence retrieval | 0 rows (table above) | Parent suggestion deferred |
 
-The last row is the load-bearing one. `backlog.md:510` records that short paraphrase queries are
-BM25's documented weak spot — and a quick-add sentence is exactly that shape. Any design that lets
-retrieval alone choose the parent is building on a signal this project has already measured as weak.
+The kind row is decisive: `NodeKind` is exactly `AppModel.defaultKind(under:)`
+(`AppModel+Organizing.swift:26-29`) on every node you have ever made. **Asking a model for it buys a
+field, a resolution path, and a confidently-wrong failure mode in exchange for zero information.**
 
-## The invariant
+## The safety property
 
-> **The model may only select or shorten. It never authors.**
+The first draft asserted *"the model may only select or shorten; it never authors."* That was
+**false for the one field the model actually produces** — a name is free text, and nothing verified
+it was a shortening rather than an invention. Stated honestly instead:
 
-Applied to the four fields of the **node that gets created** (not to the proposal type, which is
-narrower — see `NodeProposal` below):
+> **The model authors one field — the name — and a human reads it before anything is written.
+> Everything else is verbatim or derived.**
 
-| Field | Origin | Can the model invent it? |
+| Field | Origin | Model can invent it? |
 |---|---|---|
-| `description` | the user's typed text, **verbatim** | No — copied, never generated |
-| `name` | **shortened** from the user's text | No — only compressed |
-| `kind` | an index into a list the caller presents | No — an unknown index is no suggestion |
-| `parent` | an index into BM25-retrieved candidates | No — structurally impossible |
+| `description` | the user's typed text, **verbatim** | No — copied, never sent for rewriting |
+| `name` | model-authored label, **gated** by `sanitizeStrandName` | Yes, within ≤60 chars and one sentence |
+| `kind` | derived: `defaultKind(under: parent)` | No — not a model output |
+| `parent` | the current selection, or the invocation site's | No — not a model output |
 
-Two properties follow, and both are checkable in review rather than by inspection of a prompt:
+Two properties hold, and both are checkable rather than asserted:
 
-1. **No fabricated identity can reach the store.** `kind` and `parent` are *choices among real
-   options*, resolved by the caller. A model returning index 47 of 8 candidates produces a rejected
-   proposal, not a bogus row.
-2. **The trust gate is not involved, and does not need to be.** `description` is the user's own
-   words, unmodified. `name` is those words compressed. `backlog.md:1314-1317` already settled this:
-   user-authored metadata sits outside the cited gate, like `rename`. The gate governs claims about
-   *captured* text; nothing here makes such a claim.
+1. **Nothing is written without human confirmation.** The modal is the gate; `Save` is a deliberate
+   act, and every field is editable first. This is a stronger and more honest guarantee than the
+   invariant it replaces.
+2. **The cited trust gate is not involved.** Node names never render as cited provenance, and 99 of
+   281 existing names are already model-authored via `nameStrand`, so this introduces no new category
+   of content. `backlog.md`'s "talk to the system" entry settles that user-initiated metadata sits
+   outside the gate, like `rename` — noting that its wording assumes the *name* is the user's words,
+   which is why the gate above (`isTerseLabel`) does the work that assumption no longer does.
 
 **Not touched:** `TranscriptVocabulary.injectionMarkers`, `TranscriptParser.isInjectedOrCommand`,
-`isUserPrompt`, `LooseEndVerifier`, or any extraction path. This feature neither reads nor writes
-them.
+`isUserPrompt`, `LooseEndVerifier`, or any extraction path.
 
-## Kit units
+## Kit changes
 
-All in PensieveKit, all tested, pure where the work allows.
+### 1. Move the label gate where two callers can share it
 
-### `NodeProposal`
+`sanitizeStrandName` moves from `Ingester` to `TextQuality` (beside `isTerseLabel`, which it already
+calls), with `Ingester`'s single call site updated. Justified by the shape now genuinely recurring —
+not a speculative extraction. Its existing tests move with it.
 
-The value crossing the seam. Deliberately holds **indices, not identifiers**:
+### 2. `NodeLabeler` — the naming unit
 
-```
-struct NodeProposal: Sendable, Equatable {
-  var name: String
-  var kindIndex: Int
-  var parentIndex: Int
-}
-```
+One small unit: given the typed text and a provider, return a gated label or `nil`.
 
-`description` is absent on purpose: it is the user's input, so the caller already has it and the
-model is never asked for it. A field the model cannot influence should not be in the model's
-output type — that is the invariant expressed in the type rather than in a comment.
+- One `complete` call. **No new `LLMProvider` method, no `GenerationSchema`, no indices** — the
+  first draft's machinery existed only to constrain `kind` and `parent`, which are no longer model
+  outputs.
+- The prompt asks for a 3–6-word label on one line, mirroring `nameStrand`'s proven shape.
+- The result goes through `TextQuality.sanitizeLabel`. **`nil` on:** no provider, a throw, empty
+  output, or a label that fails the gate. `SummaryBuilder.narrate` is the precedent — best-effort
+  units return `nil`, never a plausible-looking fallback.
+- `Sendable`, so the `@MainActor` app can await it off-main.
 
-**"Top level" is an explicit numbered choice**, not a sentinel. The candidate list always ends with
-a `[n] (no suitable parent — top level)` entry, so the model can say "none of these" *in range*.
-That removes the need for a `-1` magic value and makes every legal answer a valid index, which in
-turn makes the out-of-range rule below unambiguous.
+### 3. `description` becomes writable
 
-### `NodeProposer`
+`NodeFields` grows `description`, and `NodeCommands.update` writes it. **The update path needs a
+test that an unedited description is not blanked** — today's contract is "leaves description
+untouched", so widening it is exactly where a regression would hide.
 
-The unit that owns the whole flow. Given the typed text and a database:
+## App changes
 
-1. **Gather candidates.** Query the shipped BM25 index with the typed text and take the top ~8
-   **node** hits, discarding loose-end and event hits. Archived excluded. *(An event hit's owning
-   node is arguably also a parent signal — a commit matching "sync agent" implies its repo's node.
-   Deliberately not folded in for v1: it is the obvious first enrichment if suggestions prove weak,
-   and it pairs with the recall risk noted at the end.)*
-2. **Build the prompt.** The typed text, a numbered candidate list (`[0] Pensieve — the …`), and a
-   numbered kind list. Bounded by construction: 8 candidate names plus 2 kind labels sits far
-   inside the 2,500-char budget that extraction proved workable, with no chunking needed.
-3. **Resolve.** Map `kindIndex`/`parentIndex` back to a real `NodeKind` and `UUID?`. **An
-   out-of-range index means "no suggestion for that field"** — that field keeps the modal's
-   existing default (the caller's parent, the modal's default kind), and the rest of the proposal
-   still stands. Explicitly *not* clamped to the nearest valid index, which would turn a confused
-   model into a confident wrong answer; and explicitly *not* grounds for discarding the whole
-   proposal, since a good name with a bad parent index is still worth showing.
-4. **Return `nil` on any failure.** No provider, a throw, an empty name, an unparseable response:
-   all one outcome. `SummaryBuilder.narrate` is the precedent — best-effort units return `nil`, and
-   never a plausible-looking fallback.
+The modal (`NodeEditor`) grows **two** fields — not the three the first draft implied, since the
+parent picker is deferred with parenting itself:
 
-**Kind list contents — a decision.** Present only `project` and `strand`. The other five kinds have
-zero rows in 281 nodes, so offering seven options spends scarce on-device context on choices the
-user has never once made, and invites a confidently-wrong `topic`. `retype` already exists if a
-kind needs changing, and widening the list later is a one-line change.
+1. **"Describe it"** — the input. Submitting it requests a label.
+2. **Description** — editable, bound through to `NodeCommands.add`/`update`. Independently valuable:
+   it closes the `description: ""` gap outright.
 
-**Empty-retrieval fallback.** When BM25 returns no candidates, the candidate list is empty and
-`parentIndex` resolves to the caller's default — the currently selected node, or top level. The
-model is not asked to choose from an empty set.
+**Submitting must not collide with `Save`.** `Save` already owns `.defaultAction`, so a bare Return
+inside the prompt field has two claimants — masked today only because `Save` is disabled while the
+name is empty, and unmasked the moment a name exists. The prompt field therefore gets an **explicit
+affordance** (a "Suggest" button, or ⌘↩), and the plan must state the chosen one. There is no
+`onSubmit`-inside-a-sheet precedent in this codebase to copy.
 
-### The provider seam
+**Parent defaults to the current selection** instead of `nil`. A one-line change to the two fast
+paths, worth having on its own: today ⌘N from a project you are reading creates at top level.
 
-One new method, following the established pattern exactly:
+**Filling fields by hand stays exactly as fast as today** — the prompt field is additive, never
+required, and never blocks `Save`.
 
-```
-func proposeNode(prompt: String) async throws -> NodeProposal?
-```
+### Progressive fill, and the clobber rule
 
-- **Default (protocol extension):** decode JSON from `complete`, as the other three do. This is
-  what `claude -p` and the cloud providers get for free.
-- **`FoundationModelsProvider` override:** a runtime `GenerationSchema` with `name: String`,
-  `kindIndex: Int`, `parentIndex: Int`. All three are types the existing schemas already use, so
-  **no unproven API** — this is why the design returns indices rather than UUID strings constrained
-  by `anyOf`.
+The proposal is user-triggered and writes into `@State` **the user may be editing concurrently** —
+unlike slice 3a's narration, which keyed a `.task` on identity and wrote read-only display state. So
+the closer precedent is `AppModel.runSearch` (`AppModel+Search.swift:73-121`): cancel any prior task,
+a monotonic token, pre-`Task` locals, and a token re-check before assigning.
 
-### Eval registration
+**The clobber rule, stated because it is otherwise undefined:** a returned label fills `Name`
+**only if the user has not edited `Name` since submitting.** The task is held in `@State` and
+cancelled on dismiss.
 
-`CLAUDE.md` requires that a new LLM-backed task register an `EvalTask` and take its default model
-from `pensieve eval` rather than a hand-picked constant, enforced by a `registry ↔ config` test.
-So: a `NodeProposalTask` in `Sources/PensieveKit/Eval/`, modelled on `DescriptionTask` — the right
-precedent, since description is likewise best-effort and outside the cited gate.
+### Failure is lossless, and honestly described
 
-Scoring is judged output, not exact match: does the name read as a label for the input, is the kind
-plausible, is the parent the one a human would pick. The gold set is small and hand-written; this
-is a quality signal for model *selection*, not a precision gate like extraction's.
+Provider unavailable, a throw, or a gate rejection: the typed sentence is already in `Description`
+verbatim, and `Name` stays empty. Nothing is lost and no alert fires — this is best-effort.
 
-## App surface
+**Stated precisely:** `Save` is `.disabled` on an empty name, so a failed suggestion still leaves the
+user to type a name. That is exactly today's modal plus their sentence — no worse, but not
+"immediately committable".
 
-### The modal grows three things
-
-`NodeEditor` (`NodeOrganizing.swift`) gains:
-
-1. **"Describe it"** — a text field at the top. Return fires the proposal.
-2. **Description** — a real editable field, bound through to `NodeCommands.add`. Independently
-   valuable: it closes the gap at `AppModel+Organizing.swift:166` where the app can never set a
-   description.
-3. **Parent picker** — reuses `MovePicker`'s list-building, but **simpler**: a node being created
-   has no descendants, so the `NodeForest.descendantIDs` guard `Move to…` needs does not apply.
-   Every existing node is a legal parent. Defaults to the request's parent (today's behaviour) or
-   the proposal's pick.
-
-### Behaviour
-
-Progressive, matching slice 3a's narration state machine: return starts the proposal, the fields
-below show a brief in-place spinner, then populate. Everything stays editable throughout, and
-**`Create` is never blocked or gated on the model.** Cancel/Escape writes nothing. Filling the
-fields by hand and ignoring the prompt field entirely must remain exactly as fast as it is today.
-
-The proposal runs off the main actor (`NodeProposer` is `Sendable`, as `SummaryBuilder` is) and its
-task is cancelled on dismiss.
-
-### Failure is silent and lossless
-
-Provider unavailable, a throw, or `nil`: the typed sentence drops into **Description verbatim** and
-`Name` stays empty. That is precisely today's modal plus the user's text — nothing is lost, nothing
-must be retyped, and no alert fires. This is a best-effort feature and `narrate` is the precedent.
-
-**Not gated by the Settings ▸ Intelligence narration toggle** — that toggle governs narration, and
-reusing it would make one control mean two things. A dedicated toggle is YAGNI until asked for.
+**Not gated by the Settings ▸ Intelligence narration toggle** — that governs narration, and reusing
+it would make one control mean two things. A dedicated toggle is YAGNI until asked for.
 
 ### Write path
 
-Unchanged. `AppModel.commitNewNode` → `NodeCommands.add`, now passing a real `description` and a
-user-confirmed `parent` instead of `""` and the call site's fixed value. Settings v2's
+`AppModel.commitNewNode` → `NodeCommands.add`, now passing a real `description`. Settings v2's
 refusal-versus-failure classification (`AppError` → `presentedError` → the single `RootView` alert)
-already covers the write, so this adds no error surface.
+already covers it; no new error surface.
 
-### Provider selection and what leaves the machine — an explicit decision
+## Three interactions that need an explicit decision
 
-With a cloud provider configured, the prompt carries the user's typed sentence **and up to ~8 node
-names**. Narration already sends event summaries under the same setting, so honouring the selected
-provider is consistent — and it is recorded here as a decision rather than left as an accident.
-
-**Extraction remains on-device unconditionally.** This feature is not extraction and does not
-change that guarantee.
+1. **`NodeDescriber.describe(force: true)` overwrites a description.** Reachable from a DetailView
+   action (`AppModel+Narration.swift:91`); `nodes.description` carries no provenance flag, so a
+   user-typed description is byte-indistinguishable from a model-authored one. **Accepted as-is:**
+   the action's entire purpose is to re-derive, and it is explicit. Recorded so it is a decision
+   rather than a surprise; a `descriptionAuthored` marker in `metadataJSON` is the fix if it bites.
+2. **Eval registration.** `CLAUDE.md` requires a new model-backed task to register an `EvalTask`.
+   This task is the *same shape* as `nameStrand`, which **is not registered** — so registering only
+   this one would leave the older, higher-volume path uncovered while implying naming is measured.
+   **Proposed:** do not register a bespoke task here; log the pre-existing naming-coverage gap in
+   `backlog.md` as its own item covering **both** call sites. Reviewer evidence: a new task needs a
+   fourth `CorpusItem` case plus DTO, exhaustive-switch updates, **two hardcoded task lists in
+   `CorpusBuilder` that the registry↔config test does not check** (so a task can register, pass the
+   suite, and silently load zero corpus items), and a gold set that cannot live in gitignored
+   `.eval/`. **This is the one place the spec proposes not following a stated project rule, so it
+   needs the user's ruling.**
+3. **Focus scoping** is not applicable here (no candidate retrieval), but the deferred parenting
+   increment must pass `visibleNodeIDs` like every other surface, or a Work Focus could be offered a
+   Personal parent.
 
 ## Localization
 
 New chrome strings in `Localizable.xcstrings`, en + de, authored by hand against the Swift literals
-(`xcodebuild` does not populate the catalog — IDE-only). The node's **name and description are
-captured content and are never localized**, consistent with every other content surface. The
-default new-node name likewise stays unlocalized, as slice 4 established.
+(`xcodebuild` does not populate the catalog — IDE-only). The **name and description are captured
+content and are never localized**.
 
 ## Testing
 
 **Kit carries the weight** (the app target has no unit tests):
 
-- `description` survives verbatim — including leading/trailing whitespace behaviour, newlines, and
-  text that looks like JSON or a code fence.
-- `kindIndex`/`parentIndex` resolve to the right `NodeKind`/`UUID`.
-- **An out-of-range index (negative or past-the-end) falls back to that field's default and leaves
-  the rest of the proposal intact** — asserted for both fields independently, and asserted *not* to
-  clamp to the nearest valid index.
-- The explicit top-level choice resolves to `parent == nil`, distinctly from an out-of-range index.
-- `nil` on: no provider, provider throws, empty name, unparseable response.
-- Candidate retrieval returns real nodes from the FTS5 index, discards non-node hits, excludes
-  archived, and respects the ~8 cap.
-- Empty retrieval yields a candidate list holding only the top-level choice, and the caller's
-  default parent.
-- The `registry ↔ config` eval test passes with `NodeProposalTask` registered.
+- `TextQuality.sanitizeLabel` after the move: existing strand-name cases still pass; ≤60-char cap;
+  multi-sentence rejection; list-marker and quote stripping.
+- `NodeLabeler` returns `nil` on: no provider, throw, empty output, gate rejection.
+- `NodeCommands.update` writes a description **and** leaves an unedited one intact.
+- `NodeCommands.add` persists a description end-to-end.
+- `NodeFields` gaining a member breaks no existing caller.
 
 **App:** `xcodebuild` build plus a non-blocking smoke-launch of the inner binary with throwaway
-`PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`, then human-verify carries (below).
+`PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`, then the carries below.
 
-### Human-verify carries (need the built app at `/Applications` and the real store)
+### Human-verify carries (built app at `/Applications`, real store)
 
-- A typed sentence about work on an existing project proposes **that project** as parent.
-- A sentence about something genuinely new proposes top level rather than a forced bad parent.
-- Hand-filling every field without touching the prompt field is unchanged from today.
-- With the provider unavailable (select a cloud provider with no key), the typed text lands in
-  Description and nothing errors.
-- `pensieve list` shows the created node where the app said it would.
-- German in situ (`-AppleLanguages '(de)'`), including the new field labels.
+- A typed sentence yields a readable label; the sentence itself is the description, verbatim.
+- Editing `Name` while the suggestion is in flight — your text survives (the clobber rule).
+- Provider unavailable (select cloud with no key): sentence in Description, no error, `Save`
+  enabled once a name is typed.
+- ⌘N while a project is selected creates **under it**, not at top level.
+- Submitting the prompt field does not accidentally trigger `Save`.
+- `pensieve list` shows the node where the app said it would.
+- German in situ (`-AppleLanguages '(de)'`).
 
 ## Out of scope
 
-- **Stage 2** — a conversational agent, organizing verbs by instruction ("nest auth under
-  platform"), grounded Q&A. Its own spec, deliberately deferred.
-- **Editing an existing node's description via the prompt field.** The prompt field is
-  creation-only; the new Description field is editable on both paths, which is enough.
-- **Icon/colour/context inference.** The model proposes identity and placement only. These have
-  defaults and a picker already.
+- **Stage 2** — conversational agent, organizing verbs by instruction, grounded Q&A.
+- **Icon / colour / context inference** — defaults and pickers exist.
 - **Bulk creation** from a multi-sentence paste.
+- **Rewriting the description.** It is the user's words; the model never sees them for editing.
 
-## Risks and open concerns
+## Deferred, with triggers
 
-- **On-device name quality is unmeasured.** A ~3B model shortening a sentence into a label may
-  produce something flat ("Sync agent"). Mitigated by the eval task choosing the model and by every
-  field being editable before write — but it is the most likely source of "this is not useful
-  enough" and the eval gold set should be written with that question in mind.
-- **BM25 recall@8 on short queries is assumed, not measured.** P3 measured P@1 (≈2/8); recall@8
-  should be materially better, but this design leans on it. If parent suggestions prove poor, the
-  cheap remedy is widening the candidate set before touching the prompt — and the honest fallback
-  is the current selection, which costs nothing.
-- **The modal is getting busy.** It already carries two zones (form plus icon preview); this adds
-  two fields and a picker. If it reads as cluttered, the split to consider is prompt-first (a small
-  sheet that proposes, then hands off to the existing modal) — deliberately *not* chosen now, since
-  it doubles the surface for a benefit that only materialises if crowding actually bites.
-- **Sequencing.** `NodeOrganizing.swift` and `AppModel+Organizing.swift` are both modified by the
-  in-flight `worktree-loose-end-resolution` branch. This spec is conflict-free; the **plan should be
-  written after that branch merges**, or expect a small rebase.
+- **Model-assisted parenting.** *Trigger: a committed measurement.* Write 15–20 quick-add sentences
+  as a gold set, score three rankers against the live index — the shipped AND expression, OR
+  aggregated by owning node across all hit kinds, and an idf-weighted token overlap over the 281
+  `name — description` strings — and report recall@8 of the parent you would have picked. Commit the
+  probe under `docs/superpowers/measurements/`, as the retrieval work established. Only then decide
+  whether a candidate list and a parent picker earn their place. **Note two mechanical findings for
+  that work:** `SearchQueries.search` has **no kind filter** (so "top 8 node hits" needs a new
+  `kinds:` predicate or a large over-fetch), and BM25 length-normalisation systematically favours
+  short-named strands over the projects they belong to.
+- **A parent picker in the modal.** Deferred with parenting. `New Child…` already passes the right
+  parent and `Move to…` fixes mistakes, so the selection default covers the common case.
+- **Eval coverage for naming**, across both `nameStrand` and this path (item 2 above).
 
-## Verification of success
+## Risks
 
-A typed description produces a correctly-typed, sensibly-parented node — the slice's own criterion
-at `specs/2026-07-05-pensieve-app-three-pane-design.md:170` — and a dead provider leaves the modal
-exactly as useful as it is today.
+- **On-device label quality is unmeasured**, and is now the *whole* model contribution. Cheap to
+  check before building: 20 typed sentences through `complete` + `sanitizeLabel`, eyeballed. Worth
+  doing first — it needs no schema, no provider method, and no eval harness.
+- **The slice's success criterion narrows.** The three-pane spec says "correctly-typed, sensibly
+  parented"; here "sensibly parented" means *the selection*, and correctness of kind is derived
+  rather than judged. Both are defensible on the 281/281 measurement, but the narrowing is
+  deliberate and recorded.
+- **`NodeFields` and `NodeCommands.update` are public Kit API** with CLI callers. Widening them is
+  the change most likely to have a caller the plan overlooks.
+
+## What the reviews changed
+
+Two independent Opus reviews of the first draft, both verified against the code, both returning **not
+sound enough to plan from** — and converging on the same critical finding. Reproduced independently
+before folding in. What they overturned:
+
+- **The parent-suggestion mechanism retrieves zero rows** (both reviewers, measured; reproduced
+  here). The first draft mis-filed this as a graded recall risk. The design lost a third of itself.
+- **"Pensieve's first LLM write path into the canonical store" was false** — `nameStrand` predates it,
+  and carries the `sanitizeStrandName`/`isTerseLabel` machinery the draft reinvented.
+- **`kindIndex` carried zero information** — 281 of 281 nodes match `defaultKind(under:)`.
+- **The invariant was unenforced on `name`**, its only generative field. One reviewer proposed
+  enforcing token-containment via `FindMatcher`; **rejected** — "background sync stopped spawning" →
+  "Background sync spawn failure" is the better label and containment would reject it. The gate is
+  `isTerseLabel`, and the safety property is now worded honestly instead.
+- **"Write path unchanged" was wrong** — `NodeFields` has no `description` and `update` refuses to
+  write one.
+- **Return-versus-`.defaultAction`**, the **clobber race** against user edits, and the stale
+  sequencing note (that branch merged mid-review) were all real and are fixed above.
