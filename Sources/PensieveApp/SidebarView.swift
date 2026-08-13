@@ -31,6 +31,26 @@ struct SidebarView: View {
         Image(systemName: "checklist").foregroundStyle(.orange)
       }
       .tag(SidebarSelection.reviewSuggestions)
+      Label {
+        HStack {
+          Text("Loose Ends")
+          Spacer()
+          if model.triageCount > 0 {
+            Text("\(model.triageCount)").foregroundStyle(.secondary).monospacedDigit()
+          }
+        }
+      } icon: {
+        Image(systemName: "tray.full").foregroundStyle(.blue)
+      }
+      .tag(SidebarSelection.triage)
+      // No count on purpose: Completed grows without bound, and a number there invites reading it
+      // as a score.
+      Label {
+        Text("Completed")
+      } icon: {
+        Image(systemName: "checkmark.circle").foregroundStyle(.green)
+      }
+      .tag(SidebarSelection.completed)
       Section("Smart Lists", isExpanded: $smartExpanded) {
         smartRow(.whatsNext, count: model.lists.whatsNext.count)
         smartRow(.dormant, count: model.lists.dormant.count)

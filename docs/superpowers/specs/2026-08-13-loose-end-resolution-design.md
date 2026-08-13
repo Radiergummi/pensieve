@@ -458,7 +458,7 @@ citation machinery as an open one.
   nothing for an unknown id.
 - **`isOpen` unchanged under all three states** — an explicit test that `done` and `dropped` are
   excluded, and that `looseEndOpenPredicatesAgree` still holds.
-- `isActionable` applied at both call sites: a node whose last open end is closed leaves What's Next
+- `isActionable` applied at all three call sites (§5): a node whose last open end is closed leaves What's Next
   but stays in Dormant / Recently Active.
 - Corpus membership per status, including the D7 line: 👎 ends absent, closed ends present.
 - **The allow-list agreement test** — SQL filter and `SearchHitResolver` agreeing for every

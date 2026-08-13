@@ -10,12 +10,17 @@ public struct SearchScope: Sendable {
   public var excludingIDs: Set<UUID>
   public var limit: Int
   public var includeArchived: Bool
+  /// Widen to closed (done/dropped) loose ends. Orthogonal to `includeArchived` in this kernel; the
+  /// app's scope bar drives both from one control, which is a UI decision, not a model one.
+  public var includeClosed: Bool
   public init(visibleNodeIDs: Set<UUID>, excludingIDs: Set<UUID> = [],
-              limit: Int = SearchQueries.resultCap, includeArchived: Bool = false) {
+              limit: Int = SearchQueries.resultCap, includeArchived: Bool = false,
+              includeClosed: Bool = false) {
     self.visibleNodeIDs = visibleNodeIDs
     self.excludingIDs = excludingIDs
     self.limit = limit
     self.includeArchived = includeArchived
+    self.includeClosed = includeClosed
   }
 }
 
@@ -57,7 +62,8 @@ public enum SearchQueries {
     var fetchCount = max(scope.limit * 8, 50)
     while true {
       let candidates = store.search(ftsQuery, limit: fetchCount,
-                                    includeArchived: scope.includeArchived)
+                                    includeArchived: scope.includeArchived,
+                                    includeClosed: scope.includeClosed)
       let hits = buildHits(candidates, terms: ftsQuery.terms, scope: scope,
                            translations: translations, language: language, database)
       if hits.count >= scope.limit || candidates.count < fetchCount || fetchCount >= maxFetch {
@@ -142,6 +148,7 @@ public enum SearchQueries {
                                 _ database: any DatabaseReader) -> [SearchHit] {
     let resolver = SearchHitResolver(
       includeArchived: scope.includeArchived,
+      includeClosed: scope.includeClosed,
       highlight: { SnippetMaker.make(from: $0, matchingAny: terms) },
       translations: { field, sourceText in
         guard let translations, !language.isEmpty else { return nil }

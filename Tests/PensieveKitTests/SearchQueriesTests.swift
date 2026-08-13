@@ -213,7 +213,7 @@ import SQLiteData
     #expect(SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: [node.id]),
                                  store: store, database).contains { $0.id == looseEnd.id })
     try await database.write { database in
-      try LooseEnd.where { $0.id.eq(looseEnd.id) }.update { $0.status = "resolved" }
+      try LooseEnd.where { $0.id.eq(looseEnd.id) }.update { $0.status = #bind(LooseEndStatus.done) }
         .execute(database)
     }
     #expect(!SearchQueries.search(query: "refunds ", scope: SearchScope(visibleNodeIDs: [node.id]),

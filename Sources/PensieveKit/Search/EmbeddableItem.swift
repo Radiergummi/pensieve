@@ -14,10 +14,17 @@ public struct EmbeddableItem: Sendable {
   /// row with English would discount every English match. The index carries this as
   /// `language UNINDEXED`, which contributes no tokens.
   public let language: String
+  /// The item's own lifecycle state, as `LooseEndStatus` raw values. Node and event rows carry
+  /// `"open"`: the SQL filter then applies the allow-list uniformly instead of switching on `kind`,
+  /// and a kind-conditional filter is exactly the asymmetry that lets the index and the canonical
+  /// re-check drift apart.
+  public let status: String
   public init(itemID: String, kind: String, nodeID: String, state: String, text: String,
-              files: String = "", language: String = "") {
+              files: String = "", language: String = "",
+              status: String = LooseEndStatus.open.rawValue) {
     self.itemID = itemID; self.kind = kind; self.nodeID = nodeID
     self.state = state; self.text = text; self.files = files; self.language = language
+    self.status = status
   }
   /// Stable across processes/runs (String.hashValue is per-process salted — do NOT use it here).
   /// Hashes `text` ONLY. `files` is excluded so that a change to path indexing does not invalidate
@@ -31,8 +38,9 @@ public struct EmbeddableItem: Sendable {
   }
 }
 
-/// v1 producer of the search corpus: active AND archived nodes + their open loose ends +
-/// their enriched events, each tagged with its owning node's state (the query layer scopes on it).
+/// v1 producer of the search corpus: active AND archived nodes + their loose ends, open and closed
+/// (👎-labelled ones excluded) + their enriched events, each tagged with its owning node's state and
+/// its own status (the query layer scopes on both).
 /// `muted` is never indexed. The seam future producers (transcript chunks, etc.) extend.
 /// Event hygiene (spec P1): `git.checkout` events are dropped (no work content), and identical
 /// event texts within a node are de-duplicated, keeping the earliest by (occurredAt, id).
@@ -62,6 +70,13 @@ public enum EmbeddableCorpus {
       // through that branch. A translated loose end tagged "node" would resolve against the Node
       // table by a loose-end id and silently vanish. Takes the loose end itself (not its id/nodeID
       // separately) to stay within SwiftLint's parameter-count limit.
+      //
+      // `status` is read off the loose end rather than passed in, and that is load-bearing:
+      // `EmbeddableItem` defaults it to `"open"`, so a translated document for a CLOSED loose end
+      // that inherited the default would pass the default-scope SQL filter and then be dropped by
+      // the resolver — the page-shrinking failure, reachable only through the translation path.
+      // Reading it from the same row the original document reads makes the two unable to disagree
+      // about eligibility, which passing a parameter alongside `kind` would only make likely.
       func appendTranslatedLooseEnd(_ field: TranslationField, of sourceText: String, kind: String,
                                     from looseEnd: LooseEnd, state: String) {
         guard !language.isEmpty, let translations,
@@ -70,7 +85,8 @@ public enum EmbeddableCorpus {
         else { return }
         out.append(EmbeddableItem(itemID: looseEnd.id.uuidString, kind: kind,
                                   nodeID: looseEnd.nodeID.uuidString, state: state,
-                                  text: text, language: language))
+                                  text: text, language: language,
+                                  status: looseEnd.status.rawValue))
       }
       // Active AND archived: archiving hides work from the normal views, it does not make the work
       // unrecallable. `muted` stays out of the corpus entirely. Each item carries its owning node's
@@ -84,11 +100,20 @@ public enum EmbeddableCorpus {
                          state: node.state.rawValue, text: [node.name, node.description].filter { !$0.isEmpty }.joined(separator: " — ")))
         appendTranslatedNodeDocument(for: node, into: &out, translations: translations, language: language)
       }
-      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
+      // Open AND closed. Closing hides work from the live views; it does not make the work
+      // unrecallable — the same reasoning that put archived nodes in this corpus. Each item carries
+      // its own status, which is what lets the query layer scope per search scope.
+      //
+      // `label = "noise"` stays EXCLUDED, and that asymmetry is deliberate: 👎 asserts the text was
+      // never a loose end at all, so indexing it would pollute retrieval, whereas a closed end was
+      // real work someone finished. `isOpen` conflates the two, so this predicate spells them out
+      // separately instead of reusing it.
+      let ends = try LooseEnd.where { $0.label.neq(LooseEndLabel.noise) }.fetchAll(database)
       for looseEnd in ends {
         guard let state = stateByNodeID[looseEnd.nodeID] else { continue }
         out.append(.init(itemID: looseEnd.id.uuidString, kind: "loose_end", nodeID: looseEnd.nodeID.uuidString,
-                         state: state, text: [looseEnd.text, looseEnd.quote].filter { !$0.isEmpty }.joined(separator: " — ")))
+                         state: state, text: [looseEnd.text, looseEnd.quote].filter { !$0.isEmpty }.joined(separator: " — "),
+                         status: looseEnd.status.rawValue))
         // Text ONLY — never the quote. The original document is "text — quote"; a translated
         // document that re-appended the English quote would manufacture a duplicate hit, and the
         // quote is verbatim provenance that must never be adjacent to a translation.

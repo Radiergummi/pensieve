@@ -179,4 +179,11 @@ private func registerRecentMigrations(on migrator: inout DatabaseMigrator) {
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "label" TEXT NOT NULL DEFAULT ''"#).execute(database)
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "labelSuggestion" TEXT NOT NULL DEFAULT ''"#).execute(database)
   }
+
+  migrator.registerMigration("v12-looseend-resolvedat") { database in
+    // Nullable on purpose: NULL means "never resolved", the honest reading for every existing row,
+    // and there are no closed rows to backfill. v11's three-valued-logic warning does not apply —
+    // nothing filters on this column, it is only an ORDER BY key.
+    try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "resolvedAt" TEXT"#).execute(database)
+  }
 }

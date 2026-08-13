@@ -33,6 +33,10 @@ extension NodeState {
 /// whole result page, so the caller builds one resolver and walks its candidates with it.
 struct SearchHitResolver {
   let includeArchived: Bool
+  /// Widens the loose-end re-check to closed ends. A SEPARATE knob from `includeArchived` because
+  /// the two dimensions are orthogonal — a hit can be an archived node's open end or an active
+  /// node's closed one — even though the app's scope bar happens to drive both from one control.
+  var includeClosed: Bool = false
   /// Receives the body text this hit displays and returns its snippet — the one place the two
   /// engines diverge (BM25 highlights the query's unstemmed terms, the vector index the raw query
   /// string).
@@ -58,15 +62,21 @@ struct SearchHitResolver {
                                                      translations(.nodeName, node.name) ?? ""]),
                        score: score, isArchived: node.state == .archived)
     case .looseEnd:
-      guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) && LooseEnd.isOpen($0) })
-              .fetchOne(database),
+      // Fetched WITHOUT a status predicate, then filtered through the shared allow-list — the same
+      // rule the SQL filter renders. A hardcoded `isOpen` here is what made this the one place the
+      // two could disagree. The `label != noise` half of `isOpen` is kept unconditionally: a 👎 item
+      // is not in the corpus at all, so surfacing one would mean the index is stale.
+      guard let looseEnd = try LooseEnd.where({ $0.id.eq(itemID) }).fetchOne(database),
+            looseEnd.label != LooseEndLabel.noise,
+            looseEnd.status.isSearchable(includeClosed: includeClosed),
             let node = try Node.where({ $0.id.eq(looseEnd.nodeID) }).fetchOne(database),
             eligible(node) else { return nil }
       return SearchHit(id: looseEnd.id, kind: .looseEnd, nodeID: looseEnd.nodeID,
                        nodeName: node.name, title: looseEnd.text,
                        snippet: snippet(preferring: [looseEnd.text, looseEnd.quote,
                                                      translations(.looseEndText, looseEnd.text) ?? ""]),
-                       score: score, isArchived: node.state == .archived)
+                       score: score, isArchived: node.state == .archived,
+                       status: looseEnd.status)
     case .event:
       guard let event = try Event.where({ $0.id.eq(itemID) }).fetchOne(database),
             let node = try Node.where({ $0.id.eq(event.nodeID) }).fetchOne(database),

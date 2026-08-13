@@ -40,6 +40,7 @@ struct PensieveApp: App {
       }
       SidebarCommands()   // standard Show/Hide Sidebar (⌃⌘S) in the View menu
       FindCommands()
+      LooseEndResolveCommands()
       CommandGroup(after: .newItem) {
         Button("New Node") { model.presentNewNode(under: nil) }
           .keyboardShortcut("n", modifiers: .command)

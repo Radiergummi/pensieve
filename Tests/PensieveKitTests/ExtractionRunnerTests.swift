@@ -200,7 +200,7 @@ private let migrationQuote = "Also remember to write the migration test before m
   _ = try await ExtractionRunner(database: database, provider: SliceAwareProvider(genuine: [(quote, 0)])).run()
   // Resolve the extracted loose end, then force the shrink→0 re-extract path.
   try await database.write { database in
-    try LooseEnd.where { $0.quote.eq(quote) }.update { $0.status = "resolved" }.execute(database)
+    try LooseEnd.where { $0.quote.eq(quote) }.update { $0.status = #bind(LooseEndStatus.done) }.execute(database)
     try Event.where { $0.id.eq(event.id) }.update {
       $0.extractedMessageCount = 99
       $0.extractedTranscriptSize = 1   // != real size and != -1 → not legacy, forces start=0
@@ -211,7 +211,7 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(rerun.first?.inserted == 0)   // resolved quote is deduped, not resurrected
   let ends = try await database.read { database in try LooseEnd.all.fetchAll(database) }
   #expect(ends.count == 1)
-  #expect(ends.first?.status == "resolved")   // still resolved; nothing reopened
+  #expect(ends.first?.status == .done)   // still closed; nothing reopened
 }
 
 @Test func legacyRowInitializesWithoutResurrectingResolved() async throws {
@@ -225,7 +225,7 @@ private let migrationQuote = "Also remember to write the migration test before m
     try Event.where { $0.id.eq(event.id) }.update { $0.extractedAt = #bind(Date(timeIntervalSince1970: 1)) }.execute(database)
     try LooseEnd.insert {
       LooseEnd(nodeID: event.nodeID, sourceEventID: event.id, text: "rate limiting",
-               quote: resolvedQuote, status: "resolved", role: "user", sourceMessageIndex: 0)
+               quote: resolvedQuote, status: .done, role: "user", sourceMessageIndex: 0)
     }.execute(database)
   }
 
@@ -235,7 +235,7 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(init1.isEmpty)
   let after1 = try await database.read { database in try LooseEnd.all.fetchAll(database) }
   #expect(after1.count == 1)
-  #expect(after1.first?.status == "resolved")
+  #expect(after1.first?.status == .done)
   let ev1 = try await database.read { database in try Event.all.fetchAll(database) }.first!
   #expect(ev1.extractedMessageCount == 1)
   #expect(ev1.extractedTranscriptSize > 0)
@@ -247,7 +247,7 @@ private let migrationQuote = "Also remember to write the migration test before m
   #expect(run2.first?.inserted == 1)
   let after2 = try await database.read { database in try LooseEnd.all.fetchAll(database) }
   #expect(after2.count == 2)
-  #expect(after2.filter { $0.status == "open" }.map { $0.quote } == [newQuote])
+  #expect(after2.filter { $0.status == .open }.map { $0.quote } == [newQuote])
 }
 
 @Test func legacyZeroByteTranscriptThatGrowsExtractsNewContent() async throws {

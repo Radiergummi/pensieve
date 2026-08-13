@@ -15,7 +15,7 @@ import SQLiteData
       LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "wire up the retry", quote: "we should retry")
     }.execute(database)
     try LooseEnd.insert {   // resolved → excluded
-      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "done item", quote: "q", status: "resolved")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "done item", quote: "q", status: .done)
     }.execute(database)
     try LooseEnd.insert {   // confirmed noise → excluded
       LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "noise item", quote: "q2",
@@ -64,7 +64,7 @@ import SQLiteData
     }.execute(database)
     try LooseEnd.insert {   // a since-closed end STILL resolves by id (degrade: tap opens its node)
       LooseEnd(id: closedID, nodeID: node.id, sourceEventID: event.id, text: "closed", quote: "q2",
-               status: "resolved")
+               status: .done)
     }.execute(database)
   }
   let facts = try LooseEndFactsQueries.facts(for: [openID, closedID, UUID()], database)

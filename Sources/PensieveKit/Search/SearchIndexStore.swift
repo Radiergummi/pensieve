@@ -17,7 +17,7 @@ public struct SearchIndexHit: Sendable {
 /// no vendored C target and no per-connection extension registration. GRDB's Swift-level
 /// FTS5 API is conditionally compiled and deliberately unused.
 public struct SearchIndexStore: Sendable {
-  private static let schemaVersion = 3
+  private static let schemaVersion = 4
   /// Ranking always comes from the TEXT table. Paths never contribute a score to a text query —
   /// `.textRestrictedByPath` uses them to narrow the candidate set, and `.textWithPathProbe`
   /// surfaces rows the text index could not find at all, ranked by their own path relevance in a
@@ -65,7 +65,7 @@ public struct SearchIndexStore: Sendable {
           CREATE VIRTUAL TABLE IF NOT EXISTS documents USING fts5(
             text,
             item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
-            language UNINDEXED,
+            language UNINDEXED, item_status UNINDEXED,
             tokenize = 'unicode61 remove_diacritics 2')
           """)
         try database.execute(sql: """
@@ -122,15 +122,16 @@ public struct SearchIndexStore: Sendable {
         // Prepared once, not per row: `execute(sql:)` re-compiles its statement on every call, and
         // a whole-corpus rebuild is thousands of identical inserts.
         let documentInsert = try database.cachedStatement(sql: """
-          INSERT INTO documents(text, item_id, kind, node_id, state, language)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO documents(text, item_id, kind, node_id, state, language, item_status)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           """)
         let fileInsert = try database.cachedStatement(sql: """
           INSERT INTO document_files(files, item_id, kind, node_id, state) VALUES (?, ?, ?, ?, ?)
           """)
         for item in items {
           try documentInsert.execute(
-            arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state, item.language])
+            arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state, item.language,
+                        item.status])
           // Only rows that actually carry paths — an empty row would be dead weight in the path
           // index and would skew its own average document length.
           guard !item.files.isEmpty else { continue }
@@ -153,7 +154,8 @@ public struct SearchIndexStore: Sendable {
   ///
   /// The query shape is decided by `FTSQueryBuilder`, never by inspecting strings here — this
   /// switches on it exhaustively, so adding a shape cannot silently fall through.
-  public func search(_ query: FTSQuery, limit: Int, includeArchived: Bool) -> [SearchIndexHit] {
+  public func search(_ query: FTSQuery, limit: Int, includeArchived: Bool,
+                     includeClosed: Bool = false) -> [SearchIndexHit] {
     guard database != nil else { return [] }
     switch query.shape {
     case .pathOnly(let path):
@@ -167,6 +169,7 @@ public struct SearchIndexStore: Sendable {
         JOIN document_files f ON f.item_id = d.item_id
         WHERE documents MATCH ? AND document_files MATCH ?
               AND \(Self.stateFilter(alias: "d.", includeArchived: includeArchived))
+              AND \(Self.statusFilter(alias: "d.", includeClosed: includeClosed))
         ORDER BY \(Self.ranking) LIMIT ?
         """, arguments: [text, path, limit])
 
@@ -175,6 +178,7 @@ public struct SearchIndexStore: Sendable {
         SELECT item_id, kind, node_id, -\(Self.ranking) AS score
         FROM documents
         WHERE documents MATCH ? AND \(Self.stateFilter(includeArchived: includeArchived))
+              AND \(Self.statusFilter(includeClosed: includeClosed))
         ORDER BY \(Self.ranking) LIMIT ?
         """, arguments: [text, limit])
       guard textHits.count < limit else { return textHits }
@@ -218,6 +222,47 @@ public struct SearchIndexStore: Sendable {
   private static func stateFilter(alias: String = "", includeArchived: Bool) -> String {
     let allowed = NodeState.searchable(includeArchived: includeArchived)
     return "\(alias)state IN (\(allowed.map { "'\($0.rawValue)'" }.joined(separator: ",")))"
+  }
+
+  /// The SQL rendering of `LooseEndStatus.searchable(includeClosed:)` — the same allow-list the
+  /// canonical re-check applies, built from the enum's own raw values for the same reason
+  /// `stateFilter` is: a hand-written `'open'` here would reintroduce the mistyped-literal hazard
+  /// this codebase converted the enums to kill.
+  ///
+  /// Applied only to `documents`. `document_files` holds event rows exclusively — events are not
+  /// closable, and `onlyEventRowsEverCarryFilePaths` pins that — so a status filter there would be
+  /// dead SQL. A future producer that puts paths on a closable item must add one.
+  private static func statusFilter(alias: String = "", includeClosed: Bool) -> String {
+    let allowed = LooseEndStatus.searchable(includeClosed: includeClosed)
+    return "\(alias)item_status IN (\(allowed.map { "'\($0.rawValue)'" }.joined(separator: ",")))"
+  }
+
+  /// Update one document's status in place — cheap next to `rebuild`, which drops and reinserts the
+  /// entire corpus. (Not free: an `UPDATE` on an fts5 table is internally a delete + reinsert of the
+  /// row, term index included, even though `item_status` is UNINDEXED.) Updates every document sharing
+  /// the item id, so a translated document tracks its original — leaving one behind would put a German
+  /// row in a scope its English original is not in.
+  ///
+  /// The load-bearing direction is REOPEN, not close. A stale `done` makes the SQL filter exclude a
+  /// row that is live work, and the resolver cannot rescue it — it never sees the candidate, so the
+  /// end is simply unfindable (`aReopenedEndBecomesFindableAgainWithoutAFullRebuild`). A stale `open`
+  /// after a close is merely wasteful: `SearchQueries.search` over-fetches and grows `k`, so it
+  /// backfills around the row the resolver drops and still returns a correct, full page. An earlier
+  /// version of this comment claimed a stale index shrinks the result page; two tests written to prove
+  /// that passed with this method gutted, which is how the claim was found to be false.
+  ///
+  /// Deliberately does NOT touch `corpus_hash`: the stored hash stays stale, so the next daemon or
+  /// launch sync performs exactly ONE honest full rebuild instead of nine hundred.
+  public func updateStatus(itemID: String, status: String) {
+    guard let database else { return }
+    do {
+      try database.write { database in
+        try database.execute(sql: "UPDATE documents SET item_status = ? WHERE item_id = ?",
+                             arguments: [status, itemID])
+      }
+    } catch {
+      Log.search.error("SearchIndexStore: status update failed: \(error, privacy: .public)")
+    }
   }
 
   /// Logs rather than swallowing silently: every plausible regression in this file — a shape routed
