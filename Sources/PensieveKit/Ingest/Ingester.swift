@@ -249,26 +249,6 @@ extension Ingester {
     try NodeCommands.resurface(database, ids: chain)
   }
 
-  /// Cleans an on-device-proposed strand name into a terse organizational label: strips a
-  /// leading list/enumeration marker ("1. ", "2) ", "- ", "* ", "• "), wrapping quotes or
-  /// backticks, and trailing sentence punctuation. Returns nil for empty input so the caller
-  /// keeps the branch-key fallback name. Deterministic — the namer is outside the trust gate,
-  /// but its output still shouldn't read like a numbered list item or a full sentence.
-  static func sanitizeStrandName(_ raw: String) -> String? {
-    var sanitized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    if let marker = sanitized.range(of: #"^(\d+[.)]|[-*•])\s+"#, options: .regularExpression) {
-      sanitized.removeSubrange(marker)
-    }
-    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
-    sanitized = sanitized.trimmingCharacters(in: .whitespaces)
-    // Enforce the "terse label, not a sentence" contract this doc comment always claimed. Observed
-    // failures: a 101-char name and multi-sentence commit-message-shaped output sitting in the
-    // sidebar. nil → the caller keeps the deterministic branch-key fallback.
-    guard TextQuality.isTerseLabel(sanitized) else { return nil }
-    return sanitized
-  }
-
   /// Per-pass cap so a big first run (or a flush-and-reingest) can't stall the sync cycle on N
   /// sequential model calls. The `nameInferred` marker makes the remainder monotonic across passes.
   static let nameRefineCap = 20
@@ -319,7 +299,7 @@ extension Ingester {
       let raw = try? await llm.complete(prompt: ProjectContext.namePrompt(ctx))
       let firstLine = raw?.split(separator: "\n", omittingEmptySubsequences: true)
         .first.map(String.init) ?? ""
-      let name = Self.sanitizeStrandName(firstLine)
+      let name = TextQuality.sanitizeLabel(firstLine)
       let newMeta = Self.settingNameInferred(in: candidate.metadataJSON)
       try? writeSync { database in
         if let name {
@@ -380,7 +360,7 @@ extension Ingester {
     guard let out = try? await llm.complete(prompt: prompt) else { return }
     let lines = out.split(separator: "\n", omittingEmptySubsequences: true)
       .map { $0.trimmingCharacters(in: .whitespaces) }
-    guard let first = lines.first, let name = Self.sanitizeStrandName(first) else { return }
+    guard let first = lines.first, let name = TextQuality.sanitizeLabel(first) else { return }
     let desc = lines.count > 1 ? lines[1] : ""
     try? writeSync { database in
       try Node.where { $0.id.eq(strandID) }.update { $0.name = name; $0.description = desc }.execute(database)

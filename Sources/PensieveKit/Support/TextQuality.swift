@@ -39,4 +39,28 @@ enum TextQuality {
     guard !trimmedText.isEmpty, trimmedText.count <= labelLengthCap else { return false }
     return trimmedText.range(of: #"[.!?]\s+\p{Lu}"#, options: .regularExpression) == nil
   }
+
+  /// Cleans a model-proposed label into a terse organizational name: strips a leading
+  /// list/enumeration marker ("1. ", "2) ", "- ", "* ", "• "), wrapping quotes or backticks, and
+  /// trailing sentence punctuation. Returns nil when nothing usable survives, so the caller keeps
+  /// its own deterministic fallback. Deterministic — the namers sit outside the cited trust gate,
+  /// but their output still shouldn't read like a numbered list item or a full sentence.
+  ///
+  /// Two callers: `Ingester` (auto-birthed strand + project names) and `NodeLabeler` (a user's
+  /// typed description). It lived on `Ingester` until the second arrived; the shape recurs, so the
+  /// gate is shared rather than copied.
+  static func sanitizeLabel(_ raw: String) -> String? {
+    var sanitized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let marker = sanitized.range(of: #"^(\d+[.)]|[-*•])\s+"#, options: .regularExpression) {
+      sanitized.removeSubrange(marker)
+    }
+    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
+    sanitized = sanitized.trimmingCharacters(in: .whitespaces)
+    // Enforce the "terse label, not a sentence" contract. Observed failures: a 101-char name and
+    // multi-sentence commit-message-shaped output sitting in the sidebar. nil → the caller keeps
+    // its deterministic fallback.
+    guard isTerseLabel(sanitized) else { return nil }
+    return sanitized
+  }
 }

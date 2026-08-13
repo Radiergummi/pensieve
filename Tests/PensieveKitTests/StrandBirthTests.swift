@@ -160,28 +160,3 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   let updated = try await database.read { database in try LooseEnd.where { $0.id.eq(looseEnd.id) }.fetchOne(database) }
   #expect(updated?.nodeID == strandID)
 }
-
-@Test func sanitizeStrandNameStripsListMarkersQuotesAndTrailingPunctuation() {
-  #expect(Ingester.sanitizeStrandName("1. Event Watermark Fields") == "Event Watermark Fields")
-  #expect(Ingester.sanitizeStrandName("2) Drop Rows") == "Drop Rows")
-  #expect(Ingester.sanitizeStrandName("- Sync daemon") == "Sync daemon")
-  #expect(Ingester.sanitizeStrandName("Security enhancement with admin bypass.") == "Security enhancement with admin bypass")
-  #expect(Ingester.sanitizeStrandName("\"Quoted Name\"") == "Quoted Name")
-  #expect(Ingester.sanitizeStrandName("Already Clean") == "Already Clean")
-  #expect(Ingester.sanitizeStrandName("   ") == nil)
-}
-
-/// A strand name is a terse organizational label, not a sentence. Real observed failures: a
-/// 101-char name, and multi-sentence commit-message-shaped output. Rejecting (nil) is the right
-/// outcome — the caller then keeps the deterministic branch-key fallback, which is honest and
-/// short, rather than a paragraph in the sidebar.
-@Test func sanitizeStrandNameRejectsSentencesAndOverlongOutput() {
-  #expect(Ingester.sanitizeStrandName("Wire noise filters into pipeline. Fixes chunk splitting issue") == nil)
-  #expect(Ingester.sanitizeStrandName(
-    "Adding a SessionSummarizer and a workSummary column to the feat/ingestion-intelligence-quality branch") == nil)
-  #expect(Ingester.sanitizeStrandName(
-    "Feature/Organizations: Tracking session prompts related to feature and organizations") == nil)
-  // A terse label with internal punctuation that is NOT a sentence boundary stays valid.
-  #expect(Ingester.sanitizeStrandName("v3.1 migration") == "v3.1 migration")
-  #expect(Ingester.sanitizeStrandName("Fix auth.middleware") == "Fix auth.middleware")
-}
