@@ -107,14 +107,27 @@ The harness earns its keep mostly by *stopping* things. The salience gate above 
 
 **Requirements:** macOS 26+, Xcode 26.6, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (2.45+).
 
-The framework and its tests are SwiftPM; the app and CLI are Xcode targets.
+The framework and its tests are SwiftPM; the app and CLI are Xcode targets. The `Makefile` is where both live:
 
 ```sh
-# Tests — 524 tests across 5 suites
-./scripts/test.sh
-./scripts/test.sh --filter projectRoundTrips
+make            # list every target
+make all        # what CI checks: lint, tests, build, embedded-CLI smoke test
+make test       # 625 tests across 9 suites; or: make test FILTER=projectRoundTrips
+make lint
+make build      # regenerates the Xcode project, then builds the app and the CLI
+make install    # replace /Applications/Pensieve.app with the build
+```
 
-# Generate the Xcode project (project.yml is the source of truth)
+Steps are cached against their inputs, so a second `make all` with nothing changed is ~0.1s rather than ~30s. Touching a PensieveKit source re-lints, re-tests and rebuilds; touching only `.swiftlint.yml` re-lints alone; adding or removing a file under an Xcode target regenerates the project first. `make -B <target>` forces a step to run anyway, and `make clean` discards the records along with the build products.
+
+The bundle lands at `./.build-xcode/Build/Products/Debug/Pensieve.app`. The targets are thin dispatchers; the commands underneath are:
+
+```sh
+./scripts/test.sh                               # a thin `swift test` passthrough
+swiftlint lint --strict
+
+# Generate the Xcode project (project.yml is the source of truth, and the
+# generated .xcodeproj is gitignored — a stale one fails as a "not in scope" error)
 xcodegen generate
 
 # Build the app (this also builds and embeds the CLI)
@@ -122,16 +135,14 @@ xcodebuild -project Pensieve.xcodeproj -scheme Pensieve \
   -configuration Debug -derivedDataPath ./.build-xcode build
 ```
 
-The bundle lands at `./.build-xcode/Build/Products/Debug/Pensieve.app`.
-
-A fresh machine's first `xcodebuild` fails until the SwiftPM macro plugins are trusted — either click **Trust & Enable** when Xcode prompts, or run once:
+A fresh machine's first `xcodebuild` fails until the SwiftPM macro plugins are trusted. `make build` passes `-skipMacroValidation -skipPackagePluginValidation` (as CI does), which scopes that decision to the one invocation. Building by hand or from Xcode instead needs either a click on **Trust & Enable** when Xcode prompts, or, once:
 
 ```sh
 defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidation -bool YES
 defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
 ```
 
-**Wiring it up**, once the app is at `/Applications/Pensieve.app`:
+**Wiring it up**, once the app is at `/Applications/Pensieve.app` (`make install`):
 
 ```sh
 pensieve scan ~/Projects --recursive --accept   # discover git repos, install hooks
