@@ -2,18 +2,25 @@ import Foundation
 import SQLiteData
 import GRDB
 
-/// The user-facing fields of the New/Edit node modal, carried as one value so the write APIs
-/// that all take the same five values share one shape.
+/// The user-facing fields of the New/Edit node modal, carried as one value so the write APIs that
+/// all take the same values share one shape.
+///
+/// `description` has **no default on purpose**: it is written by `update`, so a defaulted empty
+/// string would silently blank an existing description for any caller that forgot to pass it.
+/// Compulsory means the compiler names every site instead.
 public struct NodeFields: Sendable {
   public var name: String
   public var kind: NodeKind
+  public var description: String
   public var icon: String
   public var colorTag: String
   public var context: String
 
-  public init(name: String, kind: NodeKind, icon: String = "", colorTag: String = "", context: String = "") {
+  public init(name: String, kind: NodeKind, description: String,
+              icon: String = "", colorTag: String = "", context: String = "") {
     self.name = name
     self.kind = kind
+    self.description = description
     self.icon = icon
     self.colorTag = colorTag
     self.context = context
@@ -104,8 +111,8 @@ public enum NodeCommands {
     }
   }
 
-  /// Atomic edit of a node's user-facing fields (the app's Edit modal). Leaves description,
-  /// parentID, state, branchKey untouched. Returns false — writing nothing — for an unknown id.
+  /// Atomic edit of a node's user-facing fields (the app's Edit modal). Leaves parentID, state and
+  /// branchKey untouched. Returns false — writing nothing — for an unknown id.
   @discardableResult
   public static func update(_ database: any DatabaseWriter, nodeID: UUID, fields: NodeFields) throws -> Bool {
     try database.write { database in
@@ -113,6 +120,7 @@ public enum NodeCommands {
       try Node.where { $0.id.eq(nodeID) }.update {
         $0.name = fields.name; $0.kind = fields.kind; $0.icon = fields.icon
         $0.colorTag = fields.colorTag; $0.context = fields.context
+        $0.description = fields.description
       }.execute(database)
       return true
     }

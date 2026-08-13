@@ -166,16 +166,17 @@ import SQLiteData
   let database = try openCanonicalDatabase(at: tempURL("node-update"))
   let node = try #require(try NodeCommands.add(database, name: "Old", kind: .project, parent: nil, description: "keep"))
   #expect(try NodeCommands.update(database, nodeID: node.id,
-                                  fields: NodeFields(name: "New", kind: .strand, icon: "sf:flag", colorTag: "pink")))
+                                  fields: NodeFields(name: "New", kind: .strand, description: "keep",
+                                                     icon: "sf:flag", colorTag: "pink")))
   let stored = try database.read { database in try Node.where { $0.id.eq(node.id) }.fetchOne(database) }
   #expect(stored?.name == "New")
   #expect(stored?.kind == NodeKind.strand)
   #expect(stored?.icon == "sf:flag")
   #expect(stored?.colorTag == "pink")
-  #expect(stored?.description == "keep")   // untouched fields preserved
+  #expect(stored?.description == "keep")   // round-tripped unchanged
   // Unknown id → false, nothing written.
   #expect(try NodeCommands.update(database, nodeID: UUID(),
-                                  fields: NodeFields(name: "x", kind: .task)) == false)
+                                  fields: NodeFields(name: "x", kind: .task, description: "")) == false)
 }
 
 @Test func addAndUpdateRoundTripContext() throws {
@@ -185,9 +186,31 @@ import SQLiteData
   #expect(proj.context == "personal")
 
   #expect(try NodeCommands.update(database, nodeID: proj.id,
-                                  fields: NodeFields(name: "Garden", kind: .project, context: "work")))
+                                  fields: NodeFields(name: "Garden", kind: .project, description: "", context: "work")))
   let reloaded = try database.read { database in try Node.where { $0.id.eq(proj.id) }.fetchOne(database) }
   #expect(reloaded?.context == "work")
+}
+
+@Test func updateWritesTheDescriptionAndRoundTripsAnUnchangedOne() throws {
+  let database = try openCanonicalDatabase(at: tempURL("update-description"))
+  let node = try #require(try NodeCommands.add(database, name: "Sync", kind: .project,
+                                               parent: nil, description: "the original text"))
+
+  // Editing other fields while passing the existing description back must preserve it — this is
+  // the Edit modal's round trip, and the regression this task's compulsory parameter guards.
+  #expect(try NodeCommands.update(database, nodeID: node.id,
+                                  fields: NodeFields(name: "Sync Agent", kind: .project,
+                                                     description: "the original text")))
+  var stored = try #require(try database.read { try Node.where { $0.id.eq(node.id) }.fetchOne($0) })
+  #expect(stored.name == "Sync Agent")
+  #expect(stored.description == "the original text")
+
+  // And a real description edit lands.
+  #expect(try NodeCommands.update(database, nodeID: node.id,
+                                  fields: NodeFields(name: "Sync Agent", kind: .project,
+                                                     description: "rewritten by hand")))
+  stored = try #require(try database.read { try Node.where { $0.id.eq(node.id) }.fetchOne($0) })
+  #expect(stored.description == "rewritten by hand")
 }
 
 @Test func archiveAndUnarchiveWholeSubtree() throws {

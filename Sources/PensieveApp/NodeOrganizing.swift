@@ -106,7 +106,7 @@ struct NodeEditor: View {
   }
 
   private func commit() {
-    let fields = NodeFields(name: name, kind: kind, icon: icon, colorTag: colorTag, context: context)
+    let fields = NodeFields(name: name, kind: kind, description: "", icon: icon, colorTag: colorTag, context: context)
     switch request.mode {
     case .new(let parent):
       model.commitNewNode(parent: parent, fields: fields)
