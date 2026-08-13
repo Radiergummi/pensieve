@@ -42,7 +42,7 @@ SWIFT_SOURCES := $(shell find Sources Tests -type f -name '*.swift')
 TEST_INPUTS := Package.swift $(shell find Sources/PensieveKit Tests ! -name '.*')
 BUILD_SOURCES := $(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
 
-.PHONY: help all test lint generate build cli smoke install clean
+.PHONY: help all test lint generate build cli smoke install run clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) \
@@ -121,6 +121,28 @@ install: $(APP_CLI) ## Replace /Applications/Pensieve.app with the built bundle
 	@ditto "$(APP)" "$(INSTALLED_APP)"
 	@echo "installed: $(INSTALLED_APP)"
 	@echo "note: launch it once so the sync agent re-registers its new cdhash."
+
+# The opposite prerequisite choice from install, on purpose: install is the
+# frequent chore, run is the deliberate "look at the real thing" gesture, and the
+# step cache makes a no-change run free anyway.
+#
+# Launching from here rather than Spotlight is the point. Every worktree build
+# registers another bundle under the same id, so Spotlight picks between them by
+# rules of its own — which is how a month-old copy ends up on screen looking like
+# a regression. This path names the bundle.
+#
+# install is invoked from the recipe rather than listed as a prerequisite because
+# the quit has to happen first, and prerequisites have no order among themselves.
+# The quit is graceful and guarded by pgrep — asking a *non*-running app to quit
+# launches it first, which would leave a copy of the old bundle running.
+run: all ## Build, install and launch /Applications/Pensieve.app
+	@if pgrep -qx Pensieve; then \
+		echo "quitting the running Pensieve…"; \
+		osascript -e 'quit app id "me.mazetti.pensieve"' >/dev/null 2>&1 || true; \
+		for _ in $$(seq 1 20); do pgrep -qx Pensieve || break; sleep 0.25; done; \
+	fi
+	@$(MAKE) --no-print-directory install
+	@open "$(INSTALLED_APP)"
 
 # Build products and step records only. Never touches $(INSTALLED_APP) — that is
 # the bundle SMAppService has registered, and `install` is the only path writing it.
