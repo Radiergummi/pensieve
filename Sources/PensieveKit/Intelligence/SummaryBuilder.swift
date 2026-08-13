@@ -17,19 +17,61 @@ public struct SummaryBuilder: Sendable {
   /// budget is hit.
   public static let factSheetBudget = 1800
 
-  /// Deterministic fact sheet the model is allowed to narrate — and nothing beyond it. Prefers
-  /// each event's grounded `workSummary` (Part B); falls back to the terse `summary` when absent.
+  /// The single definition of what an event contributes to a fact sheet — or `nil` when it
+  /// contributes nothing a recap could honestly be built from.
+  ///
+  /// The rule is structural, not textual, because Pensieve writes these `summary` strings itself:
+  /// `Ingester` gives a `git.commit` the commit subject (real content, line 104), a `git.checkout`
+  /// the string `"checkout <branch>"` (line 121) and a `cc.session` the string
+  /// `"session (N prompts)"` (line 168). The latter two are labels generated from a branch name and
+  /// a count — honest as labels, but not facts about the work. Handing them to the narrator produced
+  /// recaps like *"The sessions included 41, 54, 107, 41, 349, 28, and 410, and 1 prompts"*: the
+  /// model narrating, faithfully, a fact sheet that contained no facts.
+  ///
+  /// So an event is narratable iff it carries a real `workSummary`, or its terse `summary` is itself
+  /// content (`git.commit` only). Note this is a test of *content*, not of kind — a checkout that
+  /// somehow gained a `workSummary` is narratable, because the content is what matters.
+  ///
+  /// `EmbeddableCorpus.gather` already drops `git.checkout` for the search corpus on the same
+  /// reasoning; this brings the narrator's input in line with it.
+  public static func narratableContent(for event: Event) -> String? {
+    if let work = event.workSummary, !work.isEmpty { return work }
+    return event.kind == CaptureKind.gitCommit ? event.summary : nil
+  }
+
+  /// Deterministic fact sheet the model is allowed to narrate — and nothing beyond it. Built from
+  /// each event's `narratableContent`, so events that carry only a generated label contribute
+  /// nothing and an all-label node yields a sheet with no activity lines at all.
   public static func assembleFacts(project: Node, events: [Event]) -> String {
+    factSheet(project: project, lines: factLines(events: events))
+  }
+
+  /// The narratable activity lines, newest first — the shared source of truth for both the fact
+  /// sheet and the "is there anything to narrate at all" guard, so the two can never disagree
+  /// about the same event window.
+  ///
+  /// The recency window is applied BEFORE filtering, deliberately: this is "last work done", so a
+  /// node whose recent history is all labels must not have its recap backfilled from months ago.
+  /// Measured on the live store, that costs nothing — all 36 nodes whose recent 15 events are
+  /// entirely labels have zero narratable events anywhere in their history.
+  ///
+  /// Filtered events do not consume `factSheetBudget`; only what is actually narrated competes
+  /// for it.
+  private static func factLines(events: [Event]) -> [String] {
     var lines: [String] = []
     var used = 0
     for event in events.prefix(15) {
-      let content = (event.workSummary.map { !$0.isEmpty } ?? false) ? event.workSummary! : event.summary
+      guard let content = narratableContent(for: event) else { continue }
       let line = "- \(event.kind): \(content)"
       if used + line.count > factSheetBudget, !lines.isEmpty { break }
       lines.append(line)
       used += line.count
     }
-    return "Project: \(project.name)\nRecent activity:\n\(lines.joined(separator: "\n"))"
+    return lines
+  }
+
+  private static func factSheet(project: Node, lines: [String]) -> String {
+    "Project: \(project.name)\nRecent activity:\n\(lines.joined(separator: "\n"))"
   }
 
   /// The single constrained narration prompt — shared by `build` and `narrate` so the wording
@@ -52,7 +94,11 @@ public struct SummaryBuilder: Sendable {
     // than hand the model an empty fact sheet, which it "narrates" by hallucinating or echoing
     // the prompt. A loose end can't exist without a source event, so no events ⇒ nothing grounded.
     guard !status.recentEvents.isEmpty else { return nil }
-    let facts = Self.assembleFacts(project: status.project, events: status.recentEvents)
+    // Events exist but none of them says anything (only generated labels): nothing to narrate, so
+    // skip rather than spend a call producing a restatement of the labels. Symmetric with `narrate`.
+    let lines = Self.factLines(events: status.recentEvents)
+    guard !lines.isEmpty else { return nil }
+    let facts = Self.factSheet(project: status.project, lines: lines)
     let narration = (try? await provider.complete(prompt: Self.makePrompt(facts: facts))) ?? facts   // fall back to raw facts
     let ends = try LooseEndQueries.open(database, nodeID: status.project.id, now: now)
     return ProjectSummary(
@@ -67,7 +113,11 @@ public struct SummaryBuilder: Sendable {
   /// re-query) so the prose narrates exactly what the caller already displays.
   public func narrate(project: Node, events: [Event]) async -> String? {
     guard !events.isEmpty else { return nil }
-    let facts = Self.assembleFacts(project: project, events: events)
+    // No narratable content ⇒ return nil BEFORE the provider call. The fact sheet would otherwise
+    // consist of generated labels, and the model would faithfully narrate them into a facts-dump.
+    let lines = Self.factLines(events: events)
+    guard !lines.isEmpty else { return nil }
+    let facts = Self.factSheet(project: project, lines: lines)
     guard let raw = try? await provider.complete(prompt: Self.makePrompt(facts: facts)) else { return nil }
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed

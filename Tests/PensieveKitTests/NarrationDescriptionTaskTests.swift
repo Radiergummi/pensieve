@@ -15,8 +15,10 @@ private struct EchoProvider: LLMProvider {
 }
 
 @Test func narrationTaskPassesThroughModelProseWithEvents() async throws {
+  // Enriched session (`workSummary` present): an unenriched one carries only a generated
+  // "session (N prompts)" label, which `SummaryBuilder` deliberately refuses to narrate.
   let event = Event(nodeID: UUID(), sourceID: UUID(), occurredAt: Date(), kind: "cc.session",
-                     summary: "shipped auth", detailJSON: "{}")
+                     summary: "shipped auth", detailJSON: "{}", workSummary: "shipped auth")
   let item = CorpusItem.narration(NarrationCorpusItem(id: "n2", nodeName: "colibri", events: [EventDTO(event)]))
   let out = try await NarrationTask().run(item: item, model: EchoProvider(text: "worked on auth"), reference: EchoProvider(text: ""))
   #expect(out.text == "worked on auth")

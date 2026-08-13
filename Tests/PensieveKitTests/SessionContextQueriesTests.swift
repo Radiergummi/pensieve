@@ -37,8 +37,12 @@ private struct StubProvider: LLMProvider {
 /// Seeds one node with one event + one loose end; returns the node and the event.
 private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, event: Event) {
   let (node, source) = try ProjectResolver(database: database).resolve(path: "/p/one", kind: SourceKind.claudeCode)
+  // Carries a `workSummary`, i.e. an ENRICHED session. Without one, a `cc.session`'s summary is a
+  // generated label in production (`"session (N prompts)"`) and `SummaryBuilder` will not narrate
+  // it — so a fixture lacking it cannot exercise the narration paths below.
   let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
-                    kind: CaptureKind.ccSession, summary: "did the thing", detailJSON: "{}", fingerprint: "f1")
+                    kind: CaptureKind.ccSession, summary: "did the thing", detailJSON: "{}",
+                    fingerprint: "f1", workSummary: "did the thing")
   try database.write { database in
     try Event.insert { event }.execute(database)
     try LooseEnd.insert {
