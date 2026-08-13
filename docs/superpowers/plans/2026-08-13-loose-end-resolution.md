@@ -20,9 +20,13 @@ rendered into both the SQL filter and the canonical re-check, and four thin app 
 
 Every task's requirements implicitly include this section.
 
-- **`LooseEnd.isOpen` and `LooseEnd.openSQLPredicate` are NEVER edited.** `status.eq(.open)` already
-  excludes the new cases. An implementation that edits either has gone wrong — stop and re-read §3.3
-  of the spec.
+- **`LooseEnd.isOpen` changes by exactly one word, and its MEANING not at all.** It currently reads
+  `columns.status.eq("open") && columns.label.neq("noise")` (`LooseEnd.swift:32`); the raw literal
+  stops typechecking once `status` is an enum, so it becomes `.eq(LooseEndStatus.open)`. Nothing else
+  about it may change, `openSQLPredicate` (raw SQL) is genuinely untouched, and **no consumer of
+  either needs any edit**. An implementation that changes what `isOpen` *selects* has gone wrong; one
+  that retypes its literal has not. (An earlier draft of both documents claimed the file was never
+  edited. That was false, and following it produces a tree that does not compile.)
 - **The trust gate is untouched.** No task reads, writes or references
   `TranscriptVocabulary.injectionMarkers` or `TranscriptParser.isInjectedOrCommand`. No quote is
   edited or re-pointed.
@@ -82,9 +86,20 @@ Every task's requirements implicitly include this section.
 `Sources/pensieve/Commands/Next.swift`, `Sources/pensieve/Commands/Mcp.swift`,
 `Sources/PensieveApp/AppModel+Types.swift`, `Sources/PensieveApp/AppModel.swift`,
 `Sources/PensieveApp/AppModel+Recall.swift`, `Sources/PensieveApp/AppModel+Search.swift`,
-`Sources/PensieveApp/RootView.swift`, `Sources/PensieveApp/ContentListView.swift`,
+`Sources/PensieveApp/SidebarView.swift`, `Sources/PensieveApp/ContentListView.swift`,
 `Sources/PensieveApp/DetailView.swift`, `Sources/PensieveApp/LooseEndRow.swift`,
-`Sources/PensieveApp/Localizable.xcstrings`, plus six test files carrying `"resolved"` literals.
+`Sources/PensieveApp/NodeContextMenu.swift`, `Sources/PensieveApp/PensieveCommands.swift`,
+`Sources/PensieveApp/Localizable.xcstrings`, plus six test files carrying `"resolved"` literals and
+three whose assertions this plan changes (`SmartListsTests`, `SessionContextQueriesTests`,
+`SalienceReviewQueriesTests`).
+
+**`RootView.swift` is NOT modified.** The sidebar rows live in `Sources/PensieveApp/SidebarView.swift`
+(the Review Suggestions row is at `SidebarView.swift:22-33`); `RootView.swift` holds only the
+`NavigationSplitView`, the sheets and the one `.alert`. An earlier draft named the wrong file.
+
+**Command placement:** locate the app's existing `.commands` builder (the Find submenu ships as
+`FindCommands`) and add the resolve verbs beside it; the filename above is indicative — use whatever
+file already declares the app's command groups.
 
 **Task order is load-bearing in one place:** Task 5 (the allow-list + index schema + SQL filter) must
 land **before** Task 6 (widening the corpus). Reversed, the failure mode is a silently shrinking
@@ -265,8 +280,18 @@ and the initializer:
   }
 ```
 
-Leave `isOpen` and `openSQLPredicate` **exactly as they are**. Update only the comment on `isOpen`'s
-`status` reference if it names the old two-value pair.
+Then retype `isOpen`'s literal — this is required, not optional, and is the ONLY change permitted to
+it:
+
+```swift
+  public static func isOpen(_ columns: TableColumns) -> some QueryExpression<Bool> {
+    columns.status.eq(LooseEndStatus.open) && columns.label.neq("noise")
+  }
+```
+
+`openSQLPredicate` (raw SQL, line ~39) is genuinely untouched — the on-disk spelling has not changed,
+which is exactly why `looseEndOpenPredicatesAgree` keeps passing. Update the comment on the `status`
+property if it still names the old two-value pair.
 
 - [ ] **Step 6: Add migration v12**
 
@@ -282,16 +307,28 @@ migration block:
   }
 ```
 
-- [ ] **Step 7: Fix the two production string literals**
+- [ ] **Step 7: Remove the `status` filter from Review Suggestions (spec D9 / §7.3)**
 
-In `Sources/PensieveKit/Query/SalienceReviewQueries.swift`, both `pending` and `pendingCount` compare
-`$0.status.eq("open")`. Change both to:
+`SalienceReviewQueries.pending` and `pendingCount` both filter `$0.status.eq("open")`. Do **not**
+merely retype the literal — **drop the status clause entirely** from both:
 
 ```swift
-        .where { $0.status.eq(LooseEndStatus.open) && $0.label.eq(LooseEndLabel.unlabeled) && $0.labelSuggestion.neq("") }
+        .where { $0.label.eq(LooseEndLabel.unlabeled) && $0.labelSuggestion.neq("") }
 ```
 
-These are the only production comparisons against the raw string; the compiler will point at them.
+Add above the type's doc comment:
+
+```swift
+/// Deliberately NOT filtered by `status`: a closed loose end is still labellable. Triage is about to
+/// become the default surface, and 846 of 968 items are unlabeled — filtering on status would mean
+/// every item burned down destroys a training example that was never collected. "Was the extractor
+/// right" stays a meaningful question after "is this handled" has been answered.
+```
+
+This changes an existing test's expectation: `SalienceReviewQueriesTests.swift:30` seeds a resolved
+item precisely to assert it is excluded. Update that test — it should now assert the closed item IS
+returned, with a comment naming D9 as the reason. That is a deliberate behaviour change, not a
+regression.
 
 - [ ] **Step 8: Fix the test literals**
 
@@ -304,7 +341,7 @@ and adjust the tuple's declared type.
 - [ ] **Step 9: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, **629 tests** (625 + 4 new). Every `SchemaV4`…`SchemaV11` test must still pass
+Expected: PASS, +4 tests over the 625 baseline. Every existing schema suite (`SchemaTests`, `SchemaV3`, `SchemaV4`, `SchemaV7`–`SchemaV11`; there is no V5 or V6) must still pass
 unchanged — that is how the byte-identical on-disk claim is verified.
 
 - [ ] **Step 10: Commit**
@@ -430,7 +467,7 @@ Expected: PASS.
 - [ ] **Step 5: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, 632 tests.
+Expected: PASS, +3 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -550,26 +587,39 @@ Expected: FAIL — no such members.
 Append to `Sources/PensieveKit/Query/LooseEndQueries.swift`, inside `enum LooseEndQueries`:
 
 ```swift
-  /// The burn-down triage feed: every open loose end in an ACTIVE, Focus-visible node, oldest source
-  /// first — which is burn-down order, since the stalest item is the easiest to judge.
+  /// The burn-down triage feed: every open loose end in an ACTIVE, Focus-visible node, ordered
+  /// SUGGESTED-SALIENT FIRST, then oldest source — the ordering `SalienceReviewQueries` already uses.
+  ///
+  /// Not pure oldest-first, and the reason is measured: every loose end in this store is 0–2 months
+  /// old, and the first 200 in oldest-first order come from 13 nodes with 149 of them from three
+  /// projects. "Oldest" is not "stalest" on this corpus — it is "grind through three repos". Leading
+  /// with what a machine already thinks is a real loose end brings the scarce positives forward and
+  /// spreads the queue across projects.
   ///
   /// Scoping lives here rather than at the caller because this is a cross-node feed: `open(nodeID:)`
   /// is already scoped by the node the user picked, but a global list that quietly included archived
   /// or Focus-muted work would contradict every other list in the app.
   public static func openAcrossNodes(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>,
                                      now: Date) throws -> [LooseEndView] {
-    try views(database, visibleNodeIDs: visibleNodeIDs, now: now,
-              matching: { LooseEnd.isOpen($0) })
-      .sorted { $0.occurredAt < $1.occurredAt }
+    try openViews(database, visibleNodeIDs: visibleNodeIDs, now: now)
+      .sorted { left, right in
+        let leftRank = left.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
+        let rightRank = right.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
+        if leftRank != rightRank { return leftRank < rightRank }
+        return left.occurredAt < right.occurredAt
+      }
   }
 
   /// The Completed feed: closed loose ends in ACTIVE, Focus-visible nodes, most recently resolved
   /// first. Ordered by `resolvedAt` (not the source event) because this answers "what did I finish
   /// lately", and a loose end mined from a two-year-old session can be closed today.
+  /// 👎-labelled ends are excluded, here and in `closed(nodeID:)`: an item the user declared was
+  /// never a loose end has no place in a list they read as a record of their own work, and 98 rows
+  /// carry that label today. (Search excludes them for a different reason — they are not in the
+  /// corpus at all — so the two exclusions are independent, not one rule applied twice.)
   public static func closedAcrossNodes(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>,
                                        now: Date) throws -> [LooseEndView] {
-    try views(database, visibleNodeIDs: visibleNodeIDs, now: now,
-              matching: { $0.status.neq(LooseEndStatus.open) })
+    try closedViews(database, visibleNodeIDs: visibleNodeIDs, now: now)
       .sorted { ($0.looseEnd.resolvedAt ?? .distantPast) > ($1.looseEnd.resolvedAt ?? .distantPast) }
   }
 
@@ -580,26 +630,47 @@ Append to `Sources/PensieveKit/Query/LooseEndQueries.swift`, inside `enum LooseE
                             now: Date) throws -> [LooseEndView] {
     try database.read { database in
       let ends = try LooseEnd
-        .where { $0.nodeID.eq(nodeID) && $0.status.neq(LooseEndStatus.open) }
+        .where { $0.nodeID.eq(nodeID) && $0.status.neq(LooseEndStatus.open)
+                 && $0.label.neq(LooseEndLabel.noise) }
         .fetchAll(database)
       return try attachEvents(ends, database, now: now)
         .sorted { ($0.looseEnd.resolvedAt ?? .distantPast) > ($1.looseEnd.resolvedAt ?? .distantPast) }
     }
   }
 
-  /// Shared body of the two cross-node feeds: fetch by predicate, keep only ACTIVE nodes that are
-  /// also Focus-visible, then attach each end's source event. Node state is read from the store
-  /// rather than trusted from `visibleNodeIDs`, which carries Focus visibility only.
-  private static func views(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>, now: Date,
-                            matching predicate: (LooseEnd.TableColumns) -> some QueryExpression<Bool>)
-    throws -> [LooseEndView] {
+  /// The two cross-node feeds' shared body, written as two small functions rather than one taking a
+  /// predicate closure. `(LooseEnd.TableColumns) -> some QueryExpression<Bool>` is NOT expressible:
+  /// `some` is allowed in a parameter's own position (SE-0341) but not in the RESULT position of a
+  /// function-typed parameter, which would be a reverse-generic. Making it generic over the predicate
+  /// would work, but two four-line functions are plainer than one generic one, and only the filter +
+  /// event join genuinely need sharing.
+  private static func openViews(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>,
+                                now: Date) throws -> [LooseEndView] {
     try database.read { database in
-      let activeNodeIDs = Set(try Node.where { $0.state.eq(NodeState.active) }
-        .fetchAll(database).map(\.id))
-      let ends = try LooseEnd.where(predicate).fetchAll(database)
-        .filter { activeNodeIDs.contains($0.nodeID) && visibleNodeIDs.contains($0.nodeID) }
-      return try attachEvents(ends, database, now: now)
+      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
+      return try attachEvents(scoped(ends, visibleNodeIDs: visibleNodeIDs, database),
+                              database, now: now)
     }
+  }
+
+  private static func closedViews(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>,
+                                  now: Date) throws -> [LooseEndView] {
+    try database.read { database in
+      let ends = try LooseEnd
+        .where { $0.status.neq(LooseEndStatus.open) && $0.label.neq(LooseEndLabel.noise) }
+        .fetchAll(database)
+      return try attachEvents(scoped(ends, visibleNodeIDs: visibleNodeIDs, database),
+                              database, now: now)
+    }
+  }
+
+  /// Keep only ends whose node is ACTIVE and Focus-visible. Node state is read from the store rather
+  /// than trusted from `visibleNodeIDs`, which carries Focus visibility only.
+  private static func scoped(_ ends: [LooseEnd], visibleNodeIDs: Set<UUID>,
+                             _ database: Database) throws -> [LooseEnd] {
+    let activeNodeIDs = Set(try Node.where { $0.state.eq(NodeState.active) }
+      .fetchAll(database).map(\.id))
+    return ends.filter { activeNodeIDs.contains($0.nodeID) && visibleNodeIDs.contains($0.nodeID) }
   }
 
   /// Pairs each loose end with its source event's date, dropping any whose event has vanished —
@@ -623,14 +694,17 @@ it is the same code, and leaving two copies is how the four feeds start disagree
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `./scripts/test.sh --filter AcrossNodes`
-Expected: PASS. If the `matching:` closure's opaque return type fails to compile under SQLiteData's
-builder, replace the parameter with two explicit private functions (one per predicate) rather than
-weakening the predicate type — do not reach for `AnyQueryExpression`.
+Expected: PASS.
+
+Also add a test that both closed feeds exclude a 👎-labelled closed end (seed one with
+`status: .done, label: LooseEndLabel.noise` and assert it appears in neither `closedAcrossNodes` nor
+`closed(nodeID:)`), and one that `openAcrossNodes` puts a suggested-salient item before an older
+unsuggested one.
 
 - [ ] **Step 5: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, 635 tests.
+Expected: PASS, +5 tests (three feed tests, the 👎-exclusion test, the ordering test).
 
 - [ ] **Step 6: Commit**
 
@@ -666,11 +740,15 @@ EOF
 
 **Interfaces:**
 - Consumes: `NextItem` (existing: `project`, `openLooseEnds`, `daysDormant`, `score`).
-- Produces: `NextItem.isActionable: Bool`.
+- Produces: `NextItem.closedLooseEnds: Int`; `NextItem.isActionable: Bool`.
 
-**Correction to the spec:** §5 says the predicate is applied at two call sites. There are **three** —
-`Sources/pensieve/Commands/Next.swift:9` calls `NextQueries.ranked` directly rather than going
-through `SessionContextQueries`. Fix that sentence in the spec as part of this task's commit.
+**READ THIS BEFORE WRITING ANY CODE.** The obvious predicate — `openLooseEnds > 0` — is wrong and
+would gut the feature. Measured on the live store: 162 active nodes carry events, only **32** have any
+open loose end, and **123 of the remaining 130 have never had a single `cc.session` event**. Loose
+ends are mined only from Claude Code transcripts, so a git-only node can never satisfy that predicate
+no matter how much work goes into it; those nodes would disappear permanently from What's Next, MCP
+`whats_next`, `pensieve next` and the menu bar. *Finished* is the narrow, earned case: **it had open
+ends and they are all closed.**
 
 - [ ] **Step 1: Write the failing test**
 
@@ -713,6 +791,24 @@ Append to `Tests/PensieveKitTests/LooseEndResolutionTests.swift`:
   #expect(items.map(\.nodeID).contains(withWork.node))
   #expect(!items.map(\.nodeID).contains(finished.node))
 }
+
+/// THE test that guards the 123-node case. A git-only node never produces a loose end, so "no open
+/// ends" cannot mean "finished" for it — it means never measured, and unmeasured work must keep
+/// showing up. Without this, the naive predicate removes 130 of 162 nodes on day one.
+@Test func aNodeThatNeverHadALooseEndStaysInWhatsNext() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-never-measured"))
+  let node = Node(name: "Git only")
+  let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/repo/\(UUID().uuidString)")
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                    kind: CaptureKind.gitCommit, summary: "commit", detailJSON: "{}")
+  try database.write { database in
+    try Node.insert { node }.execute(database)
+    try Source.insert { source }.execute(database)
+    try Event.insert { event }.execute(database)
+  }
+  let lists = try SmartLists.compute(database, now: Date())
+  #expect(lists.whatsNext.map(\.project.id).contains(node.id))
+}
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -722,20 +818,34 @@ Expected: FAIL — the finished node is still in `whatsNext` and in `rankedConte
 
 - [ ] **Step 3: Add the predicate**
 
-In `Sources/PensieveKit/Query/NextQueries.swift`, after the `NextItem` struct:
+In `Sources/PensieveKit/Query/NextQueries.swift`, add `closedLooseEnds` to `NextItem` (and to its
+memberwise init and the construction inside `ranked`), then:
 
 ```swift
 extension NextItem {
-  /// Is there anything here to pick up? Dormancy is a strong "you forgot this" signal, but it is not
-  /// *work*: a node with no open loose ends has nothing to do, however long it has been quiet.
+  /// Is there anything here to pick up? True when open work remains — and ALSO true when this node
+  /// has never produced a loose end at all. Loose ends come only from Claude Code transcripts, and
+  /// 123 of this store's 162 active nodes are git-only, so for them "no open ends" means "never
+  /// measured", not "finished". Treating those as done empties the list without anyone finishing
+  /// anything.
   ///
-  /// The single definition, applied by every surface that answers "what should I pick up next" —
+  /// Not actionable is therefore the narrow, earned case: it HAD open ends and they are all closed.
+  ///
+  /// The single definition, applied by the three surfaces that answer "what should I pick up next" —
   /// `SmartLists.whatsNext`, `SessionContextQueries.rankedContext` (MCP `whats_next`) and the CLI's
-  /// `pensieve next`. It is deliberately NOT applied inside `ranked`, which also feeds Dormant and
-  /// Recently Active: those answer "what is quiet" and "what moved", and a finished project belongs
-  /// in both.
-  public var isActionable: Bool { openLooseEnds > 0 }
+  /// `pensieve next`. Deliberately NOT applied inside `ranked`, which also feeds Dormant and Recently
+  /// Active: those answer "what is quiet" and "what moved", and a finished project belongs in both.
+  public var isActionable: Bool { openLooseEnds > 0 || closedLooseEnds == 0 }
 }
+```
+
+In `ranked`, count the closed ends beside the open ones — the same shape as the existing per-node
+count, keeping this query's N+1 structure rather than introducing a second one:
+
+```swift
+        let closed = try LooseEnd.where { $0.nodeID.eq(project.id)
+                                          && $0.status.neq(LooseEndStatus.open) }
+          .fetchCount(database)
 ```
 
 - [ ] **Step 4: Apply it at all three call sites**
@@ -776,17 +886,29 @@ Expected: PASS.
 - [ ] **Step 6: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, 637 tests. **If an existing `SmartLists` or `NextQueries` test now fails**, read it
-before changing it: a test asserting that an end-less node appears in What's Next is asserting the
-behaviour this task deliberately changes, and should be updated with a comment saying so. A test
-about Dormant or Recently Active membership failing means the filter was applied too broadly — fix
-the code, not the test.
 
-- [ ] **Step 7: Correct the spec**
+**Two existing tests are expected to fail, and both are pre-identified.** Read each before touching
+it:
 
-In `docs/superpowers/specs/2026-08-13-loose-end-resolution-design.md` §5, change "Applied at exactly
-two places" to three, and list `Sources/pensieve/Commands/Next.swift` as its own call site instead of
-folding it under `SessionContextQueries`.
+- `Tests/PensieveKitTests/SmartListsTests.swift:26` — `#expect(lists.whatsNext.count == 2)`. Its
+  fixture seeds two nodes with one event each and **zero loose ends**. Under the corrected predicate
+  those nodes are "never measured" and **stay** in What's Next, so this assertion should still hold.
+  If it does not, the predicate was implemented as the naive `openLooseEnds > 0` — fix the code.
+- `Tests/PensieveKitTests/SessionContextQueriesTests.swift:134` —
+  `#expect(try SessionContextQueries.rankedContext(...).count == 2)`. Only the `work` node has a
+  loose end; `personal` has none and is therefore also "never measured", so this should still hold
+  too.
+
+`NextQueriesTests.swift` is unaffected — `ranked` itself is unchanged apart from the added count.
+
+If a Dormant or Recently Active assertion fails, the filter was applied too broadly — fix the code,
+not the test.
+
+- [ ] **Step 7: Confirm the spec already matches**
+
+§5 of the spec was corrected on 2026-08-13 (commit `791b1c5`) and already states the three call sites
+and the two-part predicate. Re-read it against what you implemented; if they disagree, the code is
+wrong, not the spec.
 
 - [ ] **Step 8: Commit**
 
@@ -1023,18 +1145,70 @@ keeps its existing signature.
                      includeClosed: Bool = false) -> [SearchIndexHit] {
 ```
 
-- [ ] **Step 7: Run to verify they pass**
+- [ ] **Step 7: Add the targeted status update**
+
+Folding `status` into the corpus hash is correct, and on its own it would make every one of 968
+closes rebuild the whole index — on this store ~3,700 FTS5 documents including a JSON decode per
+event. `item_status` is `UNINDEXED`, so it can be written in place. Add to `SearchIndexStore`:
+
+```swift
+  /// Update one document's status in place. `item_status` is an UNINDEXED column, so this touches no
+  /// FTS5 term index and costs nothing next to `rebuild`, which drops and reinserts the entire
+  /// corpus. Updates every document sharing the item id, so a translated document tracks its
+  /// original — leaving one behind would put a German row in a scope its English original is not in.
+  ///
+  /// Deliberately does NOT touch `corpus_hash`: the stored hash stays stale, so the next daemon or
+  /// launch sync performs exactly ONE honest full rebuild instead of nine hundred.
+  public func updateStatus(itemID: String, status: String) {
+    guard let database else { return }
+    do {
+      try database.write { database in
+        try database.execute(sql: "UPDATE documents SET item_status = ? WHERE item_id = ?",
+                             arguments: [status, itemID])
+      }
+    } catch {
+      Log.search.error("SearchIndexStore: status update failed: \(error, privacy: .public)")
+    }
+  }
+```
+
+And a test that closes the loop the agreement test cannot reach — it builds index and canonical in
+lockstep, which is precisely why the first draft of this plan missed the staleness:
+
+```swift
+/// After a close, the default-scope page must not silently shrink. The agreement test builds index
+/// and canonical together and so cannot catch a write path that updates only one of them.
+@Test func aClosedEndLeavesTheDefaultScopeWithoutShrinkingThePage() throws {
+  let database = try openCanonicalDatabase(at: tempURL("stale-close"))
+  let keptID = try seedLooseEnd(database, text: "kestrel alpha", quote: "kestrel alpha")
+  let closedID = try seedLooseEnd(database, text: "kestrel beta", quote: "kestrel beta")
+  let store = SearchIndexStore(url: tempURL("stale-close-index"))
+  let corpus = try EmbeddableCorpus.gather(database)
+  store.rebuild(items: corpus, corpusHash: SearchIndexer.corpusHash(corpus))
+
+  #expect(try LooseEndCommands.resolve(database, id: closedID, status: .done))
+  store.updateStatus(itemID: closedID.uuidString, status: LooseEndStatus.done.rawValue)
+
+  let visible = Set(try database.read { try Node.all.fetchAll($0) }.map(\.id))
+  let hits = SearchQueries.search(query: "kestrel",
+                                  scope: SearchScope(visibleNodeIDs: visible),
+                                  store: store, database)
+  #expect(hits.map(\.id) == [keptID])
+}
+```
+
+- [ ] **Step 8: Run to verify they pass**
 
 Run: `./scripts/test.sh --filter SearchStatus`
 Expected: PASS.
 
-- [ ] **Step 8: Run the full suite**
+- [ ] **Step 9: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, 641 tests. Existing `SearchIndexStore` tests keep passing because `includeClosed`
-defaults to `false` and every existing item defaults to `status: "open"`.
+Expected: PASS. Existing `SearchIndexStore` tests keep passing because `includeClosed` defaults to
+`false` and every existing item defaults to `status: "open"`.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add Sources/PensieveKit Tests/PensieveKitTests
@@ -1133,14 +1307,21 @@ In `EmbeddableCorpus.gather`, replace the loose-end fetch and its loop:
         // document that re-appended the English quote would manufacture a duplicate hit, and the
         // quote is verbatim provenance that must never be adjacent to a translation.
         appendTranslatedLooseEnd(.looseEndText, of: looseEnd.text, kind: "loose_end",
-                                 from: looseEnd, state: state)
+                                 from: looseEnd, state: state, status: looseEnd.status.rawValue)
       }
 ```
 
-`appendTranslatedLooseEnd` must carry the same status as the original it shadows — add a `status`
-parameter and pass `looseEnd.status.rawValue`, for the same reason its doc comment already gives
-about `kind`: a translated document that disagreed with its original about eligibility would appear
-in a scope its original does not.
+**`appendTranslatedLooseEnd` MUST gain that `status` parameter and pass it into the `EmbeddableItem`
+it appends** — the call above already does, and the helper's signature has to match. This is not
+optional cleanup: `EmbeddableItem.status` defaults to `"open"`, so a helper left unchanged emits a
+German document for a *closed* loose end tagged `open`. That document then passes the SQL filter in
+the default scope and is dropped by the resolver — the exact §8.1 page-shrinking failure, reachable
+only through the translation path. Extend the helper's doc comment with the same reasoning it already
+carries for `kind`: a translated document that disagreed with its original about eligibility would
+appear in a scope its original does not.
+
+Add a test alongside Task 6's others that seeds a closed loose end with a stored translation and
+asserts **both** its documents carry the closed status.
 
 Update the type doc comment: "active AND archived nodes + their open loose ends" becomes "+ their
 loose ends, open and closed (👎-labelled ones excluded)".
@@ -1153,7 +1334,7 @@ Expected: PASS.
 - [ ] **Step 5: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, 643 tests.
+Expected: PASS, +3 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1319,7 +1500,7 @@ Expected: PASS.
 - [ ] **Step 7: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, 644 tests.
+Expected: PASS, +2 tests (the agreement test and its translated-document case).
 
 - [ ] **Step 8: Commit**
 
@@ -1431,7 +1612,7 @@ store after reinstalling the app.
 - [ ] **Step 5: Run the full suite**
 
 Run: `./scripts/test.sh`
-Expected: PASS, 644 tests (no Kit change in this task).
+Expected: PASS, unchanged (no Kit change in this task).
 
 - [ ] **Step 6: Commit**
 
@@ -1485,6 +1666,12 @@ In `Sources/PensieveApp/AppModel+Recall.swift`, after `setLooseEndLabel`:
     do {
       let succeeded = try LooseEndCommands.resolve(database, id: looseEndID, status: status)
       if succeeded {
+        // The index must not lag the write. `refresh()` does NOT sync the search indexes — only
+        // `drainThenRefresh` and `refreshFromWatch` do — so without this the index keeps calling the
+        // row open: it passes the SQL filter, the resolver drops it on the canonical re-check, and
+        // because LIMIT is applied in SQL the result page silently shrinks. A targeted UNINDEXED
+        // update rather than `syncSearchIndexes()`, which would rebuild ~3,700 documents per close.
+        searchIndexStore?.updateStatus(itemID: looseEndID.uuidString, status: status.rawValue)
         undoManager?.registerUndo(withTarget: self) { model in
           model.resolveLooseEnd(looseEndID, previous, previous: status, undoManager: undoManager)
         }
@@ -1501,6 +1688,11 @@ In `Sources/PensieveApp/AppModel+Recall.swift`, after `setLooseEndLabel`:
 
 `refresh()` is called on success because the row must leave the open feed (unlike `setLabel`, whose
 row already re-filters on the next reload).
+
+`searchIndexStore` is whichever `SearchIndexStore` instance `AppModel` already holds for
+`syncSearchIndexes` — reuse it; do not construct a second one, since two handles on the same file
+would each carry their own busy-timeout behaviour. If the existing one is created per-sync rather
+than stored, hoist it to an `@ObservationIgnored` property first.
 
 - [ ] **Step 2: Create the shared verb menu**
 
@@ -1538,7 +1730,10 @@ struct LooseEndStatusMenu: View {
 
 - [ ] **Step 3: Wire the row**
 
-In `Sources/PensieveApp/LooseEndRow.swift`, add the input beside `onLabel`:
+In `Sources/PensieveApp/LooseEndRow.swift`, add the input **immediately after `onTranslate` and
+before `expandedLooseEndID`** — the struct's memberwise initializer takes arguments in declaration
+order, and every call site in Tasks 9–11 passes `onResolve` after `onTranslate`. Declaring it beside
+`onLabel` instead (position 4) makes all three call sites fail to compile.
 
 ```swift
   /// Resolves this loose end: `(looseEndID, newStatus, previousStatus)`. `nil` in surfaces that do
@@ -1577,8 +1772,13 @@ common action is first:
 And add swipe actions on the row (outside the `.contextMenu`, on the same `VStack`):
 
 ```swift
-    // Swipe is the burn-down affordance; the context menu is the discoverable one. Both render
-    // `LooseEndStatusMenu`'s verbs so they cannot drift apart.
+    // Swipe is a pointer affordance in the List-backed feeds; the context menu is the discoverable
+    // one everywhere; the keyboard verbs in Step 3b are the burn-down one. All three render the same
+    // two commands so they cannot drift apart.
+    //
+    // NOTE: this is INERT in `DetailView`, which renders loose ends in a VStack inside a ScrollView
+    // rather than a List. That is expected, not a regression — the detail pane is covered by the
+    // context menu and the menu commands.
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
       if onResolve != nil, currentStatus == .open {
         Button("Mark as done") { resolve(.done) }.tint(.green)
@@ -1586,6 +1786,48 @@ And add swipe actions on the row (outside the `.contextMenu`, on the same `VStac
       }
     }
 ```
+
+- [ ] **Step 3b: Add the keyboard verbs (spec §6 — required, not optional)**
+
+Without these the queue is pointer-only, and the undo registered above is justified by "a mis-key
+must be one ⌘Z away" with no key to mis-hit. At 968 items this is the difference between a queue and
+a chore.
+
+Find the file declaring the app's existing command groups (the shipped Find submenu is `FindCommands`,
+added via `CommandGroup(after: .textEditing)` because this SDK has no `.find` placement) and add a
+sibling group. Follow `FindCommands`' pattern exactly, including how it reaches the focused scene's
+state via an explicit `FocusedValueKey` — `@FocusedValue` has no `init(_ objectType:)` for a plain
+`@Observable` class in this SDK, which is why the shipped code does it that way:
+
+```swift
+/// Resolve verbs for the selected row of a loose-end feed. `⌘⏎` / `⌥⌘⏎` / `⇧⌘⏎` deliberately avoid
+/// bare letters (List type-ahead) and the shipped ⌘F / ⌥⌘F / ⌘G find bindings.
+struct LooseEndCommands: Commands {
+  @FocusedValue(\.looseEndSelection) private var selection: LooseEndSelection?
+
+  var body: some Commands {
+    CommandGroup(after: .pasteboard) {
+      Divider()
+      Button("Mark as Done") { selection?.resolve(.done) }
+        .keyboardShortcut(.return, modifiers: .command)
+        .disabled(selection?.canClose != true)
+      Button("Drop") { selection?.resolve(.dropped) }
+        .keyboardShortcut(.return, modifiers: [.option, .command])
+        .disabled(selection?.canClose != true)
+      Button("Reopen") { selection?.resolve(.open) }
+        .keyboardShortcut(.return, modifiers: [.shift, .command])
+        .disabled(selection?.canReopen != true)
+    }
+  }
+}
+```
+
+`LooseEndSelection` is a tiny value the feed column publishes as a focused value: the selected loose
+end's id, its current status (so the three buttons enable correctly), and a `resolve` closure onto
+`AppModel.resolveLooseEnd`. Publish it from `ContentListView` when the middle column is showing
+`.triage` or `.completed`, and **not otherwise** — the verbs must be disabled everywhere else rather
+than acting on a stale selection. Register the group in the `App`'s `.commands` beside the existing
+ones.
 
 - [ ] **Step 4: Pass it from the two existing call sites**
 
@@ -1612,7 +1854,17 @@ Add to `Sources/PensieveApp/Localizable.xcstrings` (en base + de), by hand:
 | `Drop` | Drop | Verwerfen |
 | `Reopen` | Reopen | Wieder öffnen |
 | `Mark as dropped` | Mark as dropped | Als verworfen markieren |
+| `Mark as Done` | Mark as Done | Als erledigt markieren |
 | `Resolve Loose End` | Resolve Loose End | Losen Faden abschließen |
+
+`Mark as Done` is a separate key from `Mark as done` on purpose: menu items take Title Case, inline
+buttons do not, and String Catalog keys are case-sensitive. `Drop` and `Reopen` are shared by both
+surfaces, which is correct — they are the same word in both registers.
+
+**Before adding any row, check whether the key already exists in the catalog with a different
+value.** This bit the project once already: the catalog holds `"Done"` → de `"Fertig"`, consumed by
+`FindBar.swift:28`'s dismiss button, so a new `"Done"` row would silently relabel the find bar. None
+of the five keys above collides, but Task 10 adds one that does.
 
 - [ ] **Step 6: Build and smoke**
 
@@ -1755,9 +2007,11 @@ with the cited row expanded, so you judge against full provenance rather than a 
 
 - [ ] **Step 4: Add the two sidebar rows**
 
-In `Sources/PensieveApp/RootView.swift`, beside the existing Review Suggestions row (which tags
-`SidebarSelection.reviewSuggestions` with a `checklist` icon), add two rows tagging `.triage` and
-`.completed`. Match the existing row's `Label { … } icon: { … }` structure exactly:
+In **`Sources/PensieveApp/SidebarView.swift`** — not `RootView.swift`, which holds only the
+`NavigationSplitView`, the sheets and the `.alert` — beside the existing Review Suggestions row at
+`SidebarView.swift:22-33` (which tags `SidebarSelection.reviewSuggestions` with a `checklist` icon),
+add two rows tagging `.triage` and `.completed`. Match the existing row's `Label { … } icon: { … }`
+structure exactly:
 
 ```swift
       Label {
@@ -1875,8 +2129,10 @@ struct LooseEndStatusBadge: View {
   var body: some View {
     switch status {
     case .open: EmptyView()
-    case .done: badge(Text("Done"), .green)
-    case .dropped: badge(Text("Dropped"), .secondary)
+    // Own catalog keys, NOT the bare "Done" — that key exists and belongs to FindBar's dismiss
+    // button, where its German is "Fertig".
+    case .done: badge(Text("Loose end done"), .green)
+    case .dropped: badge(Text("Loose end dropped"), .secondary)
     }
   }
 
@@ -1914,13 +2170,19 @@ Add `@Environment(\.undoManager) private var undoManager` to `ContentListView`.
 | `Completed` | Completed | Abgeschlossen |
 | `No open loose ends` | No open loose ends | Keine losen Fäden offen |
 | `Nothing completed yet` | Nothing completed yet | Noch nichts abgeschlossen |
-| `Done` | Done | Erledigt |
-| `Dropped` | Dropped | Verworfen |
-| `%lld open` | %lld open | %lld offen |
+| `Loose end done` | Done | Erledigt |
+| `Loose end dropped` | Dropped | Verworfen |
 | `%lld closed` | %lld closed | %lld abgeschlossen |
 
-Check whether `%lld open` already exists (the menu-bar popover uses an "open" count string) and reuse
-the existing key rather than adding a near-duplicate.
+**Do NOT add a bare `"Done"` key.** The catalog already holds `"Done"` → de `"Fertig"`, consumed by
+`FindBar.swift:28`'s dismiss button; adding a row would silently relabel the find bar to "Erledigt",
+and reusing the existing entry would render the badge as "Fertig", which is not the intended word
+either. The badge therefore uses its own keys — `"Loose end done"` / `"Loose end dropped"` — whose
+English *values* are still "Done" / "Dropped". Reference them in `LooseEndStatusBadge` as
+`Text("Loose end done")`, not `Text("Done")`.
+
+`%lld open` already exists (→ de `%lld offen`) and is reused rather than re-added. `Include Archived`
+also exists (→ de `Archivierte einschließen`) and is retired in Task 11.
 
 - [ ] **Step 7: Build, smoke, and check the line count**
 
@@ -1996,7 +2258,16 @@ and load it in the same `.task` that sets `looseEnds` (around line 120):
       closedLooseEnds = model.closedLooseEnds(forNode: node.id)
 ```
 
-Inside the existing `if showsLooseEnds { section("Loose Ends") { … } }`, after the `ForEach`, add:
+**Placement is load-bearing.** Put the disclosure at the very BOTTOM of the pane's `VStack` — after
+Recent Activity, not inside the Loose Ends section. An earlier draft placed it inside that section
+and justified deferring find-indexing with "closed ends render after everything else", which was
+false: the recap (`DetailView.swift:69`) and Recent Activity (`:87`) both follow Loose Ends, so
+appending closed slots to `NodeFindDocument` would have put them after `.narration` and every
+`.event` — violating the "match order equals on-screen order" contract and recreating the exact
+slice-A × in-node-find defect the spec cites as its own justification. Rendering it last makes the
+sentence true and keeps the deferral honest.
+
+Still gate it on `showsLooseEnds`, so a childless focused strand does not grow a stray section:
 
 ```swift
               // The record, collapsed. Rendered only when non-empty: an always-present "Done · 0"
@@ -2030,9 +2301,14 @@ Add `@Environment(\.undoManager) private var undoManager` if Task 9 did not alre
 
 **Do NOT add these rows to `NodeFindDocument`.** In-node ⌘F over the disclosure is deliberately out of
 scope (spec §7.1): the document's contract is that match order equals on-screen order via
-pre-allocated per-loose-end slots, and closed rows render after everything else, so appending their
-slots later stays compatible. Adding them now without extending that contract would reintroduce the
-exact defect the slice-A × in-node-find merge produced.
+pre-allocated per-loose-end slots, and — *given the placement above* — closed rows now genuinely do
+render after everything else, so appending their slots later stays compatible. Adding them now
+without extending that contract would reintroduce the exact defect the slice-A × in-node-find merge
+produced.
+
+Known day-one consequence, accepted: ⌘F over an expanded "Done · N" reports no matches for text
+plainly on screen. It is behind a collapsed disclosure of already-closed work, which is the least bad
+place in the pane for that gap.
 
 - [ ] **Step 3: Widen the search scope**
 
@@ -2127,14 +2403,184 @@ EOF
 
 ---
 
+### Task 12: Per-node bulk close
+
+Added after adversarial review (spec D10). 288 open ends sit on one node; item-by-item is not a path
+for that tail, and `resolve(status: .open)` reverses the verb, so the "indistinguishable from data
+loss" framing that first deferred it does not hold.
+
+**Files:**
+- Modify: `Sources/PensieveKit/Query/LooseEndCommands.swift`
+- Modify: `Sources/PensieveApp/AppModel+Recall.swift`
+- Modify: `Sources/PensieveApp/NodeContextMenu.swift`
+- Modify: `Sources/PensieveApp/Localizable.xcstrings`
+- Modify: `Tests/PensieveKitTests/LooseEndResolutionTests.swift`
+
+**Interfaces:**
+- Consumes: `LooseEndCommands.resolve`, `LooseEndStatus`.
+- Produces: `LooseEndCommands.resolveAllOpen(_ database:, nodeID: UUID, status: LooseEndStatus, now: Date) throws -> [UUID]`
+  (the ids it actually closed, so undo can reopen exactly that set).
+
+- [ ] **Step 1: Write the failing test**
+
+```swift
+@Test func bulkCloseClosesOnlyThisNodesOpenEndsAndReportsThem() throws {
+  let database = try openCanonicalDatabase(at: tempURL("les-bulk"))
+  let mine = try seedIn(database, nodeState: .active, status: .open)
+  let other = try seedIn(database, nodeState: .active, status: .open)
+  let alreadyClosed = try database.write { database -> UUID in
+    let event = try Event.where { $0.nodeID.eq(mine.node) }.fetchOne(database)!
+    let looseEnd = LooseEnd(nodeID: mine.node, sourceEventID: event.id, text: "t", quote: "already",
+                            status: .dropped,
+                            resolvedAt: Date(timeIntervalSince1970: 1_700_000_000))
+    try LooseEnd.insert { looseEnd }.execute(database)
+    return looseEnd.id
+  }
+
+  let closed = try LooseEndCommands.resolveAllOpen(database, nodeID: mine.node, status: .done,
+                                                   now: Date())
+  #expect(closed == [mine.looseEnd])   // only the OPEN one, and only on this node
+
+  let stored = try database.read { try LooseEnd.all.fetchAll($0) }
+  #expect(stored.first { $0.id == other.looseEnd }?.status == .open)      // other node untouched
+  #expect(stored.first { $0.id == alreadyClosed }?.status == .dropped)    // not re-stamped
+}
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `./scripts/test.sh --filter bulkClose`
+Expected: FAIL — no `resolveAllOpen`.
+
+- [ ] **Step 3: Implement it**
+
+```swift
+  /// Close every OPEN loose end on one node, returning the ids it changed so the caller can register
+  /// a single undo that reopens exactly that set. Already-closed ends are left alone — re-stamping
+  /// their `resolvedAt` would move work you finished weeks ago to the top of the Completed feed.
+  ///
+  /// 👎-labelled ends ARE included: they are open by `status`, and leaving them behind would mean the
+  /// count in the confirmation dialog disagreed with what the node's open feed shows.
+  @discardableResult
+  public static func resolveAllOpen(_ database: any DatabaseWriter, nodeID: UUID,
+                                    status: LooseEndStatus, now: Date = Date()) throws -> [UUID] {
+    try database.write { database in
+      let open = try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq(LooseEndStatus.open) }
+        .fetchAll(database)
+      guard !open.isEmpty else { return [] }
+      let stamp: Date? = status.isClosed ? now : nil
+      try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq(LooseEndStatus.open) }.update {
+        $0.status = status
+        $0.resolvedAt = #bind(stamp)
+      }.execute(database)
+      return open.map(\.id)
+    }
+  }
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+Run: `./scripts/test.sh --filter bulkClose`
+Expected: PASS.
+
+- [ ] **Step 5: Wire the app action**
+
+In `AppModel+Recall.swift`:
+
+```swift
+  /// Close every open end on a node in one action, with ONE undo that reopens exactly the set it
+  /// closed — not "reopen everything on this node", which would resurrect ends closed weeks ago.
+  func closeAllLooseEnds(onNode nodeID: UUID, undoManager: UndoManager?) {
+    guard let database else { return }
+    do {
+      let closed = try LooseEndCommands.resolveAllOpen(database, nodeID: nodeID, status: .done)
+      for id in closed {
+        searchIndexStore?.updateStatus(itemID: id.uuidString, status: LooseEndStatus.done.rawValue)
+      }
+      undoManager?.registerUndo(withTarget: self) { model in
+        model.reopenLooseEnds(closed, undoManager: undoManager)
+      }
+      undoManager?.setActionName(String(localized: "Close All Loose Ends"))
+      refresh()
+    } catch {
+      fail(String(localized: "update"), String(localized: "this node"), error)
+    }
+  }
+
+  /// Undo's inverse of `closeAllLooseEnds`. Registers its own redo so ⌘Z / ⇧⌘Z toggles cleanly.
+  private func reopenLooseEnds(_ ids: [UUID], undoManager: UndoManager?) {
+    guard let database else { return }
+    for id in ids {
+      _ = try? LooseEndCommands.resolve(database, id: id, status: .open)
+      searchIndexStore?.updateStatus(itemID: id.uuidString, status: LooseEndStatus.open.rawValue)
+    }
+    undoManager?.registerUndo(withTarget: self) { model in
+      for id in ids { _ = try? LooseEndCommands.resolve(database, id: id, status: .done) }
+      model.refresh()
+    }
+    refresh()
+  }
+```
+
+In `NodeContextMenu.swift`, add the item plus a `.confirmationDialog` naming the count — the dialog
+is what makes the verb reviewable, since the plan deliberately does not show the items first:
+
+```swift
+      Button("Close all open loose ends…", role: .destructive) { confirmingBulkClose = true }
+```
+
+- [ ] **Step 6: Strings**
+
+| Key | en | de |
+|---|---|---|
+| `Close all open loose ends…` | Close all open loose ends… | Alle offenen losen Fäden abschließen … |
+| `Close %lld loose ends?` | Close %lld loose ends? | %lld lose Fäden abschließen? |
+| `They can be reopened individually or with ⌘Z.` | They can be reopened individually or with ⌘Z. | Sie lassen sich einzeln oder mit ⌘Z wieder öffnen. |
+| `Close All Loose Ends` | Close All Loose Ends | Alle losen Fäden abschließen |
+
+- [ ] **Step 7: Build, smoke, lint, then commit**
+
+```bash
+git add Sources/PensieveKit Sources/PensieveApp Tests/PensieveKitTests
+git commit -F - <<'EOF'
+feat: close every open loose end on one node, with one undo
+
+288 open ends sit on a single node, so item-by-item is not a path for
+that tail. The verb is reversible, which is why the "indistinguishable
+from data loss" framing that first deferred it does not hold -- but it
+still confirms, naming the count, and registers ONE undo that reopens
+exactly the set it closed rather than everything on the node.
+
+Already-closed ends are left alone: re-stamping resolvedAt would move
+work finished weeks ago to the top of the Completed feed.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_013K3R3eWgpmuS2MqQzXhPgo
+EOF
+```
+
+---
+
 ## Final verification
 
-- [ ] **Full suite:** `./scripts/test.sh` → **644 tests**, 0 failures.
+- [ ] **Full suite:** `./scripts/test.sh` → 0 failures. Baseline is **625**; each task states its own
+      delta, and the total lands near **655**. Treat a mismatch as a prompt to check which task's
+      tests were skipped, not as a target to hit.
 - [ ] **Lint:** `swiftlint lint --strict` → 0 violations; no file over 400 lines.
 - [ ] **Both builds:** `xcodegen generate`, then the `Pensieve` and `PensieveCLI` schemes, each
       checked for `** BUILD SUCCEEDED **` in an unpiped log.
-- [ ] **The invariant that matters:** `git diff main -- Sources/PensieveKit/Model/LooseEnd.swift`
-      shows **no change to `isOpen` or `openSQLPredicate`**. If it does, the design was not followed.
+- [ ] **The invariant that matters is semantic, not textual:**
+      `git diff main -- Sources/PensieveKit/Model/LooseEnd.swift` should show `isOpen`'s literal
+      retyped to `.eq(LooseEndStatus.open)` **and nothing else about what it selects**;
+      `openSQLPredicate` unchanged; `looseEndOpenPredicatesAgree` passing. A diff that changes which
+      rows `isOpen` matches means the design was not followed.
+- [ ] **The predicate that would have gutted What's Next:** confirm `isActionable` is
+      `openLooseEnds > 0 || closedLooseEnds == 0` and that `aNodeThatNeverHadALooseEndStaysInWhatsNext`
+      passes. Then sanity-check against the real store, read-only, that What's Next has not collapsed:
+      `sqlite3 -readonly ~/Library/Application\ Support/Pensieve/pensieve.sqlite "select count(*) from nodes where state='active';"`
+      and compare with the app's list.
+- [ ] **Index freshness:** `aClosedEndLeavesTheDefaultScopeWithoutShrinkingThePage` passes, and
+      `resolveLooseEnd` calls `updateStatus` (grep for it — its absence is silent).
 - [ ] **Trust gate:** `git diff main --stat` touches neither `TranscriptVocabulary.swift` nor
       `TranscriptParser.swift`.
 - [ ] **Live store untouched:** every smoke run set `PENSIEVE_DB`/`PENSIEVE_CAPTURE_DB`; confirm
