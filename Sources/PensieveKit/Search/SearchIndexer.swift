@@ -56,13 +56,17 @@ public struct SearchIndexer: Sendable {
   /// and Swift's sort is not stable, so sorting on the id alone would hash those two rows in
   /// arbitrary order. The rebuild guard compares this hash to the stored one, so a non-deterministic
   /// hash means a whole-corpus rebuild on every single sync.
+  ///
+  /// `status` is folded in because closing a loose end changes NOTHING else about its document — the
+  /// text, id, kind, node and language are all identical. Omit it and the guard skips the rebuild,
+  /// leaving the index calling a closed end open, so it keeps surfacing in the default scope forever.
   public static func corpusHash(_ items: [EmbeddableItem]) -> String {
     var hash = StableHash()
     for item in items.sorted(by: { ($0.itemID, $0.language) < ($1.itemID, $1.language) }) {
       hash.absorbField(item.itemID); hash.absorbField(item.contentHash)
       hash.absorbField(item.files); hash.absorbField(item.kind)
       hash.absorbField(item.nodeID); hash.absorbField(item.state)
-      hash.absorbField(item.language)
+      hash.absorbField(item.language); hash.absorbField(item.status)
     }
     return hash.hexValue
   }

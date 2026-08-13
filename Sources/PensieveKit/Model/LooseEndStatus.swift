@@ -25,3 +25,22 @@ public enum LooseEndStatus: String, QueryBindable, Sendable {
   /// per-node and Completed feeds cannot disagree about what "closed" means.
   public var isClosed: Bool { self != .open }
 }
+
+extension LooseEndStatus {
+  /// The statuses a search may surface: `open` always, closed states only when the caller opted in.
+  /// An allow-list, never a deny-list — a future state can never leak in by omission.
+  ///
+  /// The single source for this rule, and it is applied TWICE per query on purpose: once in SQL so
+  /// the index returns only eligible rows, once again when each candidate is re-resolved against
+  /// canonical. Those two applications MUST agree, or rows pass the query and are then silently
+  /// dropped, shrinking the page with nothing failing. Sharing one definition is what makes them
+  /// agree. Deliberately mirrors `NodeState.searchable(includeArchived:)`, which solves the same
+  /// problem for the other dimension.
+  public static func searchable(includeClosed: Bool) -> [LooseEndStatus] {
+    includeClosed ? [.open, .done, .dropped] : [.open]
+  }
+
+  public func isSearchable(includeClosed: Bool) -> Bool {
+    Self.searchable(includeClosed: includeClosed).contains(self)
+  }
+}

@@ -14,10 +14,17 @@ public struct EmbeddableItem: Sendable {
   /// row with English would discount every English match. The index carries this as
   /// `language UNINDEXED`, which contributes no tokens.
   public let language: String
+  /// The item's own lifecycle state, as `LooseEndStatus` raw values. Node and event rows carry
+  /// `"open"`: the SQL filter then applies the allow-list uniformly instead of switching on `kind`,
+  /// and a kind-conditional filter is exactly the asymmetry that lets the index and the canonical
+  /// re-check drift apart.
+  public let status: String
   public init(itemID: String, kind: String, nodeID: String, state: String, text: String,
-              files: String = "", language: String = "") {
+              files: String = "", language: String = "",
+              status: String = LooseEndStatus.open.rawValue) {
     self.itemID = itemID; self.kind = kind; self.nodeID = nodeID
     self.state = state; self.text = text; self.files = files; self.language = language
+    self.status = status
   }
   /// Stable across processes/runs (String.hashValue is per-process salted — do NOT use it here).
   /// Hashes `text` ONLY. `files` is excluded so that a change to path indexing does not invalidate
