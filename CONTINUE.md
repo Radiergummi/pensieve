@@ -173,21 +173,15 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**Post-merge carry — `xcodegen generate`, then rebuild + reinstall, before doing anything else.** The
-in-node-find merge adds five app files to a **generated, gitignored** project, so a build without
-`xcodegen generate` fails with `cannot find 'FindCommands' in scope`. `/Applications/Pensieve.app` was
-built **2026-08-11 13:38** — current on BM25/vector-removal, but predating **both** design slices, so the
-installed app has neither the "where was I" pass nor in-node find, and its ⌘F is still the global search
-field. After reinstalling, confirm `ls -l ~/.local/bin/pensieve` is still a symlink into
-`Contents/Helpers/`. Run `defaults delete me.mazetti.pensieve app.semanticSearch` — inert now that
-nothing reads it, but leaving it invites a future reader to wonder what does. **Expect the background
-sync agent to need healing after the bundle swap:** a new helper cdhash makes `SMAppService.register()`
-silently no-op (`EX_CONFIG` / "Launch Constraint Violation"). Observed 2026-08-11, and the app's own
-unregister+register did **not** heal it. What worked: quit the app →
-`launchctl bootout gui/$(id -u)/me.mazetti.pensieve.sync` → relaunch → verify `last exit code = 0` and a
-fresh line in `~/Library/Logs/Pensieve/sync.log`. Then walk the **human-verify carries** at the bottom of
-this file — in-node find's are entirely unrun, and they need the installed app and the real store, which
-no agent can do headlessly.
+**~~Post-merge carry — rebuild + reinstall~~ — DONE 2026-08-13.** `/Applications/Pensieve.app` is now the
+2026-08-13 build (both design slices included; ⌘F is in-node find, ⌥⌘F is search-everything), installed
+via `make run`, which also healed the background-sync agent — see the status line above. `make build` runs
+`xcodegen generate` first, so the "`cannot find 'FindCommands' in scope`" trap on the generated, gitignored
+project can no longer bite. The rest of this carry is closed too: `~/.local/bin/pensieve` is still a
+symlink into `Contents/Helpers/` and runs, and `me.mazetti.pensieve app.semanticSearch` no longer exists in
+defaults. **What remains is the part no agent can do:** walk the **human-verify carries** at the bottom of
+this file — in-node find's are entirely unrun, and they need the
+installed app and the real store, which no agent can do headlessly.
 
 **THEN — the honest shortlist.** Nothing is half-built, so the next move is a genuine choice:
 
@@ -249,13 +243,13 @@ membership is in hand. See `backlog.md` "Widgets — DEFERRED".
 - **CLI:** bundled inside `Pensieve.app` at `Contents/Helpers/pensieve`; `~/.local/bin/pensieve` is the
   app-managed symlink external callers (git hooks, `~/.claude/settings.json`, `claude mcp add`) resolve.
   Keep `~/.local/bin` on `PATH`. No manual CLI rebuild/reinstall anymore — updating the app updates it.
-- **Background sync: ⚠️ NOT RUNNING since 2026-08-11T23:29Z.** The bundled `SMAppService.agent`
-  `me.mazetti.pensieve.sync` is registered and enabled, and launchd **refuses to spawn it** — see
-  "Background sync is dead" in `backlog.md` for the full investigation. **Ingestion still happens:** the
-  app self-drains whenever it is open (FSEvents spool watch → `drainThenRefresh`), which for this user is
-  most of the time. What is lost is the unattended 300 s path while the app is closed. Watch:
-  `tail -f ~/Library/Logs/Pensieve/sync.log` — a line only appears when the app drains or the helper is
-  run by hand (`/Applications/Pensieve.app/Contents/Library/Helpers/PensieveSyncAgent`, which works).
+- **Background sync: ✅ RUNNING again since 2026-08-13T11:18Z**, every 300 s. The bundled
+  `SMAppService.agent` `me.mazetti.pensieve.sync` had spawn-failed for 35 h on a stale LWCR: installs mint
+  a new helper cdhash, and only launching the *installed* bundle runs `registerIfNeeded()` to refresh it —
+  but Spotlight kept launching a 2026-07-10 DerivedData copy that predates the agent. **Use `make run`,
+  which installs and relaunches together; `make install` alone leaves the registration stale.** Resolution
+  in "Background sync is dead" in `backlog.md`. Watch: `tail -f ~/Library/Logs/Pensieve/sync.log`, or
+  `launchctl print gui/$(id -u)/me.mazetti.pensieve.sync | grep -E 'runs|last exit'`.
 - **Hooks** in `~/.claude/settings.json`: SessionStart (`capture-session-start` + `pensieve prime`) +
   SessionEnd. **MCP:** `pensieve mcp` registered at user scope (`claude mcp get pensieve` → Connected).
 - **Real stores:** `~/Library/Application Support/Pensieve/{pensieve,capture}.sqlite`.

@@ -848,15 +848,57 @@ once. If a spike is ever run: sign with the team, add the App Group entitlement 
 `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` resolves non-nil in BOTH the app and the
 widget, and that the widget can read a file the app wrote there — that go/no-go gates everything else.
 
-**A third surface joined this gate on 2026-08-12: background sync itself.** See the next entry.
+**~~A third surface joined this gate on 2026-08-12: background sync itself.~~ Retracted 2026-08-13** — that
+outage was a stale LWCR, not a Team-ID problem, and the agent now spawns ad-hoc-signed with
+`codeSigningTeamID: ""`. See the next entry. This gate covers Focus filters, Widgets and CloudKit only.
 
 ---
 
-## Background sync is dead — launchd won't spawn the agent (2026-08-12)
+## Background sync is dead — launchd won't spawn the agent — ✅ RESOLVED (2026-08-13)
 
-**Status: OPEN, root cause NOT proven.** Seven hypotheses tested and refuted; the surviving explanation is
-the Team-ID gate above, which the user plans to clear with a paid membership. **Decision (2026-08-12): rely
-on the app's self-drain for now, do not build a workaround.**
+**Status: CLOSED. The agent has run every ~5 minutes since 2026-08-13T11:18:25Z** (`launchctl print`:
+`runs = 5`, `last exit code = 0`, `state = not running` — correct, the helper exits between runs), after
+35 h of silence from `2026-08-11T23:29:36Z`. It resumed the moment the *installed* bundle was launched.
+
+**Root cause: a stale LWCR that nothing refreshed, because the app being launched was never the installed
+one.** `make install` replaces `/Applications/Pensieve.app` and mints a new helper cdhash; only launching
+*that* bundle runs `registerIfNeeded()` → `unregister()` + `register()`, which rebuilds the LWCR against the
+current binary. The app being launched was a **2026-07-10 DerivedData copy** picked by Spotlight out of
+eleven bundles registered under `me.mazetti.pensieve` — a build that predates the sync agent entirely (no
+`Contents/Library/LaunchAgents/`, no `Contents/Helpers/`), so it could not refresh anything. Install after
+install drifted the cdhash away from a registration no launch ever healed. See the `make run` note below.
+
+**`BackgroundSyncService.register()`'s doc comment (`BackgroundSyncService.swift:20-28`) described this
+exactly** — "a registration from a previous build keeps spawn-failing (`EX_CONFIG` / 'Launch Constraint
+Violation' kills) on every interval" — and is **vindicated, not in need of correction.** Hypothesis 5 below
+recorded that cycle as refuted; today's evidence contradicts that, so the refutation is the entry that was
+wrong. Best guess at why the 2026-08-12 toggle test appeared to fail: it exercised the toggle in some
+*other* copy of the app, which registers that copy's helper, not the installed one.
+
+**Two hypotheses this run killed:**
+- **8. *Duplicate LaunchServices registrations were the cause* (proposed 2026-08-13). REFUTED, and this is
+  the decisive datum.** The nine stale registrations were deleted first, and a spawn attempt **after** that
+  cleanup still died: `PensieveSyncAgent-2026-08-13-131026.ips`, `procPath
+  /Applications/Pensieve.app/Contents/Library/Helpers/PensieveSyncAgent`, `"namespace":"CODESIGNING",
+  "indicator":"Launch Constraint Violation"` — the documented signature, unchanged. The duplicates explain
+  why the *wrong app* kept getting launched; they are not what launchd was rejecting.
+- **The Team-ID gate is NOT the blocker for this.** The agent now spawns with `codeSigningTeamID: ""` and
+  `codeSigningValidationCategory: 10` — the same ad-hoc identity that was failing. **Ad-hoc signing is not
+  categorically incompatible with a bundled `SMAppService.agent`.** This does not touch the Focus-filter /
+  Widgets / CloudKit gate above, which is a separate, still-real Team-ID requirement.
+
+**What is still not proven.** `make run` did two things between the 13:10 failure and the 13:18 success —
+a fresh `rm -rf` + `ditto` of the bundle, and the launch that triggers `registerIfNeeded()`. The doc
+comment's mechanism says the launch is what mattered, and the timing fits, but the clean experiment
+(reinstall, launch a *different* copy, confirm it dies again) was not run and is not worth running.
+
+**The durable fix is `make run`** (added 2026-08-13, `785d500`): it is the only path that installs *and*
+relaunches the installed bundle, so the cdhash and the registration cannot drift apart. Installing without
+launching `/Applications/Pensieve.app` is what created this outage; `make install` still prints the
+"launch it once" note for the same reason.
+
+<details>
+<summary>Original investigation (2026-08-12) — seven refuted hypotheses, kept as record</summary>
 
 **Symptom.** The agent last ran at `2026-08-11T23:29:36Z` and has not run since. `launchctl print` shows the
 job registered and `enabled`, with `runatload` set, `run interval = 300 seconds`, and
@@ -913,6 +955,12 @@ them when the app is removed; `sfltool resetbtm` would clear them but is system-
 *Revisit trigger:* the paid Apple Developer membership lands (same trigger as Widgets/CloudKit/Focus
 filters — **one gate now unblocks four things**). First check after signing with a real Team ID: does the
 agent spawn? If yes, this entry closes and the `registerIfNeeded()` doc comment needs correcting.
+
+</details>
+
+**Superseded by the resolution above (2026-08-13).** The Team-ID revisit trigger no longer applies to this
+item — the agent spawns ad-hoc-signed. Hypotheses 1–4, 6 and 7 stand as refuted; 5 is itself refuted by the
+fix. The litter noted above (two orphaned BTM records) is unchanged and still inert.
 
 ---
 
