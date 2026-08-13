@@ -12,7 +12,7 @@ private func session(_ messages: [TranscriptMessage]) -> ParsedSession {
 
 private func looseEnd(quote: String, messageIndex: Int) -> LooseEnd {
   LooseEnd(id: UUID(), nodeID: UUID(), sourceEventID: UUID(), text: "an end", quote: quote,
-           status: "open", role: "typed", sourceMessageIndex: messageIndex,
+           status: .open, role: "typed", sourceMessageIndex: messageIndex,
            label: "", labelSuggestion: "", createdAt: Date())
 }
 

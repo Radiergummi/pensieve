@@ -16,7 +16,7 @@ import SQLiteData
       LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t", quote: "q", role: "user")
     }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t2", quote: "q2", status: "resolved")
+      LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t2", quote: "q2", status: .done)
     }.execute(database)
   }
   let facts = try NodeFactsQueries.all(database, now: Date())
@@ -117,7 +117,7 @@ import SQLiteData
     try Event.insert { eventB }.execute(database)
     // nodeA: one open, one resolved, one confirmed-noise → exactly 1 open
     try LooseEnd.insert { LooseEnd(nodeID: nodeA.id, sourceEventID: eventA1.id, text: "open", quote: "q") }.execute(database)
-    try LooseEnd.insert { LooseEnd(nodeID: nodeA.id, sourceEventID: eventA1.id, text: "done", quote: "q", status: "resolved") }.execute(database)
+    try LooseEnd.insert { LooseEnd(nodeID: nodeA.id, sourceEventID: eventA1.id, text: "done", quote: "q", status: .done) }.execute(database)
     try LooseEnd.insert { LooseEnd(nodeID: nodeA.id, sourceEventID: eventA1.id, text: "noise", quote: "q",
                                    label: LooseEndLabel.noise) }.execute(database)
   }
@@ -148,7 +148,7 @@ import SQLiteData
   try database.write { database in
     try Event.insert { testEvent }.execute(database)
     // Every status × label combination the predicate must judge. Two rows carry
-    // `label: .noise` (one open, one resolved) rather than one: a fixture with exactly one
+    // `label: .noise` (one open, one done) rather than one: a fixture with exactly one
     // confirmed-noise row and one suggestion-only-noise row is symmetric under the mutation that
     // swaps which column is checked (`label` vs `labelSuggestion`) — both spellings then total 3,
     // just with different membership, so a count-only assertion can't tell them apart. The extra
@@ -157,9 +157,9 @@ import SQLiteData
     // `labelSuggestion`) would count both of them (their `labelSuggestion` is unset) and drop the
     // suggestion-only-noise row, totaling 4.
     for (status, label, suggestion) in [
-      ("open", "", ""), ("open", LooseEndLabel.salient, ""), ("open", LooseEndLabel.noise, ""),
-      ("open", LooseEndLabel.noise, ""), ("open", "", LooseEndLabel.noise), ("resolved", "", ""),
-      ("resolved", LooseEndLabel.salient, ""), ("resolved", LooseEndLabel.noise, ""),
+      (LooseEndStatus.open, "", ""), (.open, LooseEndLabel.salient, ""), (.open, LooseEndLabel.noise, ""),
+      (.open, LooseEndLabel.noise, ""), (.open, "", LooseEndLabel.noise), (.done, "", ""),
+      (.done, LooseEndLabel.salient, ""), (.done, LooseEndLabel.noise, ""),
     ] {
       try LooseEnd.insert {
         LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t", quote: "q",

@@ -45,10 +45,10 @@ import SQLiteData
     try Source.insert { src }.execute(database)
     try Event.insert { event }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t1", quote: "q1", status: "open")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t1", quote: "q1", status: .open)
     }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t2", quote: "q2", status: "resolved")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t2", quote: "q2", status: .done)
     }.execute(database)
   }
   let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: tempURL("absent-spool"), now: Date())
@@ -163,7 +163,7 @@ import SQLiteData
     try Source.insert { src }.execute(database)
     try Event.insert { event }.execute(database)
     try LooseEnd.insert {
-      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t", quote: "q", status: "open")
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t", quote: "q", status: .open)
     }.execute(database)
   }
 

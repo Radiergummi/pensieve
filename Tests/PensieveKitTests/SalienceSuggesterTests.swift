@@ -18,7 +18,7 @@ private struct AlwaysThrows: LLMProvider {
 /// Seeds one node+source+event and a loose end on it. Returns (looseEndID, eventID).
 @discardableResult
 private func seedLE(_ database: any DatabaseWriter, quote: String, label: String = "",
-                    suggestion: String = "", status: String = "open",
+                    suggestion: String = "", status: LooseEndStatus = .open,
                     messageIndex: Int = 0) throws -> (UUID, UUID) {
   let node = Node(name: "N")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")

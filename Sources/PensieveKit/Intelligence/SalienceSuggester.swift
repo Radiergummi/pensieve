@@ -29,7 +29,7 @@ public struct SalienceSuggester {
     // 1. Candidates: open + unlabeled; skip already-suggested unless `force`. Deterministic order
     //    (createdAt) so `--limit` is reproducible.
     let candidates: [LooseEnd] = try await database.read { database in
-      let rows = try LooseEnd.where { $0.status.eq("open") && $0.label.eq(LooseEndLabel.unlabeled) }.fetchAll(database)
+      let rows = try LooseEnd.where { $0.status.eq(LooseEndStatus.open) && $0.label.eq(LooseEndLabel.unlabeled) }.fetchAll(database)
       return rows.filter { force || $0.labelSuggestion.isEmpty }
                  .sorted { $0.createdAt < $1.createdAt }
     }

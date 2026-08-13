@@ -5,7 +5,7 @@ import SQLiteData
 
 @discardableResult
 private func seed(_ database: any DatabaseWriter, quote: String, label: String, suggestion: String,
-                  status: String = "open", daysAgo: Int = 0) throws -> UUID {
+                  status: LooseEndStatus = .open, daysAgo: Int = 0) throws -> UUID {
   let node = Node(name: "N")
   let source = Source(nodeID: node.id, kind: SourceKind.claudeCode, key: "/src/\(UUID().uuidString)")
   let when = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
@@ -22,15 +22,18 @@ private func seed(_ database: any DatabaseWriter, quote: String, label: String, 
   return looseEnd.id
 }
 
-@Test func reviewPendingReturnsOnlyUnlabeledSuggestedOpen() throws {
+@Test func reviewPendingReturnsUnlabeledSuggestedRegardlessOfStatus() throws {
   let database = try openCanonicalDatabase(at: tempURL("rev-filter"))
   let want = try seed(database, quote: "unlabeled with suggestion", label: "", suggestion: LooseEndLabel.salient)
   _ = try seed(database, quote: "already human labeled", label: LooseEndLabel.salient, suggestion: LooseEndLabel.salient)
   _ = try seed(database, quote: "unlabeled no suggestion", label: "", suggestion: "")
-  _ = try seed(database, quote: "resolved one", label: "", suggestion: LooseEndLabel.noise, status: "resolved")
+  // Spec D9: a closed loose end is still labellable, so triage must NOT filter on status —
+  // burning an item down would otherwise destroy a training example that was never collected.
+  let closed = try seed(database, quote: "done one", label: "", suggestion: LooseEndLabel.noise, status: .done)
   let pending = try SalienceReviewQueries.pending(database, now: Date())
-  #expect(pending.map(\.looseEnd.id) == [want])
-  #expect(try SalienceReviewQueries.pendingCount(database) == 1)
+  // Suggested-salient first, so the closed noise-suggested item follows the open salient one.
+  #expect(pending.map(\.looseEnd.id) == [want, closed])
+  #expect(try SalienceReviewQueries.pendingCount(database) == 2)
 }
 
 @Test func reviewPendingOrdersSuggestedSalientFirst() throws {
