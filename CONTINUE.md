@@ -1,4 +1,4 @@
-# CONTINUE — session handoff (2026-08-12)
+# CONTINUE — session handoff (2026-08-13)
 
 Self-contained pickup for a fresh agent. Read `CLAUDE.md` first (project rules + the full shipped
 changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the durable long-term list
@@ -6,34 +6,50 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-**589 tests**, run with `make test`. The full loop is **LIVE and
-dogfooded**: capture → ingest → auto-extract runs unattended via the bundled background-sync agent; the
-app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The
-core intelligence gate passed long ago. The hard part is done — remaining work is feature breadth, not
-foundations.
+**659 tests**, run with `make test` (`make all` = lint + test + build + smoke, in CI's order). The full
+loop is **LIVE and dogfooded**: capture → ingest → auto-extract runs unattended via the bundled
+background-sync agent; the app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI
+embedded inside it. The core intelligence gate passed long ago. The hard part is done — remaining work
+is feature breadth, not foundations.
 
-**Nothing is in flight. `main` is clean and every branch is merged.** The two design slices that were
-open at the last handoff both landed: **"where was I"** (design slice A, merged and human-verified
-2026-08-12) and **in-node find** (merged 2026-08-12 — see the merge note below, it was not mechanical).
-Stale leftovers still on disk: `.claude/worktrees/remove-vector` (branch
-`fix/post-vector-removal-cleanup`, fully merged — safe to remove) and `.claude/worktrees/retrieval-bm25`
+**Nothing is in flight. `main` is clean and every branch is merged.** The backlog's highest-value item
+landed today: **loose ends can end** (`open` / `done` / `dropped`, merged `a1c649a`) — twelve planned
+tasks, two independent Opus reviews, a fix wave, then `SalienceSuggester` extended in its own commit
+(`ecd96ff`). Before it, **"where was I"** (design slice A) and **in-node find** both merged 2026-08-12.
+
+**`main` is 112 commits ahead of `origin/main` and has never been pushed this session.** That is the
+long-standing state, not a new one — but if you expect a remote to be current, it is not.
+
+Stale leftovers on disk: `.claude/worktrees/loose-end-resolution` (branch
+`worktree-loose-end-resolution`, **fully merged** — safe to remove) and `.claude/worktrees/retrieval-bm25`
 (branch `worktree-retrieval-bm25`, **8 commits NOT in `main`** — abandoned two-path work, so removing it
 discards those commits; that is a decision, not cleanup).
+
+**Counts that used to only grow now shrink.** A loose end has a lifecycle, so "Als Nächstes"/"Ruhend"
+mean something, a project with no open ends **leaves What's Next but stays in Dormant** (finished, not
+neglected), and there are two new sidebar buckets — **Loose Ends** (the burn-down queue, badged with a
+count) and **Completed** (deliberately uncounted: it grows without bound and a number there reads as a
+score). **973 open loose ends** are waiting in that queue as of 2026-08-13 (968 when the plan measured
+them; capture keeps adding), and **not one is closed yet** — the per-node bulk close exists because 288 of
+them sit on a single node.
 
 **BM25/FTS5 shipped and is the only retrieval path.** `worktree-retrieval-bm25-single-path` merged to
 `main`, and the vector stack it replaced was then deleted outright (see the vector-removal ship below) —
 there is no second engine left to reconcile against.
 
-**⚠️ Rebuild + reinstall before trusting the live app.** `/Applications/Pensieve.app` was built
-**2026-08-11 13:38**, which is *after* BM25 + the vector removal (so the bundled `pensieve mcp` every
-Claude Code session calls is current on retrieval) but *before* **both** design slices. The running app
-therefore has none of the "where was I" pass and no in-node find, and its ⌘F is still the **global**
-search field rather than the new find-within-node. After reinstalling, check
+**⚠️ Rebuild + reinstall — one ship stale again.** `/Applications/Pensieve.app` is the **2026-08-13
+12:50** build, so it *does* have the macOS 26 floor / Liquid Glass pass, but it predates the loose-end
+merge (verified: its binary contains no `LooseEndStatusMenu`). The running app therefore has no resolve
+verbs, no **Loose Ends** / **Completed** buckets, no Done · N record, and ⌥⌘F's scope bar still reads
+"Include Archived". Its bundled `pensieve mcp` also predates `search`'s `closed` flag, which every Claude
+Code session calls. `make install` (or `make run`) does the whole thing; afterwards check
 `ls -l ~/.local/bin/pensieve` is still a symlink (see Gotchas).
 
 **`xcodegen generate` is required after pulling this merge** — the checked-in project is generated and
-gitignored, and the in-node-find merge adds five app files. A build without it fails with
-`cannot find 'FindCommands' in scope`, which reads like a code error and is not one.
+gitignored, and the loose-end merge adds three app files (`AppModel+Middle.swift`,
+`LooseEndStatusMenu.swift`, `ClosedLooseEndsRecord.swift`). A build without it fails with
+`cannot find 'LooseEndStatusMenu' in scope`, which reads like a code error and is not one. `make build`
+regenerates automatically — a bare `xcodebuild` does not.
 
 **No open defects on the retrieval path.** **FTS5/BM25 is the only retrieval path** — the vector stack
 (embedder, `vec0` store, indexer, `SemanticQueries` and its inert `0.25` floor, the vendored `sqlite-vec`
@@ -47,6 +63,30 @@ See `backlog.md`, "Semantic relevance floor — CLOSED by removing the engine".
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
 
+- **Loose ends can end — `open` / `done` / `dropped`** (2026-08-13, merged to `main` `a1c649a`; the
+  suggester follow-up is `ecd96ff`). The backlog's "single highest-value idea", and a data-model change
+  rather than chrome. `LooseEndStatus` over the `status` column that shipped in Phase 1B and that
+  **nothing had ever written** (968 rows, all `open`); the stored strings are unchanged, so **v12 adds
+  only a nullable `resolvedAt`**. **`isOpen` was not edited** beyond retyping its literal — that is what
+  carries resolution into the detail view, the menu-bar count, App-Intents facts, What's-Next ranking,
+  the search corpus and Spotlight for free. New: one `resolve` verb (+ per-node `resolveAllOpen`), three
+  feeds, `isActionable` at the three "what should I pick up next" surfaces, index **schema v4** with one
+  allow-list rendered into both the SQL filter and the canonical re-check, closed ends in the corpus,
+  and the app surfaces (verbs with undo, two sidebar buckets, Done · N record, widened ⌥⌘F scope, bulk
+  close). **`isActionable` is two-part on measured grounds** (`openLooseEnds > 0 || closedLooseEnds == 0`):
+  123 of 162 active nodes are git-only and can never produce a loose end, so the naive predicate would
+  have emptied What's Next of 130 nodes on day one.
+  **What the two reviews caught, and what it cost:** resolving updated **no list until ⌘R** (the feeds
+  key on `refreshToken`, which `refresh()` never bumps — now a dedicated `looseEndRevision`), and bulk
+  close **closed more than its dialog counted** (`status`-only vs `isOpen`, stranding 👎 ends on no
+  surface). Both were invisible to the test suite because the app target has none.
+  **A false premise the spec, the plan and three comments shared:** a stale search index does **not**
+  shrink the result page — `SearchQueries` over-fetches ×8 and grows `k`, so it backfills around the row
+  the resolver drops. The real hole is the **reopen** direction, where a stale `done` excludes live work
+  in SQL and the resolver never sees a candidate. Found by *running* the mutation: the plan's
+  index-freshness test **and my first replacement for it** both passed with `updateStatus` deleted.
+  Lesson worth keeping: a test for a staleness bug must be asserted at the layer where staleness is
+  observable (here the store), not through a query path designed to paper over it.
 - **"Where was I" — design slice A, the reload-context pass** (2026-08-12, merged to `main`;
   human-verified the same day, outcome in `docs/superpowers/verify/2026-08-11-where-was-i-human-verify.md`).
   Detail pane leads with an **adaptive state line** (`NodeMetaLine`) instead of the repeated kind/state
@@ -173,15 +213,14 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**~~Post-merge carry — rebuild + reinstall~~ — DONE 2026-08-13.** `/Applications/Pensieve.app` is now the
-2026-08-13 build (both design slices included; ⌘F is in-node find, ⌥⌘F is search-everything), installed
-via `make run`, which also healed the background-sync agent — see the status line above. `make build` runs
-`xcodegen generate` first, so the "`cannot find 'FindCommands' in scope`" trap on the generated, gitignored
-project can no longer bite. The rest of this carry is closed too: `~/.local/bin/pensieve` is still a
-symlink into `Contents/Helpers/` and runs, and `me.mazetti.pensieve app.semanticSearch` no longer exists in
-defaults. **What remains is the part no agent can do:** walk the **human-verify carries** at the bottom of
-this file — in-node find's are entirely unrun, and they need the
-installed app and the real store, which no agent can do headlessly.
+**Post-merge carry — reinstall once more.** The 12:50 install closed the *previous* carry (`make run`,
+which also healed the background-sync agent, and confirmed `~/.local/bin/pensieve` is still a symlink and
+`app.semanticSearch` is gone). Loose-end resolution merged **after** it, so one more `make install` is
+owed before any of this feature is visible or before `pensieve mcp` reports `closed`. `make build` runs
+`xcodegen generate` first, so the "`cannot find X in scope`" trap on the generated, gitignored project
+cannot bite. **What remains after that is the part no agent can do:** walk the **human-verify carries** at
+the bottom of this file — in-node find's are entirely unrun, and loose-end resolution's are new and
+entirely unrun, and all of them need the installed app and the real store.
 
 **THEN — the honest shortlist.** Nothing is half-built, so the next move is a genuine choice:
 
@@ -195,9 +234,12 @@ installed app and the real store, which no agent can do headlessly.
   *behind* in-node find because both rewrite `LooseEndRow.swift` and `TranscriptSegmentView.swift`. That
   block is now gone, so C is unblocked — and in-node find's flatten-on-match trade-off lives in exactly
   those files, so C is the natural place to revisit it.
-- **Loose ends can end — three verbs (`open`/`done`/`dropped`).** `backlog.md` calls it "the single
-  highest-value idea in the whole review", and it is a data-model change, not chrome: today a loose end is
-  open forever, so "Als Nächstes 155" and "Ruhend 112" never shrink and neither number means anything.
+- ~~**Loose ends can end — three verbs.**~~ **SHIPPED 2026-08-13** (`a1c649a`). The counts shrink now.
+  What it left behind, in rough order of value: **use it** (968 open ends, 288 on one node — the queue and
+  the bulk close exist for exactly that), then decide whether the **triage feed's ordering** survives
+  contact with real burn-down (suggested-salient first, then oldest, on measured grounds — but nobody has
+  actually walked it yet), and whether **Review Suggestions** wants a `status` scope control now that it
+  deliberately keeps closed items.
 - **Track A slice 5 — talk-to-system.** Still the product spine (see Track A below).
 
 **AND — P3, the paraphrase harness, is the one open retrieval question, and it is blocked on YOU.**
@@ -427,3 +469,47 @@ testing the transcript path — an old one will correctly fall back to its store
 - **Watch for highlight/count skew** while doing the above — a row can briefly tint matches the count
   doesn't include and ⌘G can't reach (open, by decision; see `backlog.md` ▸ "In-node find —
   highlight/document skew"). Whether it's noticeable in practice is the revisit trigger.
+
+## Human-verify carries — loose-end resolution (needs the reinstalled app + the real store)
+
+Entirely unrun. The app target has no unit tests, and the two defects the reviews caught were both
+invisible to the suite for exactly that reason — so this list is the real gate, not a formality. The
+first item is the whole feature.
+
+- **The burn-down loop itself.** Select **Loose Ends**, walk it with ↑↓, close several with the swipe,
+  the context menu and ⌘⏎. As you go: does the **sidebar count drop**, does the **row leave the list**
+  (the defect the review caught was that it did not, until ⌘R), does the **detail pane follow the cursor**
+  onto each row's node with the cited row expanded, and does the queue **keep your place** in the middle
+  column rather than navigating away from it?
+- **⌘Z after a mis-key** restores the previous status *and* puts the row back in the queue. Then ⇧⌘Z
+  redoes it, and ⌘Z again undoes it — the toggle must survive more than one cycle (it did not, before the
+  fix wave).
+- **A project actually finishes.** Close every open end on one small node: it must leave **What's Next**
+  and stay in **Dormant**. `pensieve next` must agree with the app.
+- **Bulk close says what it does.** On a node with 👎-labelled open ends, the confirmation's count must
+  equal the number that actually close (this was wrong: it said 1 and closed 4). Then ⌘Z reopens exactly
+  that set — not ends closed weeks earlier.
+- **The per-node record.** "Done · N" appears only on nodes with closed ends, renders **last** in the
+  pane, and reopening from inside it moves the row back up into Loose Ends.
+- **Completed ordering** is genuinely most-recently-closed-first, and the done/dropped badges are right.
+  Then undo a *done → dropped* flip and confirm the row does **not** jump to the top (the restored
+  `resolvedAt` is what prevents that).
+- **⌥⌘F, both scopes.** A phrase that exists only in a closed loose end returns nothing under **Active**
+  and returns the **badged** row under **Include Archived & Closed** — and clicking that result opens the
+  node with the record **expanded on the cited row** (it opened showing nothing, before the fix wave).
+- **A reopened end becomes findable again** without ⌘R or a relaunch. This is the one place a stale index
+  is a correctness bug rather than wasted work.
+- **Spotlight does NOT return closed ends** — that is spec D8, deliberate.
+- **MCP from a real session** (after reinstalling): `search` with `include_archived: true` returns items
+  carrying `"closed": true`, and `whats_next` no longer lists projects with no open ends.
+- **Review Suggestions keeps closed items, and badges them** (spec D9 — a closed end is still labellable),
+  and the suggester now proposes for closed ends too, so `pensieve suggest` has more candidates than
+  before. Sanity-check the count before spending on-device calls.
+- **German in situ** (`-AppleLanguages '(de)'`): the two sidebar rows ("Lose Enden" / "Abgeschlossen" —
+  note the catalog's established vocabulary is *Enden*, not *Fäden*), both badges, "Erledigt · N", the
+  widened scope option, the **plural** confirmation ("Ein loses Ende abschließen?" for exactly one), and
+  the undo action name in the Edit menu.
+- **Focus scoping:** with a Work focus active, both new buckets show only work nodes' ends.
+- **Idle cost:** the sidebar count is now a count query rather than a feed build, but `refresh()` still
+  runs on every debounced watch event. If the app feels heavier while a drain is running, that is where
+  to look.

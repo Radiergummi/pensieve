@@ -296,12 +296,18 @@ accepted flatten-on-match trade-off lives in exactly those two files, which make
 revisit it. *Trigger: live now.*
 
 **D — Not design at all; each needs its own brainstorm → spec.**
-- **Loose ends can end — three verbs (`open` / `done` / `dropped`).** The single highest-value idea in
-  the whole review, and a data-model change, not chrome. Today a loose end is open forever, so
-  "Als Nächstes 155" and "Ruhend 112" never shrink and neither number means anything. With a
-  resolution verb the list can actually empty, a fourth smart list *Completed* becomes possible, and
-  a project with no open ends and no activity is **finished** rather than neglected. The thumbs stay
-  what they are — extraction feedback, not status. Wants `.swipeActions` + undo via `UndoManager`.
+- **Loose ends can end — three verbs (`open` / `done` / `dropped`). ✅ DONE (2026-08-13, merged to
+  `main` `a1c649a`).** Was the single highest-value idea in the whole review, and a data-model change
+  rather than chrome: a loose end was open forever, so "Als Nächstes 155" and "Ruhend 112" never
+  shrank and neither number meant anything. Shipped as specced — `LooseEndStatus` over the latent
+  `status` column, migration v12 for `resolvedAt`, a burn-down queue, a *Completed* list, a per-node
+  record, and `isActionable` so a project with no open ends leaves What's Next while staying in
+  Dormant. The thumbs stayed what they were. `.swipeActions` + `UndoManager` both landed. See
+  `CLAUDE.md` Status for the full record and the two review-caught defects.
+  **One deliberate scope change during execution:** `SalienceSuggester` also dropped its
+  `status == open` candidate filter (own commit, `ecd96ff`) — the spec's D9 only removed it from
+  `SalienceReviewQueries`, which left closed ends auditable *only if they already had a suggestion*,
+  so burning the backlog down would still have destroyed most training examples.
 - **Merge inbox for duplicate nodes.** Not hypothetical: the live sidebar shows **"Agent" twice**.
   Proposal is an evidence-first review queue (both candidates side by side with created/path/remote/
   last-touched, a count of what would move, and three non-destructive verbs — merge / nest under /
