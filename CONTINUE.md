@@ -60,8 +60,9 @@ there is no second engine left to reconcile against.
 `8d2ba0b` by `make run` after a green `make all`. It now has loose-end resolution *and* slice 5
 (verified by localized-key probe: `Loose Ends`, `Completed`, `Done · %lld`, `Description` all present in
 `Contents/Resources/en.lproj/Localizable.strings`), and its bundled `pensieve mcp` carries `search`'s
-`closed` flag. `~/.local/bin/pensieve` is still the symlink. Background sync needed one extra relaunch
-to clear a stale LWCR and is confirmed running (see the LIVE deployment state note).
+`closed` flag. `~/.local/bin/pensieve` is still the symlink. **It was reinstalled again at 23:41 for
+slice B's two carries, and that install left background sync DOWN with no remedy found — see the LIVE
+deployment state section, which is the first thing to deal with next session.**
 
 **Note on version probes:** `strings`/`nm` on the app binary do **not** surface Swift type names like
 `LooseEndStatusMenu` — a freshly-built binary that certainly contains that code reads ABSENT too, so
@@ -368,23 +369,33 @@ membership is in hand. See `backlog.md` "Widgets — DEFERRED".
 - **CLI:** bundled inside `Pensieve.app` at `Contents/Helpers/pensieve`; `~/.local/bin/pensieve` is the
   app-managed symlink external callers (git hooks, `~/.claude/settings.json`, `claude mcp add`) resolve.
   Keep `~/.local/bin` on `PATH`. No manual CLI rebuild/reinstall anymore — updating the app updates it.
-- **Background sync: ✅ RUNNING again since 2026-08-13T11:18Z**, every 300 s. The bundled
-  `SMAppService.agent` `me.mazetti.pensieve.sync` had spawn-failed for 35 h on a stale LWCR: installs mint
-  a new helper cdhash, and only launching the *installed* bundle runs `registerIfNeeded()` to refresh it —
-  but Spotlight kept launching a 2026-07-10 DerivedData copy that predates the agent. **Use `make run`,
-  which installs and relaunches together; `make install` alone leaves the registration stale.** Resolution
-  in "Background sync is dead" in `backlog.md`. Watch: `tail -f ~/Library/Logs/Pensieve/sync.log`, or
-  `launchctl print gui/$(id -u)/me.mazetti.pensieve.sync | grep -E 'runs|last exit'`.
-  **`make run` is necessary but not always sufficient — always verify, then relaunch once more.**
-  Observed 2026-08-13T21:15Z: the `open` that `make run` fires lands immediately after `ditto`, and the
-  `registerIfNeeded()` it triggers built an LWCR that launchd still reported as
-  `needs LWCR update` — the helper then spawn-failed three times (`OS_REASON_CODESIGNING`, then twice
-  `EX_CONFIG`). The register cycle itself was correct in the log (`unregister` → error 113 "no such
-  service" → a fresh job), so this is not the bare-`register()` no-op the code already guards against;
-  it looks like the registration racing a bundle that has only just been written. **A plain quit +
-  `open` afterwards cleared it on the first try.** So after any install: check
-  `launchctl print … | grep properties` — if it still says `needs LWCR update`, quit and relaunch; a
-  healthy agent reads `job state = running` with no such flag, and writes a `sync.log` line within 300 s.
+- **Background sync: ❌ DOWN since 2026-08-13T21:41Z (an install broke it, and no known remedy fixed
+  it).** The bundled `SMAppService.agent` `me.mazetti.pensieve.sync` spawn-fails with
+  `needs LWCR update` in its launchd `properties`, `job state = spawn failed`, and
+  `OS_REASON_CODESIGNING` then `EX_CONFIG`. **This recurs on every install** — it also happened at the
+  22:56 install the same evening, where a quit + relaunch cleared it on the first try. That remedy then
+  failed three times in a row after the 23:41 install, so **treat "quit and relaunch" as worth trying,
+  not as a fix.** Watch: `tail -f ~/Library/Logs/Pensieve/sync.log`, or
+  `launchctl print gui/$(id -u)/me.mazetti.pensieve.sync | grep -E 'runs|last exit|properties'`.
+  A healthy agent reads `job state = running` with **no** `needs LWCR update`, and writes a `sync.log`
+  line within 300 s.
+
+  **What is NOT broken, established by running it:** the helper binary executes fine when invoked
+  directly (`/Applications/Pensieve.app/Contents/Library/Helpers/PensieveSyncAgent` → exit 0, real work,
+  a `sync.log` line). So the binary and its ad-hoc signature are sound and **no data is at risk** —
+  capture still spools and the app still drains on launch and on the watch path. What is lost is
+  unattended sync while the GUI is closed. **A manual run of that binary is a working stopgap.**
+
+  **Refuted tonight (add to the eight in `backlog.md` ▸ "Background sync is dead"):**
+  *competing LaunchServices registrations are not the cause.* Four bundles were registered under
+  `me.mazetti.pensieve` (`/Applications`, the repo's `.build-xcode`, and two worktree copies — one
+  whose worktree no longer exists, since every `xcodebuild` runs `lsregister -f -R -trusted`). Dropping
+  all three non-`/Applications` entries with `lsregister -u` left exactly one registration and the
+  agent **still** spawn-failed unchanged. Worth knowing the entries accumulate; it is not this bug.
+
+  **Not yet tried:** unregister/re-register through the GUI (Settings ▸ General), which is the one path
+  that exercises `BackgroundSyncService.register()` with a user gesture rather than at launch; and a
+  reboot, which is the crude test of whether the constraint is cached in a daemon's memory.
 - **Hooks** in `~/.claude/settings.json`: SessionStart (`capture-session-start` + `pensieve prime`) +
   SessionEnd. **MCP:** `pensieve mcp` registered at user scope (`claude mcp get pensieve` → Connected).
 - **Real stores:** `~/Library/Application Support/Pensieve/{pensieve,capture}.sqlite`.
