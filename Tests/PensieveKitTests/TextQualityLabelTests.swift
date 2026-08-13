@@ -22,6 +22,15 @@ import Testing
   #expect(TextQuality.sanitizeLabel("Fix auth.middleware") == "Fix auth.middleware")
 }
 
+@Test func sanitizeLabelCollapsesAnEmbeddedNewlineInsteadOfAcceptingItVerbatim() throws {
+  // The reviewer's third repro: a bare line break doesn't trip the ". " + capital sentence regex,
+  // so the old gate accepted the label with the newline still inside it.
+  let withNewline = "Sync Agent Spawn Failure\nsidebar label"
+  let sanitized = try #require(TextQuality.sanitizeLabel(withNewline))
+  #expect(!sanitized.contains(where: { $0.isNewline }))
+  #expect(sanitized == "Sync Agent Spawn Failure sidebar label")
+}
+
 @Test func shortenReturnsShortInputWhole() {
   // The measured common case: quick-add sentences usually already fit, so most inputs
   // pass through untouched. Nine of eleven probe inputs were <= the cap.
@@ -38,6 +47,34 @@ import Testing
   let inputWords = Set(long.split(separator: " ").map(String.init))
   #expect(shortened.split(separator: " ").allSatisfy { inputWords.contains(String($0)) })
   #expect(long.hasPrefix(shortened))
+  // Maximality: the next word must not have fit. Without this, an implementation returning only
+  // the first word (or one that drops the "+1" for the joining space) also passes every assertion
+  // above — a prefix is not pinned to be the LONGEST prefix that fits.
+  let nextWord = try #require(long.dropFirst(shortened.count)
+    .trimmingCharacters(in: .whitespaces).split(separator: " ").first)
+  #expect(shortened.count + 1 + nextWord.count > TextQuality.labelLengthCap)
+}
+
+@Test func shortenCollapsesEmbeddedNewlinesBeforeMeasuringLength() throws {
+  // A German complaint that fits under the cap once collapsed to one line — the reviewer found this
+  // returned whole with the newline still embedded, because the old length check ran on the raw
+  // (uncollapsed) string.
+  let withNewline = "Reklamation Deutsche Bahn\nfür die verspätete Fahrt"
+  let shortened = try #require(TextQuality.shorten(withNewline))
+  #expect(!shortened.contains(where: { $0.isNewline }))
+  #expect(shortened == "Reklamation Deutsche Bahn für die verspätete Fahrt")
+}
+
+@Test func shortenNeverFusesWordsAcrossAnEmbeddedNewline() throws {
+  // The reviewer's second repro: `split(separator: " ")` alone joins "agent\nand" into one bogus
+  // "word" that survives into the label. Collapsing whitespace first must keep them separate words.
+  let withNewline =
+    "look into the sync agent\nand also check the launchd plist registration today"
+  let shortened = try #require(TextQuality.shorten(withNewline))
+  #expect(!shortened.contains(where: { $0.isNewline }))
+  #expect(!shortened.contains("agent\nand"))
+  let words = shortened.split(separator: " ").map(String.init)
+  #expect(words.allSatisfy { !$0.contains("\n") })
 }
 
 @Test func shortenHandlesASingleOverlongWordAndEmptyInput() {

@@ -50,7 +50,10 @@ enum TextQuality {
   /// typed description). It lived on `Ingester` until the second arrived; the shape recurs, so the
   /// gate is shared rather than copied.
   static func sanitizeLabel(_ raw: String) -> String? {
-    var sanitized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Collapse every interior whitespace run (newline, tab, mixed) to one space FIRST, so a label
+    // that only looks fine because a line break hides in it can't reach the gate — and so the
+    // length/sentence checks below measure the string as it will actually render on one line.
+    var sanitized = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     if let marker = sanitized.range(of: #"^(\d+[.)]|[-*•])\s+"#, options: .regularExpression) {
       sanitized.removeSubrange(marker)
     }
@@ -61,6 +64,7 @@ enum TextQuality {
     // multi-sentence commit-message-shaped output sitting in the sidebar. nil → the caller keeps
     // its deterministic fallback.
     guard isTerseLabel(sanitized) else { return nil }
+    assert(!sanitized.contains(where: \.isNewline), "sanitizeLabel must never return an embedded newline")
     return sanitized
   }
 
@@ -73,19 +77,28 @@ enum TextQuality {
   /// most quick-add sentences already fit, so it usually returns them whole, in the user's own
   /// words, guaranteed correct. See `measurements/2026-08-13-slice5-label-quality/`.
   static func shorten(_ text: String, cap: Int = labelLengthCap) -> String? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Collapse every interior whitespace run (newline, tab, mixed) to one space FIRST — otherwise a
+    // string that only exceeds `cap` because of an embedded line break is measured wrong, and
+    // `split(separator: " ")` below would fuse the words either side of a "\n" into one bogus word.
+    let trimmed = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     guard !trimmed.isEmpty else { return nil }
-    guard trimmed.count > cap else { return trimmed }
-    var kept = ""
-    for word in trimmed.split(separator: " ") {
-      if kept.isEmpty {
-        kept = String(word)
-      } else if kept.count + 1 + word.count <= cap {
-        kept += " " + word
-      } else {
-        break
+    let result: String
+    if trimmed.count <= cap {
+      result = trimmed
+    } else {
+      var kept = ""
+      for word in trimmed.split(separator: " ") {
+        if kept.isEmpty {
+          kept = String(word)
+        } else if kept.count + 1 + word.count <= cap {
+          kept += " " + word
+        } else {
+          break
+        }
       }
+      result = kept.count <= cap ? kept : String(kept.prefix(cap))
     }
-    return kept.count <= cap ? kept : String(kept.prefix(cap))
+    assert(!result.contains(where: \.isNewline), "shorten must never return an embedded newline")
+    return result
   }
 }
