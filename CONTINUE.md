@@ -513,3 +513,51 @@ first item is the whole feature.
 - **Idle cost:** the sidebar count is now a count query rather than a feed build, but `refresh()` still
   runs on every debounced watch event. If the app feels heavier while a drain is running, that is where
   to look.
+
+## Talk-to-system slice 5 — whole-branch review carries (2026-08-13, decisions not code changes)
+
+The review returned NOT READY on one Important (an embedded newline could reach `nodes.name` —
+**fixed**, see `TextQuality.shorten`/`sanitizeLabel` now collapsing every whitespace run to one space
+before either the length check or the gate check, on this branch). Three further findings were judged
+benign and are recorded here rather than changed:
+
+1. **Spec deviation, recorded.** Spec line 195 says *"The task is held in `@State` and cancelled on
+   dismiss."* The shipped code launches a bare `Task { await suggestName() }`. Judged benign —
+   `commit()` snapshots `name` before `dismiss()`, and the orphaned task writes to a torn-down view's
+   `@State`. The residue is a stray in-flight provider call outliving the sheet.
+2. **Edit-save writes `description` from a stale snapshot.** `NodeEditRequest.mode = .edit(node)`
+   captures a `Node` value at menu-click; a concurrent background write (realistically
+   `Ingester.nameStrand`, which writes name AND description from the 300 s agent) is silently reverted
+   on Save. Low likelihood; `name`/`kind`/`icon` already had this exposure, so it extends an existing
+   pattern rather than creating a new class.
+3. **Taxonomy gap.** `defaultKind(under:)` returns `.project` under a `strand`, so pressing "+" while
+   reading a strand nests a project inside a strand. The spec's decisive 281/281 "kind is a pure
+   function of parent" measurement was taken on a store where NO node has a strand parent, so
+   selection-parenting now reaches a region that measurement never covered. Nothing breaks and the Type
+   picker can correct it.
+
+## Human-verify carries — talk-to-system slice 5 (needs the built app + the real store)
+
+Mirrors the plan's own ledger (`docs/superpowers/plans/2026-08-13-talk-to-system-slice5.md`), with the
+Return-key item promoted to the top per the review — it is a keystroke away, not an edge case, because
+the sheet's Save owns `.keyboardShortcut(.defaultAction)` and the Description field is
+`axis: .vertical`.
+
+- **Pressing Return in the Description field must not trigger Save** — a half-typed multi-line
+  description must never save on a stray Return.
+- Type an **English** sentence, press Suggest — a terse readable label appears in Name, and the
+  sentence stays in Description untouched.
+- Type a **German** sentence, press Suggest — the name comes back **in German**, never translated.
+  This is the whole reason the routing exists.
+- Press Suggest, then immediately type in Name — your text survives; the suggestion is discarded.
+- Select a cloud provider with no API key, press Suggest — a name still appears (the deterministic
+  shortening), no error, and Save is enabled.
+- Type a description with an embedded line break (paste a two-line note), press Suggest, then Save —
+  the stored name must render as one line everywhere (sidebar, `NodeTree.render`, search snippets,
+  Spotlight), never with the break intact.
+- Edit an existing node: its description loads, edits save, and editing only the *name* leaves the
+  description intact.
+- ⌘N with a project selected creates **under it**; with an archived node selected, at top level.
+- `pensieve list` shows the node where the app said it would.
+- German in situ: `open -a Pensieve --args -AppleLanguages '(de)'` — check "Beschreibung",
+  "Namen vorschlagen", "Worum geht es?" and that none of them truncate.
