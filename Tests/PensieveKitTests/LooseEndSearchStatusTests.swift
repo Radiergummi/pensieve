@@ -177,9 +177,16 @@ private func seedLooseEnd(_ database: any DatabaseWriter, text: String = "t", qu
   #expect(wide.first?.status == .done)
 }
 
-/// After a close, the default-scope page must not silently shrink. The agreement test builds index
-/// and canonical together and so cannot catch a write path that updates only one of them.
-@Test func aClosedEndLeavesTheDefaultScopeWithoutShrinkingThePage() throws {
+/// `updateStatus` must make the INDEX stop returning a closed row, not merely rely on the resolver to
+/// drop it afterwards. Asserted against the store directly, which is the only layer where this is
+/// observable: `SearchQueries.search` over-fetches (`max(limit * 8, 50)`) and grows `k` on a shortfall,
+/// so it backfills around a stale row and returns a correct, full page either way.
+///
+/// That over-fetch is why the first two versions of this test were VACUOUS — both passed with
+/// `updateStatus` commented out (verified by running the mutation, not by reasoning about it). The
+/// spec's "the result page silently shrinks" framing does not survive contact with the retry loop; what
+/// staleness actually costs is wasted top-k slots here, and a false NEGATIVE in the sibling test below.
+@Test func updateStatusStopsTheIndexReturningAClosedRow() throws {
   let database = try openCanonicalDatabase(at: tempURL("stale-close"))
   let keptID = try seedLooseEnd(database, text: "kestrel alpha", quote: "kestrel alpha")
   let closedID = try seedLooseEnd(database, text: "kestrel beta", quote: "kestrel beta")
@@ -190,9 +197,33 @@ private func seedLooseEnd(_ database: any DatabaseWriter, text: String = "t", qu
   #expect(try LooseEndCommands.resolve(database, id: closedID, status: .done))
   store.updateStatus(itemID: closedID.uuidString, status: LooseEndStatus.done.rawValue)
 
+  let query = FTSQueryBuilder.build("kestrel", file: nil)!
+  let candidates = store.search(query, limit: 50, includeArchived: false, includeClosed: false)
+  #expect(!candidates.map(\.itemID).contains(closedID.uuidString))
+  #expect(candidates.map(\.itemID).contains(keptID.uuidString))
+  // And the widened scope still reaches it — the row was updated, not deleted.
+  let wide = store.search(query, limit: 50, includeArchived: false, includeClosed: true)
+  #expect(wide.map(\.itemID).contains(closedID.uuidString))
+}
+
+/// The REOPEN direction is the one where a stale index is a correctness bug rather than wasted work:
+/// the index says `done`, so the SQL filter excludes the row in the default scope, and live work
+/// becomes unfindable. The resolver cannot rescue this — it never sees a candidate to admit.
+/// Mutation-verified: removing the `updateStatus` call below turns this red (0 hits).
+@Test func aReopenedEndBecomesFindableAgainWithoutAFullRebuild() throws {
+  let database = try openCanonicalDatabase(at: tempURL("stale-reopen"))
+  let id = try seedLooseEnd(database, text: "kestrel rollout", quote: "kestrel rollout",
+                            status: .done)
+  let store = SearchIndexStore(url: tempURL("stale-reopen-index"))
+  let corpus = try EmbeddableCorpus.gather(database)
+  store.rebuild(items: corpus, corpusHash: SearchIndexer.corpusHash(corpus))
+
+  #expect(try LooseEndCommands.resolve(database, id: id, status: .open))
+  store.updateStatus(itemID: id.uuidString, status: LooseEndStatus.open.rawValue)
+
   let visible = Set(try database.read { try Node.all.fetchAll($0) }.map(\.id))
   let hits = SearchQueries.search(query: "kestrel",
                                   scope: SearchScope(visibleNodeIDs: visible),
                                   store: store, database)
-  #expect(hits.map(\.id) == [keptID])
+  #expect(hits.map(\.id) == [id])
 }

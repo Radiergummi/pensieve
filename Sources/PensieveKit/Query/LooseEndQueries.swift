@@ -45,6 +45,26 @@ public enum LooseEndQueries {
       }
   }
 
+  /// How many open loose ends the triage feed holds, without building it. A count query rather than
+  /// `openAcrossNodes(...).count`, which fetches every open end, every node, and then issues ONE
+  /// event point query per end (~870 on the measured store) — and which `AppModel.refresh()` calls on
+  /// every debounced watch event and after every resolve.
+  ///
+  /// One deliberate difference from the feed's length: the feed drops ends whose source event has
+  /// vanished (it needs the event's date), and this does not. Nothing else can diverge — both read the
+  /// same `isOpen` predicate and the same active ∩ visible node set.
+  public static func openCountAcrossNodes(_ database: any DatabaseReader,
+                                          visibleNodeIDs: Set<UUID>) throws -> Int {
+    try database.read { database in
+      let activeNodeIDs = Set(try Node.where { $0.state.eq(NodeState.active) }
+        .fetchAll(database).map(\.id))
+      let eligible = activeNodeIDs.intersection(visibleNodeIDs)
+      guard !eligible.isEmpty else { return 0 }
+      return try LooseEnd.where { LooseEnd.isOpen($0) && $0.nodeID.in(Array(eligible)) }
+        .fetchCount(database)
+    }
+  }
+
   /// The Completed feed: closed loose ends in ACTIVE, Focus-visible nodes, most recently resolved
   /// first. Ordered by `resolvedAt` (not the source event) because this answers "what did I finish
   /// lately", and a loose end mined from a two-year-old session can be closed today.

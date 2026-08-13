@@ -160,6 +160,9 @@ import SQLiteData
       (LooseEndStatus.open, "", ""), (.open, LooseEndLabel.salient, ""), (.open, LooseEndLabel.noise, ""),
       (.open, LooseEndLabel.noise, ""), (.open, "", LooseEndLabel.noise), (.done, "", ""),
       (.done, LooseEndLabel.salient, ""), (.done, LooseEndLabel.noise, ""),
+      // `.dropped` too: the predicate must judge all THREE states, and a fixture holding only
+      // open/done would let a rule that special-cased `done` pass.
+      (.dropped, "", ""), (.dropped, LooseEndLabel.salient, ""),
     ] {
       try LooseEnd.insert {
         LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t", quote: "q",

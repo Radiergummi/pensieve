@@ -23,7 +23,12 @@ extension AppModel {
     // reason to rebuild, so a run that observed another's in-flight window would rebuild redundantly.
     // Correct either way (a rebuild is one transaction and GRDB serializes writes); this is about not
     // re-doing whole-corpus work the hash guard exists to avoid.
-    guard !isSyncingIndexes else { return }
+    // A coalesced request is RE-RUN, not dropped. Dropping it left a real hole: a resolve landing
+    // during an in-flight rebuild has its targeted `updateStatus` overwritten by that rebuild's
+    // DELETE-and-reinsert (which gathered the corpus before the write), and its own watch event was
+    // then swallowed here — leaving the index disagreeing with canonical until ⌘R or relaunch. In the
+    // reopen direction that means live work stays unfindable in ⌥⌘F's default scope.
+    guard !isSyncingIndexes else { pendingIndexSync = true; return }
     isSyncingIndexes = true
     let searchStore = self.searchStore
     Task.detached { [weak self] in
@@ -47,6 +52,12 @@ extension AppModel {
     isSyncingIndexes = false
     searchIndexState = state
     if isSearching { runSearch() }
+    // Exactly one catch-up run, whatever the number of requests coalesced into the flag: the guard
+    // re-latches it if yet another arrives, so this cannot spin.
+    if pendingIndexSync {
+      pendingIndexSync = false
+      syncSearchIndexes()
+    }
   }
 
   /// The keystroke entry point (from the .searchable field). Coalesces rapid typing into one

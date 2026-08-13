@@ -43,7 +43,8 @@ struct ContentListView: View {
     .navigationSubtitle(subtitle(for: kind))
     // Load the focused leaf's loose ends. Re-runs on selection change AND ⌘R (refreshToken),
     // mirroring DetailView's off-body load. Non-leaf kinds clear the list.
-    .task(id: MiddleLoadKey(kind: kind, token: model.refreshToken)) {
+    .task(id: MiddleLoadKey(kind: kind, token: model.refreshToken,
+                            looseEndRevision: model.looseEndRevision)) {
       switch kind {
       case .looseEndsOf(let id): looseEnds = model.looseEnds(forNode: id)
       case .reviewSuggestions: reviewItems = model.reviewItems()
@@ -53,8 +54,10 @@ struct ContentListView: View {
       }
     }
     // Published ONLY while a feed is showing, so the Edit-menu verbs are disabled elsewhere rather
-    // than acting on a stale selection.
-    .focusedValue(\.looseEndSelection, feedSelection(for: kind))
+    // than acting on a stale selection. `.focusedSceneValue`, matching `NodeFindState`: a menu verb
+    // acts on the focused SCENE's selected row, so it must survive the pointer moving into the detail
+    // pane — plain `.focusedValue` disabled the verbs as soon as view focus left this List.
+    .focusedSceneValue(\.looseEndSelection, feedSelection(for: kind))
   }
 
   @ViewBuilder private func searchResultsList() -> some View {
@@ -157,6 +160,14 @@ struct ContentListView: View {
                     displaySummary: model.displayed(field: .looseEndText,
                                                     sourceText: view.looseEnd.text),
                     onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
+                    // A childless focused leaf shows its loose ends HERE and the detail pane then
+                    // renders no Loose Ends section (the one-home rule), so without this its ends
+                    // would be resolvable from nowhere but the global triage feed.
+                    onResolve: { id, status, previous, previousStamp in
+                      model.resolveLooseEnd(id, status, previous: previous,
+                                            previousResolvedAt: previousStamp,
+                                            undoManager: undoManager)
+                    },
                     compact: true)
       }
     }
@@ -169,8 +180,17 @@ struct ContentListView: View {
     List {
       ForEach(reviewItems, id: \.looseEnd.id) { view in
         VStack(alignment: .leading, spacing: 2) {
-          if let name = model.node(view.looseEnd.nodeID)?.name {
-            Text(name).font(.caption).foregroundStyle(.secondary)
+          HStack {
+            if let name = model.node(view.looseEnd.nodeID)?.name {
+              Text(name).font(.caption).foregroundStyle(.secondary)
+            }
+            // This queue deliberately keeps closed items (spec D9: a closed end is still labellable),
+            // so it has to say which ones are closed — otherwise handled work is indistinguishable
+            // from live work in the one list whose whole job is judging items.
+            if view.looseEnd.status.isClosed {
+              Spacer()
+              LooseEndStatusBadge(status: view.looseEnd.status)
+            }
           }
           LooseEndRow(view: view, loadProvenance: model.provenance, onLabel: model.setLooseEndLabel,
                       displaySummary: model.displayed(field: .looseEndText,
@@ -222,8 +242,10 @@ struct ContentListView: View {
                       displaySummary: model.displayed(field: .looseEndText,
                                                       sourceText: view.looseEnd.text),
                       onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
-                      onResolve: { id, status, previous in
-                        model.resolveLooseEnd(id, status, previous: previous, undoManager: undoManager)
+                      onResolve: { id, status, previous, previousStamp in
+                        model.resolveLooseEnd(id, status, previous: previous,
+                                            previousResolvedAt: previousStamp,
+                                            undoManager: undoManager)
                       },
                       compact: true)
         }
@@ -253,8 +275,10 @@ struct ContentListView: View {
     guard let id = focusedFeedID, let match = items.first(where: { $0.looseEnd.id == id })
     else { return nil }
     let previous = match.looseEnd.status
+    let previousStamp = match.looseEnd.resolvedAt
     return LooseEndSelection(looseEndID: id, status: previous) { newStatus in
-      model.resolveLooseEnd(id, newStatus, previous: previous, undoManager: undoManager)
+      model.resolveLooseEnd(id, newStatus, previous: previous,
+                            previousResolvedAt: previousStamp, undoManager: undoManager)
     }
   }
 
@@ -314,12 +338,16 @@ extension View {
 }
 
 /// A Hashable `.task` id for the middle. Derived from `MiddleKind` WITHOUT hashing the node array —
-/// only the leaf id + refresh token matter for reloading loose ends.
+/// only the leaf id, the refresh token and the loose-end revision matter for reloading loose ends.
+/// The revision is what makes a resolved row actually leave the feed: `refresh()` does not bump
+/// `refreshToken` (that means ⌘R), so without it the write landed and the list never reloaded.
 private struct MiddleLoadKey: Hashable {
   enum Tag: Hashable { case nodes, looseEnds(UUID), review, triage, completed }
   let tag: Tag
   let token: Int
-  init(kind: MiddleKind, token: Int) {
+  let looseEndRevision: Int
+  init(kind: MiddleKind, token: Int, looseEndRevision: Int) {
+    self.looseEndRevision = looseEndRevision
     switch kind {
     case .looseEndsOf(let id): tag = .looseEnds(id)
     case .reviewSuggestions: tag = .review

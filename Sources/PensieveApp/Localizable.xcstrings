@@ -1196,7 +1196,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Archivierte und abgeschlossene einschließen"
+            "value" : "Archivierte und Abgeschlossene einschließen"
           }
         }
       }
@@ -1383,15 +1383,39 @@
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld lose Enden abschließen?"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Ein loses Ende abschließen?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld lose Enden abschließen?"
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close %lld loose ends?"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Close one loose end?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Close %lld loose ends?"
+                }
+              }
+            }
           }
         }
       }

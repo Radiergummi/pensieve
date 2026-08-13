@@ -14,6 +14,9 @@ struct DetailView: View {
   @State private var recentEvents: [Event] = []
   @State private var looseEnds: [LooseEndView] = []
   @State private var closedLooseEnds: [LooseEndView] = []
+  /// The record's disclosure. Collapsed by default (it is a record, not a worklist), but opened when
+  /// a search lands on a closed end so the cited row it named is actually reachable.
+  @State private var closedExpanded = false
   @Environment(\.undoManager) private var undoManager
   @State private var lastWorkDone: String?
   @State private var isNarrating = false
@@ -21,6 +24,7 @@ struct DetailView: View {
   @State private var describeNote: String?   // brief inline note when a refresh yields nothing
   @State private var describable = false
   @State private var loadedNodeID: UUID?   // which node the current prose belongs to
+  @State private var loadedToken = 0       // the refreshToken that prose was generated for
   @State private var shareMarkdown = ""   // rebuilt on load/refresh; fed to the toolbar ShareLink
   @State private var find = NodeFindState()
 
@@ -56,8 +60,9 @@ struct DetailView: View {
                             displaySummary: model.displayed(field: .looseEndText,
                                                             sourceText: view.looseEnd.text),
                             onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
-                            onResolve: { id, status, previous in
+                            onResolve: { id, status, previous, previousStamp in
                               model.resolveLooseEnd(id, status, previous: previous,
+                                                    previousResolvedAt: previousStamp,
                                                     undoManager: undoManager)
                             },
                             expandedLooseEndID: model.expandedLooseEndID, compact: false,
@@ -98,36 +103,13 @@ struct DetailView: View {
           }
         }
 
-        // THE RECORD, collapsed. LAST in the pane, which is load-bearing: in-node ⌘F indexes
-        // per-loose-end slots in on-screen order, so closed rows placed inside the Loose Ends
-        // section above would sit before `.narration` and every `.event` in the document while
-        // rendering after them — the exact slice-A × in-node-find defect. Rendering last keeps the
-        // deferral of find-indexing (spec §7.1) honest and compatible.
-        //
-        // Rendered only when non-empty: an always-present "Done · 0" would announce a slot that is
-        // usually empty, the same failure the recap's removed caps header had. Gated on
-        // `showsLooseEnds` so a childless focused strand does not grow a stray section.
+        // THE RECORD — LAST in the pane, which is load-bearing (see ClosedLooseEndsRecord for why).
+        // Gated on `showsLooseEnds` so a childless focused strand does not grow a stray section, and
+        // on non-emptiness so no empty slot is announced.
         if showsLooseEnds, !closedLooseEnds.isEmpty {
-          DisclosureGroup {
-            ForEach(closedLooseEnds, id: \.looseEnd.id) { view in
-              HStack(alignment: .top, spacing: 8) {
-                LooseEndStatusBadge(status: view.looseEnd.status)
-                LooseEndRow(view: view, loadProvenance: model.provenance,
-                            onLabel: model.setLooseEndLabel,
-                            displaySummary: model.displayed(field: .looseEndText,
-                                                            sourceText: view.looseEnd.text),
-                            onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
-                            onResolve: { id, status, previous in
-                              model.resolveLooseEnd(id, status, previous: previous,
-                                                    undoManager: undoManager)
-                            },
-                            compact: false)
-              }
-            }
-          } label: {
-            Text("Done · \(closedLooseEnds.count)").font(.callout).foregroundStyle(.secondary)
-          }
-          .padding(.top, 4)
+          ClosedLooseEndsRecord(model: model, items: closedLooseEnds,
+                                isExpanded: $closedExpanded, undoManager: undoManager)
+            .padding(.top, 4)
         }
       }
       .padding(24)
@@ -144,11 +126,18 @@ struct DetailView: View {
     // recap visible until the new one lands — no flash), reset `isNarrating` on EVERY entry (never
     // leak `true` across a handoff), and guard `Task.isCancelled` before writing (a superseded
     // task's await still resumes — don't let a late result render under the new node).
-    .task(id: DetailLoadKey(nodeID: node.id, token: model.refreshToken)) {
-      // Same node + token bumped == a ⌘R refresh; a different node == navigation.
-      let isRefresh = (loadedNodeID == node.id)
-      if !isRefresh { lastWorkDone = nil }
+    .task(id: DetailLoadKey(nodeID: node.id, token: model.refreshToken,
+                            looseEndRevision: model.looseEndRevision)) {
+      // Three distinct entries, and only ONE of them may re-narrate. A different node ==
+      // navigation (clear the prose). Same node + `refreshToken` bumped == ⌘R (force). Same node +
+      // only `looseEndRevision` bumped == a resolve: it must repaint the lists and REUSE the cached
+      // prose, so `isRefresh` tests the token explicitly rather than inferring "not navigation" —
+      // inferring it would spend an LLM call on every single close.
+      let nodeChanged = (loadedNodeID != node.id)
+      let isRefresh = (!nodeChanged && loadedToken != model.refreshToken)
+      if nodeChanged { lastWorkDone = nil }
       loadedNodeID = node.id
+      loadedToken = model.refreshToken
       isNarrating = false
       isDescribing = false
       describeNote = nil
@@ -157,6 +146,11 @@ struct DetailView: View {
       recentEvents = detail.status.recentEvents
       looseEnds = detail.looseEnds
       closedLooseEnds = model.closedLooseEnds(forNode: node.id)
+      // Open the record when the pending expand names one of ITS rows, so a widened-scope search hit
+      // has a site to scroll to. Never closes it — the user's own toggle stands.
+      if let id = model.expandedLooseEndID, closedLooseEnds.contains(where: { $0.looseEnd.id == id }) {
+        closedExpanded = true
+      }
       if let id = model.expandedLooseEndID { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       resetFind(narration: nil)
       // Computed once: both the pre-generation share markdown and the cached fast path below read
@@ -183,6 +177,7 @@ struct DetailView: View {
     }
     .onChange(of: model.expandedLooseEndID) { _, id in
       guard let id else { return }
+      if closedLooseEnds.contains(where: { $0.looseEnd.id == id }) { closedExpanded = true }
       withAnimation { proxy.scrollTo(id, anchor: .center) }
     }
     .onChange(of: find.scrollTarget) { _, anchor in
@@ -301,7 +296,7 @@ struct DetailView: View {
   }
 }
 
-private struct DetailLoadKey: Hashable { let nodeID: UUID; let token: Int }
+private struct DetailLoadKey: Hashable { let nodeID: UUID; let token: Int; let looseEndRevision: Int }
 
 /// A GitHub-style vertical-rail timeline: events grouped by day, a colored dot per event on a rail,
 /// the source icon+color, the localized source label, and the summary. No avatars (single-user).

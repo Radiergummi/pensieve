@@ -116,6 +116,14 @@ final class AppModel {
   /// NOT `private(set)`: bumped from `AppModel+Translation.swift`, a different file in the same module.
   var translationRevision = 0
 
+  /// Bumped when a loose end's status changes. Its own signal for the same reason
+  /// `translationRevision` is: the feeds and the detail pane key their reload `.task` on
+  /// `refreshToken`, which `refresh()` deliberately does not bump (it means ⌘R, and `DetailView`
+  /// reads it as `isRefresh` and re-narrates through the LLM). Without this, a resolve wrote to the
+  /// store, decremented the sidebar count, and left the resolved row sitting in the feed until the
+  /// user happened to press ⌘R — caught by two independent reviews.
+  var looseEndRevision = 0
+
   // MARK: - In-app find
   var searchText: String = ""
   /// ⌘F search scope. `.all` opts archived nodes into results. Observable → drives the scope bar.
@@ -133,6 +141,9 @@ final class AppModel {
   /// An index rebuild is in flight. Not observed by any view — it exists only to keep the watch-driven
   /// refresh from stacking whole-corpus rebuilds on top of each other.
   @ObservationIgnored var isSyncingIndexes = false
+  /// A sync request that arrived while one was in flight. Re-run rather than dropped, because the
+  /// in-flight rebuild can overwrite a targeted `updateStatus` that landed mid-flight.
+  @ObservationIgnored var pendingIndexSync = false
   /// The loose-end row a search hit should auto-expand + scroll to. Consumed by LooseEndRow/DetailView.
   var expandedLooseEndID: UUID?
   /// Set by the Find command; RootView observes it to move focus into the .searchable field.
@@ -314,8 +325,8 @@ final class AppModel {
       lastForestContext = activeFocusContext
     }
     reviewCount = (try? SalienceReviewQueries.pendingCount(database)) ?? 0
-    triageCount = (try? LooseEndQueries.openAcrossNodes(database, visibleNodeIDs: visible,
-                                                        now: now).count) ?? 0
+    triageCount = (try? LooseEndQueries.openCountAcrossNodes(database,
+                                                             visibleNodeIDs: visible)) ?? 0
     if isSearching { runSearch() }
   }
 

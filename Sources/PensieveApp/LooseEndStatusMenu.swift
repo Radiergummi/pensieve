@@ -50,9 +50,10 @@ struct LooseEndStatusBadge: View {
   }
 }
 
-/// The selected row of a loose-end feed, published as a focused value so the Edit-menu verbs act on
-/// the focused scene. Published ONLY while the middle column shows a feed — the verbs must be
-/// disabled everywhere else rather than acting on a stale selection.
+/// The selected row of a loose-end feed, published as a focused SCENE value so the Edit-menu verbs act
+/// on the focused window's selection. Published ONLY while the middle column shows a feed — the verbs
+/// must be disabled everywhere else rather than acting on a stale selection. Re-derived from the live
+/// items array on every body pass, so a selection whose row has left the feed resolves to nil.
 struct LooseEndSelection {
   let looseEndID: UUID
   let status: LooseEndStatus

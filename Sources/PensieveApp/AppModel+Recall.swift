@@ -51,24 +51,34 @@ extension AppModel {
   /// Undo is not polish here: triage is a rapid keyboard flow by design, so a mis-key must be one ⌘Z
   /// away. `previous` is passed in rather than re-read because the row already holds the snapshot,
   /// and re-reading after the write would record the NEW value as the thing to undo to.
+  /// `previousResolvedAt` completes the pair undo must restore: `resolve` derives the stamp from the
+  /// target status, so without it an undone done→dropped flip left the item stamped `now` and pinned
+  /// to the top of the Completed feed. nil for a row that was open (the honest value).
   func resolveLooseEnd(_ looseEndID: UUID, _ status: LooseEndStatus,
-                       previous: LooseEndStatus, undoManager: UndoManager?) {
+                       previous: LooseEndStatus, previousResolvedAt: Date? = nil,
+                       undoManager: UndoManager?) {
     guard let database else { return }
     do {
-      let succeeded = try LooseEndCommands.resolve(database, id: looseEndID, status: status)
+      let succeeded = try LooseEndCommands.resolve(database, id: looseEndID, status: status,
+                                                  restoringResolvedAt: previousResolvedAt)
       if succeeded {
-        // The index must not lag the write. `refresh()` does NOT sync the search indexes — only
-        // `drainThenRefresh` and `refreshFromWatch` do — so without this the index keeps calling the
-        // row open: it passes the SQL filter, the resolver drops it on the canonical re-check, and
-        // because LIMIT is applied in SQL the result page silently shrinks. A targeted UNINDEXED
-        // update rather than `syncSearchIndexes()`, which would rebuild ~3,700 documents per close.
+        // The index must not lag the write, and REOPENING is the direction that matters: a stale
+        // `done` excludes live work from ⌥⌘F's default scope in SQL, where the resolver never gets a
+        // candidate to admit, so the end becomes unfindable. (A stale `open` after a close is only
+        // wasteful — the query's over-fetch backfills around it.) A targeted update rather than
+        // `syncSearchIndexes()`, which rebuilds the whole corpus.
         searchStore.updateStatus(itemID: looseEndID.uuidString, status: status.rawValue)
-        undoManager?.registerUndo(withTarget: self) { model in
-          model.resolveLooseEnd(looseEndID, previous, previous: status, undoManager: undoManager)
+        // The stamp this write just replaced is what the inverse must put back, so it is read from
+        // the row BEFORE this write in the caller and threaded through, not re-derived here.
+        undoManager?.registerUndo(withTarget: self) { [previousResolvedAt] model in
+          model.resolveLooseEnd(looseEndID, previous, previous: status,
+                                previousResolvedAt: previousResolvedAt, undoManager: undoManager)
         }
         undoManager?.setActionName(String(localized: "Resolve Loose End"))
         // Unlike `setLabel`, whose row re-filters on the next reload, the resolved row must leave the
-        // open feed now.
+        // open feed now — and `refresh()` alone cannot do that, because the feeds key their reload
+        // `.task` on `refreshToken`, which means ⌘R and is deliberately not bumped here.
+        looseEndRevision += 1
         refresh()
       } else {
         refuse(String(localized: "update"), String(localized: "this loose end"))
@@ -88,30 +98,46 @@ extension AppModel {
         searchStore.updateStatus(itemID: id.uuidString, status: LooseEndStatus.done.rawValue)
       }
       undoManager?.registerUndo(withTarget: self) { model in
-        model.reopenLooseEnds(closed, undoManager: undoManager)
+        model.setLooseEnds(closed, to: .open, undoManager: undoManager)
       }
       undoManager?.setActionName(String(localized: "Close All Loose Ends"))
+      looseEndRevision += 1
       refresh()
     } catch {
       fail(String(localized: "update"), String(localized: "this node"), error)
     }
   }
 
-  /// Undo's inverse of `closeAllLooseEnds`. Registers its own redo so ⌘Z / ⇧⌘Z toggles cleanly.
-  private func reopenLooseEnds(_ ids: [UUID], undoManager: UndoManager?) {
+  /// Undo's inverse of `closeAllLooseEnds`, and its own inverse in turn: each direction registers the
+  /// other, so ⌘Z / ⇧⌘Z toggles indefinitely. An earlier version had the redo closure re-close the
+  /// set without registering anything, so the chain died after one cycle.
+  ///
+  /// Every end in `ids` was OPEN before the bulk close (`resolveAllOpen` only touches open rows, and
+  /// an open row's `resolvedAt` is nil by construction), so reopening needs no stamp to restore.
+  private func setLooseEnds(_ ids: [UUID], to status: LooseEndStatus, undoManager: UndoManager?) {
     guard let database else { return }
-    for id in ids {
-      _ = try? LooseEndCommands.resolve(database, id: id, status: .open)
-      searchStore.updateStatus(itemID: id.uuidString, status: LooseEndStatus.open.rawValue)
-    }
-    undoManager?.registerUndo(withTarget: self) { model in
+    do {
+      var refused = 0
       for id in ids {
-        _ = try? LooseEndCommands.resolve(database, id: id, status: .done)
-        model.searchStore.updateStatus(itemID: id.uuidString, status: LooseEndStatus.done.rawValue)
+        if try LooseEndCommands.resolve(database, id: id, status: status) {
+          searchStore.updateStatus(itemID: id.uuidString, status: status.rawValue)
+        } else {
+          refused += 1   // deleted or merged away since the action — not a failure
+        }
       }
-      model.refresh()
+      let inverse: LooseEndStatus = status == .open ? .done : .open
+      undoManager?.registerUndo(withTarget: self) { model in
+        model.setLooseEnds(ids, to: inverse, undoManager: undoManager)
+      }
+      undoManager?.setActionName(String(localized: "Close All Loose Ends"))
+      looseEndRevision += 1
+      refresh()
+      // Surfaced rather than swallowed: the sibling organizing writes retired `try?` for exactly this
+      // classification, and a silent undo that did nothing is worse here than a plain notice.
+      if refused > 0 { refuse(String(localized: "update"), String(localized: "this node")) }
+    } catch {
+      fail(String(localized: "update"), String(localized: "this node"), error)
     }
-    refresh()
   }
 
   /// Names the count, because the bulk verb deliberately does not show the items first.

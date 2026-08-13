@@ -237,10 +237,19 @@ public struct SearchIndexStore: Sendable {
     return "\(alias)item_status IN (\(allowed.map { "'\($0.rawValue)'" }.joined(separator: ",")))"
   }
 
-  /// Update one document's status in place. `item_status` is an UNINDEXED column, so this touches no
-  /// FTS5 term index and costs nothing next to `rebuild`, which drops and reinserts the entire
-  /// corpus. Updates every document sharing the item id, so a translated document tracks its
-  /// original — leaving one behind would put a German row in a scope its English original is not in.
+  /// Update one document's status in place — cheap next to `rebuild`, which drops and reinserts the
+  /// entire corpus. (Not free: an `UPDATE` on an fts5 table is internally a delete + reinsert of the
+  /// row, term index included, even though `item_status` is UNINDEXED.) Updates every document sharing
+  /// the item id, so a translated document tracks its original — leaving one behind would put a German
+  /// row in a scope its English original is not in.
+  ///
+  /// The load-bearing direction is REOPEN, not close. A stale `done` makes the SQL filter exclude a
+  /// row that is live work, and the resolver cannot rescue it — it never sees the candidate, so the
+  /// end is simply unfindable (`aReopenedEndBecomesFindableAgainWithoutAFullRebuild`). A stale `open`
+  /// after a close is merely wasteful: `SearchQueries.search` over-fetches and grows `k`, so it
+  /// backfills around the row the resolver drops and still returns a correct, full page. An earlier
+  /// version of this comment claimed a stale index shrinks the result page; two tests written to prove
+  /// that passed with this method gutted, which is how the claim was found to be false.
   ///
   /// Deliberately does NOT touch `corpus_hash`: the stored hash stays stale, so the next daemon or
   /// launch sync performs exactly ONE honest full rebuild instead of nine hundred.

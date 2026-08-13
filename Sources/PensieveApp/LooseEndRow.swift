@@ -26,9 +26,10 @@ struct LooseEndRow: View {
   /// `{ text in await model.translate(field: .looseEndText, sourceText: text) }`. `nil` hides the
   /// context-menu action outright (as does the target being off) — no caller may show a dead button.
   var onTranslate: ((String) async -> Void)?
-  /// Resolves this loose end: `(looseEndID, newStatus, previousStatus)`. `nil` in surfaces that do
-  /// not offer resolution — no caller may show a dead button.
-  var onResolve: ((UUID, LooseEndStatus, LooseEndStatus) -> Void)?
+  /// Resolves this loose end: `(looseEndID, newStatus, previousStatus, previousResolvedAt)`. The
+  /// previous stamp travels with the previous status because undo restores the PAIR. `nil` in surfaces
+  /// that do not offer resolution — no caller may show a dead button.
+  var onResolve: ((UUID, LooseEndStatus, LooseEndStatus, Date?) -> Void)?
   /// When this equals the row's loose end, the row starts/auto-expands (a search hit landing here).
   var expandedLooseEndID: UUID?
   /// True in the middle column, where ~180pt is usable. Drops bubbles and tightens the type scale.
@@ -69,7 +70,7 @@ struct LooseEndRow: View {
   private func resolve(_ newStatus: LooseEndStatus) {
     let previous = currentStatus
     localStatus = newStatus
-    onResolve?(view.looseEnd.id, newStatus, previous)
+    onResolve?(view.looseEnd.id, newStatus, previous, view.looseEnd.resolvedAt)
   }
 
   /// A thumb the user has actually set stays visible unconditionally — a confirmed label is recorded
@@ -178,6 +179,10 @@ struct LooseEndRow: View {
     .onChange(of: expandedLooseEndID) { _, newValue in
       if newValue == view.looseEnd.id { expanded = true }
     }
+    // Drop the optimistic override once the reload hands this row the stored value. Without it an
+    // undone flip left the row's badge (which reads the snapshot) disagreeing with its own context
+    // menu (which reads the override) — one row answering the same question two ways.
+    .onChange(of: view.looseEnd.status) { _, _ in localStatus = nil }
     // The per-window find channel, ALONGSIDE the app-wide `expandedLooseEndID` above and never
     // instead of it: that property is read by the detail pane in every open window, so driving find
     // through it would expand this row in every ⌘⌥N recall window and clobber a pending search or

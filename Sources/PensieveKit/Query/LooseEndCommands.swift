@@ -30,12 +30,18 @@ public enum LooseEndCommands {
   /// Resolve (or reopen) a loose end. Stamps `resolvedAt` when closing and clears it when reopening,
   /// so a reopened end is indistinguishable from one never closed. Returns false, writing nothing,
   /// if the id is unknown — the caller surfaces that as a refusal (stale state), not a failure.
+  ///
+  /// `restoringResolvedAt` exists for undo, and only for undo: an undo must restore the previous
+  /// `(status, resolvedAt)` PAIR, not just the status. Without it, undoing a done→dropped flip left
+  /// the item stamped `now`, permanently moving work finished weeks ago to the top of the Completed
+  /// feed (which orders on `resolvedAt`). Ignored when reopening, where nil is the only honest value.
   @discardableResult
   public static func resolve(_ database: any DatabaseWriter, id: UUID,
-                             status: LooseEndStatus, now: Date = Date()) throws -> Bool {
+                             status: LooseEndStatus, now: Date = Date(),
+                             restoringResolvedAt: Date? = nil) throws -> Bool {
     try database.write { database in
       guard try LooseEnd.where({ $0.id.eq(id) }).fetchOne(database) != nil else { return false }
-      let stamp: Date? = status.isClosed ? now : nil
+      let stamp: Date? = status.isClosed ? (restoringResolvedAt ?? now) : nil
       try LooseEnd.where { $0.id.eq(id) }.update {
         $0.status = #bind(status)
         $0.resolvedAt = #bind(stamp)
@@ -48,17 +54,22 @@ public enum LooseEndCommands {
   /// a single undo that reopens exactly that set. Already-closed ends are left alone — re-stamping
   /// their `resolvedAt` would move work you finished weeks ago to the top of the Completed feed.
   ///
-  /// 👎-labelled ends ARE included: they are open by `status`, and leaving them behind would mean the
-  /// count in the confirmation dialog disagreed with what the node's open feed shows.
+  /// Scoped by `isOpen`, NOT by `status` alone — so it closes exactly what the node's open feed shows
+  /// and exactly what the confirmation dialog counted (both go through `isOpen`/`openSQLPredicate`).
+  /// An earlier version filtered on `status` only, and its doc comment argued that including
+  /// 👎-labelled ends kept the dialog honest; it did the opposite. On a node with 1 unlabeled and 3
+  /// 👎 open ends the dialog said "Close 1" and closed 4 — and since both closed feeds exclude
+  /// `label = noise`, those three then appeared on no surface at all and could be reopened only by
+  /// ⌘Z. Two independent reviews caught it.
   @discardableResult
   public static func resolveAllOpen(_ database: any DatabaseWriter, nodeID: UUID,
                                     status: LooseEndStatus, now: Date = Date()) throws -> [UUID] {
     try database.write { database in
-      let open = try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq(LooseEndStatus.open) }
+      let open = try LooseEnd.where { $0.nodeID.eq(nodeID) && LooseEnd.isOpen($0) }
         .fetchAll(database)
       guard !open.isEmpty else { return [] }
       let stamp: Date? = status.isClosed ? now : nil
-      try LooseEnd.where { $0.nodeID.eq(nodeID) && $0.status.eq(LooseEndStatus.open) }.update {
+      try LooseEnd.where { $0.nodeID.eq(nodeID) && LooseEnd.isOpen($0) }.update {
         $0.status = #bind(status)
         $0.resolvedAt = #bind(stamp)
       }.execute(database)
