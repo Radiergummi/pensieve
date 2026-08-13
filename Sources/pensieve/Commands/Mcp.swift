@@ -77,7 +77,7 @@ struct Mcp: AsyncParsableCommand {
              "limit": .object(["type": .string("number"), "minimum": .int(1),
                                "description": .string("max results (default 8)")]),
              "include_archived": .object(["type": .string("boolean"),
-                                          "description": .string("also search archived projects (default false)")]),
+                                          "description": .string("also search archived projects and closed loose ends (default false)")]),
            ]), "required": .array([])]),
            annotations: .init(readOnlyHint: true, openWorldHint: false)),
     ]
@@ -253,7 +253,11 @@ enum PensieveMCP {
       return Set(nodes.filter { $0.state.isSearchable(includeArchived: includeArchived) }
                       .map { $0.id })
     }
-    let scope = SearchScope(visibleNodeIDs: visible, limit: limit, includeArchived: includeArchived)
+    // One control, two dimensions: `include_archived` widens BOTH node state and loose-end status,
+    // matching the app's single scope bar. The kernel keeps them separate; conflating them is the
+    // caller's choice, and this is the caller.
+    let scope = SearchScope(visibleNodeIDs: visible, limit: limit,
+                            includeArchived: includeArchived, includeClosed: includeArchived)
     let ranked = SearchQueries.search(query: query, file: file, scope: scope,
                                       store: searchStore, database)
 
@@ -299,6 +303,9 @@ private struct SearchItem: Encodable {
   /// reconstruct exactly the ranking the verification gate rejected on measured evidence.
   var score: Double?
   var archived: Bool
+  /// The loose end is done or dropped. Always false for node and event items. A widened scope whose
+  /// items cannot say WHICH rows the widening admitted is a half-finished change.
+  var closed: Bool
 
   init(hit: SearchHit) {
     id = hit.id.uuidString
@@ -309,10 +316,11 @@ private struct SearchItem: Encodable {
     snippet = hit.snippet.leading + hit.snippet.match + hit.snippet.trailing
     score = hit.score
     archived = hit.isArchived
+    closed = hit.status.isClosed
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, kind, title, snippet, score, archived
+    case id, kind, title, snippet, score, archived, closed
     case nodeID = "node_id"
     case nodeName = "node_name"
   }
