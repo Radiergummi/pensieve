@@ -56,7 +56,7 @@ jobs:
       - name: Run test suite
         run: |
           set -o pipefail
-          ./scripts/test.sh 2>&1 | tee "${RUNNER_TEMP}/test.log" | ./scripts/swift-test-annotations.sh
+          swift test 2>&1 | tee "${RUNNER_TEMP}/test.log" | ./scripts/swift-test-annotations.sh
 
       # A failure that only reproduces on CI is the expensive kind to diagnose;
       # keep the full log rather than re-running to find out what happened.

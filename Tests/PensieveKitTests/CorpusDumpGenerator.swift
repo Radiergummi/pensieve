@@ -16,7 +16,7 @@ import SQLiteData
 ///   sqlite3 ~/Library/Application\ Support/Pensieve/pensieve.sqlite \
 ///     "VACUUM INTO '/tmp/measure/snapshot.sqlite'"
 ///   PENSIEVE_MEASURE_DIR=/tmp/measure PENSIEVE_MEASURE_DB=/tmp/measure/snapshot.sqlite \
-///     ./scripts/test.sh --filter dumpCorpusForMeasurement
+///     make test FILTER=dumpCorpusForMeasurement
 ///
 /// The output is real work text. Delete it when the measurement run is done.
 @Test func dumpCorpusForMeasurement() throws {

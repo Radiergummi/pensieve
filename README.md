@@ -116,14 +116,15 @@ make test       # 625 tests across 9 suites; or: make test FILTER=projectRoundTr
 make lint
 make build      # regenerates the Xcode project, then builds the app and the CLI
 make install    # replace /Applications/Pensieve.app with the build
+make run        # all + install + launch the installed bundle
 ```
 
 Steps are cached against their inputs, so a second `make all` with nothing changed is ~0.1s rather than ~30s. Touching a PensieveKit source re-lints, re-tests and rebuilds; touching only `.swiftlint.yml` re-lints alone; adding or removing a file under an Xcode target regenerates the project first. `make -B <target>` forces a step to run anyway, and `make clean` discards the records along with the build products.
 
-The bundle lands at `./.build-xcode/Build/Products/Debug/Pensieve.app`. The targets are thin dispatchers; the commands underneath are:
+The bundle lands at `./.build-xcode/Build/Products/Debug/Pensieve.app`. Use the targets; the commands underneath are listed here to explain what they do, not as a second way in:
 
 ```sh
-./scripts/test.sh                               # a thin `swift test` passthrough
+swift test
 swiftlint lint --strict
 
 # Generate the Xcode project (project.yml is the source of truth, and the

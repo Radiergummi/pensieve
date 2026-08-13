@@ -19,7 +19,7 @@ import Translation
 ///
 /// Usage:
 ///   PENSIEVE_MEASURE_DIR=/scratch PENSIEVE_MEASURE_DB=/scratch/snapshot.sqlite \
-///     ./scripts/test.sh --filter dumpTranslatedCorpusForMeasurement
+///     make test FILTER=dumpTranslatedCorpusForMeasurement
 ///
 /// Writes `translations.sqlite` (a throwaway `TranslationStore`, inside `PENSIEVE_MEASURE_DIR`) and
 /// `corpus_de.jsonl` (the treated corpus arm). Both are real captured/generated work text — delete

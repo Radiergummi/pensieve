@@ -6,7 +6,7 @@ changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the du
 
 ## Where things stand
 
-**589 tests**, run with `./scripts/test.sh` (thin `swift test` passthrough). The full loop is **LIVE and
+**589 tests**, run with `make test`. The full loop is **LIVE and
 dogfooded**: capture → ingest → auto-extract runs unattended via the bundled background-sync agent; the
 app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI embedded inside it. The
 core intelligence gate passed long ago. The hard part is done — remaining work is feature breadth, not

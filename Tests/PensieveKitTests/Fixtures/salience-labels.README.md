@@ -15,7 +15,7 @@ running the eval for real:
    ```
 2. Hand-label each row `{ "quote": "...", "salient": true|false }` and
    replace the contents of this file with that labeled set.
-3. Run `PENSIEVE_SALIENCE_EVAL=1 ./scripts/test.sh --filter salienceEvalReport`
+3. Run `PENSIEVE_SALIENCE_EVAL=1 make test FILTER=salienceEvalReport`
    and record precision/recall against the gate in the plan (Task A5 Step 1–3).
 
 See `.superpowers/sdd/task-A5-brief.md` for the full runbook.

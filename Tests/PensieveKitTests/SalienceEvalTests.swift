@@ -27,7 +27,7 @@ private func claudeRun(_ prompt: String, model: String) throws -> String {
 }
 
 /// Review-time eval against the REAL on-device model. Skipped in CI (no deterministic gate for a
-/// probabilistic model). Run: PENSIEVE_SALIENCE_EVAL=1 ./scripts/test.sh --filter salienceEval
+/// probabilistic model). Run: PENSIEVE_SALIENCE_EVAL=1 make test FILTER=salienceEval
 @Test func salienceEvalReport() async throws {
   guard ProcessInfo.processInfo.environment["PENSIEVE_SALIENCE_EVAL"] == "1" else { return }
   // Fixture path is overridable so a real go/no-go can point at a private out-of-repo file of

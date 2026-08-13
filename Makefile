@@ -59,7 +59,7 @@ ifeq ($(strip $(FILTER)),)
 test: .make/test
 else
 test:
-	@./scripts/test.sh --filter $(FILTER)
+	@swift test --filter $(FILTER)
 endif
 
 lint: .make/lint ## Run SwiftLint as CI runs it
@@ -73,7 +73,7 @@ cli: $(CLI) ## Build only the embedded pensieve CLI
 smoke: .make/smoke ## Verify the built bundle's embedded CLI launches
 
 .make/test: $(TEST_INPUTS) | .make
-	@./scripts/test.sh
+	@swift test
 	@touch $@
 
 .make/lint: $(SWIFT_SOURCES) .swiftlint.yml | .make
