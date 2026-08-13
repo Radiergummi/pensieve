@@ -1,23 +1,41 @@
-# CONTINUE — session handoff (2026-08-13)
+# CONTINUE — session handoff
+
+**Last refreshed: 2026-08-13 23:30, against `main` at `fb5e40b` (684 tests).** If `git log -1` shows
+commits newer than that, treat every "next" and "not yet" claim below as suspect until checked — the
+previous refresh went stale within a day and sent a session off to build a slice that had already
+shipped.
 
 Self-contained pickup for a fresh agent. Read `CLAUDE.md` first (project rules + the full shipped
 changelog in **Status**), then this. **`docs/superpowers/backlog.md`** is the durable long-term list
 (Roadmap + deferred ledger with revisit triggers); this file is the per-session handoff.
 
+**Precedence when these disagree:** `git log` > `CLAUDE.md` Status > `backlog.md` > this file. This one
+is the most useful and the first to rot.
+
 ## Where things stand
 
-**659 tests**, run with `make test` (`make all` = lint + test + build + smoke, in CI's order). The full
+**684 tests** (verified by a full `swift test` run, not a cache hit), with `make test` (`make all` =
+lint + test + build + smoke, in CI's order). The full
 loop is **LIVE and dogfooded**: capture → ingest → auto-extract runs unattended via the bundled
 background-sync agent; the app is a real `Pensieve.app` bundle (Xcode/XcodeGen) with the `pensieve` CLI
 embedded inside it. The core intelligence gate passed long ago. The hard part is done — remaining work
 is feature breadth, not foundations.
 
-**Nothing is in flight. `main` is clean and every branch is merged.** The backlog's highest-value item
-landed today: **loose ends can end** (`open` / `done` / `dropped`, merged `a1c649a`) — twelve planned
-tasks, two independent Opus reviews, a fix wave, then `SalienceSuggester` extended in its own commit
-(`ecd96ff`). Before it, **"where was I"** (design slice A) and **in-node find** both merged 2026-08-12.
+**Nothing is in flight. `main` (`fb5e40b`) is clean and every branch is merged** except the abandoned
+`worktree-retrieval-bm25` noted below. **Four features landed on 2026-08-12/13** — in rough order:
+**on-device translation** (2026-08-12), **in-node find** and **"where was I"** (design slice A, both
+merged 2026-08-12), **the macOS 26 floor + Liquid Glass chrome pass** (design slice B, merged `c356bc6`
+2026-08-13 01:00), **loose ends can end** (`open`/`done`/`dropped`, merged `a1c649a`, plus `ecd96ff`),
+and **talk-to-system slice 5** (merged through `8d2ba0b`, 18:11).
 
-**`main` is 112 commits ahead of `origin/main` and has never been pushed this session.** That is the
+> ⚠️ **The previous handoff was materially stale and cost this session real time.** It offered design
+> slice B as the recommended *next* track when B had already shipped 17 hours earlier, and it never
+> mentioned on-device translation or slice 5's merge at all. **Trust `backlog.md` over this file for
+> what is done** — its "Claude Design review" header carries the live slice status (currently
+> "A and B done, C live, D parked"), and `CLAUDE.md` Status is the authoritative changelog. If you are
+> about to start a track named here, confirm against `git log` first; it takes one command.
+
+**`main` is 132 commits ahead of `origin/main` and has never been pushed.** That is the
 long-standing state, not a new one — but if you expect a remote to be current, it is not.
 
 Stale leftovers on disk: `.claude/worktrees/loose-end-resolution` (branch
@@ -29,9 +47,10 @@ discards those commits; that is a decision, not cleanup).
 mean something, a project with no open ends **leaves What's Next but stays in Dormant** (finished, not
 neglected), and there are two new sidebar buckets — **Loose Ends** (the burn-down queue, badged with a
 count) and **Completed** (deliberately uncounted: it grows without bound and a number there reads as a
-score). **973 open loose ends** are waiting in that queue as of 2026-08-13 (968 when the plan measured
-them; capture keeps adding), and **not one is closed yet** — the per-node bulk close exists because 288 of
-them sit on a single node.
+score). **976 open loose ends** are waiting in that queue (checked directly against the live store on
+2026-08-13; 968 when the plan measured them — capture keeps adding), and **not one is closed yet**
+(`select status, count(*) from looseEnds group by status` returns a single `open` row). The per-node
+bulk close exists because 288 of them sit on a single node.
 
 **BM25/FTS5 shipped and is the only retrieval path.** `worktree-retrieval-bm25-single-path` merged to
 `main`, and the vector stack it replaced was then deleted outright (see the vector-removal ship below) —
@@ -49,11 +68,12 @@ to clear a stale LWCR and is confirmed running (see the LIVE deployment state no
 that probe produces false "stale" verdicts. Probe the **localized keys** in
 `Contents/Resources/en.lproj/Localizable.strings` instead.
 
-**`xcodegen generate` is required after pulling this merge** — the checked-in project is generated and
-gitignored, and the loose-end merge adds three app files (`AppModel+Middle.swift`,
-`LooseEndStatusMenu.swift`, `ClosedLooseEndsRecord.swift`). A build without it fails with
-`cannot find 'LooseEndStatusMenu' in scope`, which reads like a code error and is not one. `make build`
-regenerates automatically — a bare `xcodebuild` does not.
+**`xcodegen generate` is required whenever a merge adds or removes an app file** — the project is
+generated and gitignored, so a build without it fails with `cannot find 'SomeNewType' in scope`, which
+reads like a code error and is not one. (The recent examples: the loose-end merge added
+`AppModel+Middle.swift`, `LooseEndStatusMenu.swift`, `ClosedLooseEndsRecord.swift`; the in-node-find
+merge added `FindCommands.swift` and four siblings.) **`make build` regenerates automatically — a bare
+`xcodebuild` does not.**
 
 **No open defects on the retrieval path.** **FTS5/BM25 is the only retrieval path** — the vector stack
 (embedder, `vec0` store, indexer, `SemanticQueries` and its inert `0.25` floor, the vendored `sqlite-vec`
@@ -66,6 +86,39 @@ See `backlog.md`, "Semantic relevance floor — CLOSED by removing the engine".
 
 Brief — the exhaustive per-feature record lives in `CLAUDE.md` **Status**; deferred follow-ups + human
 carries live in the matching `backlog.md` entries.
+
+- **Talk to the system, stage 1 — design slice 5** (2026-08-13, merged through `8d2ba0b`). Describe a
+  strand in a sentence, get a node — the app's first write path where the **user**, not the model,
+  authors identity. `NodeLabeler.label(for:provider:)` routes by detected language
+  (`NLLanguageRecognizer`): **English goes to the on-device model; every other language takes a
+  deterministic word-boundary shortening**. That routing is **measured, not assumed** — the model
+  *translates* non-English input rather than labelling it (a German delayed-train complaint came back
+  "Train Advertisement Claim", and an explicit "do not translate" instruction made it *worse*);
+  evidence in `measurements/2026-08-13-slice5-label-quality/`. `NodeFields.description` is now
+  compulsory (no default — a default would silently blank an existing description on every `update`),
+  and a new node finally lands **under the current selection** rather than at top level. **The
+  whole-branch review returned NOT READY on one Important** — an embedded newline could reach
+  `nodes.name` — fixed by collapsing every whitespace run before the gate check (`e45f57d`). Three
+  further findings were judged benign and recorded as decisions, not changes; they are in the
+  slice-5 carries section near the bottom of this file.
+- **The macOS 26 floor + Liquid Glass chrome — design slice B** (2026-08-13 01:00, merged `c356bc6`).
+  `project.yml` pins `deploymentTarget.macOS: "26.0"`, so macOS 26 APIs need no `if #available`
+  scaffolding at the call site. Scroll-edge material (`.scrollEdgeEffectStyle(.soft, for: .top)`) so
+  content stops bleeding through chrome; the sidebar status footer revisited; and **the menu-bar
+  popover rebuilt** — it was the worst-looking surface in the app, node rows with no per-item action.
+  Its footer is now a full-width primary button plus an ellipsis `Menu` holding Refresh and Quit at a
+  320pt popover, which is what fixes the `Pensieve öffnen` → `Pensieve öf…` truncation slice A's
+  verify pass found: **the string was always correct, the row was too narrow.** Two adversarial spec
+  reviews notably *"strip the glass out of the glass slice"* (`e7f124d`) — worth reading before
+  proposing more chrome. **Two carries stayed open; see the next-action section.**
+- **On-device translation** (2026-08-12). Generated text read in German, stored as an indexed alternate
+  stream: a `Translator` seam over the macOS 26 headless `TranslationSession`, a disposable
+  `TranslationStore`, and a translation **target that is a setting, not the runtime locale**. Applies to
+  text Pensieve's own models produced — narration, loose-end summaries, node names — and is indexed
+  alongside the English original **so the German you read is also the German you can find**.
+  Deliberately excluded: captured content of every kind, and loose-end **quotes** or transcript windows
+  in any circumstance (a quote that no longer matches its transcript is a broken citation). Spec/plan:
+  `{specs,plans}/2026-08-12-on-device-translation*`.
 
 - **Loose ends can end — `open` / `done` / `dropped`** (2026-08-13, merged to `main` `a1c649a`; the
   suggester follow-up is `ecd96ff`). The backlog's "single highest-value idea", and a data-model change
@@ -217,34 +270,55 @@ carries live in the matching `backlog.md` entries.
 
 ## THE NEXT ACTION — pick a track (each its own brainstorm→spec→plan)
 
-**Post-merge carry — reinstall once more.** The 12:50 install closed the *previous* carry (`make run`,
-which also healed the background-sync agent, and confirmed `~/.local/bin/pensieve` is still a symlink and
-`app.semanticSearch` is gone). Loose-end resolution merged **after** it, so one more `make install` is
-owed before any of this feature is visible or before `pensieve mcp` reports `closed`. `make build` runs
-`xcodegen generate` first, so the "`cannot find X in scope`" trap on the generated, gitignored project
-cannot bite. **What remains after that is the part no agent can do:** walk the **human-verify carries** at
-the bottom of this file — in-node find's are entirely unrun, and loose-end resolution's are new and
-entirely unrun, and all of them need the installed app and the real store.
+**The install carry is CLOSED** (2026-08-13 22:56 — see "Where things stand"), and background sync is
+confirmed running. **Nothing mechanical is owed.** What remains is the part no agent can do: walk the
+**human-verify carries** at the bottom of this file. There are now **four unrun lists** — retrieval/BM25,
+in-node find, loose-end resolution, and slice 5 — plus two verify documents with blank outcome lines,
+`verify/2026-08-12-macos26-floor-human-verify.md` (slice B) and the completed
+`verify/2026-08-11-where-was-i-human-verify.md` (slice A, the one that *was* run, and which found a real
+defect). **The backlog of unverified GUI work is now the largest standing risk in the project** — the app
+target has no unit tests, and every defect the last two whole-branch reviews caught was invisible to the
+suite for exactly that reason.
 
 **THEN — the honest shortlist.** Nothing is half-built, so the next move is a genuine choice:
 
-- **Design slice B — Liquid Glass chrome + the macOS 26 floor** (`backlog.md`, "Claude Design review").
-  The backlog's own trigger says *pair with or follow A*, and A just landed. Bump `deploymentTarget.macOS`
-  15.0 → 26 (the machine runs 26.6; the 15.0 floor buys a single-user tool nothing and forces
-  `if #available` scaffolding at every call site), adopt scroll-edge material, revisit the sidebar status
-  footer, and **rebuild the menu-bar popover** — the worst-looking surface in the app, with node rows that
-  have no per-item action, plus the `Pensieve öffnen` → `Pensieve öf…` truncation the verify pass found.
-- **Design slice C — transcript reading: one rail, no nested cards.** It was explicitly sequenced
-  *behind* in-node find because both rewrite `LooseEndRow.swift` and `TranscriptSegmentView.swift`. That
-  block is now gone, so C is unblocked — and in-node find's flatten-on-match trade-off lives in exactly
-  those files, so C is the natural place to revisit it.
-- ~~**Loose ends can end — three verbs.**~~ **SHIPPED 2026-08-13** (`a1c649a`). The counts shrink now.
-  What it left behind, in rough order of value: **use it** (968 open ends, 288 on one node — the queue and
-  the bulk close exist for exactly that), then decide whether the **triage feed's ordering** survives
-  contact with real burn-down (suggested-salient first, then oldest, on measured grounds — but nobody has
-  actually walked it yet), and whether **Review Suggestions** wants a `status` scope control now that it
-  deliberately keeps closed items.
-- **Track A slice 5 — talk-to-system.** Still the product spine (see Track A below).
+- **Design slice C — transcript reading: one rail, no nested cards.** *(The recommended next design
+  slice — A and B are done and the backlog marks C "live now".)* The provenance transcript nests three
+  near-identical gray surfaces (message card inside system card inside HINWEIS/BEFEHL card) with the
+  speaker as an 11pt label **outside** the outermost one, so it reads as a log, not a conversation.
+  Proposal: a **speaker column** carries the structure; only user messages get a filled bubble (they are
+  the minority and the thing being hunted for); assistant replies sit free on the page as prose; harness
+  events collapse to one folded `DisclosureGroup`; attached skill documents become a chip, not an
+  embedded article; Markdown H1 inside a transcript never renders larger than the app's own headings.
+  It was sequenced *behind* in-node find because both rewrite `LooseEndRow.swift` and
+  `TranscriptSegmentView.swift`; that block cleared on 2026-08-12, and in-node find's accepted
+  **flatten-on-match** trade-off lives in exactly those two files, so C is the natural place to revisit
+  it.
+- **Slice B's two open carries** — small, well-specified, and both parked on a trigger that has now
+  arrived (`backlog.md` ▸ "B's two open carries"):
+  - **Scroll-edge material covers 4 of ~9 scroll surfaces.** `.scrollEdgeEffectStyle(.soft, for: .top)`
+    sits on `SidebarView`, `ContentListView`, `BriefingView`, `DetailView`. Untreated: the three Settings
+    `Form`s, `MovePicker`/`MergePicker` (lists scrolling under a `navigationTitle` — the textbook case),
+    the `NodeEditor` `Form`, and both `IconPicker` grids. The four shipped sites already rely on the
+    modifier propagating down a subtree, which is the argument it can be **hoisted to one call per scene**
+    (`RootView`, `RecallWindowView`, `SettingsView`) — closing the gap *and* making later scroll views
+    inherit it. **Needs a GUI session, not a green build:** propagation into sheet-presented content is
+    the unverified part, and getting it wrong silently removes the effect from surfaces slice B
+    deliberately treated.
+  - **`NextItem` lacks `lastActivityAt`,** so the popover buys its second line with two whole-database
+    aggregates. `NextQueries.ranked` *already* fetches the latest `Event` per project and discards the
+    `Date`, keeping only `daysDormant`; `NodeFacts` wrote down exactly the right pattern (carry the
+    `Date` beside the `Int`, views read the `Date`, ranking reads the `Int`). Adding the field lets the
+    row render from the item it already holds and deletes a query from `refreshGlance()`. Adjacent and
+    **pre-existing**: `ranked` runs `2N` queries per refresh and `looseEnds` has no index on `nodeID`.
+- **Use loose-end resolution in anger.** 976 open ends, 288 on one node, **zero closed**. The queue and
+  the bulk close were built for exactly this. Two design questions can only be answered by walking it:
+  whether the **triage feed's ordering** survives contact with real burn-down (suggested-salient first,
+  then oldest — measured, but nobody has actually walked it), and whether **Review Suggestions** wants a
+  `status` scope control now that it deliberately keeps closed items.
+- **Transcript-passage chunking** — **the shortest path to shipping**, because the spec is already
+  written (`specs/2026-07-19-transcript-passage-chunking-design.md`, committed `35b0ed1`) and only a
+  plan is missing. The next corpus increment for BM25.
 
 **AND — P3, the paraphrase harness, is the one open retrieval question, and it is blocked on YOU.**
 Both engines fail "find without remembering the words" (`vector` ≈0/8, `bm25` ≈2/8 on short paraphrase
@@ -255,11 +329,15 @@ queries *are* the ground truth. Design is already written (spec §P3): two files
 operating points, an explicit `NO VIABLE THRESHOLD` verdict, and a pre-registered absolute floor so the
 report can conclude "the incumbent is unusable".
 
-**Track A — the three-pane app (the product spine).** Everything through Share-recall, archive, and
-error-surfacing has shipped. Next: **slice 5 (talk-to-system** — describe a strand in natural language →
-structured create via `LLMProvider`), then **slice 6 (forks** — gated on the unbuilt fork-capture backend;
-brainstorm that backend first). Design: `specs/2026-07-05-pensieve-app-three-pane-design.md`.
-**Still the product spine — but the design slices above have first claim now that A is verified.**
+**Track A — the three-pane app (the product spine).** Everything through Share-recall, archive,
+error-surfacing and now **slice 5 (talk-to-system, merged 2026-08-13)** has shipped. Next: **slice 6
+(forks)** — **gated on the unbuilt fork-capture backend, so brainstorm that backend first**; the slice
+cannot start until there is something capturing forks to display. Design:
+`specs/2026-07-05-pensieve-app-three-pane-design.md`. Also left open by slice 5, deferred **by
+measurement rather than argument**: model-assisted *parenting*. The original design had BM25 shortlist
+candidate parents from the typed sentence, but `FTSQueryBuilder` AND-joins every term, so a realistic
+quick-add sentence retrieves **zero** rows. The alternative that does work (OR-aggregating across all
+three hit kinds) is gated on its own committed measurement — `backlog.md` ▸ "Deferred, with triggers".
 
 **Track B — DONE.** Both threads shipped: the cloud/API `LLMProvider` (2026-07-09) and organizing-writes
 error surfacing (2026-07-14). Nothing open. (Spec 2's deferred source-management GUI + daemon-interval
@@ -268,8 +346,9 @@ editing remain parked in `backlog.md`, not part of Track B.)
 **Track C — findability / OS-integration.** The global search field (now **⌥⌘F**), the menu-bar item,
 `pensieve://`, App
 Intents + Spotlight, Focus filters, **Spotlight loose-end indexing (1b, 2026-07-19)**, **transcript
-readability (2026-07-26)**, **retrieval P1+P2′ / BM25 (2026-08-11)** and **in-node find (⌘F,
-2026-08-12)** are live. **Semantic/vector
+readability (2026-07-26)**, **retrieval P1+P2′ / BM25 (2026-08-11)**, **in-node find (⌘F,
+2026-08-12)** and **on-device translation (2026-08-12 — translated text is indexed, so the German you
+read is the German you can find)** are live. **Semantic/vector
 recall (#2) and its two 2026-07-19 follow-ups were built, measured worse than BM25, and removed on
 2026-08-11** — they hardened an engine that no longer exists. Remaining:
 - **Transcript-passage chunking** — the next corpus increment. **The spec is already written**
@@ -417,6 +496,28 @@ keys missing a `de` value, compare format specifiers between `en` and `de`, and 
 Swift literals against the catalog's keys. That covers all 219 keys instead of five surfaces, and it is
 what would have caught the six mis-keyed entries before they shipped. Forced-locale launch is still
 worth doing for **layout**, just not for key coverage.
+
+## Human-verify carries — the standing backlog (READ THIS FIRST)
+
+**Five lists, four of them entirely unrun.** The app target has no unit tests, so this *is* the gate on
+GUI work, not a formality — the last two whole-branch reviews each caught a defect that broke a feature
+in ordinary use and was invisible to all 684 tests. The installed app is current (2026-08-13 22:56), so
+every item below is runnable right now.
+
+| Slice | Where | State |
+|---|---|---|
+| "Where was I" (slice A) | `verify/2026-08-11-where-was-i-human-verify.md` | ✅ **run 2026-08-12** — found 1 real defect (unreachable hover thumbs) + 6 mis-keyed catalog entries |
+| macOS 26 floor / Liquid Glass (slice B) | `verify/2026-08-12-macos26-floor-human-verify.md` | ❌ unrun — blank outcome lines |
+| retrieval / BM25 | this file, below | ❌ unrun |
+| in-node find (⌘F) | this file, below | ❌ unrun |
+| loose-end resolution | this file, below | ❌ unrun |
+| talk-to-system slice 5 | this file, bottom | ❌ unrun |
+
+**Slice B's list deserves one callout, because it is the one that can pass while being wrong:** its
+first check asks you to toggle `.soft` ↔ `.hard` in the source and confirm the top band *visibly
+changes*. "Material is visible at the top" **passes even when the modifier landed on the wrong view or
+never applied at all** — the default is `.automatic`, which also looks like something. A comparison is
+the only honest test.
 
 ## Human-verify carries — retrieval / BM25 (needs the reinstalled app + the real store)
 
