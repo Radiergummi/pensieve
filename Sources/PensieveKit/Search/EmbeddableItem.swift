@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import SQLiteData
 
 public struct EmbeddableItem: Sendable {
@@ -52,6 +53,23 @@ public enum EmbeddableCorpus {
   /// store already holds historical rows written before that guard existed.
   static func isSearchable(_ text: String) -> Bool { TextQuality.isProse(text) }
 
+  /// The nodes the corpus covers: active AND archived. Archiving hides work from the normal views, it
+  /// does not make the work unrecallable; `muted` stays out entirely.
+  ///
+  /// Extracted so `TranslatableCorpus` reads eligibility from HERE rather than restating it. The
+  /// backfill's denominator and the corpus's lookups have to be the same set, and two copies of a
+  /// filter are how they stop being.
+  static func corpusNodes(_ database: Database) throws -> [Node] {
+    try Node.all.fetchAll(database).filter { $0.state == .active || $0.state == .archived }
+  }
+
+  /// Open AND closed loose ends, `noise` excluded. `isOpen` conflates the two, so the predicate is
+  /// spelled out: 👎 asserts the text was never a loose end, whereas a closed end was real work.
+  /// Shared with `TranslatableCorpus` — see `corpusNodes`.
+  static func corpusLooseEnds(_ database: Database) throws -> [LooseEnd] {
+    try LooseEnd.where { $0.label.neq(LooseEndLabel.noise) }.fetchAll(database)
+  }
+
   /// `translations` + `language` add a SECOND document per item whose generated text has a stored
   /// translation, sharing the original's `itemID`. Defaulted to off, so a caller that has no opinion
   /// (every test, the CLI paths that only read) produces exactly the corpus it did before.
@@ -91,8 +109,7 @@ public enum EmbeddableCorpus {
       // Active AND archived: archiving hides work from the normal views, it does not make the work
       // unrecallable. `muted` stays out of the corpus entirely. Each item carries its owning node's
       // real state, which is what lets the query layer scope results per search scope.
-      let nodes = try Node.all.fetchAll(database)
-        .filter { $0.state == .active || $0.state == .archived }
+      let nodes = try Self.corpusNodes(database)
       let stateByNodeID = Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
                                      uniquingKeysWith: { firstState, _ in firstState })
       for node in nodes {
@@ -108,7 +125,7 @@ public enum EmbeddableCorpus {
       // never a loose end at all, so indexing it would pollute retrieval, whereas a closed end was
       // real work someone finished. `isOpen` conflates the two, so this predicate spells them out
       // separately instead of reusing it.
-      let ends = try LooseEnd.where { $0.label.neq(LooseEndLabel.noise) }.fetchAll(database)
+      let ends = try Self.corpusLooseEnds(database)
       for looseEnd in ends {
         guard let state = stateByNodeID[looseEnd.nodeID] else { continue }
         out.append(.init(itemID: looseEnd.id.uuidString, kind: "loose_end", nodeID: looseEnd.nodeID.uuidString,
