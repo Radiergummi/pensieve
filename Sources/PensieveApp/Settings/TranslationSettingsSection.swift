@@ -66,7 +66,11 @@ struct TranslationSettingsSection: View {
 
   @State private var options: [TranslationLanguageOption] = []
   @State private var isInstalled = false
-  @State private var isDownloading = false
+  /// The language a Download tap actually captured, or nil while nothing is in flight. Compared
+  /// synchronously against `translationTarget` (not reset from inside the async download closure) so
+  /// switching the picker mid-download can never mount a `.translationTask` for the newly selected
+  /// language — see `packStatus` below.
+  @State private var downloadingLanguage: String?
 
   private var isOff: Bool { translationTarget == TranslationTarget.off }
 
@@ -107,21 +111,29 @@ struct TranslationSettingsSection: View {
   @available(macOS 26, *)
   @ViewBuilder private var packStatus: some View {
     HStack {
-      if isDownloading {
-        // The ONLY view-attached translation in the app, and now it is attached only while a download
-        // is actually running. Previously it was mounted whenever a target was set, so it re-fired on
-        // every Settings open and reported nothing.
-        //
+      // The ONLY view-attached translation in the app, and it is attached only while a download the
+      // user actually asked for is running. Previously `.translationTask` was gated on the plain
+      // `Bool` `isDownloading`, reset only from inside its own async completion closure — a mid-
+      // download picker switch renders before that closure resumes, so the stale-`true` flag mounted a
+      // NEW `.translationTask` for the newly selected language, one the user never clicked Download
+      // for. Gating on `downloadingLanguage == translationTarget` instead makes the guard synchronous
+      // with the picker write: the render that follows a switch evaluates unequal and mounts nothing,
+      // with no async closure needing to "catch up" first.
+      if let downloadingLanguage, downloadingLanguage == translationTarget {
         // A headless `TranslationSession(installedSource:)` cannot request a download
         // (`canRequestDownloads`), which is why first-run acquisition has to happen in a view.
         ProgressView().controlSize(.small)
         Text("Preparing the language…")
           .font(.caption).foregroundStyle(.secondary)
           .translationTask(source: Locale.Language(identifier: TranslationTarget.sourceLanguage),
-                           target: Locale.Language(identifier: translationTarget)) { session in
+                           target: Locale.Language(identifier: downloadingLanguage)) { session in
             try? await session.prepareTranslation()
-            isInstalled = await TranslationLanguageCatalog.isInstalled(translationTarget)
-            isDownloading = false
+            // Cancellation is cooperative: `prepareTranslation()` may resume after the user has
+            // already switched languages. Only the closure whose captured language still matches the
+            // live selection may write outcome state — a superseded closure writes nothing.
+            guard downloadingLanguage == translationTarget else { return }
+            isInstalled = await TranslationLanguageCatalog.isInstalled(downloadingLanguage)
+            self.downloadingLanguage = nil
           }
       } else if isInstalled {
         Label("Ready to translate on this Mac.", systemImage: "checkmark.circle")
@@ -130,11 +142,11 @@ struct TranslationSettingsSection: View {
         Label("This language isn’t downloaded yet.", systemImage: "arrow.down.circle")
           .font(.caption).foregroundStyle(.secondary)
         Spacer()
-        Button("Download…") { isDownloading = true }
+        Button("Download…") { downloadingLanguage = translationTarget }
       }
     }
     .task(id: translationTarget) {
-      isDownloading = false
+      downloadingLanguage = nil
       isInstalled = await TranslationLanguageCatalog.isInstalled(translationTarget)
     }
   }
