@@ -609,6 +609,27 @@ the same corpus through the same store with a second denominator to keep honest;
 app unit tests; the documented smoke-launch renders no view body), so that checklist is the first real
 exercise of this feature and may reorder everything above.
 
+### Carries from the final whole-branch review (recorded, not fixed)
+
+- **`TranslatedCorpusDumpGenerator.swift:50-58` restates corpus eligibility a third time and has already
+  drifted.** It filters `LooseEnd.isOpen` under a comment claiming it "mirrors gather's own eligibility
+  exactly", but the corpus has used `label != noise` (open **and closed** ends) since the loose-end-
+  resolution branch. Pre-existing and outside this branch's diff, but this branch built the type
+  (`TranslatableCorpus.gather`) that would replace those nine lines. Consequence: the spec's claim that
+  this feature produces "precisely the treated arm the ranking gate already measured" is slightly
+  overstated — the gate's German arm predates closed loose ends, so the shipped backfill translates a
+  marginally wider set than was measured. Directionally identical, low risk.
+- **The downloadable-language marker is a bare `⤓` glyph**, with no label or accessibility text, where
+  the spec said rows should label installed vs downloadable.
+- **`%lld of %lld translated` renders with no grouping separator** ("0 of 1294"), where the spec's own
+  example writes "1,294" (German would want "1.294").
+- **The coverage readout does not say what it covers.** "1294 von 1294 übersetzt" can read as "the app
+  is German now" while the tree stays English (see the search-only note above) — a clarifying word in
+  the label or the section footer would close it. Deferred to in-situ judgement since nothing here has
+  been seen running.
+- **The nine new catalog keys were inserted where `Prepare translation` sat**, so the file is no longer
+  alphabetically sorted and the next Xcode edit will re-sort it into a large reformat diff.
+
 ---
 
 ## `TextQuality.shorten` — two weak tests on correct code (2026-08-13)

@@ -77,6 +77,25 @@ import SQLiteData
     #expect(!texts.contains("Not an end"))
   }
 
+  /// Archived nodes are still eligible — `EmbeddableCorpus.corpusNodes` includes `.active` AND
+  /// `.archived` (only `.muted` drops out, pinned above). That inclusion is currently reached only
+  /// indirectly, through `SearchQueriesTests.swift:142`'s exercise of the shared helper; nothing pinned
+  /// `TranslatableCorpus.gather` itself calling it, so a future state filter added INSIDE `gather` (not
+  /// the shared helper) would leave every archived node permanently untranslated with a fully green
+  /// suite — precisely the failure this file's own doc comment names.
+  ///
+  /// FAILS UNDER MUTATION: add `.filter { $0.state == .active }` (or equivalent) inside
+  /// `TranslatableCorpus.gather`.
+  @Test func archivedNodesAreUnits() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("translatable-archived"))
+    let archived = Node(name: "Archived project", state: .archived, kind: NodeKind.project,
+                        description: "Wound down")
+    try await database.write { database in try Node.insert { archived }.execute(database) }
+    let texts = Set(try TranslatableCorpus.gather(database).map(\.sourceText))
+    #expect(texts.contains("Archived project"))
+    #expect(texts.contains("Wound down"))
+  }
+
   /// Coverage is counted by DISTINCT text because `TranslationStore` is keyed by
   /// `(field, source_hash, language)`: two nodes named "Agent" collapse onto one stored row. The eval
   /// run measured this — 278 node names, 272 distinct strings. A row-count denominator could never

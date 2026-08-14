@@ -153,8 +153,17 @@ struct TranslationSettingsSection: View {
       }
     }
     .task(id: translationTarget) {
+      // Third instance of the same guard on this file (the download mount above and the coverage
+      // measurement in `body` are the other two): `LanguageAvailability().status(from:to:)` returns a
+      // value and never throws, so `.task(id:)` cancelling this body on a picker switch does not stop
+      // it from resuming and writing anyway. Capture-and-recheck makes a superseded probe a no-op
+      // instead of an out-of-order write — without it, a slower `de` probe can overwrite a faster `uk`
+      // probe's `false` with `true`, and `isInstalled` then lies about the language actually selected.
+      let language = translationTarget
       downloadingLanguage = nil
-      isInstalled = await TranslationLanguageCatalog.isInstalled(translationTarget)
+      let installed = await TranslationLanguageCatalog.isInstalled(language)
+      guard language == translationTarget else { return }
+      isInstalled = installed
     }
   }
 

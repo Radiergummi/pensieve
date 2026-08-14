@@ -124,6 +124,26 @@ import Foundation
     #expect(store.translation(field: .nodeName, sourceText: "one", language: "de") == nil)
   }
 
+  /// An unopenable store must stop the run before it ever calls the translator — otherwise every one
+  /// of 1,294 units pays for a translator call whose `put` silently no-ops, and the caller is told
+  /// nothing went wrong. The store is made unavailable by pointing it at a path whose PARENT is an
+  /// existing plain file: `TranslationStore.open`'s `ensureParentDirectory` cannot create a directory
+  /// where a file already sits, so `DatabasePool` is never constructed and `isAvailable` is false.
+  ///
+  /// FAILS UNDER MUTATION: remove the `store.isAvailable` guard — `callCount()` becomes 3, even though
+  /// `written` stays 0 either way (which is why this asserts calls, not writes).
+  @Test func unavailableStoreCallsTranslatorZeroTimes() async {
+    let parentIsAFile = tempURL("backfill-unavailable-parent", ext: nil)
+    FileManager.default.createFile(atPath: parentIsAFile.path, contents: Data("x".utf8))
+    let store = TranslationStore(url: parentIsAFile.appendingPathComponent("nested.sqlite"))
+    #expect(!store.isAvailable)
+    let translator = RecordingTranslator()
+    let written = await TranslationBackfill.run(units: units, store: store, translator: translator,
+                                                language: "de", progress: { _, _ in })
+    #expect(written == 0)
+    #expect(await translator.callCount() == 0)
+  }
+
   /// Off means off: no translator call, no store write.
   @Test func offTranslatesNothing() async {
     let store = TranslationStore(url: tempURL("backfill-off"))

@@ -1487,9 +1487,10 @@ measured for, so it renders nothing rather than a stale number during a re-measu
 - [ ] Quitting mid-run and relaunching: coverage shows the partial total, and pressing the button again
       resumes rather than restarting (watch the count start from where it stopped, not from 0).
 - [ ] At 100%: the row shows **only** the count, with no button and **no** second sentence beside it.
-- [ ] After a completed run: node names and descriptions render in German in the sidebar/detail, and
-      ⌘F finds a node by a **German** word from its description (this is the payoff — those two fields
-      previously had no writer at all).
+- [ ] After a completed run: ⌘F (and MCP `search`) finds a node by a **German** word from its name or
+      its description — the tree itself keeps rendering in English (`displayed(field:)` is only ever
+      called with `.looseEndText`, so `nodeName`/`nodeDescription` translations are search-only). This
+      is still the payoff: those two fields previously had no writer at all.
 - [ ] Cited quotes and transcript windows are **still English** everywhere. This is the trust gate; if
       any quote is German, stop and file it.
 - [ ] "Manage installed languages in System Settings…" opens Language & Region, showing Translation

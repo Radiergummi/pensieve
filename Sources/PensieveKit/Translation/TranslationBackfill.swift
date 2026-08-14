@@ -27,6 +27,10 @@ public enum TranslationBackfill {
                          translator: any Translator, language: String,
                          progress: @Sendable (Int, Int) -> Void) async -> Int {
     guard !language.isEmpty else { return 0 }
+    // Without this, an unopenable cache still runs every translator call (each `translation` lookup
+    // and `put` write silently no-ops on a nil database) — 1,294 calls spent to write nothing, with
+    // the progress bar and the caller both reporting success.
+    guard store.isAvailable else { return 0 }
     let total = units.count
     var written = 0
     for (index, unit) in units.enumerated() {
