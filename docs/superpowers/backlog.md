@@ -540,6 +540,77 @@ unusable". *Revisit trigger:* when the gold set exists.
 
 ---
 
+## Translation settings — pack management, coverage & backfill — DONE (2026-08-14, branch `worktree-translation-settings`, through `1ac2cab`)
+
+Shipped the control surface the on-device translation slice never built: a picker over the **29 targets
+this Mac actually offers**, pack status with a download that mounts only while pressed, a link out to
+the OS pane that owns pack lifecycle, a coverage readout counted by **distinct text**, and one explicit
+**serial, idempotent, resumable, cancellable** backfill. The starting point it exists to expose was
+measured, not guessed: **0 of 1,294** translatable texts covered, with `nodeName`/`nodeDescription`
+having had **no production writer at all**. `TranslationTarget.supported = ["de"]` is gone — its stated
+index-size cost was refuted by its own pre-registered ranking gate (McNemar **p = 1.000**). Trust gate
+untouched; no `EvalTask` (nothing here is LLM-backed). Spec/plan:
+`{specs,plans}/2026-08-14-translation-settings-coverage*`; full detail in `CLAUDE.md` Status.
+
+**Subsumed, not deferred:** the translation slice's **per-node bulk translation** follow-up
+(`specs/2026-08-12-on-device-translation-design.md:241` — "an easy additive follow-up if dogfooding
+shows the sparsity") is **closed by the global backfill**. A per-node button would translate a subset of
+the same corpus through the same store with a second denominator to keep honest; one global pass over
+`TranslatableCorpus` covers every node, and re-pressing it costs only what is missing.
+
+### Deliberately left open by this design
+
+- **An ETA on the backfill.** Needs one observed run's throughput. The eval README logged 1,303
+  attempts and 0 nils but **no elapsed time**, so any "~4 min left" would be invented. The readout is
+  `318 of 1,294` until a real run has been timed. *Revisit trigger:* the first completed run on real
+  hardware — note its wall time, then decide.
+- **Concurrent backfill.** Serial on purpose: on-device translation throughput under concurrency is
+  unmeasured, and a bulk pass over someone's whole history is not where to find out. *Revisit trigger:*
+  a measured serial run that is slow enough to be worth the risk — measurement first, then a decision.
+- **RTL layout for translated content.** `ar-AE` is offered because the framework offers it; translated
+  node names and loose-end text will render in views built for LTR (chrome is unaffected). *Revisit
+  trigger:* an RTL target actually being used.
+- **Ambient translation in the sync agent — explicitly rejected, not parked.** The launchd agent stays a
+  **reader** of translations, exactly where the translation spec drew the line, so there is one writer
+  of `translation-cache.sqlite` and no arbitration between a background slice and a foreground run.
+  Reopening this means reopening that boundary, not adding a feature.
+- **Pruning a previous language's rows after a switch.** Switching languages costs a full pass for the
+  new one and leaves the old language's rows on disk. The file is disposable and the index rebuild drops
+  their documents (`gather` looks up only the current language), so the only cost is disk. *Revisit
+  trigger:* the cache file growing large enough to notice.
+- **Coverage is a store lookup per unit** (1,294 reads on Settings open today). Becomes one grouped
+  query if it is ever slow enough to feel; deliberately not designed around in advance.
+
+### Deferred minors from this run (all reviewed, all judged not worth their fix)
+
+- **A blank coverage row after an out-of-order re-measure.** The coverage state carries the language it
+  was measured for and renders only on a match, so a stale measurement for a superseded language shows
+  **nothing** rather than another language's numbers. Bounded: `.task(id:)` also fires on appear, so
+  closing and reopening Settings recovers it. Fixing it fully needs the monotonic token the fix
+  deliberately did not add — and showing nothing beats showing a number that is not about the selected
+  language.
+- **A narrow ABA download race.** Press Download for A, switch away, switch back to A before the first
+  closure resumes, and both the orphaned and the fresh closure can complete for a genuinely-current A.
+  Not a wrong-language write — at worst a redundant `isInstalled` recompute and a no-op nil assignment.
+- **The progress bar persists until the in-flight unit returns** after a language switch. Correct
+  behaviour on **Stop** (the bar *should* stand until the unit lands); telling "stopped" from
+  "superseded" costs state for a sub-second cosmetic window.
+- **Endonym sort order under mixed scripts.** The picker sorts by `localizedStandardCompare`, i.e. the
+  app locale's collation over Deutsch / 中文 / العربية. A readability quirk of sorting names written in
+  different scripts; the alternative (sort by identifier, or group by script) is not obviously better.
+- **`TranslationCoverage`'s `off` test pins the observable side effect, not "no store read".** It
+  catches the realistic mutation (deleting the `!language.isEmpty` guard makes `total == 4`), but a
+  literal read-count assertion would need an injectable store seam that does not exist.
+- **The pre-macOS-26 `else` branch is unreachable** at the app's 26.0 deployment target. The spec's
+  degradation table calls for it and it mirrors surrounding code, so it stays.
+
+*Revisit trigger for the whole section:* the human-verify checklist in
+`plans/2026-08-14-translation-settings-coverage.md` — **nothing in the app half has executed yet** (no
+app unit tests; the documented smoke-launch renders no view body), so that checklist is the first real
+exercise of this feature and may reorder everything above.
+
+---
+
 ## `TextQuality.shorten` — two weak tests on correct code (2026-08-13)
 
 Parked at the end of the slice-5 run rather than fixed, because the process allows exactly one fix wave

@@ -39,8 +39,11 @@ search corpus cannot disagree about what is translatable. The app half is thin: 
   `%1$lld` / `%2$lld` in German where word order differs. German is impersonal/infinitive.
 - **Chrome is localized; content is not.** Language display names come from `Locale` and are rendered
   with `Text(verbatim:)` — never a catalog key.
-- **Availability floors:** app deployment target is 15.0, so `LanguageAvailability` needs no
-  annotation in the app target. `Package.swift` stays `.macOS(.v14)`, so **no Kit file added by this
+- **Availability floors:** app deployment target is ~~15.0~~ **26.0** (`project.yml:9` — corrected
+  2026-08-14 during the pre-flight scan; harmless in both directions), so `LanguageAvailability`
+  (15+) needs no annotation in the app target — but it also means every `if #available(macOS 26, *)`
+  guard below is always-true and the pre-26 fallback text is unreachable in this build. Both were kept
+  deliberately: the spec's degradation table calls for them and they mirror surrounding code. `Package.swift` stays `.macOS(.v14)`, so **no Kit file added by this
   plan may import `Translation`** — Kit's only `Translation` use stays the existing
   `@available(macOS 26, *) SystemTranslator`. Translating and downloading stay behind
   `if #available(macOS 26, *)`.
@@ -1384,10 +1387,14 @@ impersonal/infinitive:
 | `Preparing the language…` | `Sprache wird vorbereitet …` |
 | `Download…` | `Herunterladen …` |
 | `Manage installed languages in System Settings…` | `Installierte Sprachen in den Systemeinstellungen verwalten …` |
+| `Translating %lld of %lld…` | `%1$lld von %2$lld werden übersetzt …` |
 | `%lld of %lld translated` | `%1$lld von %2$lld übersetzt` |
 | `Translate remaining` | `Restliche übersetzen` |
 | `Stop` | `Stoppen` |
-| `Everything is translated.` | `Alles ist übersetzt.` |
+
+*Corrected 2026-08-14, before Task 7 ran: Task 6's fix round gave the progress row its own literal
+(`Translating %lld of %lld…`) and deleted `Everything is translated.` from the source, so that key was
+never authored. The `Prepare translation` entry to delete was at `:3086`, not `:2125`. Nine keys shipped.*
 
 Two things to get right: `%lld of %lld translated` needs **positional** `%1$lld` / `%2$lld` in German
 because the numbers precede the verb; and `Stop` may already exist in the catalog — check before adding
@@ -1431,6 +1438,9 @@ make all
 Expected: lint clean, full suite PASS (Kit gains ~18 tests: 5 + 6 + 6 in Tasks 1–3, plus 2 in Task 4),
 app builds, embedded-CLI smoke passes. Record the final test count for the CLAUDE.md bullet.
 
+*Actual (2026-08-14): **703 tests in 12 suites**, up from a 685 baseline — the predicted +18, distributed
+5 + 5 + 5 in Tasks 1–3 and +3 in Task 4. Lint 0 violations; app builds; embedded-CLI smoke passes.*
+
 - [ ] **Step 2: Install and drive it once, for real**
 
 ```bash
@@ -1441,7 +1451,17 @@ Then work the checklist. This is the only verification that touches the actual f
 has no unit tests, and the documented smoke-launch recipe renders no view body, so nothing before this
 step has executed a single line of `TranslationSettingsSection` or `AppModel+Translation`.
 
+> **Not run by the implementation session (2026-08-14), deliberately.** `make run` replaces the live
+> `/Applications/Pensieve.app` and re-mints the bundled sync helper's cdhash — an outward side effect on
+> a running system. Step 1 (`make all`) is green: lint 0 violations, **703 tests in 12 suites** (up from
+> 685), app builds, embedded-CLI smoke passes. The install and Step 3 are the human's.
+
 - [ ] **Step 3: Human-verify checklist**
+
+*Corrected 2026-08-14 to match what actually shipped: the running row is `Translating N of M…` (its own
+key — Kit's counter advances on every unit ATTEMPTED, not every one written), there is no "Everything is
+translated." sentence (deleted as redundant with the count), and coverage now carries the language it was
+measured for, so it renders nothing rather than a stale number during a re-measure.*
 
 - [ ] Settings ▸ Intelligence ▸ Translation lists **29 languages** (not 1), each in its own language,
       with `Deutsch` and `Français` unmarked and `polski` / `русский` carrying the `⤓` marker.
@@ -1450,13 +1470,23 @@ step has executed a single line of `TranslationSettingsSection` or `AppModel+Tra
       always-attached `.translationTask` did).
 - [ ] Picking an undownloaded language shows "isn’t downloaded yet" + Download; pressing Download shows
       the system sheet, and on completion the line flips to "Ready to translate".
+- [ ] **Switch the picker to another language while a download is running.** No download prompt may
+      appear for the newly selected language, and the row must show that language's own status (ready /
+      needs download). This is the review-found defect: the old `Bool` flag was reset only inside a
+      `.task(id:)` body, which never runs synchronously with the change to its id.
 - [ ] With no pack installed, **Translate remaining is disabled**.
 - [ ] Coverage reads `0 of 1294` on first open with German selected (the live store held 2 narration
       rows and nothing else on 2026-08-14).
-- [ ] Pressing **Translate remaining** advances the bar; **Stop** halts it; the count keeps what landed.
-- [ ] Closing Settings mid-run and reopening it shows the run **still going**.
+- [ ] Pressing **Translate remaining** advances the bar, and the running row reads
+      **"Translating N of M…"** — not "N of M translated".
+- [ ] **Stop** halts it; the count keeps what landed. Pressing again resumes from there.
+- [ ] Closing Settings mid-run and reopening it shows the run **still going** (and the bar, not a
+      button).
+- [ ] **Switch the target language mid-run: the run stops.** The bar may linger for up to one unit
+      while the in-flight translation returns; it must not keep climbing.
 - [ ] Quitting mid-run and relaunching: coverage shows the partial total, and pressing the button again
       resumes rather than restarting (watch the count start from where it stopped, not from 0).
+- [ ] At 100%: the row shows **only** the count, with no button and **no** second sentence beside it.
 - [ ] After a completed run: node names and descriptions render in German in the sidebar/detail, and
       ⌘F finds a node by a **German** word from its description (this is the payoff — those two fields
       previously had no writer at all).
@@ -1464,9 +1494,16 @@ step has executed a single line of `TranslationSettingsSection` or `AppModel+Tra
       any quote is German, stop and file it.
 - [ ] "Manage installed languages in System Settings…" opens Language & Region, showing Translation
       Languages.
-- [ ] Switching to another language drops coverage to `0 of 1294` and a new backfill works.
+- [ ] Switching to another language shows **no coverage row at all** for the moment the re-measure
+      takes (never the previous language's numbers), then `0 of 1294`; a new backfill then works. If the
+      row stays blank, closing and reopening Settings must recover it — that residual is a known,
+      recorded minor.
 - [ ] Launch with `-AppleLanguages '(de)'`: every new string is German, and language names stay in
-      their own language.
+      their own language. The nine new values to check: `Bereit zum Übersetzen auf diesem Mac.` ·
+      `Diese Sprache ist noch nicht heruntergeladen.` · `Sprache wird vorbereitet …` ·
+      `Herunterladen …` · `Installierte Sprachen in den Systemeinstellungen verwalten …` ·
+      `%1$lld von %2$lld werden übersetzt …` · `%1$lld von %2$lld übersetzt` · `Restliche übersetzen` ·
+      `Stoppen`. (`Prepare translation` / `Übersetzung vorbereiten` must be **gone**.)
 
 - [ ] **Step 4: Update the docs**
 
