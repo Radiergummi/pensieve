@@ -16,7 +16,8 @@ public enum PassageChunker {
   /// Ordered chunks covering `text`. Empty for empty or whitespace-only input.
   ///
   /// Consecutive chunks share `overlapLength` characters of context. A window ends at the last
-  /// whitespace inside it and opens at the next whitespace after the stride, so chunks start and
+  /// whitespace inside it and the next window opens `overlapLength` characters back from that end
+  /// (backed off, not stridden), then snapped FORWARD to the next whitespace so chunks start and
   /// end at word boundaries; a window with no whitespace in reach is cut at its hard length so a
   /// pathological no-whitespace input still terminates.
   public static func chunk(_ text: String) -> [String] {
@@ -43,26 +44,27 @@ public enum PassageChunker {
       let chunk = trimmed[windowStart..<windowEnd].trimmingCharacters(in: .whitespacesAndNewlines)
       if !chunk.isEmpty { chunks.append(chunk) }
       if windowEnd >= trimmed.endIndex { break }
-      windowStart = nextWindowStart(in: trimmed, from: windowStart, windowEnd: windowEnd)
+      windowStart = nextWindowStart(in: trimmed, windowEnd: windowEnd)
     }
     return chunks
   }
 
-  /// Where the next window begins: `windowLength - overlapLength` characters on, then snapped
-  /// FORWARD to the next whitespace so a window never opens mid-word — a fragment like
-  /// "comprehensibilities" is a token the user never wrote, and BM25 matches it happily. Two bounds
-  /// keep it honest. The snap may only eat into the overlap, so it cannot swallow a whole window.
-  /// And neither the stride nor the snap may pass `windowEnd`: a window whose last whitespace sat
-  /// early ends well before the stride would land, and striding blindly past it would drop the text
-  /// in between. The stride is positive, so progress — and termination — are guaranteed either way.
-  private static func nextWindowStart(in text: String, from windowStart: String.Index,
+  /// Where the next window begins. Backing off from where this chunk actually ENDED, rather than
+  /// striding blindly from where it began, is what makes the overlap real at every boundary. A
+  /// window whose only whitespace sat just past `overlapLength` ends far short of a full stride,
+  /// and a stride would either skip the text in between (losing it) or land exactly on `windowEnd`
+  /// (losing the overlap) — a phrase straddling that boundary would then appear in neither chunk,
+  /// which is the failure overlap exists to prevent. Progress is still guaranteed: a window is only
+  /// cut short when its whitespace lies more than `overlapLength` in, so `start` is always past
+  /// `windowStart`.
+  /// Then snap FORWARD to the next whitespace so a window never opens mid-word — a fragment like
+  /// "comprehensibilities" is a token the user never wrote, and BM25 matches it happily. Searching
+  /// only up to `windowEnd` keeps the snap inside the overlap it is allowed to consume.
+  private static func nextWindowStart(in text: String,
                                       windowEnd: String.Index) -> String.Index {
-    let strideStart = text.index(windowStart, offsetBy: windowLength - overlapLength,
-                                 limitedBy: text.endIndex) ?? text.endIndex
-    let start = min(strideStart, windowEnd)
-    let snapLimit = min(text.index(start, offsetBy: overlapLength,
-                                   limitedBy: text.endIndex) ?? text.endIndex, windowEnd)
-    guard start < snapLimit else { return start }
-    return text[start..<snapLimit].firstIndex(where: { $0.isWhitespace }) ?? start
+    let start = text.index(windowEnd, offsetBy: -overlapLength, limitedBy: text.startIndex)
+      ?? text.startIndex
+    guard start < windowEnd else { return start }
+    return text[start..<windowEnd].firstIndex(where: { $0.isWhitespace }) ?? start
   }
 }
