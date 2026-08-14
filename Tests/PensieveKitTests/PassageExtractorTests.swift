@@ -73,6 +73,21 @@ import Testing
     #expect(passages.isEmpty)
   }
 
+  /// A dropped prompt still consumes its turn. The turn happened — its prompt just was not worth
+  /// storing — so the reply that answered it belongs to that turn, not folded back into the
+  /// previous one. Without this, a reply to "ok" would be filed under the previous question.
+  @Test func aDroppedPromptStillConsumesItsTurn() {
+    let passages = extract([
+      message(0, "user", "why does background sync refuse to spawn", isUserPrompt: true),
+      message(1, "assistant", "Because the agent's LWCR is stale.", isUserPrompt: false),
+      message(2, "user", "ok", isUserPrompt: true),
+      message(3, "assistant", "Then the next run will spawn normally.", isUserPrompt: false),
+    ])
+    #expect(passages.count == 3, "the degenerate prompt is dropped, the other three are stored")
+    #expect(passages.map(\.turnIndex) == [0, 0, 1],
+            "the reply after the dropped prompt opens turn 1, not turn 0")
+  }
+
   /// A reply longer than the single-chunk limit becomes several passages that share their message
   /// index and their turn — that shared identity is what the retrieval layer dedupes on.
   @Test func aLongReplyBecomesSeveralPassagesSharingItsTurnAndMessageIndex() {
