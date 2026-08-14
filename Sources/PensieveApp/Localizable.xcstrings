@@ -3115,6 +3115,105 @@
           }
         }
       }
+    },
+    "Ready to translate on this Mac." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit zum Übersetzen auf diesem Mac."
+          }
+        }
+      }
+    },
+    "This language isn’t downloaded yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Sprache ist noch nicht heruntergeladen."
+          }
+        }
+      }
+    },
+    "Preparing the language…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprache wird vorbereitet …"
+          }
+        }
+      }
+    },
+    "Download…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Herunterladen …"
+          }
+        }
+      }
+    },
+    "Manage installed languages in System Settings…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installierte Sprachen in den Systemeinstellungen verwalten …"
+          }
+        }
+      }
+    },
+    "Translating %lld of %lld…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld von %2$lld werden übersetzt …"
+          }
+        }
+      }
+    },
+    "%lld of %lld translated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld von %2$lld übersetzt"
+          }
+        }
+      }
+    },
+    "Translate remaining" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restliche übersetzen"
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stoppen"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
