@@ -88,6 +88,12 @@ struct TranslationSettingsSection: View {
       }
     }
     .task { options = await TranslationLanguageCatalog.load() }
+    .task(id: translationTarget) { await model.measureTranslationCoverage() }
+    // NOT `.task(id:)`: a `.task(id:)` body also runs on first appear, which would cancel a run in
+    // flight every time Settings merely reopens — and "closing Settings does not kill a run, and
+    // reopening shows it still going" is this feature's whole point. `.onChange` fires only on an
+    // actual change, so a language switch cancels a stale run without touching one just opened into.
+    .onChange(of: translationTarget) { _, _ in model.cancelTranslationBackfill() }
 
     if !isOff {
       if #available(macOS 26, *) {
@@ -96,6 +102,7 @@ struct TranslationSettingsSection: View {
         Text("Translation requires macOS 26 or later.")
           .font(.caption).foregroundStyle(.secondary)
       }
+      if #available(macOS 26, *) { coverageRow }
       Button("Manage installed languages in System Settings…") {
         // Verified present on macOS 26: this extension owns the "Translation Languages" UI. Deleting
         // a pack is OS-only, so linking out is the honest ceiling of "manage".
@@ -148,6 +155,36 @@ struct TranslationSettingsSection: View {
     .task(id: translationTarget) {
       downloadingLanguage = nil
       isInstalled = await TranslationLanguageCatalog.isInstalled(translationTarget)
+    }
+  }
+
+  /// Coverage plus the one button that starts or stops the bulk pass. Disabled when the pack is not
+  /// installed: 1,294 calls that each nil out is not a run worth starting, and the Download button
+  /// directly above is the actual next step.
+  @available(macOS 26, *)
+  @ViewBuilder private var coverageRow: some View {
+    if let progress = model.translationBackfillProgress {
+      VStack(alignment: .leading, spacing: 4) {
+        ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
+        HStack {
+          Text("\(progress.done) of \(progress.total) translated")
+            .font(.caption).foregroundStyle(.secondary)
+          Spacer()
+          Button("Stop") { model.cancelTranslationBackfill() }
+        }
+      }
+    } else if let coverage = model.translationCoverage {
+      HStack {
+        Text("\(coverage.translated) of \(coverage.total) translated")
+          .font(.caption).foregroundStyle(.secondary)
+        Spacer()
+        if coverage.missing.isEmpty {
+          Text("Everything is translated.").font(.caption).foregroundStyle(.secondary)
+        } else {
+          Button("Translate remaining") { model.startTranslationBackfill() }
+            .disabled(!isInstalled)
+        }
+      }
     }
   }
 }

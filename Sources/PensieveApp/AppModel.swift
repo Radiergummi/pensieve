@@ -116,6 +116,15 @@ final class AppModel {
   /// NOT `private(set)`: bumped from `AppModel+Translation.swift`, a different file in the same module.
   var translationRevision = 0
 
+  /// Coverage as last measured, or nil when the target is off / not yet measured. Measured on demand
+  /// from Settings, not on launch: it is 1,294 store reads today and nothing outside Settings shows it.
+  var translationCoverage: TranslationCoverage?
+  /// Non-nil while a bulk translation is running: (done, total). Lives on the model, not the view, so
+  /// closing Settings does not kill a run and reopening it shows the run still going.
+  var translationBackfillProgress: (done: Int, total: Int)?
+  /// The running backfill. `Task.detached` deliberately — see `startTranslationBackfill`.
+  @ObservationIgnored var translationBackfillTask: Task<Int, Never>?
+
   /// Bumped when a loose end's status changes. Its own signal for the same reason
   /// `translationRevision` is: the feeds and the detail pane key their reload `.task` on
   /// `refreshToken`, which `refresh()` deliberately does not bump (it means ⌘R, and `DetailView`
