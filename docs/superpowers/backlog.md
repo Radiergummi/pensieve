@@ -594,6 +594,41 @@ regardless, since it is a few lines and it currently makes (1) harder to close s
 
 ---
 
+## Pensieve captured its own `claude -p` calls as work sessions — OPEN (found 2026-08-14)
+
+Found while measuring the corpus for the transcript-passage-chunking re-spec, and deliberately **not**
+folded into that work — it is a capture-path question, not a retrieval one.
+
+**427 of the 1,099 `cc.session` events are Pensieve's own LLM calls.** The evidence is unambiguous:
+all 427 carry cwd `/` (hence the degenerate transcript path `~/.claude/projects/-/<id>.jsonl`, a
+directory that does not exist), **423 of them have exactly 1 prompt**, all are attributed to a single
+junk node named literally `/`, and their `workSummary` values are summaries *of other sessions* — one
+leaking the scaffolding verbatim: *"The session is already summarized. Here it is in 1-2 sentences:"*.
+That is the `claude -p` fallback provider firing the `SessionStart` hook: Pensieve captured itself
+summarizing a session, then summarized that capture.
+
+**Why it is not urgent:** every one is dated **2026-07** and the `/` node is already **archived**, so
+the loop is not running today (the on-device provider became the default, and `claude -p` is now the
+fallback). No data is at risk.
+
+**Why it is not nothing:** those 427 summaries are in the BM25 corpus right now, reachable under
+Include Archived, and they are model output *about* Pensieve's own internals — the highest-confusion
+possible search result. They also inflate every "sessions captured" figure by 39%, which is how they
+were noticed: a transcript-availability measurement read 36% until they were excluded, and 59% after.
+
+Three candidate fixes, needing a decision rather than a patch:
+
+1. **Guard at capture** — have `capture-session-start` ignore invocations Pensieve itself spawned.
+   Cleanest, but needs a reliable marker; cwd `/` is a symptom, not an identity.
+2. **Purge the rows** — delete the 427 events and the `/` node. Straightforward, but the ingester is
+   the only canonical writer and there is no delete-events verb.
+3. **Leave archived.** They are already out of every normal view; only search reaches them.
+
+*Revisit trigger:* selecting a cloud or `claude -p` provider for any automatic, unattended task —
+that is what would restart the loop. Also worth checking before the next capture-path change.
+
+---
+
 ## In-node find — highlight/document skew — OPEN, needs thinking (2026-08-12)
 
 Raised by the whole-branch review of `worktree-in-node-find` and **deliberately left unchanged** — the
