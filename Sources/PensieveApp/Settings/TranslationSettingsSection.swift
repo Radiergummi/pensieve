@@ -22,9 +22,9 @@ struct TranslationLanguageOption: Identifiable, Hashable {
 /// What this Mac can translate English into.
 ///
 /// `LanguageAvailability` is macOS 15+ (only `TranslationSession(installedSource:)` is 26+), and the
-/// app's deployment target is 15.0, so this needs no availability annotation. Measured on this
-/// machine: 38 supported languages, of which 9 are English variants reporting `.unsupported` (en→en)
-/// and drop out by that status alone — no hand-maintained exclusion list.
+/// app's deployment target is 26.0 — well past that floor — so this needs no availability annotation.
+/// Measured on this machine: 38 supported languages, of which 9 are English variants reporting
+/// `.unsupported` (en→en) and drop out by that status alone — no hand-maintained exclusion list.
 enum TranslationLanguageCatalog {
   static func load() async -> [TranslationLanguageOption] {
     let availability = LanguageAvailability()
@@ -98,11 +98,11 @@ struct TranslationSettingsSection: View {
     if !isOff {
       if #available(macOS 26, *) {
         packStatus
+        coverageRow
       } else {
         Text("Translation requires macOS 26 or later.")
           .font(.caption).foregroundStyle(.secondary)
       }
-      if #available(macOS 26, *) { coverageRow }
       Button("Manage installed languages in System Settings…") {
         // Verified present on macOS 26: this extension owns the "Translation Languages" UI. Deleting
         // a pack is OS-only, so linking out is the honest ceiling of "manage".
@@ -161,26 +161,38 @@ struct TranslationSettingsSection: View {
   /// Coverage plus the one button that starts or stops the bulk pass. Disabled when the pack is not
   /// installed: 1,294 calls that each nil out is not a run worth starting, and the Download button
   /// directly above is the actual next step.
+  ///
+  /// The stored coverage is shown only when it was measured FOR the currently selected language:
+  /// `translationCoverage.language == translationTarget`. A re-measure after a language switch takes
+  /// a full corpus gather, and during that window the row shows nothing rather than the previous
+  /// language's numbers under the new selection — a mismatch, not a stale display, is the honest
+  /// state to render.
+  ///
+  /// "Translated" during the progress bar would overstate what happened: `TranslationBackfill`
+  /// advances its counter on every unit it ATTEMPTS, not every one it writes (a missing language pack
+  /// mid-run nils out every call while the counter still climbs to the total). "Translating N of M…"
+  /// is honest in that degraded path and leaves the coverage row's own "translated" meaning only what
+  /// it actually measured from the store.
   @available(macOS 26, *)
   @ViewBuilder private var coverageRow: some View {
     if let progress = model.translationBackfillProgress {
       VStack(alignment: .leading, spacing: 4) {
         ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
         HStack {
-          Text("\(progress.done) of \(progress.total) translated")
+          Text("Translating \(progress.done) of \(progress.total)…")
             .font(.caption).foregroundStyle(.secondary)
           Spacer()
           Button("Stop") { model.cancelTranslationBackfill() }
         }
       }
-    } else if let coverage = model.translationCoverage {
+    } else if let measured = model.translationCoverage, measured.language == translationTarget {
+      let coverage = measured.coverage
       HStack {
         Text("\(coverage.translated) of \(coverage.total) translated")
           .font(.caption).foregroundStyle(.secondary)
         Spacer()
-        if coverage.missing.isEmpty {
-          Text("Everything is translated.").font(.caption).foregroundStyle(.secondary)
-        } else {
+        // Nothing missing: the count already says so. A second sentence beside it would stutter.
+        if !coverage.missing.isEmpty {
           Button("Translate remaining") { model.startTranslationBackfill() }
             .disabled(!isInstalled)
         }

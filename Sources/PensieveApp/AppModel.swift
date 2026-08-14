@@ -118,7 +118,12 @@ final class AppModel {
 
   /// Coverage as last measured, or nil when the target is off / not yet measured. Measured on demand
   /// from Settings, not on launch: it is 1,294 store reads today and nothing outside Settings shows it.
-  var translationCoverage: TranslationCoverage?
+  /// The language travels WITH the coverage, not as a separate token: a re-measure after a language
+  /// switch takes a full corpus gather, and during that window a token could only say "stale", while
+  /// the language itself lets both the backfill and the view compare against the CURRENT target and
+  /// refuse/hide on mismatch — the same stale-async-write shape slice 3a's narration window and
+  /// `DetailView`'s `loadedNodeID == node.id` gate already fixed.
+  var translationCoverage: (language: String, coverage: TranslationCoverage)?
   /// Non-nil while a bulk translation is running: (done, total). Lives on the model, not the view, so
   /// closing Settings does not kill a run and reopening it shows the run still going.
   var translationBackfillProgress: (done: Int, total: Int)?

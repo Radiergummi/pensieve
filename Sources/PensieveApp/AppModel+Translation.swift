@@ -39,10 +39,11 @@ extension AppModel {
       return
     }
     let store = translationStore
-    translationCoverage = await Task.detached {
+    let coverage = await Task.detached { () -> TranslationCoverage? in
       guard let units = try? TranslatableCorpus.gather(database) else { return nil }
       return TranslationCoverage.measure(units: units, store: store, language: language)
     }.value
+    translationCoverage = coverage.map { (language: language, coverage: $0) }
   }
 
   /// Translate everything the corpus can use and this store does not have yet.
@@ -53,7 +54,13 @@ extension AppModel {
   func startTranslationBackfill() {
     guard translationBackfillTask == nil, let translator else { return }
     let language = TranslationTarget.resolved()
-    guard !language.isEmpty, let missing = translationCoverage?.missing, !missing.isEmpty else { return }
+    // Coverage must be FOR this language, not merely present: a stale measurement from before a
+    // language switch would otherwise hand this run language A's missing list to translate into
+    // language B, silently skipping units A never needed. The row itself hides during that same
+    // window (see `coverageRow`), so refusing here rather than measuring first keeps both in step.
+    guard !language.isEmpty, let translationCoverage, translationCoverage.language == language,
+          !translationCoverage.coverage.missing.isEmpty else { return }
+    let missing = translationCoverage.coverage.missing
     let store = translationStore
     translationBackfillProgress = (done: 0, total: missing.count)
     // Built HERE, on the main actor, so `self` is captured before the detached task exists. `AppModel`
