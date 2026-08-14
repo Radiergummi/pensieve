@@ -14,15 +14,37 @@ public enum TranslationTarget {
   /// Generated text is written in English; that is the source of every display translation and the
   /// target of the query backstop.
   public static let sourceLanguage = "en"
-  /// Languages offered. Narrow on purpose — each one added doubles a slice of the search index, which
-  /// is a measured cost (see the plan's verification gate), not a free dropdown entry.
-  public static let supported = ["de"]
 
-  /// The persisted target, or `off` for unset, English, or anything not in `supported`. An
-  /// unrecognised value degrades to off rather than reaching the framework, which would fail per call
-  /// and log on every render.
+  /// The persisted target, or `off` for unset, English, or a malformed identifier.
+  ///
+  /// There is deliberately NO allow-list of languages. The original `supported = ["de"]` existed on
+  /// the argument that each language "doubles a slice of the search index, which is a measured cost" —
+  /// and that argument was retired by its own measurement: the pre-registered ranking gate shipped as
+  /// built with English P@1 statistically indistinguishable from baseline (McNemar p = 1.000,
+  /// `measurements/2026-08-12-translation-ranking/`). Only one target is active at a time, so the
+  /// doubling is bounded at exactly the case that gate cleared.
+  ///
+  /// The check is SHAPE, not membership, and the framework is where unsupported languages degrade:
+  /// `SystemTranslator.translate` verifies `status(from:to:) == .installed` before constructing a
+  /// session, and `AppModel.displayed(field:sourceText:)` is a pure store lookup that never reaches
+  /// the framework at all. So an exotic-but-valid code costs one availability check and shows English;
+  /// it cannot fail per render. (The previous comment here claimed otherwise; it was written when
+  /// nothing downstream guarded.)
   public static func resolved(defaults: UserDefaults = PensieveDefaults.shared()) -> String {
     let stored = defaults.string(forKey: PensieveDefaults.translationTargetKey) ?? off
-    return supported.contains(stored) ? stored : off
+    guard !stored.isEmpty, stored != sourceLanguage,
+          let code = Locale.Language(identifier: stored).languageCode,
+          Locale.LanguageCode.isoLanguageCodes.contains(code)
+    else { return off }
+    return stored
+  }
+
+  /// The language's name in its own language — "Deutsch", "Deutsch (Schweiz)", "中文（香港）".
+  ///
+  /// `forIdentifier:`, NOT `forLanguageCode:`: the latter drops the region/script qualifier, which
+  /// renders `zh`, `zh-HK` and `zh-TW` as three identical rows labelled "中文". Falls back to the
+  /// identifier so a row is never blank.
+  public static func displayName(for language: String) -> String {
+    Locale(identifier: language).localizedString(forIdentifier: language) ?? language
   }
 }
