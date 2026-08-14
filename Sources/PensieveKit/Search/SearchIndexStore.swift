@@ -17,13 +17,14 @@ public struct SearchIndexHit: Sendable {
 /// no vendored C target and no per-connection extension registration. GRDB's Swift-level
 /// FTS5 API is conditionally compiled and deliberately unused.
 public struct SearchIndexStore: Sendable {
-  private static let schemaVersion = 4
+  private static let schemaVersion = 5
   /// Ranking always comes from the TEXT table. Paths never contribute a score to a text query —
   /// `.textRestrictedByPath` uses them to narrow the candidate set, and `.textWithPathProbe`
   /// surfaces rows the text index could not find at all, ranked by their own path relevance in a
   /// separate list appended BELOW the text hits.
   private static let ranking = "bm25(documents)"
   private static let filesRanking = "bm25(document_files)"
+  private static let passagesRanking = "bm25(document_passages)"
 
   private let database: (any DatabaseWriter)?
   public var isAvailable: Bool { database != nil }
@@ -54,6 +55,7 @@ public struct SearchIndexStore: Sendable {
         if storedVersion != schemaVersion {
           try database.execute(sql: "DROP TABLE IF EXISTS documents")
           try database.execute(sql: "DROP TABLE IF EXISTS document_files")
+          try database.execute(sql: "DROP TABLE IF EXISTS document_passages")
           try database.execute(sql: "DROP TABLE IF EXISTS meta")
         }
         // Two tables, not one table with two columns. FTS5 normalises bm25 by the row's TOTAL token
@@ -74,13 +76,31 @@ public struct SearchIndexStore: Sendable {
             item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
             tokenize = 'unicode61 remove_diacritics 2')
           """)
+        // A THIRD table, for the same measured reason `document_files` is separate: FTS5 normalises
+        // bm25() by a row's TOTAL token count, so putting 1,500-character passages beside 40-character
+        // node names would discount every existing hit. Sharing one table regressed P@1 0.395 → 0.378
+        // (McNemar p = 0.017, n = 1500) when this was tried with file paths. Passage scores are
+        // therefore NOT comparable to text scores, which is why passage results are a separate,
+        // appended list rather than merged into the ranked one.
+        //
+        // No `item_status`: a passage has no lifecycle of its own. If a future producer gives one to
+        // a passage, add the filter here AND in the canonical re-check, in the same commit.
+        try database.execute(sql: """
+          CREATE VIRTUAL TABLE IF NOT EXISTS document_passages USING fts5(
+            text,
+            item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
+            tokenize = 'unicode61 remove_diacritics 2')
+          """)
         try database.execute(sql: """
           CREATE TABLE IF NOT EXISTS meta(
-            schema_version INT, corpus_hash TEXT, building INT NOT NULL DEFAULT 0)
+            schema_version INT, corpus_hash TEXT, building INT NOT NULL DEFAULT 0,
+            passages_hash TEXT)
           """)
         if storedVersion != schemaVersion {
-          try database.execute(sql: "INSERT INTO meta(schema_version, corpus_hash, building) VALUES (?, NULL, 0)",
-                               arguments: [schemaVersion])
+          try database.execute(sql: """
+            INSERT INTO meta(schema_version, corpus_hash, building, passages_hash)
+            VALUES (?, NULL, 0, NULL)
+            """, arguments: [schemaVersion])
         }
       }
       return pool
@@ -103,6 +123,13 @@ public struct SearchIndexStore: Sendable {
     guard let database else { return nil }
     return try? database.read { database in
       try String.fetchOne(database, sql: "SELECT corpus_hash FROM meta")
+    }
+  }
+
+  public func storedPassagesHash() -> String? {
+    guard let database else { return nil }
+    return try? database.read { database in
+      try String.fetchOne(database, sql: "SELECT passages_hash FROM meta")
     }
   }
 
@@ -144,6 +171,32 @@ public struct SearchIndexStore: Sendable {
     } catch {
       Log.search.error("SearchIndexStore: rebuild failed: \(error, privacy: .public)")
       try? database.write { database in try database.execute(sql: "UPDATE meta SET building = 0") }
+    }
+  }
+
+  /// Whole-rebuild of the passage table ONLY. Deliberately does not touch `documents`,
+  /// `document_files`, `corpus_hash`, or the `building` flag: the two indexes rebuild on their own
+  /// hashes, so a new commit does not rewrite tens of thousands of unchanged passage rows.
+  ///
+  /// `building` is not reused here because it describes the text index's state, which `state()`
+  /// reports to the UI. A passage rebuild in flight must not make ⌥⌘F claim the whole index is
+  /// building.
+  public func rebuildPassages(items: [EmbeddableItem], passagesHash: String) {
+    guard let database else { return }
+    do {
+      try database.write { database in
+        try database.execute(sql: "DELETE FROM document_passages")
+        let insert = try database.cachedStatement(sql: """
+          INSERT INTO document_passages(text, item_id, kind, node_id, state)
+          VALUES (?, ?, ?, ?, ?)
+          """)
+        for item in items {
+          try insert.execute(arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state])
+        }
+        try database.execute(sql: "UPDATE meta SET passages_hash = ?", arguments: [passagesHash])
+      }
+    } catch {
+      Log.search.error("SearchIndexStore: passage rebuild failed: \(error, privacy: .public)")
     }
   }
 
@@ -195,6 +248,27 @@ public struct SearchIndexStore: Sendable {
       }
       return merged
     }
+  }
+
+  /// Passage candidates for a text query. Only `FTSQuery.terms` matter here — a passage has no file
+  /// paths, so the path shapes are irrelevant and a `pathOnly` query must return nothing rather than
+  /// matching passage prose against a path expression.
+  public func searchPassages(_ query: FTSQuery, limit: Int,
+                             includeArchived: Bool) -> [SearchIndexHit] {
+    guard database != nil else { return [] }
+    let match: String
+    switch query.shape {
+    case .pathOnly: return []
+    case .textRestrictedByPath(let text, _): match = text
+    case .textWithPathProbe(let text): match = text
+    }
+    return fetch(sql: """
+      SELECT item_id, kind, node_id, -\(Self.passagesRanking) AS score
+      FROM document_passages
+      WHERE document_passages MATCH ?
+            AND \(Self.stateFilter(includeArchived: includeArchived))
+      ORDER BY \(Self.passagesRanking) LIMIT ?
+      """, arguments: [match, limit])
   }
 
   /// Rows the PATH index matched, ranked by path relevance. Shared by the explicit `files:`

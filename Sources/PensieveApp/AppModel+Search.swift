@@ -38,7 +38,9 @@ extension AppModel {
       // each side's rebuild would then look like a corpus change to the other and undo it, forever.
       // `.production()` re-reads the target on every call (a Settings change lands without relaunch)
       // and already skips opening the translation store when the target is off.
-      SearchIndexer.production().sync(database)
+      let indexer = SearchIndexer.production()
+      indexer.sync(database)
+      indexer.syncPassages(database)
       // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
       // timeout is the whole reason this work is detached.
       let state = searchStore.state()

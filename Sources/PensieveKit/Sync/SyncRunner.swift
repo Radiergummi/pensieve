@@ -60,6 +60,7 @@ public struct SyncRunner {
     // here DID self-construct exactly that way, which is why it is worth naming.) Both production
     // entry points (`pensieve sync`, PensieveSyncAgent) inject one explicitly.
     searchIndexer?.sync(database)
+    searchIndexer?.syncPassages(database)
 
     return Summary(ingested: ingested, discovered: discovered.count, extracted: extracted)
   }

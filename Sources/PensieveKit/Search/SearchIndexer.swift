@@ -48,6 +48,20 @@ public struct SearchIndexer: Sendable {
     store.rebuild(items: corpus, corpusHash: hash)
   }
 
+  /// Rebuilds the passage index when its own corpus moved. Separate from `sync` and guarded on its
+  /// own hash: passages change only when a session is ingested, while nodes/loose ends/events change
+  /// on every commit, so sharing one hash would rebuild ~50k passage documents for a one-line commit.
+  ///
+  /// Reuses `corpusHash` — the passage items carry the same fields, and `files`/`language`/`status`
+  /// are constant across them, so the hash is still a faithful digest of what the table holds.
+  public func syncPassages(_ database: any DatabaseReader) {
+    guard store.isAvailable else { return }
+    guard let corpus = try? EmbeddableCorpus.gatherPassages(database) else { return }
+    let hash = Self.corpusHash(corpus)
+    guard hash != store.storedPassagesHash() else { return }
+    store.rebuildPassages(items: corpus, passagesHash: hash)
+  }
+
   /// FNV-1a over every field the index stores, sorted by (item id, language) so gather order cannot
   /// change the hash. `contentHash` covers `text`; `files` is folded in separately because
   /// `contentHash` deliberately excludes it (paths must never force a re-embed on the semantic side).

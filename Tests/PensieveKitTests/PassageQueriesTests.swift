@@ -1,0 +1,139 @@
+import Foundation
+import Testing
+import SQLiteData
+@testable import PensieveKit
+
+// MARK: - fixtures
+//
+// Free functions in the style `Tests/PensieveKitTests/TestSupport.swift` already establishes
+// (`tempURL`, `tempSearchStore`, `makeCommittedRepo`). There are NO harness structs in this suite —
+// do not introduce the first one. These stay `private` to this file because only it uses them;
+// promote to `TestSupport.swift` only if a second file needs them.
+//
+// `tempSearchStore()` ALREADY EXISTS in TestSupport.swift — use it rather than constructing a
+// `SearchIndexStore` by hand.
+
+private func makePassageStore() throws -> any DatabaseWriter {
+  try openCanonicalDatabase(at: tempURL("passage-canon"))
+}
+
+private func insertNode(_ database: any DatabaseWriter, name: String,
+                        state: NodeState = .active) throws -> Node {
+  let node = Node(name: name, state: state)
+  try database.write { database in try Node.insert { node }.execute(database) }
+  return node
+}
+
+/// A `cc.session` event with its `Source`. `transcriptPath` is written into `detailJSON` under the
+/// same key `Ingester` uses, because that is where `ProvenanceQueries.transcriptPath(in:)` reads it.
+private func insertSessionEvent(_ database: any DatabaseWriter, nodeID: UUID,
+                                transcriptPath: String = "") throws -> Event {
+  let source = Source(nodeID: nodeID, kind: SourceKind.claudeCode,
+                      key: tempURL("repo", ext: nil).path)
+  let detail = try encodeJSON(["sessionID": UUID().uuidString, "prompts": "1",
+                               "transcriptPath": transcriptPath])
+  let event = Event(nodeID: nodeID, sourceID: source.id, occurredAt: Date(),
+                    kind: CaptureKind.ccSession, summary: "session", detailJSON: detail)
+  try database.write { database in
+    try Source.insert { source }.execute(database)
+    try Event.insert { event }.execute(database)
+  }
+  return event
+}
+
+@discardableResult
+private func insertPassage(_ database: any DatabaseWriter, nodeID: UUID, eventID: UUID,
+                           // Defaulted ONLY to keep this fixture under SwiftLint's
+                           // `function_parameter_count` cap (which excludes defaulted parameters
+                           // from its count, the same device `SearchQueries.buildHits` uses). Every
+                           // call site still passes both explicitly.
+                           turnIndex: Int = 0, messageIndex: Int = 0, role: PassageRole,
+                           text: String) throws -> Passage {
+  let passage = Passage(nodeID: nodeID, eventID: eventID, turnIndex: turnIndex,
+                        messageIndex: messageIndex, role: role, text: text,
+                        occurredAt: Date(timeIntervalSince1970: 1_700_000_000))
+  try database.write { database in try Passage.insert { passage }.execute(database) }
+  return passage
+}
+
+private func passageItem(_ text: String, nodeID: UUID, state: NodeState = .active,
+                         itemID: UUID = UUID()) -> EmbeddableItem {
+  EmbeddableItem(itemID: itemID.uuidString, kind: "passage", nodeID: nodeID.uuidString,
+                 state: state.rawValue, text: text)
+}
+
+/// A transcript file of alternating prompt/reply pairs, named `<sessionID>.jsonl` — load-bearing,
+/// because `TranscriptParser` derives the session id from the FILENAME, not from the JSON. The
+/// assistant content is an ARRAY of `text` blocks, matching the real format `extractText` reads.
+private func writeTranscript(_ pairs: [(prompt: String, reply: String)]) throws -> URL {
+  let id = UUID().uuidString
+  let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(id).jsonl")
+  var lines: [String] = []
+  for pair in pairs {
+    lines.append("""
+      {"type":"user","cwd":"/tmp","sessionId":"\(id)","timestamp":"2026-06-30T10:00:00Z",\
+      "message":{"role":"user","content":"\(pair.prompt)"}}
+      """)
+    lines.append("""
+      {"type":"assistant","sessionId":"\(id)","timestamp":"2026-06-30T10:00:01Z",\
+      "message":{"role":"assistant","content":[{"type":"text","text":"\(pair.reply)"}]}}
+      """)
+  }
+  try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+  return url
+}
+
+@Suite struct PassageQueriesTests {
+  @Test func passagesAreSearchableInTheirOwnTable() throws {
+    let store = tempSearchStore()
+    let nodeID = UUID()
+    store.rebuildPassages(items: [passageItem("the LWCR is stale so launchd rejects the spawn",
+                                              nodeID: nodeID)],
+                          passagesHash: "h1")
+    let query = try #require(FTSQueryBuilder.build("launchd spawn", file: nil))
+    let hits = store.searchPassages(query, limit: 10, includeArchived: false)
+    #expect(hits.count == 1)
+    #expect(hits.first?.kind == "passage")
+  }
+
+  /// The whole reason passages get their own table: writing them must not touch `documents`,
+  /// so the existing text ranking is byte-identical by construction.
+  @Test func rebuildingPassagesLeavesTheTextIndexAlone() throws {
+    let store = tempSearchStore()
+    let nodeID = UUID()
+    store.rebuild(items: [EmbeddableItem(itemID: UUID().uuidString, kind: "node",
+                                         nodeID: nodeID.uuidString, state: NodeState.active.rawValue,
+                                         text: "launchd sync agent")],
+                  corpusHash: "text-1")
+    store.rebuildPassages(items: [passageItem("something about launchd entirely", nodeID: nodeID)],
+                          passagesHash: "pass-1")
+    let query = try #require(FTSQueryBuilder.build("launchd", file: nil))
+    #expect(store.search(query, limit: 10, includeArchived: false).count == 1,
+            "the node document survives a passage rebuild")
+    #expect(store.storedCorpusHash() == "text-1", "and its hash is untouched")
+  }
+
+  /// Symmetry: a text rebuild must not wipe passages. Without a separate hash and a separate
+  /// DELETE, every new commit would silently clear the passage index.
+  @Test func rebuildingTheTextIndexLeavesPassagesAlone() throws {
+    let store = tempSearchStore()
+    let nodeID = UUID()
+    store.rebuildPassages(items: [passageItem("passage about the retrieval index", nodeID: nodeID)],
+                          passagesHash: "pass-1")
+    store.rebuild(items: [], corpusHash: "text-2")
+    let query = try #require(FTSQueryBuilder.build("retrieval", file: nil))
+    #expect(store.searchPassages(query, limit: 10, includeArchived: false).count == 1)
+    #expect(store.storedPassagesHash() == "pass-1")
+  }
+
+  @Test func archivedPassagesRequireOptIn() throws {
+    let store = tempSearchStore()
+    let nodeID = UUID()
+    store.rebuildPassages(items: [passageItem("archived talk about launchd", nodeID: nodeID,
+                                              state: .archived)],
+                          passagesHash: "h1")
+    let query = try #require(FTSQueryBuilder.build("launchd", file: nil))
+    #expect(store.searchPassages(query, limit: 10, includeArchived: false).isEmpty)
+    #expect(store.searchPassages(query, limit: 10, includeArchived: true).count == 1)
+  }
+}

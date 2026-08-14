@@ -181,6 +181,33 @@ public enum EmbeddableCorpus {
                                 state: node.state.rawValue, text: text, language: language))
   }
 
+  /// The passage corpus, gathered from the CANONICAL `passages` table — not from transcripts. That
+  /// is the simplification storing text in canonical buys: the 2026-07-19 design needed a producer
+  /// with its own reconciliation path precisely because passages came from a different source than
+  /// everything else. They no longer do, so pruning is membership-driven for free.
+  ///
+  /// Separate from `gather` rather than a `kind == "passage"` branch inside it, because the passage
+  /// table rebuilds on its own hash: one mixed array would have to be partitioned and two hashes
+  /// reconciled inside `rebuild`, which is the kind-conditional shape `statusFilter`'s own comment
+  /// warns about.
+  public static func gatherPassages(_ database: any DatabaseReader) throws -> [EmbeddableItem] {
+    try database.read { database in
+      let nodes = try Node.all.fetchAll(database)
+        .filter { $0.state == .active || $0.state == .archived }
+      let stateByNodeID = Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
+                                     uniquingKeysWith: { firstState, _ in firstState })
+      // Ordered so the corpus hash cannot depend on SQLite's arbitrary return order — the same
+      // reason `gather` orders events explicitly.
+      let passages = try Passage.order { ($0.occurredAt, $0.id) }.fetchAll(database)
+      return passages.compactMap { passage in
+        guard let state = stateByNodeID[passage.nodeID] else { return nil }
+        return EmbeddableItem(itemID: passage.id.uuidString, kind: "passage",
+                              nodeID: passage.nodeID.uuidString, state: state,
+                              text: passage.text)
+      }
+    }
+  }
+
   /// The ingester writes {"hash","branch","files"} for a commit, with `files` newline-joined.
   /// Anything else (a session's detail, malformed JSON, an absent key) yields "".
   static func changedFiles(in detailJSON: String) -> String {
