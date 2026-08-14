@@ -1,9 +1,4 @@
 import SwiftUI
-// Load-bearing and FILE-SCOPED: `@preconcurrency` suppresses this file's Sendable warnings from the
-// `Translation` framework's un-audited types (e.g. the `.translationTask` view below). It does not
-// carry over to any other file — a future `Translation` use elsewhere gets no free pass and must
-// either import it the same way or handle the warnings itself.
-@preconcurrency import Translation
 import PensieveKit
 
 /// Settings ▸ Intelligence. The narration toggle, the provider picker, and the cloud subsection —
@@ -17,7 +12,6 @@ struct IntelligenceSettingsTab: View {
   @AppStorage(PensieveDefaults.cloudFlavorKey) private var cloudFlavorRaw = CloudFlavor.anthropic.rawValue
   @AppStorage(PensieveDefaults.cloudBaseURLKey) private var cloudBaseURL = ""
   @AppStorage(PensieveDefaults.cloudModelKey) private var cloudModel = ""
-  @AppStorage(PensieveDefaults.translationTargetKey) private var translationTarget = TranslationTarget.off
 
   @State private var apiKeyField = ""
   /// Mirrors the last-persisted Keychain value, so an edited-but-unsubmitted key is distinguishable
@@ -92,7 +86,7 @@ struct IntelligenceSettingsTab: View {
         Section("Cloud provider") { cloudSection }
       }
 
-      Section { translationSection } header: {
+      Section { TranslationSettingsSection(model: model) } header: {
         Text("Translation")
       } footer: {
         Text("Generated summaries are translated on this device. Captured text, cited quotes and transcripts are never translated.")
@@ -104,28 +98,6 @@ struct IntelligenceSettingsTab: View {
     .onAppear {
       apiKeyField = KeychainSecretStore().read(account: keychainAccount) ?? ""
       loadedKey = apiKeyField
-    }
-  }
-
-  @ViewBuilder private var translationSection: some View {
-    Picker("Translate generated text to", selection: $translationTarget) {
-      Text("Off").tag(TranslationTarget.off)
-      Text(verbatim: "Deutsch").tag("de")
-    }
-    if translationTarget != TranslationTarget.off {
-      // The ONLY view-attached translation in the app. A headless TranslationSession cannot request a
-      // download (`canRequestDownloads`), so first-run pack acquisition has to happen here; everywhere
-      // else uses the headless session and degrades to English when the pack is absent.
-      if #available(macOS 26, *) {
-        Text("Prepare translation")
-          .translationTask(source: Locale.Language(identifier: TranslationTarget.sourceLanguage),
-                            target: Locale.Language(identifier: translationTarget)) { session in
-            try? await session.prepareTranslation()
-          }
-      } else {
-        Text("Translation requires macOS 26 or later.")
-          .foregroundStyle(.secondary)
-      }
     }
   }
 
