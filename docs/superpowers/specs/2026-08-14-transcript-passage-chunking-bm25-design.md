@@ -286,7 +286,14 @@ verbatim: *"The session is already summarized. Here it is in 1-2 sentences:"*. T
 fallback provider firing the `SessionStart` hook, so Pensieve captured itself summarizing, then
 summarized that.
 
-**Confined to 2026-07, and the `/` node is already archived**, so it is historical rather than
-ongoing — but those 427 summaries are in the BM25 corpus today and reachable under Include Archived.
-Worth its own decision: whether to exclude self-generated sessions at capture (a hook guard), purge
-the existing rows, or leave them archived. Recorded in `backlog.md`.
+**The bug is already fixed, twice, and cannot recur:** `ClaudeCLIProvider.shellRun` pins the child's
+cwd to `PensievePaths.llmScratchDirectory()` — its comment describes this precise loop and the
+"phantom project named `/`" it produced — and `Ingester.ingestSession` refuses
+`ProjectResolver.isDegenerateRoot` as a second line of defense. All 427 events are dated 2026-07,
+consistent with the fix, and the `/` node is archived.
+
+What remains is **residue, not a defect**: those 427 summaries are in the BM25 corpus today under
+Include Archived, and they inflate any count over `cc.session` events by 39% (the 36%-vs-59%
+transcript-availability split above is exactly this). Purging them is a one-off maintenance question,
+recorded in `backlog.md`. **This spec's passage corpus is unaffected either way** — those sessions have
+no transcripts, so they can produce no passages.

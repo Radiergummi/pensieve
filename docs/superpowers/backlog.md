@@ -594,38 +594,43 @@ regardless, since it is a few lines and it currently makes (1) harder to close s
 
 ---
 
-## Pensieve captured its own `claude -p` calls as work sessions — OPEN (found 2026-08-14)
+## The `claude -p` self-capture loop left 427 rows behind — the BUG is fixed, the RESIDUE is not (2026-08-14)
 
-Found while measuring the corpus for the transcript-passage-chunking re-spec, and deliberately **not**
-folded into that work — it is a capture-path question, not a retrieval one.
+Measured while re-speccing transcript-passage chunking. **The bug itself is already fixed, twice** —
+this entry is only about the rows it left in the store. It was initially filed here as an open capture
+defect; that framing was wrong and is corrected below, because acting on it would mean re-fixing
+something that already works.
 
-**427 of the 1,099 `cc.session` events are Pensieve's own LLM calls.** The evidence is unambiguous:
-all 427 carry cwd `/` (hence the degenerate transcript path `~/.claude/projects/-/<id>.jsonl`, a
-directory that does not exist), **423 of them have exactly 1 prompt**, all are attributed to a single
-junk node named literally `/`, and their `workSummary` values are summaries *of other sessions* — one
-leaking the scaffolding verbatim: *"The session is already summarized. Here it is in 1-2 sentences:"*.
-That is the `claude -p` fallback provider firing the `SessionStart` hook: Pensieve captured itself
-summarizing a session, then summarized that capture.
+**What is in the store:** 427 of the 1,099 `cc.session` events are Pensieve's own LLM calls. All carry
+cwd `/` (hence transcript paths under `~/.claude/projects/-/`, a directory that does not exist),
+**423 have exactly 1 prompt**, all are attributed to one node named literally `/`, and their
+`workSummary` values are summaries *of other sessions* — one leaking the scaffolding verbatim:
+*"The session is already summarized. Here it is in 1-2 sentences:"*.
 
-**Why it is not urgent:** every one is dated **2026-07** and the `/` node is already **archived**, so
-the loop is not running today (the on-device provider became the default, and `claude -p` is now the
-fallback). No data is at risk.
+**Why it cannot recur.** `ClaudeCLIProvider.shellRun` pins `currentDirectoryURL` to
+`PensievePaths.llmScratchDirectory()`, and its comment already describes this exact failure —
+*"every extraction call became a Claude Code session at the filesystem root, got captured by the
+SessionEnd hook, and was re-ingested as 'work' (a feedback loop that produced a phantom project named
+'/')"*. `Ingester.ingestSession` then refuses `ProjectResolver.isDegenerateRoot` (`/` or `$HOME`) as a
+second line of defense, dropping such a session permanently. Both guards ship. Every one of the 427
+events is dated **2026-07**, consistent with the fix, and the `/` node is **archived**.
 
-**Why it is not nothing:** those 427 summaries are in the BM25 corpus right now, reachable under
-Include Archived, and they are model output *about* Pensieve's own internals — the highest-confusion
-possible search result. They also inflate every "sessions captured" figure by 39%, which is how they
-were noticed: a transcript-availability measurement read 36% until they were excluded, and 59% after.
+**What is still open — purging the residue.** Those 427 summaries are in the BM25 corpus today,
+reachable under Include Archived, and they are model output *about* Pensieve's internals, which is the
+most confusing thing a search for Pensieve's own work can return. They also inflate any
+"sessions captured" figure by 39%: the transcript-availability measurement read 36% with them and 59%
+without, and the second number is the true one.
 
-Three candidate fixes, needing a decision rather than a patch:
+Two options, both small:
 
-1. **Guard at capture** — have `capture-session-start` ignore invocations Pensieve itself spawned.
-   Cleanest, but needs a reliable marker; cwd `/` is a symptom, not an identity.
-2. **Purge the rows** — delete the 427 events and the `/` node. Straightforward, but the ingester is
-   the only canonical writer and there is no delete-events verb.
-3. **Leave archived.** They are already out of every normal view; only search reaches them.
+1. **Leave archived** (status quo). They are out of every normal view; only Include Archived reaches
+   them. Costs nothing, keeps a permanent 39% distortion in any count over `cc.session` events.
+2. **Purge** — delete the 427 events and the `/` node. There is no delete-events verb and `Ingester`
+   is the only canonical writer, so this is a one-off maintenance command rather than a feature. The
+   events cascade from the node, so deleting the node may be sufficient; verify before relying on it.
 
-*Revisit trigger:* selecting a cloud or `claude -p` provider for any automatic, unattended task —
-that is what would restart the loop. Also worth checking before the next capture-path change.
+*Revisit trigger:* the next time a count over `cc.session` events matters (a stats surface, a corpus
+measurement), or before anything reads archived event summaries into a prompt.
 
 ---
 
