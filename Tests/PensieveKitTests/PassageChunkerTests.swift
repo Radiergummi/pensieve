@@ -58,14 +58,17 @@ import Testing
   }
 
   /// The snap-driven boundary. A window whose only whitespace sits just past `overlapLength` ends
-  /// far short of a full stride; the next window must still open BEFORE that end, or a phrase
-  /// straddling it appears in neither chunk. Deriving the next start from `windowEnd` is what
-  /// guarantees that — a blind stride landed exactly on the boundary and lost the overlap.
+  /// far short of a full stride, and the split lands exactly ON that whitespace — so no single word
+  /// can straddle it, but a PHRASE can. With zero overlap the phrase appears in neither chunk, which
+  /// is the failure overlap exists to prevent. Deriving the next start from `windowEnd` is what
+  /// keeps it whole.
   @Test func anEarlyWhitespaceBoundaryStillOverlaps() {
-    let text = String(repeating: "A", count: 201) + " GHOST" + String(repeating: "B", count: 2000)
+    // Whitespace only at 195 and 201: the first window ends at 201, between the two words.
+    let text = String(repeating: "A", count: 195) + " GHOST PHRASE"
+      + String(repeating: "B", count: 2000)
     let chunks = PassageChunker.chunk(text)
     #expect(chunks.count > 1)
-    #expect(chunks.contains { $0.contains("GHOST") },
-            "the token straddling the early boundary must survive intact in some chunk")
+    #expect(chunks.contains { $0.contains("GHOST PHRASE") },
+            "a phrase straddling an early snapped boundary must survive intact in some chunk")
   }
 }
