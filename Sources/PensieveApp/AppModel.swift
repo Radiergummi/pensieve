@@ -202,11 +202,11 @@ final class AppModel {
   func start() {
     guard !started else { return }
     started = true
-    AppLog.app.info("App started, canonical=\(Stores.canonicalURL.path, privacy: .public) spool=\(Stores.spoolURL.path, privacy: .public)")
+    AppLog.app.info("App started, canonical=\(resolvedCanonicalURL().path, privacy: .public) spool=\(resolvedSpoolURL().path, privacy: .public)")
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
-    database = try? openCanonicalDatabase(at: Stores.canonicalURL)
+    database = try? openCanonicalDatabase(at: resolvedCanonicalURL())
     loadNarrationCache()
-    spool = try? CaptureSpool(at: Stores.spoolURL)   // persistent — see the property note above
+    spool = try? CaptureSpool(at: resolvedSpoolURL())   // persistent — see the property note above
     activeFocusContext = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
     Task { await drainThenRefresh() }
 
@@ -222,8 +222,8 @@ final class AppModel {
         } catch { /* observation ended; watches still cover changes */ }
       }
     }
-    let canonicalDir = Stores.canonicalURL.deletingLastPathComponent().path
-    let spoolDir = Stores.spoolURL.deletingLastPathComponent().path
+    let canonicalDir = resolvedCanonicalURL().deletingLastPathComponent().path
+    let spoolDir = resolvedSpoolURL().deletingLastPathComponent().path
     canonicalWatcher = DirectoryWatcher(paths: [canonicalDir]) { [weak self] in
       Task { await self?.refreshDebouncer.schedule() }   // catches the EXTERNAL daemon's writes
     }

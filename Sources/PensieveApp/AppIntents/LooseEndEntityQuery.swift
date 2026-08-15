@@ -26,7 +26,7 @@ struct LooseEndEntityQuery: EntityQuery, EntityStringQuery {
   }
 
   private func read(_ body: (any DatabaseReader) throws -> [LooseEndFacts]) -> [LooseEndFacts] {
-    guard let database = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL) else { return [] }
+    guard let database = try? openCanonicalDatabaseReadOnly(at: resolvedCanonicalURL()) else { return [] }
     return (try? body(database)) ?? []
   }
 }

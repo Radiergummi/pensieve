@@ -20,10 +20,7 @@ struct Pensieve: AsyncParsableCommand {
 }
 
 /// Opens the canonical store strictly read-only (no migrator, cannot create the file).
-/// Override for tests via PENSIEVE_DB. For read-only surfaces: `prime`, `mcp`.
+/// For read-only surfaces: `prime`, `mcp`. Takes no lock — readers never block a relocation.
 func openCanonicalReadOnly() throws -> any DatabaseReader {
-  if let override = ProcessInfo.processInfo.environment["PENSIEVE_DB"] {
-    return try openCanonicalDatabaseReadOnly(at: URL(fileURLWithPath: override))
-  }
-  return try openCanonicalDatabaseReadOnly(at: PensievePaths.canonicalURL())
+  try openCanonicalDatabaseReadOnly(at: resolvedCanonicalURL())
 }

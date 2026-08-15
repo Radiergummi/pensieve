@@ -7,7 +7,7 @@ import PensieveKit
 /// best-effort; never fatal.
 enum SpotlightIndexer {
   static func reindex(activeContext: String = "") async {
-    guard let database = try? openCanonicalDatabaseReadOnly(at: Stores.canonicalURL) else { return }
+    guard let database = try? openCanonicalDatabaseReadOnly(at: resolvedCanonicalURL()) else { return }
     let facts = (try? NodeFactsQueries.all(database, now: Date())) ?? []
     let allNodes = (try? ProjectQueries.all(database)) ?? []
     let visible = NodeContextResolver.visibleNodeIDs(for: activeContext, in: allNodes)

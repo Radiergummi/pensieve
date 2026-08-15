@@ -1,21 +1,55 @@
 import Foundation
 
 public enum PensievePaths {
-  public static func supportDirectory() -> URL {
+  /// The shared defaults handle, constructed ONCE. `supportDirectory()` runs on every git-hook
+  /// capture, and the capture path is sacred — a per-call `UserDefaults(suiteName:)` would put a
+  /// domain construction on it for no reason. Reads from a cached cfprefsd domain are microseconds.
+  /// `UserDefaults` is documented thread-safe, so `nonisolated(unsafe)` on this immutable handle is
+  /// safe (same pattern as `DiagnosticsCollector.shared`).
+  nonisolated(unsafe) private static let sharedDefaults = PensieveDefaults.shared()
+
+  /// The un-overridable location. Kept separate so the resolver has something to fall back TO and
+  /// so tests can name the fallback without restating the string.
+  public static func defaultSupportDirectory() -> URL {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     return base.appendingPathComponent("Pensieve", isDirectory: true)
   }
-  public static func canonicalURL() -> URL {
-    supportDirectory().appendingPathComponent("pensieve.sqlite")
+
+  /// The rule, pure and injectable. Separated from reading the world for the same reason
+  /// `indexURL(named:storeOverride:)` is: the real source is process-global shared state, and
+  /// Swift Testing runs suites in parallel.
+  ///
+  /// A blank or relative stored value is treated as absent rather than honoured. A relative root
+  /// would resolve against the process's cwd — `/` under launchd — which is how a store ends up at
+  /// the filesystem root.
+  public static func supportDirectory(customRoot: String?) -> URL {
+    guard let customRoot else { return defaultSupportDirectory() }
+    let trimmed = customRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, trimmed.hasPrefix("/") else { return defaultSupportDirectory() }
+    return URL(fileURLWithPath: trimmed, isDirectory: true)
   }
-  public static func captureURL() -> URL {
-    supportDirectory().appendingPathComponent("capture.sqlite")
+
+  /// The one call site that reads the world. Never throws; a failed read yields the default.
+  public static func supportDirectory() -> URL {
+    supportDirectory(customRoot: sharedDefaults.string(forKey: PensieveDefaults.customSupportRootKey))
   }
+
+  public static func canonicalURL(in support: URL) -> URL {
+    support.appendingPathComponent("pensieve.sqlite")
+  }
+  public static func canonicalURL() -> URL { canonicalURL(in: supportDirectory()) }
+
+  public static func captureURL(in support: URL) -> URL {
+    support.appendingPathComponent("capture.sqlite")
+  }
+  public static func captureURL() -> URL { captureURL(in: supportDirectory()) }
+
   /// The disposable narration cache (shared across app / CLI / MCP). Not the canonical store,
   /// not the spool — losing it costs only a re-narrate.
-  public static func narrationCacheURL() -> URL {
-    supportDirectory().appendingPathComponent("narration-cache.sqlite")
+  public static func narrationCacheURL(in support: URL) -> URL {
+    support.appendingPathComponent("narration-cache.sqlite")
   }
+  public static func narrationCacheURL() -> URL { narrationCacheURL(in: supportDirectory()) }
   /// The disposable, device-local, never-synced FTS5 search index (shared across app / CLI /
   /// daemon / MCP). Losing it costs only a re-index.
   public static func searchIndexURL() -> URL {
@@ -38,14 +72,16 @@ public enum PensievePaths {
   /// index becomes a sibling of the overridden store prefixed by the store's base name, so two
   /// throwaway stores in the same directory do not share an index.
   private static func indexURL(named name: String) -> URL {
-    indexURL(named: name, storeOverride: ProcessInfo.processInfo.environment["PENSIEVE_DB"])
+    indexURL(named: name,
+             storeOverride: ProcessInfo.processInfo.environment["PENSIEVE_DB"],
+             support: supportDirectory())
   }
 
   /// The rule itself, separated from reading the environment so it is testable: `setenv` is
   /// process-global and Swift Testing runs suites in parallel, so a test that mutated `PENSIEVE_DB`
   /// to cover this could perturb every other test reading it.
-  static func indexURL(named name: String, storeOverride: String?) -> URL {
-    guard let storeOverride else { return supportDirectory().appendingPathComponent(name) }
+  static func indexURL(named name: String, storeOverride: String?, support: URL) -> URL {
+    guard let storeOverride else { return support.appendingPathComponent(name) }
     let store = URL(fileURLWithPath: storeOverride)
     let prefix = store.deletingPathExtension().lastPathComponent
     return store.deletingLastPathComponent().appendingPathComponent("\(prefix)-\(name)")

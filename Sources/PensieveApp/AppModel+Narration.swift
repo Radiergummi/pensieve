@@ -32,7 +32,7 @@ extension AppModel {
   }
 
   static func narrationCacheDefaultsKey() -> String {
-    "pensieve.narrationCache." + Stores.canonicalURL.path
+    "pensieve.narrationCache." + resolvedCanonicalURL().path
   }
   func loadNarrationCache() {
     guard let data = UserDefaults.standard.data(forKey: Self.narrationCacheDefaultsKey()),

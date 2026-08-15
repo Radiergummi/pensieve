@@ -27,8 +27,8 @@ struct AdvancedSettingsTab: View {
       }
 
       Section("Store & Logs") {
-        pathRow("Canonical store", Stores.canonicalURL)
-        pathRow("Capture spool", Stores.spoolURL)
+        pathRow("Canonical store", resolvedCanonicalURL())
+        pathRow("Capture spool", resolvedSpoolURL())
         pathRow("Support folder", PensievePaths.supportDirectory())
         pathRow("Logs", PensievePaths.logsDirectory())
         Button("Open Logs Folder") {
