@@ -7,6 +7,11 @@ options:
     - de
   deploymentTarget:
     macOS: "26.0"
+settings:
+  base:
+    # XcodeGen's project-level default is 5.0; every target already overrides it to 6.0, but a
+    # target added without that override would silently compile in Swift 5 mode. Set the default.
+    SWIFT_VERSION: "6.0"
 packages:
   PensieveKit:
     path: .
