@@ -71,6 +71,7 @@ final class AppModel {
   @ObservationIgnored private var observationTask: Task<Void, Never>?
   @ObservationIgnored private var spoolWatcher: DirectoryWatcher?
   @ObservationIgnored private var canonicalWatcher: DirectoryWatcher?
+  @ObservationIgnored private var translationActivityScheduler: TranslationActivityScheduler?
   @ObservationIgnored private lazy var refreshDebouncer = Debouncer(interval: 0.15) { [weak self] in
     await self?.refreshFromWatch()
   }
@@ -241,6 +242,13 @@ final class AppModel {
                                            object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor in self?.focusContextDidChange() }
     }
+
+    // Idle translation. App-lifetime like the watchers above: the corpus grows with every sync, so
+    // this is a standing job, not a launch-time one.
+    let translationScheduler = TranslationActivityScheduler(model: self)
+    translationScheduler.start()
+    translationActivityScheduler = translationScheduler
+    AppLog.app.info("Idle translation scheduled")
   }
 
   /// On-demand equivalent of the launch drain+refresh, for the ⌘R Refresh menu command.
