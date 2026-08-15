@@ -52,7 +52,6 @@ private struct PassageResultRow: View {
       }
       SnippetText(snippet: hit.snippet)
         .font(.system(size: 13))
-        .lineLimit(3)
     }
     .padding(.vertical, 2)
     // The row's whole width must be hoverable/clickable — a Spacer is dead space to hit-testing,

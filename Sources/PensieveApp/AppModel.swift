@@ -158,7 +158,7 @@ final class AppModel {
   /// ⌘F search scope. `.all` opts archived nodes into results. Observable → drives the scope bar.
   enum SearchScope: Hashable { case active, all }
   var searchScope: SearchScope = .active
-  // All four are written by AppModel+Search.swift's runSearch()/clearSearch(), hence not private(set).
+  // All five are written by AppModel+Search.swift's runSearch()/clearSearch(), hence not private(set).
   /// The single ranked result list.
   var searchHits: [SearchHit] = []
   /// Conversation-passage hits, rendered as their own "From your conversations" section below the

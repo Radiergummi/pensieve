@@ -156,8 +156,9 @@ extension Ingester {
     let outcome = try writeSync { database -> SessionIngestOutcome in
       let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.claudeCode)
       let fingerprint = Fingerprint.session(sessionID: session.sessionID)
-      // A duplicate event is NOT a no-op: `TranscriptDiscovery` re-spools in-progress sessions as
-      // they grow, so the same sessionID arrives repeatedly with more messages each time. The event
+      // A duplicate event is NOT a no-op: the `SessionEnd` capture hook re-spools the same session
+      // as it grows, so the same sessionID arrives repeatedly with more messages each time (`TranscriptDiscovery.discover`
+      // skips any session that already has an event, so it is not the re-spool trigger). The event
       // dedupes; the passages must be rewritten from the now-longer transcript.
       if let existing = try existingEvent(database, sourceID: source.id, fingerprint: fingerprint) {
         try writePassages(database, session: session, nodeID: existing.nodeID,
