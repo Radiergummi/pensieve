@@ -740,6 +740,31 @@ unusable". *Revisit trigger:* when the gold set exists.
 
 ---
 
+## The UI harness has two known holes (2026-08-15, recorded at build time)
+
+Both are in `Tests/PensieveUITests`, both known and neither fixed, because a test that looks like
+coverage and is not is this project's recurring defect.
+
+**1. The ordering test cannot cover the defect it was written for.** The motivating bug was slice A
+moving the recap *below* the loose ends while the parallel in-node-find branch still emitted the
+narration slot first. The recap only exists once narration has run, and the suite disables narration
+(`-app.narrationEnabled NO`) because it is an LLM call. `testLooseEndsRenderAboveRecentActivity` pins
+the neighbouring always-present boundary instead — mutation-verified, so it is a real assertion, just
+not *that* assertion. *Closing it needs a way to render a recap without an LLM call — most likely
+seeding the narration cache through the argument domain, which is a test-only path and needs
+checking that it is not a production seam.*
+
+**2. `testSidebarShowsFixtureCounts` is weak and probably vacuous.** It asserts
+`application.staticTexts["3"].exists`, and the fixture renders "3" in at least two unrelated places
+(the open-loose-end count and the What's Next project count), so it would pass with the count feature
+broken. It was **not** mutation-verified; the ordering test was. Its second assertion — that the
+archived node stays out of the main tree — is sound. *Smallest fix: match the count within its own
+sidebar row rather than anywhere in the window.*
+
+*Revisit trigger:* the next change to sidebar counts or to detail-pane ordering.
+
+---
+
 ## Extraction recall has never been measured, and live sessions could supply the gold set (2026-08-15)
 
 **User's idea, recorded before it evaporates** — and it is the missing half of the trust gate, not a

@@ -835,7 +835,7 @@ Expected: PASS. If the insert spelling is wrong it will fail to compile — read
 ```bash
 make test && make lint
 ```
-Expected: the full suite green (681 tests + 1 new = 682), lint clean.
+Expected: the full suite green (754 tests + 1 new = 755), lint clean. (Baseline reconciled 2026-08-15: the plan was written at 681.)
 
 - [ ] **Step 6: Commit**
 
@@ -1405,16 +1405,16 @@ git status --porcelain .claude/skills
 Expected: the `SKILL.md` shows as untracked (`??`), proving the un-ignore worked.
 
 ```bash
-grep -n "smoke-launch of the inner binary" CLAUDE.md; echo "exit=$?"
+grep -n "smoke-launch" CLAUDE.md; echo "exit=$?"
 ```
-Expected: `exit=1` — no match. The broken recipe is gone.
+Expected: `exit=1` — no match. The broken recipe is gone. (The original grep here searched for `smoke-launch of the inner binary`, which never matched even while the recipe was live, because CLAUDE.md emphasises `**inner binary**`. It would have passed without the removal happening.)
 
 - [ ] **Step 5: Full verification**
 
 ```bash
 make all && make uitest
 ```
-Expected: lint clean, 682 tests green, app builds, CLI smoke passes, 4 UI tests pass.
+Expected: lint clean, 755 tests green, app builds, CLI smoke passes, 4 UI tests pass.
 
 - [ ] **Step 6: Commit**
 
