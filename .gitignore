@@ -16,5 +16,7 @@ Sources/PensieveApp/Info.plist
 
 .worktrees/
 
-# Claude Code worktree checkouts
-.claude/
+# Claude Code worktree checkouts. Narrowed to `/*` so skills can be re-included:
+# git cannot re-include a path whose parent directory is excluded.
+.claude/*
+!.claude/skills/
