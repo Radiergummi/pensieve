@@ -632,6 +632,47 @@ exercise of this feature and may reorder everything above.
 
 ---
 
+## The salience pipeline is built, wired, and has never been run (2026-08-15)
+
+**Two findings, one entry.** Surfaced by two independent adversarial reviews of the menu-bar popover
+spec — which proposed reusing the salient-first ordering, and so had to check whether it does
+anything. It does not. Both were verified against the live store on 2026-08-15.
+
+**1. `labelSuggestion` is empty on every row, so two shipped features are inert.**
+
+```
+labelSuggestion:  '' → 986 rows   (all of them)
+label (human):    '' → 864,  noise → 98,  salient → 24
+```
+
+`SalienceSuggester` (`Intelligence/SalienceSuggester.swift`) is the only writer, it is **offline and
+opt-in** behind `pensieve label-suggest` (`Sources/pensieve/Commands/LabelSuggest.swift:36`), and it
+has never been run here. The machinery is not missing — it is unexercised. Two consequences:
+
+- **`openAcrossNodes`'s salient-first tier is dead code in practice** (`LooseEndQueries.swift:40-45`).
+  The Loose Ends bucket's headline ordering — chosen on measured grounds over pure oldest-first,
+  which its own doc comment calls "grind through three repos" — currently *is* pure oldest-first.
+  The burn-down queue has been running in the mode the design rejected.
+- **Review Suggestions is structurally empty**, not merely quiet. `SalienceReviewQueries.pending`
+  requires `label == unlabeled && labelSuggestion != ""` (`:17`), and the second clause matches
+  nothing. The badge count has been an honest zero over a query that cannot return rows.
+
+*Smallest action:* run `pensieve label-suggest` once and re-check both surfaces. *Open question worth
+deciding first:* whether suggestion should stay a manual backfill at all, or run as part of
+extraction — 864 of 986 ends are unlabeled, and a one-off backfill leaves every future end unlabeled
+again.
+
+**2. `SalienceReviewQueries` holds a second copy of both the comparator and the N+1.**
+`:27-28` is byte-identical to `LooseEndQueries.swift:41-42`, and `:21` is its own inlined per-row
+`Event` point-query loop — outside the file, so "all four feeds share `attachEvents`" is true of
+`LooseEndQueries` only. Extracting one copy and leaving the other is how the two drift. Relevant the
+moment the batched-`attachEvents` work lands: **fix both or neither.**
+
+*Revisit trigger:* the batching change, or the first time Review Suggestions is expected to show
+anything.
+
+---
+
 ## `TextQuality.shorten` — two weak tests on correct code (2026-08-13)
 
 Parked at the end of the slice-5 run rather than fixed, because the process allows exactly one fix wave
