@@ -3,10 +3,275 @@
 Ideas we've deliberately parked so a phase stays focused. Each is on the roadmap;
 none is foreclosed. Revisit when the noted trigger arrives.
 
-The **Roadmap** below is the spine — the sequenced pillars from where we are to the finished
-app. Everything after the first `---` is the detail-ledger: features parked out of specific
-phases, plus forward ideas, each with its own revisit trigger. Read the roadmap for *where
-we're going*; read the ledger for *what we deliberately deferred and why*.
+**How this file is organised (restructured 2026-08-15).** Everything still **open** comes first, in
+four priority tiers; everything **shipped** is preserved verbatim in the **Archive** at the bottom.
+Before the restructure the two were interleaved in one long ledger, so "what is actually open" was
+only discoverable by reading all 1,700 lines. Nothing was deleted or reworded — entries were moved
+and indexed.
+
+- **Tier 0 — Foundation.** Structural carries from the 2026-08-15 architecture review. Ahead of feature
+  work because each gets more expensive as the app half keeps growing untested.
+- **Tier 1 — Product pillars.** The Roadmap: the sequenced spine from here to the finished app.
+- **Tier 2 — Quality, measurement & known defects.** Open findings against shipped code.
+- **Tier 3 — Parked, trigger-gated.** Real ideas waiting on a named trigger.
+- **Archive.** Shipped work, dated, verbatim. Several archived entries carry
+  *"Deferred out of …"* sub-lists whose items are still live; where one still matters it is
+  cross-referenced from a tier above rather than duplicated.
+
+---
+
+## Open items — the index
+
+**Tier 0 — Foundation** *(architecture review, 2026-08-15)*
+1. The app is 6,202 lines with no automated tests — and the smoke recipe renders no view body.
+2. Two narration caches, and the shared one is write-only from MCP — so `prime` can rarely hit it.
+3. `Query/` is a namespace, not a layer — and the "only writer" invariant in `CLAUDE.md` is false.
+4. The LLM surface has outgrown its eval gate: 9 model-backed tasks, 3 bars, and the guardrail cannot see the gap.
+5. Three derived stores, three implementations, no shared contract — two have no schema versioning at all.
+6. Ingest has no per-kind seam — the switch is fine, but the trigger should fire *before* the next kind lands.
+7. Per-device state has no home decision, and CloudKit will force one.
+
+**Tier 1 — Product pillars** — Roadmap §. Open: slice 6 (forks, gated on the capture backend) ·
+CloudKit + iOS · system-integration surfaces · FSEvents real-time capture · additional source types ·
+analytics. Blocked on the Apple signing gate: Focus filters (built, correct, cannot attach) ·
+Widgets · CloudKit.
+
+**Tier 2 — Quality, measurement & known defects**
+- Claude Design review — slice C (transcript reading, **live now**) and slice D (six items, each its own brainstorm).
+- Contextify scan — open items: honest staleness on the retrieval path, `pensieve doctor`, Live Recall, skill + researcher subagent.
+- P3 retrieval harness — **blocked on the user** writing 30–50 paraphrase queries.
+- Extraction recall has never been measured; live sessions could supply the gold set.
+- The salience pipeline is built, wired, and has never been run — two shipped features are inert.
+- Naming has no eval coverage, and the harness has a silent hole. *(Subsumed by F4; kept for its detail.)*
+- `TextQuality.shorten` — two weak tests on correct code.
+- The `claude -p` self-capture loop left 427 rows behind — the bug is fixed, the residue is not.
+- In-node find — highlight/document skew; needs a design, not a patch.
+- Code-quality review carries (2026-07-07) — the still-open remainder, incl. the `drain()` poison-pill design question.
+
+**Tier 3 — Parked, trigger-gated**
+- Transcript rendering siblings — rich code blocks (syntax + DOT/Mermaid), Writing Tools on loose ends.
+- Widgets — blocked on App Groups needing a paid Team ID *(the same gate as Focus filters + CloudKit)*.
+- Spike: statistical theme discovery across strands (`NLEmbedding`).
+- Talk to the system, **stage 2** — the conversational agent (stage 1 shipped 2026-08-13).
+- Forks as first-class — the capture backend; the long pole gating app slice 6.
+
+---
+
+# Tier 0 — Foundation (architecture review, 2026-08-15)
+
+Seven structural carries from a high-level architecture review of the whole tree. Every claim below
+was verified against the source before filing; line counts and call-site counts are as measured on
+2026-08-15.
+
+**What the review confirmed sound, and what these items are therefore protecting.** The spine has
+held: all real logic in `PensieveKit` (10,464 lines) with four thin clients over it (app 6,202, CLI
+1,214, sync agent, MCP), against 11,938 lines of tests. The two-store separation (sacred append-only
+spool / canonical SQLiteData store) is intact, the 13 migrations are additive and forward-only, and
+the trust gate is untouched by everything built around it. The strains are **not** in the model —
+they are in *derived state* and in *verification coverage*, both of which have grown faster than the
+abstractions holding them. Two decisions are worth naming as the pattern to repeat: retiring the
+vector engine outright after it lost on measurement (rather than leaving it default-off), and keeping
+`PassageHit` disjoint from `SearchHit` so a producer bug is unrepresentable rather than merely
+unlikely.
+
+**Sequencing.** 1 → 2 → 3 → 4 → 5. Item 1 is days; the rest are afternoons. Items 6 and 7 are
+trigger-gated and listed last because their trigger has not arrived, not because they are smaller.
+
+---
+
+## F1. The app is 6,202 lines with no automated tests, and the smoke recipe renders no view body
+
+**The largest verification hole in the project, and it grows with every slice.** `Sources/PensieveApp`
+has no unit tests by construction — it is an Xcode app target, outside `PensieveKitTests` — and the
+documented substitute (build + background-launch the inner Mach-O + `kill`) **executes no view body**:
+`AppModel.start()` runs from `.task` on a rendered view, and a backgrounded direct-exec never renders
+one. That gap was reproduced during the slice-5 run and is recorded there; it is pre-existing and not
+specific to any branch.
+
+The consequence is already visible in the record. The translation-settings entry states plainly that
+**not one line** of `TranslationSettingsSection` or its three new `AppModel` methods had executed at
+merge. Every recent slice closes with a human-verify checklist, and the defects worth catching — the
+`.task(id:)` download-state race, the stale coverage-language write, the slice-3a render window — were
+found by *reasoning about code that had never run*.
+
+**Why now rather than earlier.** The "thin views over tested Kit" rule has mostly held, but the app now
+carries real non-view state machines: `AppModel` + 7 extensions (1,438 lines), `NodeFindState` (289),
+`NodeOrganizing` (253). These are logic, not chrome, and they are the parts the human checklist is
+worst at covering.
+
+**Two routes, and the first is smaller.** (a) Add a test target for the app in `project.yml`. No UI
+automation is needed — `AppModel` is `@MainActor` but takes an injected `DatabaseWriter`, so it is
+testable today against a throwaway store; the state machines above are the first targets. (b) Move more
+of `AppModel` into Kit as pure kernels. (b) is the longer-term shape but (a) buys the most immediately
+and does not require deciding where each piece belongs first.
+
+*Revisit trigger: now — before the next app slice, since every slice adds to the untested surface.*
+
+---
+
+## F2. Two narration caches, and the shared one is write-only from MCP
+
+**Same key function, two homes, one-way flow.** `AppModel.narrationCache`
+(`AppModel+Narration.swift:34-54`) is a UserDefaults plist keyed by node UUID. `PensieveKit.NarrationCache`
+is `narration-cache.sqlite`, written only by `pensieve mcp` (`Mcp.swift:206`) and read by `prime`
+(`Prime.swift:18`) and `mcp`. **Both key on `NarrationCacheKey.make(events:provider:)`** — the same
+invalidation contract — but the app never touches the shared store (`grep NarrationCache
+Sources/PensieveApp` finds only the local struct).
+
+So the process that generates narration all day, interactively, on every node open, writes to a plist
+nobody else reads — and `pensieve prime`, the SessionStart hook that primes **every** Claude Code
+session, can only reuse prose an MCP call happened to warm first. `NarrationCache.swift:5` already
+documents the intended behaviour ("shared across app / CLI / MCP"); only the wiring is missing.
+
+*Smallest action: have `AppModel.narration` write through to `NarrationCache` and read it as the
+second-level lookup behind the synchronous plist. ~20 lines. Once that lands, whether the plist stays
+as a fast synchronous first level or goes away entirely is a separate, cheap call.*
+
+*Revisit trigger: now — this is the highest value-per-line item on the list, and `prime` is the surface
+that benefits.*
+
+---
+
+## F3. `Query/` is a namespace, not a layer — and the "only writer" invariant is false
+
+**Two separable problems in one directory.**
+
+**(a) The folder no longer describes its contents.** `Sources/PensieveKit/Query/` holds 30 files
+spanning four different kinds of thing: reads (`BriefingQueries`, `SmartLists`, `NodeFacts`,
+`SearchQueries`), **writes** (`NodeCommands`, `LooseEndCommands`, `CheckpointCommands`), rendering
+(`RecallMarkdown`, `ProjectContextRender`, `Snippet`), and interaction state machines (`FindSession`,
+`NodeFindDocument`, `ProvenanceLoader`). `Store/` has 3 files and `Search/` has 4. A new file has no
+obvious home, which is how a namespace decays.
+
+**(b) The stated invariant is wrong, and it is load-bearing for reviewers.** `CLAUDE.md` says "the only
+canonical writer is `Ingester.drain()`" and `NarrationCache.swift:6` repeats it in a doc comment.
+Measured: **seven** files write the canonical store — `Ingester`, `ProjectResolver`, `ExtractionRunner`,
+`NodeDescriber`, plus the three `*Commands` — and three more write derived stores. A reviewer relying
+on the current wording would mis-review a write.
+
+The true invariant is still crisp and worth stating: **ingest owns `events` / `passages` / `sources`;
+user commands own `nodes` / `looseEnds` / `checkpoints`; neither writes a derived store.**
+
+*Smallest action: split into `Read/`, `Commands/`, `Present/` (pure file moves, no logic change), and
+correct the invariant in `CLAUDE.md` and the `NarrationCache` doc comment.*
+
+*Revisit trigger: before the next batch of new query/command files — cheap at 30 files, annoying at 45.*
+
+---
+
+## F4. The LLM surface has outgrown its eval gate — 9 tasks, 3 bars, and a guardrail that cannot see the gap
+
+**Nine model-backed production tasks:** `Ingester.nameStrand`, `IntentClassifier`, `LooseEndExtractor`,
+`NodeDescriber`, `NodeLabeler`, `SalienceClassifier`, `SalienceSuggester`, `SessionSummarizer`,
+`SummaryBuilder.narrate`. **Three registered `EvalTask`s** (`TaskRegistry.all` — extraction, narration,
+description).
+
+**The gap is structural, not accidental.** `TaskRegistry.consistency` (`EvalTask.swift:22-30`) checks
+*registry ↔ config* — every task has a bar, every bar has a task. It never checks *call site ↔
+registry*. So `CLAUDE.md`'s rule "new LLM-backed tasks must register an `EvalTask`" is **unenforceable
+by the test that exists to enforce it**, and reality has drifted to 3 of 9 without anything failing.
+Two of the uncovered tasks write user-visible node identity, and § "The salience pipeline is built,
+wired, and has never been run" records that a third has never executed at all.
+
+**The recommendation is deliberately not "register six more tasks."** That is expensive, and most of
+these are legitimately best-effort — the trust gate covers *loose ends*, and everything else being
+nil-honest rather than measured is a real design choice. What is missing is that the choice is
+currently invisible. *Smallest action: one explicit inventory of every LLM call site tagged
+`cited-gate` / `eval-gated` / `best-effort-unmeasured`, plus a test that fails when a new `any
+LLMProvider` call site appears with no entry.* That converts silent drift into a deliberate, reviewable
+decision.
+
+**Two existing entries are the detail for this one, and should be closed with it:** § "Naming has no
+eval coverage, and the harness has a silent hole" (which also records `CorpusBuilder`'s two hardcoded
+task lists — a registered task can pass the whole suite while loading zero items) and § "Extraction
+recall has never been measured".
+
+*Revisit trigger: the next `EvalTask` addition or harness touch — and note that the `CorpusBuilder`
+hole should be fixed first regardless, since it makes the rest harder to close safely.*
+
+---
+
+## F5. Three derived stores, three implementations, no shared contract
+
+Beside the canonical store and the spool there are now three disposable stores:
+`narration-cache.sqlite`, `search-index.sqlite`, `translation-cache.sqlite`. Each independently
+reimplements open-or-delete-and-retry, best-effort no-op when unavailable, and schema handling —
+**and only one of them actually has schema handling.** `SearchIndexStore` versions and drops on
+mismatch (`schemaVersion = 5`, `SearchIndexStore.swift:21`); `NarrationCache` (`:27`) and
+`TranslationStore` (`:35`) are bare `CREATE TABLE IF NOT EXISTS`, so a future column change fails
+silently instead of rebuilding.
+
+**The path rule is already shared and correct** — `PensievePaths.indexURL(named:)` makes every index
+follow `PENSIEVE_DB`, which is the generalised form of a real scar (a verification recipe wiping the
+live index). That is the proof the family is a family; nothing else about it is shared.
+
+Nothing enumerates them, either: `SystemStatus` reports none, `pensieve status` shows none, and there
+is no "rebuild derived" verb. Diagnosing a stale index currently means knowing which file to delete.
+
+*Smallest action: one `DerivedStore` descriptor (url, schema version, rebuild action) listing the
+three, consumed by `SystemStatus` and a single `pensieve reindex`. Folds naturally into the deferred
+`pensieve doctor` (§ Contextify scan, item 5), which wants exactly this inventory.*
+
+*Revisit trigger: before a fourth derived store is added, or when `pensieve doctor` is specced —
+whichever comes first.*
+
+---
+
+## F6. Ingest has no per-kind seam — fire the existing trigger *before* the next kind lands
+
+**Not a new finding — a re-dating of one this backlog already holds.** § "Phase 1B-org ▸ Deferred out
+of 1B-org" records: *"Per-kind ingestion-handler protocol (fingerprint/enrich/extract) — a `switch`
+suffices for git+session. Trigger: a 4th source type."* That judgement still stands. What the review
+adds is the asymmetry and the drift risk.
+
+**The asymmetry.** Discovery *has* a genuine seam — `FileSystemSourceType` is cleanly kind-agnostic and
+all git specifics live in `GitSource`. Ingestion has none: `Ingester.ingest` is a four-case switch on
+`CaptureKind` string constants with bespoke per-kind code inline, and `Ingester.swift` (395 lines) is now
+the largest file in Kit. Note this is *not* an argument for typing `CaptureKind`: those strings are the
+on-disk spool wire format on the sacred capture path and are deliberately `String` (unlike `NodeKind` /
+`LooseEndStatus` / `PassageRole`, which became real enums). The dispatch is the seam, not the constant.
+
+**Why re-file it.** "We will probably add more sources in the future, so the ingestion should really not
+hard-code assumptions about git or claude sessions" is one of the **oldest open loose ends in the live
+store**, and pillar #7 (additional source types) is where it lands. The refinement to the trigger: fire
+it *before* the fourth kind goes in inline, not after — adding the kind first is what makes the
+extraction expensive.
+
+*Revisit trigger: the fourth source type is specced (unchanged) — but the seam comes first, not the kind.*
+
+---
+
+## F7. Per-device state has no home decision, and CloudKit will force one
+
+`AppModel.narrationCache` (UserDefaults, node-UUID-keyed) and `lastOpenedAt` are device-local by
+accident of where they were easiest to put, not by a decision anyone made. Today that is invisible —
+there is one device.
+
+**Derived stores are already handled correctly**: narration cache, search index and translation cache
+are explicitly disposable, never-synced, rebuildable, and documented as such. UUID PKs and STRICT
+tables have kept the CloudKit on-ramp open on the canonical side (pillar #4). These two UserDefaults
+values sit in neither category: they are neither canonical state nor rebuildable derived output, and
+nothing says which they should be when a second device exists.
+
+The narration cache is genuinely ambiguous — it is derived output (rebuildable, so device-local is
+defensible) but expensive to regenerate on a phone. `lastOpenedAt` is more clearly a *sync* candidate:
+"since your last visit" means the wrong thing on a second device if each keeps its own.
+
+*Smallest action: decide the category for each and write it down. It is a two-line decision now and a
+migration later.* Note it also interacts with **F2**: if narration write-through lands, the shared
+`narration-cache.sqlite` becomes the natural home and the plist question mostly answers itself.
+
+*Revisit trigger: CloudKit (pillar #4) is specced, or the App Groups gate opens — whichever is first.
+The App-Groups move already requires relocating the store for all writers, which is the moment to
+settle this.*
+
+---
+
+# Tier 1 — Product pillars
+
+The sequenced spine from where we are to the finished app. **Tier 0 above is scheduled ahead of this
+tier**, not instead of it: none of the Tier 0 items blocks a pillar, but each gets more expensive the
+longer the app half keeps growing untested.
 
 ---
 
@@ -34,9 +299,9 @@ This is the hard part, done.
 ### Pending pillars (sequenced; each is a brainstorm → spec → plan item unless noted)
 
 This is the durable index of *everything still to build*. Each pillar below needs its own
-brainstorm→spec→plan cycle (the loop in `CONTINUE.md` → "How we work here"); the deferred-ledger
-sections after the first `---` hold the parked depth-features + forward ideas, each with a revisit
-trigger. Order is a recommendation, not a commitment.
+brainstorm→spec→plan cycle (the loop in `CONTINUE.md` → "How we work here"); **Tier 3 — Parked,
+trigger-gated** holds the parked depth-features + forward ideas, each with a revisit trigger, and the
+**Archive** holds the shipped record. Order is a recommendation, not a commitment.
 
 1. **Menu-bar item / `LSUIElement` (v0.2)** — ✅ **DONE** (menu-bar item merged 2026-07-06; the
    `LSUIElement` hide-dock toggle shipped 2026-07-08 in the App Settings surface). Shipped: a `MenuBarExtra`
@@ -80,9 +345,12 @@ trigger. Order is a recommendation, not a commitment.
    - ⏳ **Slice 6 — forks surface:** ancestry trail + siblings + "Roads Not Taken" list. **Gated on the
      fork-capture backend** (see "Forks as first-class" below — that backend is a separate spec, still the
      long pole).
-   - **Carries from slice reviews (fold in when convenient):** key `lastOpenedAt` per DB path; a shared
-     per-node "latest event + days-dormant + open-loose-end-count" helper (that shape now recurs in
-     `NextQueries` / `MonitorSnapshot` / `BriefingQueries`).
+   - **Carries from slice reviews (fold in when convenient):** key `lastOpenedAt` per DB path — and see
+     **F7**, which asks the prior question of whether `lastOpenedAt` should be device-local at all.
+     ~~a shared per-node "latest event + days-dormant + open-loose-end-count" helper~~ — ✅ **DONE
+     (2026-08-12)**: slice A shipped `NodeRowFacts` over two grouped aggregates. *(`NextItem` still
+     lacks `lastActivityAt`, so the menu-bar popover pays for its second line separately — that
+     remainder is tracked in Tier 2 ▸ Claude Design review ▸ B's two open carries.)*
 
 3. **Retire the launchd daemon → in-app background service (Phase 2)** — ✅ **DONE (2026-07-16, see the
    dated entry below).** The hand-installed `com.pensieve.sync` LaunchAgent + `install-daemon` command are
@@ -105,12 +373,14 @@ trigger. Order is a recommendation, not a commitment.
 
 7. **Additional source types** — *large, open-ended.* Notion, Entra, browser work, etc. The model
    already allows non-git sources; this is where the deferred **per-kind ingestion-handler
-   protocol** (below) finally earns its place (trigger: the 4th source type).
+   protocol** finally earns its place (trigger: the 4th source type). **See F6** — the 2026-08-15
+   review re-filed that deferral with one refinement: build the seam *before* the fourth kind goes
+   in inline, because adding the kind first is what makes the extraction expensive.
 
 8. **Analytics surfaces** — *medium.* Cross-project dependency graphs, dashboards, token-spend
    charts. Explicitly "Later" in the spec; lowest priority.
 
-**Depth features that thread through the above** (detailed in the ledger, not standalone pillars):
+**Depth features that thread through the above** (detailed in Tier 3, not standalone pillars):
 domain-level recursive rollups, cross-cutting soft references (`node_links`) — which
 forks-as-first-class builds on, statistical theme discovery (`NLEmbedding`), proactive project
 suggestion, and native localization. These deepen existing surfaces rather than standing alone.
@@ -214,6 +484,14 @@ availability + deployment-target floors at each surface's spec time.
 changes): Writing Tools / Image Playground / Genmoji / Visual Intelligence (content-creation AI); Endpoint
 Security / DeviceActivity / Screen Time (too invasive); Quick Look / Print services / legacy Automator
 (App Intents + Shortcuts subsumes the useful part).
+
+---
+
+# Tier 2 — Quality, measurement & known defects
+
+Open findings against shipped code. Each was verified against the source when filed; none is a
+blocker, and several are recorded specifically because this project has twice shipped vacuous tests
+and caught them only by mutation.
 
 ---
 
@@ -444,6 +722,491 @@ filters, App Intents, Spotlight, deep links; semantic/vector recall (they appear
 
 ---
 
+## P3 — a paraphrase-only eval harness — OPEN, and blocked on the user
+
+The one retrieval question still unanswered: **does any on-device strategy deliver "find without
+remembering the words"?** Both candidates fail it today — on hand-written short paraphrase queries
+`vector` scored ≈0/8 and `bm25` ≈2/8. BM25 winning the headline metric does not mean it can paraphrase;
+it means it is less bad, and the same-node gold set that measured it uses **full documents as queries**,
+which flatters lexical matching in a way real short typed queries do not.
+
+**Blocked on one input only: 30–50 paraphrase queries the user writes**, from real recall needs, each
+naming the item(s) it should find. That single choice is what dissolves LLM circularity and the leakage
+guard — as sole user, your own queries *are* the ground truth. Design is already written (spec §P3):
+two files (`RetrievalCorpus`, `RetrievalMetrics`), per-query-normalised operating-point search with an
+explicit `NO VIABLE THRESHOLD` verdict, no ROC-AUC, strategies `bm25` / `bm25Porter` / `vector` /
+`hybridRRF`, and a **pre-registered absolute floor** so the report can conclude "the incumbent is
+unusable". *Revisit trigger:* when the gold set exists.
+
+---
+
+## Extraction recall has never been measured, and live sessions could supply the gold set (2026-08-15)
+
+**User's idea, recorded before it evaporates** — and it is the missing half of the trust gate, not a
+nice-to-have.
+
+Phase 1B validated extraction for **precision**: 0 noise, 0 fabrication across three on-device
+acceptance runs, which is what made the make-or-break gate pass. **Recall was never measured, and
+there is no instrument for it.** The gate is deliberately built never to fabricate; the price of that
+posture is *silent misses*, and a silent miss is invisible by construction — the loose end simply is
+not there, and nothing indicates it should have been.
+
+**The proposal:** during real development sessions, loose ends arise organically and are recognised
+in the moment. Record them as they occur; after the session's transcript is ingested, check whether
+extraction actually produced them; where it did not, find out why. Live use becomes the gold set,
+which is the same shape as **P3**'s blocked paraphrase gold set (`backlog.md` § P3) — and has the
+same appeal: it is generated by working, not by an authoring chore.
+
+**The trap, and the fix.** Any in-session recording *contaminates the measurement*: stating "this is
+a loose end" in chat puts a clean, well-formed statement of it into the transcript, which is the
+easiest possible extraction target, so recall scored that way is optimistically biased upward. This
+repo already carries a live instance of the self-capture hazard (§ "The `claude -p` self-capture loop
+left 427 rows behind"). The fix is a **matching rule, not a capture rule**: count an extraction as a
+hit only when **its cited message index precedes the point at which the expectation was recorded**.
+Ground truth may then be recorded in-band without inflating the score.
+
+**Open questions, none blocking a spec:**
+
+- **Matching.** An expectation is a paraphrase; an extracted loose end cites a verbatim quote. Exact
+  match will not work. Options: BM25 over the transcript window, a model judge, or a human
+  confirm-queue shaped like Review Suggestions. Probably the hardest part, and worth measuring before
+  choosing.
+- **Whose judgement.** "This was a loose end" is itself noisy — arguably it needs the same
+  confirm-step the salience labels have.
+- **Where it lives.** There is an `EvalTask` registry and `pensieve eval` already
+  (`Sources/PensieveKit/Eval/README.md`), so a recall bar has a natural home beside the existing
+  extraction / narration / description bars — and adding one would also close part of § "Naming has
+  no eval coverage".
+- **Denominator.** Recall needs "how many loose ends were really there", which no one can enumerate.
+  A per-session recorded set only measures recall *against what was noticed*, which is a floor, not a
+  true rate. Worth stating honestly in whatever the harness reports.
+
+*Revisit trigger:* the next extraction-quality question, or any session where a miss is noticed by
+hand — that is a free datapoint and currently nothing catches it.
+
+---
+
+## The salience pipeline is built, wired, and has never been run (2026-08-15)
+
+**Two findings, one entry.** Surfaced by two independent adversarial reviews of the menu-bar popover
+spec — which proposed reusing the salient-first ordering, and so had to check whether it does
+anything. It does not. Both were verified against the live store on 2026-08-15.
+
+**1. `labelSuggestion` is empty on every row, so two shipped features are inert.**
+
+```
+labelSuggestion:  '' → 986 rows   (all of them)
+label (human):    '' → 864,  noise → 98,  salient → 24
+```
+
+`SalienceSuggester` (`Intelligence/SalienceSuggester.swift`) is the only writer, it is **offline and
+opt-in** behind `pensieve label-suggest` (`Sources/pensieve/Commands/LabelSuggest.swift:36`), and it
+has never been run here. The machinery is not missing — it is unexercised. Two consequences:
+
+- **`openAcrossNodes`'s salient-first tier is dead code in practice** (`LooseEndQueries.swift:40-45`).
+  The Loose Ends bucket's headline ordering — chosen on measured grounds over pure oldest-first,
+  which its own doc comment calls "grind through three repos" — currently *is* pure oldest-first.
+  The burn-down queue has been running in the mode the design rejected.
+- **Review Suggestions is structurally empty**, not merely quiet. `SalienceReviewQueries.pending`
+  requires `label == unlabeled && labelSuggestion != ""` (`:17`), and the second clause matches
+  nothing. The badge count has been an honest zero over a query that cannot return rows.
+
+*Smallest action:* run `pensieve label-suggest` once and re-check both surfaces. *Open question worth
+deciding first:* whether suggestion should stay a manual backfill at all, or run as part of
+extraction — 864 of 986 ends are unlabeled, and a one-off backfill leaves every future end unlabeled
+again.
+
+**2. `SalienceReviewQueries` holds a second copy of both the comparator and the N+1.**
+`:27-28` is byte-identical to `LooseEndQueries.swift:41-42`, and `:21` is its own inlined per-row
+`Event` point-query loop — outside the file, so "all four feeds share `attachEvents`" is true of
+`LooseEndQueries` only. Extracting one copy and leaving the other is how the two drift. Relevant the
+moment the batched-`attachEvents` work lands: **fix both or neither.**
+
+*Revisit trigger:* the batching change, or the first time Review Suggestions is expected to show
+anything.
+
+---
+
+## Naming has no eval coverage, and the harness has a silent hole (2026-08-13)
+
+**Two findings, one entry.** Raised by an adversarial review of the slice-5 spec and confirmed
+against the code.
+
+**1. Strand naming was never eval-registered.** `eval-config.json` carries three bars —
+`extraction`, `narration`, `description` — and `Ingester.nameStrand`
+(`Sources/PensieveKit/Ingest/Ingester.swift:366-389`) is not among them, despite being a real
+model-backed task with its own prompt that writes a **name and description onto a canonical node**.
+So `CLAUDE.md`'s "new LLM-backed tasks must register an `EvalTask`" rule has a pre-existing
+exception nobody chose, on the highest-volume naming path in the app (99 of 281 node names).
+
+**Decision for slice 5 (2026-08-13):** its labeler does **not** register a bespoke task. Registering
+only the new path would leave the older, higher-volume one uncovered while implying naming is
+measured. Its quality is instead pinned by committed probes
+(`measurements/2026-08-13-slice5-label-quality/`), which for a single-prompt task is the more
+reproducible artifact anyway. **If naming gets a bar, it should cover both call sites at once.**
+
+**2. `CorpusBuilder` has two hardcoded task lists the guardrail does not check.** The
+registry↔config test (`Sources/PensieveKit/Eval/EvalTask.swift:22-30`, asserted by
+`Tests/PensieveKitTests/EvalConfigConsistencyTests.swift`) only checks that every task has a bar and
+every bar has a task. It does **not** check that a registered task can load corpus items — and
+`CorpusBuilder` names its tasks by hand in two places. **A task can register, have a bar, pass the
+whole suite, and silently load zero items, reporting nothing while looking healthy.** That is a
+guardrail with a hole in the exact shape of the mistake it exists to catch.
+
+*Revisit trigger:* the next time an `EvalTask` is added or the harness is touched — fix (2) then
+regardless, since it is a few lines and it currently makes (1) harder to close safely.
+
+---
+
+## `TextQuality.shorten` — two weak tests on correct code (2026-08-13)
+
+Parked at the end of the slice-5 run rather than fixed, because the process allows exactly one fix wave
+after the whole-branch review and these arrived in its scoped re-review. **Both are test-strength issues;
+the shipped implementation was traced correct three times independently.** Together they are ~3 lines.
+Recorded because this project has twice shipped vacuous tests and caught them only by mutation.
+
+- **The maximality assertion cannot catch the `+1`-dropped mutant.** `shortenBreaksOnWordBoundariesNeverMidWord`
+  gained an assertion that demonstrably kills the first-word-only mutant (mutation-verified both
+  directions). But a reviewer hand-traced that with *this* test input, dropping the `+1` for the joining
+  space produces a **byte-identical** 56-character output — so the assertion is structurally insensitive to
+  it, not merely unverified. *Smallest fix: a second input whose break margin is exactly one character.*
+  Failure mode if it regresses: labels come back one word short.
+- **`shortenNeverFusesWordsAcrossAnEmbeddedNewline` is vacuous against its own claim.** Its assertions only
+  check for the literal absence of `\n`, which its two sibling tests already prove by pinning exact strings.
+  A delete-only mutant (`replacingOccurrences(of: "\n", with: "")`) would fuse `agent`+`and` and still pass
+  it. *Smallest fix: assert the fused token is absent, or pin the exact string as its siblings do.*
+
+*Revisit trigger:* the next edit to `TextQuality.shorten`'s join arithmetic, or any pass that touches these
+tests.
+
+---
+
+## The `claude -p` self-capture loop left 427 rows behind — the BUG is fixed, the RESIDUE is not (2026-08-14)
+
+Measured while re-speccing transcript-passage chunking. **The bug itself is already fixed, twice** —
+this entry is only about the rows it left in the store. It was initially filed here as an open capture
+defect; that framing was wrong and is corrected below, because acting on it would mean re-fixing
+something that already works.
+
+**What is in the store:** 427 of the 1,099 `cc.session` events are Pensieve's own LLM calls. All carry
+cwd `/` (hence transcript paths under `~/.claude/projects/-/`, a directory that does not exist),
+**423 have exactly 1 prompt**, all are attributed to one node named literally `/`, and their
+`workSummary` values are summaries *of other sessions* — one leaking the scaffolding verbatim:
+*"The session is already summarized. Here it is in 1-2 sentences:"*.
+
+**Why it cannot recur.** `ClaudeCLIProvider.shellRun` pins `currentDirectoryURL` to
+`PensievePaths.llmScratchDirectory()`, and its comment already describes this exact failure —
+*"every extraction call became a Claude Code session at the filesystem root, got captured by the
+SessionEnd hook, and was re-ingested as 'work' (a feedback loop that produced a phantom project named
+'/')"*. `Ingester.ingestSession` then refuses `ProjectResolver.isDegenerateRoot` (`/` or `$HOME`) as a
+second line of defense, dropping such a session permanently. Both guards ship. Every one of the 427
+events is dated **2026-07**, consistent with the fix, and the `/` node is **archived**.
+
+**What is still open — purging the residue.** Those 427 summaries are in the BM25 corpus today,
+reachable under Include Archived, and they are model output *about* Pensieve's internals, which is the
+most confusing thing a search for Pensieve's own work can return. They also inflate any
+"sessions captured" figure by 39%: the transcript-availability measurement read 36% with them and 59%
+without, and the second number is the true one.
+
+Two options, both small:
+
+1. **Leave archived** (status quo). They are out of every normal view; only Include Archived reaches
+   them. Costs nothing, keeps a permanent 39% distortion in any count over `cc.session` events.
+2. **Purge** — delete the 427 events and the `/` node. There is no delete-events verb and `Ingester`
+   is the only canonical writer, so this is a one-off maintenance command rather than a feature. The
+   events cascade from the node, so deleting the node may be sufficient; verify before relying on it.
+
+*Revisit trigger:* the next time a count over `cc.session` events matters (a stats surface, a corpus
+measurement), or before anything reads archived event summaries into a prompt.
+
+---
+
+## In-node find — highlight/document skew — OPEN, needs thinking (2026-08-12)
+
+Raised by the whole-branch review of `worktree-in-node-find` and **deliberately left unchanged** — the
+obvious fix trades the bug for a worse one, so this wants a design, not a patch.
+
+`NodeFindState.runs(for:text:)` takes an `anchor` and **ignores it**: highlighting is derived purely
+from the text handed to it. So during the window between a provenance row rendering its transcript and
+`noteRenderedProvenance` landing in the document, that row tints matches that are **not** in the "N
+matches" count and that ⌘G cannot reach. The count and the highlights disagree, briefly.
+
+**Why the one-line fix was rejected:** gating `runs` on document membership makes the same window show
+*no* highlights on text that visibly contains the query — a reader watching the phrase they typed go
+unmarked reads as broken, where a slightly-early highlight reads as fine. Missing highlights are the
+worse failure, so the skew was kept and flagged.
+
+**The real question is which of two models the pane should hold**, and it isn't a rendering detail:
+either the document is the single authority (and rows must not render until they're indexed — needs the
+sweep and the mount path to converge, or a placeholder), or highlights are locally derived and the
+*count* becomes the approximation (which weakens ⌘G's promise that the count is walkable). Note the
+transcript path is only 18 of 122 loose ends on the `Pensieve` node, so the window is rarer in practice
+than it looks in the code. *Revisit trigger:* the eyeball pass shows the skew is actually noticeable,
+or a future find surface makes the count load-bearing beyond ⌘G.
+
+**Settled at the same time, no work needed:** ⌘F on the Briefing **stays inert**. `FindCommands`
+disables it with no focused node and it does not fall back to the global field — that is the intended
+behaviour after the keybinding swap, not an oversight.
+
+---
+
+## Code-quality review carries — 2026-07-07 (deferred / design questions)
+
+From a full code-quality + idiomatic-Swift review of the whole tree. Most findings were fixed in
+the same pass (Swift 6 mode on the app target — which caught a real non-`Sendable` `Ingester`
+crossing the `@MainActor` boundary; the inspector's in-`body` DB query; a `claude -p` timeout +
+off-cooperative-pool + SIGPIPE guard; `DatabaseReader` widening; `@Sendable` FSEvents callback; a
+`NodeKind` type; and a batch of smaller cleanups). These four were deliberately **not** taken on —
+too big, or a genuine design question.
+
+- **`AppModel` → `@Observable` migration** — ✅ **DONE (2026-07-19, app-quality cleanup pass; plan `plans/2026-07-19-appmodel-observable-migration.md`).** Turned out cleaner than feared: no `@EnvironmentObject` to rewire, only `RootView` needed `@Bindable`, and the named hotspots (`nodesForSelection`/`PaletteView.rows`) were already gone (IA rework + ⌘K retirement). Non-UI infra is `@ObservationIgnored`; the Opus whole-branch review caught one wrongly-silenced property (`allNodes`, read by bodies via `node(_:)`) breaking `RecallWindowView` cold-restore, fixed. *Original note below, for context.* — the app still uses `ObservableObject`/`@Published`, so
+  any `@Published` write invalidates *every* observing view. That's the root cause of a cluster of
+  small "recomputed in `body`" items: the (now-fixed) inspector re-query, `ContentListView.nodesForSelection()`
+  (filter + O(n log n) sort on every unrelated refresh), and `PaletteView.rows` (re-runs `matchingNodes`
+  each keystroke). `@Observable` scopes invalidation to the properties each view actually reads.
+  Deferred because it's a broad, non-surgical rewrite of every view's state wrappers in an untested
+  target. *Trigger: a dedicated app-target modernization pass, or when broad invalidation shows a cost.*
+- **Organizing-writes silent-failure surfacing** — `AppModel.move/merge/rename/retype/createNode`
+  `try?` the Kit op then unconditionally `refresh()`, so a failed *write* (as opposed to a read) is
+  invisible with no signal why. `try?`-degrade-to-empty is right for reads, worse for user-initiated
+  writes. Needs an error-presentation mechanism the app doesn't have yet. *Trigger: pair with the
+  first Settings/error-surface (same surface the `LSUIElement` toggle waits on).*
+- **`BriefingQueries.cards` N+1-inside-N+1** — fetches *all* events for every active node (no limit)
+  to read `events.first` + a since-count, then calls `LooseEndQueries.open` per node, which itself
+  re-fetches each loose end's source `Event` by id. Fine at single-user scale; a real fix is a query
+  restructuring that risks the tested default landing view for no practical gain today. *Trigger: if
+  the Briefing landing feels slow, or node/event volume grows materially.* (Related: the long-standing
+  "shared per-node latest-event + days-dormant + open-loose-end-count helper" carry under pillar #2.)
+- **`@MainActor` annotation on `AppModel`** — the model is main-actor-isolated by convention (only
+  ever accessed from views or explicitly-hopped `Task`s), but it’s a plain `class` with no
+  annotation. Adding `@MainActor final class AppModel` makes the compiler enforce the invariant,
+  simplifies closures that currently need `@MainActor in` or `Task { @MainActor in }`, and catches
+  any accidental off-main access at compile time. One-line change in declaration + removing the now-
+  redundant explicit isolation annotations in `start()`/`focusContextDidChange()`. *Trigger: next
+  touch of `AppModel`, or pair with the `@Observable` migration above.*
+- **`NodeKind` / `NodeState` / `EventKind` → real `RawRepresentable` enums** — ✅ **DONE (2026-07-19, app-quality cleanup pass) for `NodeKind` + `NodeState`.** They're now `: String, CaseIterable, Codable, Sendable, Equatable, QueryBindable` enums (same strings on disk, no migration, all SchemaV4–V9 tests pass). **`EventKind` was NOT done — it doesn't exist:** `Event.kind` values come from `CaptureKind` on the sacred append-only capture spool, deliberately left `String`. *Original note below.* — currently string
+  namespaces (`enum NodeKind { static let project = "project" ... }`). Making them real
+  `enum NodeKind: String, Codable, Sendable, CaseIterable { case project, strand, ... }` gives
+  exhaustive `switch` (the compiler catches a forgotten case), auto-`Codable`/`Equatable`, and
+  eliminates the possibility of a typo creating a silent wrong-kind. SQLiteData column adapters
+  handle `RawRepresentable` natively (no schema change — same strings on disk). The trade-off:
+  adding a new kind becomes a migration-sized change (new enum case + update all `switch`es),
+  but at the current rate (≤0.5 new kinds/month) that’s a feature, not a cost. *Trigger: next
+  model-layer refactor, or pair with the `@Observable` pass.*
+- **`Ingester.drain()` decode-failure poison-pill — design question, intentionally unchanged.**
+  permanently-undecodable `git.commit` / `git.checkout` / `cc.session.start` spool row throws every
+  drain and is left unmarked, so it's re-processed every launchd cycle forever; only the `cc.session`
+  branch distinguishes transient (retry) from permanent (drop-and-mark). This was **not** flipped
+  because the existing test `failingRowStaysPendingWhileGoodRowProcesses` encodes a deliberate "never
+  silently drop a capture row" decision, and the loop is invisible (`drain`'s `catch { continue }`
+  swallows the cause). The decision to make: keep data-preservation (retry forever, harmless for a
+  single row) vs. treat a *decode* failure as permanent (drop-and-mark) — ideally paired with drain
+  observability so a stuck row is at least logged. *Trigger: if a malformed capture row is ever
+  observed looping, or when adding drain logging/metrics.*
+
+---
+
+# Tier 3 — Parked, trigger-gated
+
+Real ideas waiting on a named trigger. Parked deliberately, none foreclosed. The trigger is the
+contract: when it arrives, the entry is picked up — it is not a euphemism for "someday".
+
+---
+
+## Transcript rendering — deferred siblings (2026-07-19, split out of the readability spec)
+
+Raised together while dogfooding the inline provenance view; **sub-project #1 (transcript
+readability — role bubbles, XML-tag callouts, heading type scale) SHIPPED 2026-07-26** (merged to
+`main` `4b184a3`; see CLAUDE.md ▸ Status). These two were split off because each is a different
+*kind* of decision, not a styling one — **both revisit triggers are now live.**
+
+- **Rich code blocks — syntax highlighting + diagram rendering.** *Medium–large; its own spec.*
+  Transcript code fences currently render unhighlighted (MarkdownUI default). Two separable pieces:
+  (1) **syntax highlighting** — needs a highlighter dependency (or a hand-rolled tokenizer for the
+  handful of languages that actually appear: Swift, shell, JSON, Markdown); (2) **diagram
+  rendering** — the harder half. **Note: the observed diagrams are Graphviz DOT** (`digraph … {}`
+  emitted by skill docs), **not Mermaid**, though Claude emits both depending on context. Neither has
+  a first-party macOS renderer: Mermaid means bundling mermaid.js in a `WKWebView`; DOT means a
+  WebView (viz.js) or a Swift layout engine. Both collide with **"platform primitives first"** and
+  add a heavyweight dependency to a view that today is pure SwiftUI. **Decide the DOT-vs-Mermaid
+  question with real corpus evidence before committing** — a Mermaid-only renderer may buy nothing.
+  *Revisit trigger:* transcript readability has shipped and code blocks are still the worst part of
+  the view.
+- **macOS Writing Tools on loose ends** (condense / summarize / explain). *Unknown feasibility;
+  spike first.* **Open question that gates the whole idea:** Writing Tools attaches to the standard
+  text system (`NSTextView`/`TextEditor`); MarkdownUI renders custom SwiftUI views, so Writing Tools
+  may never appear in that hierarchy at all. **Do a small spike before any design.** Second gate is
+  the **trust gate**: rewriting a loose end *in place* would mutate displayed provenance — the one
+  thing that must stay verbatim. A read-only "explain this" overlay is a different, safer feature
+  than "condense this text", and the spec must pick one deliberately. *Revisit trigger:* the spike
+  proves Writing Tools reachable from the loose-end surface.
+
+---
+
+## Widgets — DEFERRED (2026-07-08): blocked on App Groups needing a paid Team ID
+
+Attempted to pick up Widgets (the first *second process*). Hit a hard prerequisite during brainstorming and
+deferred with the user's agreement.
+
+**The blocker.** A macOS **WidgetKit extension is always sandboxed** — it cannot read the canonical store at
+`~/Library/Application Support/Pensieve/` (`PensievePaths.supportDirectory()`), which every current writer (git
+hooks via CLI, launchd daemon, app) and reader uses. The only way to share the store with the extension is an
+**App Group container** (`~/Library/Group Containers/<TeamID>.<group>/`), which on macOS requires the app to be
+**signed with a Team ID** and the `com.apple.security.application-groups` entitlement **provisioned**.
+
+**Why blocked now.** The app is **ad-hoc signed** (`CODE_SIGN_IDENTITY: "-"`, no `DEVELOPMENT_TEAM`), which has
+no Team ID. The only signing artifacts on the machine are corporate MDM/Configurator ones (an "Apple
+Configurator: Matchory GmbH" identity; a Microsoft *Intune MDM Agent* profile, team `UBF8T346G9`) — none carry
+App Groups. The user has a **free Personal Team** available (via Apple ID), but **free personal teams do not
+support the App Groups capability** (Apple gates it as paid; Xcode blocks adding it). ~85% confident this is a
+hard block for a personal team — a spike would confirm, but the odds favor failure.
+
+**Revisit trigger.** A **paid Apple Developer membership** (personal enrollment, or an acceptable paid org team)
+is in hand **and has activated**. *(2026-08-15: purchased, but not yet active — no team in Xcode ▸ Settings ▸
+Accounts, nothing on the Membership page, and no Apple Development cert on the machine. **The missing cert is
+not evidence either way** — Xcode mints one on first request, so the local state is identical whether the
+membership is live or absent, and Xcode caches no portal data to read offline. Check Xcode Accounts, not the
+filesystem.)* Then the first move is switching the app + a new widget target to Team-ID signing and moving the
+canonical store into an App Group container — a shared `PensievePaths.supportDirectory()` resolution that ALL
+writers (hooks/daemon/CLI/app) adopt, not just the app. **This same gate blocks CloudKit** (pillar #4) and any
+future extension; resolving the paid-membership + App-Group foundation unblocks the whole extension family at
+once. If a spike is ever run: sign with the team, add the App Group entitlement to both targets, and confirm
+`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` resolves non-nil in BOTH the app and the
+widget, and that the widget can read a file the app wrote there — that go/no-go gates everything else.
+
+**~~A third surface joined this gate on 2026-08-12: background sync itself.~~ Retracted 2026-08-13** — that
+outage was a stale LWCR, not a Team-ID problem, and the agent now spawns ad-hoc-signed with
+`codeSigningTeamID: ""`. See Archive ▸ "Background sync is dead — launchd won't spawn the agent". This gate covers Focus filters, Widgets and CloudKit only.
+
+---
+
+## Spike: statistical theme discovery across strands (`NLEmbedding`)
+
+**Parked:** 2026-07-03, during Phase 1B brainstorming.
+**Revisit when:** the grounded loose-end/summary layer (1B) is proven and we want the
+"broad picture of how strands unfold across the whole tree" — i.e. surfacing
+*recurring cross-cutting themes* ("you keep touching auth across three projects")
+rather than per-project state.
+
+**Idea:** use unsupervised statistical analysis (word2vec-style embeddings +
+clustering) over captured session/commit text and extracted loose ends to surface
+recurring themes and candidate cross-cutting strands/concepts automatically.
+
+**Constraints & the native path:**
+- **No Python, ever.** The Swift-native route is Apple's `NLEmbedding` (the
+  `NaturalLanguage` framework) for on-device word/sentence embeddings — no API key,
+  no external service, runs locally. This is the intended implementation surface.
+- **Grounding caveat (important).** Opaque embedding clusters are hard to *cite*,
+  which cuts against Pensieve's provenance-or-it-doesn't-exist north star. When we
+  build this, prefer using embeddings as a *retrieval/grouping aid* that feeds a
+  grounded LLM synthesis (which can cite real captured text), rather than surfacing
+  raw clusters as if they were findings. Themes must still trace to captured text.
+
+**Why it's a perfect Pensieve dogfood case:** this note is itself a `concept`/`topic`
+— a targeted exploration parked for later. When Pensieve can track a strand like this
+(let me forget it for a month, then reload full context and continue), it's working.
+
+---
+
+## App: capture & instruct by talking to the system (prompt input → chat)
+
+**Requested:** 2026-07-05.
+
+**Idea, in two stages:**
+1. **Capture a strand by describing it** — a prompt/text input in the Pensieve UI where I
+   type a description of a new strand and it gets created (name + `description` + `kind`,
+   parented sensibly). The lightweight "quick add a thing I'm about to work on" surface,
+   as opposed to auto-birth from ≥2 captured events. Pairs with the organizing CLI
+   (`add-node`) but conversational and in-app.
+2. **Talk to the system** — a fuller Claude/OpenAI/Gemini chat session embedded in the app
+   for giving instructions in natural language ("nest auth under the platform node",
+   "what did I leave open on the sync daemon", "start a strand for X"). The chat drives the
+   same organizing/query operations the CLI exposes, plus grounded Q&A over captured state.
+
+**Scope note:** stage 1 (structured strand creation from a prompt) is achievable early and
+independently. Stage 2 (a full conversational agent surface) **can be deferred very late** —
+it's a large surface and not on the critical path.
+
+**Constraints & the native path:**
+- **Provider-agnostic** via the existing `LLMProvider` protocol (default shells out to
+  `claude -p`; I have a subscription, **no API key**). "Claude/OpenAI/Gemini" is a
+  someday-choice, not a requirement — don't hardcode a vendor.
+- **Grounding caveat.** When the chat *answers questions* about project state, it stays
+  under the provenance north star — cite captured text, don't fabricate. When it *creates a
+  strand* from my description, the name/description are my own words (user-authored metadata,
+  outside the trust gate, like `rename`), which is fine.
+- A prompt that creates or re-parents nodes is a **write** — it must go through the same
+  validated operations as the CLI (`add-node`/`nest`/`group`), including the deferred
+  cycle guard, not raw SQL from model output.
+
+**Stage 1 now specced:** describe-a-strand → structured create is designed in
+`specs/2026-07-05-pensieve-app-three-pane-design.md` (slice 5). Stage 2 (conversational agent)
+stays deferred to its own later spec.
+
+*Trigger: stage 1 once the app has real interactive UI (the three-pane app, past the
+read-only heartbeat/menu-bar steps). Stage 2 much later, once the read/query surface is solid.*
+
+---
+
+## Forks as first-class: capture & visualize strand ancestry and orphans
+
+**Requested:** 2026-07-05.
+
+**The observation:** working is full of *forks*. Claude offers two choices and I pick one;
+I branch off to do something adjacent; I switch to another branch and carry on there. Each
+is a decision point that splits the work — and today the *road not taken* silently goes cold.
+The strands most likely to be forgotten are exactly the ones orphaned at a fork.
+
+**Idea:** make forks first-class in the strand model and surface them prominently, git-branch-like:
+- **Capture the fork** — a strand carries not just a parent (containment) but a *branched-from*
+  ancestry: which strand/decision-point it split off from, and when. Sibling strands sharing a
+  fork point are visibly related.
+- **Walk back the ancestry** — from any strand, trace its lineage back through the forks that
+  produced it (distinct from the `parentID` containment tree — this is *temporal/causal*
+  ancestry).
+- **Surface orphans at a fork** — when a fork has branches I started and left dormant, show them
+  as "picked up / left open" so I can consciously return to the road not taken.
+
+**Constraints & the native path:**
+- **Ground every fork in real captured signal**, not inference. Candidate sources already in
+  hand: `SessionBranch` (a session's git branch), git branch creation/switch, worktree
+  activity, and — harder — Claude offering explicit choices within a transcript. A fork edge
+  should trace to a captured event, consistent with the north star.
+- This is likely a **new edge type distinct from `parentID`** — closer to the deferred
+  *cross-cutting soft references* (`node_links`, cycles allowed) than to the strict containment
+  tree. Design it as causal/temporal lineage, not by overloading containment.
+- Detecting "Claude presented two choices and I picked one" from a transcript is the ambitious
+  part and may warrant its own spike; branch-switch forks from git/`SessionBranch` are the
+  tractable first cut.
+- **The full pannable "fork canvas" node-graph is parked here as a power-view** — a 2-D map of
+  decision points to walk when many strands accumulate. The app starts with the lightweight
+  *ancestry-trail + siblings* surface instead (chosen in the app design). Revisit the canvas once
+  strand volume makes the trail feel cramped.
+
+**App surface now specced:** the ancestry-trail + siblings view and the *Roads Not Taken* smart
+list are designed in `specs/2026-07-05-pensieve-app-three-pane-design.md` (slice 6), gated on this
+capture backend. This entry is the **capture backend** — the still-needed long pole; brainstorm it
+on its own before that slice.
+
+*Trigger: once strand auto-birth is proven in dogfooding and the app has a visualization surface
+worth walking a tree in (the three-pane app). Branch-switch forks first; transcript-choice
+detection as a later spike.*
+
+---
+
+# Archive — shipped work
+
+Dated records of shipped work, newest first, **preserved verbatim** from the pre-2026-08-15 ledger.
+Kept because the reasoning — especially the refuted hypotheses, the rejected designs and the
+measurement discipline — is the reusable part, and `CLAUDE.md` ▸ Status is the short version.
+
+**Several entries below carry a *"Deferred out of …"* sub-list, and some of those items are still
+live.** They were not promoted wholesale: where one still matters it is cross-referenced from a tier
+above (e.g. the per-kind ingestion-handler protocol → **F6**). Read the sub-lists when picking up
+adjacent work.
+
+---
+
 ## Semantic relevance floor — CLOSED by removing the engine (2026-08-11)
 
 **The floor no longer exists, because the engine no longer exists.** This entry was first closed as
@@ -521,22 +1284,6 @@ a calibration method. *Revisit trigger:* next time semantic recall is touched, o
 live, default-on, and currently diluting the grounded context fed to Claude via MCP.
 
 </details>
-
-## P3 — a paraphrase-only eval harness — OPEN, and blocked on the user
-
-The one retrieval question still unanswered: **does any on-device strategy deliver "find without
-remembering the words"?** Both candidates fail it today — on hand-written short paraphrase queries
-`vector` scored ≈0/8 and `bm25` ≈2/8. BM25 winning the headline metric does not mean it can paraphrase;
-it means it is less bad, and the same-node gold set that measured it uses **full documents as queries**,
-which flatters lexical matching in a way real short typed queries do not.
-
-**Blocked on one input only: 30–50 paraphrase queries the user writes**, from real recall needs, each
-naming the item(s) it should find. That single choice is what dissolves LLM circularity and the leakage
-guard — as sole user, your own queries *are* the ground truth. Design is already written (spec §P3):
-two files (`RetrievalCorpus`, `RetrievalMetrics`), per-query-normalised operating-point search with an
-explicit `NO VIABLE THRESHOLD` verdict, no ROC-AUC, strategies `bm25` / `bm25Porter` / `vector` /
-`hybridRRF`, and a **pre-registered absolute floor** so the report can conclude "the incumbent is
-unusable". *Revisit trigger:* when the gold set exists.
 
 ---
 
@@ -629,246 +1376,6 @@ exercise of this feature and may reorder everything above.
   been seen running.
 - **The nine new catalog keys were inserted where `Prepare translation` sat**, so the file is no longer
   alphabetically sorted and the next Xcode edit will re-sort it into a large reformat diff.
-
----
-
-## Extraction recall has never been measured, and live sessions could supply the gold set (2026-08-15)
-
-**User's idea, recorded before it evaporates** — and it is the missing half of the trust gate, not a
-nice-to-have.
-
-Phase 1B validated extraction for **precision**: 0 noise, 0 fabrication across three on-device
-acceptance runs, which is what made the make-or-break gate pass. **Recall was never measured, and
-there is no instrument for it.** The gate is deliberately built never to fabricate; the price of that
-posture is *silent misses*, and a silent miss is invisible by construction — the loose end simply is
-not there, and nothing indicates it should have been.
-
-**The proposal:** during real development sessions, loose ends arise organically and are recognised
-in the moment. Record them as they occur; after the session's transcript is ingested, check whether
-extraction actually produced them; where it did not, find out why. Live use becomes the gold set,
-which is the same shape as **P3**'s blocked paraphrase gold set (`backlog.md` § P3) — and has the
-same appeal: it is generated by working, not by an authoring chore.
-
-**The trap, and the fix.** Any in-session recording *contaminates the measurement*: stating "this is
-a loose end" in chat puts a clean, well-formed statement of it into the transcript, which is the
-easiest possible extraction target, so recall scored that way is optimistically biased upward. This
-repo already carries a live instance of the self-capture hazard (§ "The `claude -p` self-capture loop
-left 427 rows behind"). The fix is a **matching rule, not a capture rule**: count an extraction as a
-hit only when **its cited message index precedes the point at which the expectation was recorded**.
-Ground truth may then be recorded in-band without inflating the score.
-
-**Open questions, none blocking a spec:**
-
-- **Matching.** An expectation is a paraphrase; an extracted loose end cites a verbatim quote. Exact
-  match will not work. Options: BM25 over the transcript window, a model judge, or a human
-  confirm-queue shaped like Review Suggestions. Probably the hardest part, and worth measuring before
-  choosing.
-- **Whose judgement.** "This was a loose end" is itself noisy — arguably it needs the same
-  confirm-step the salience labels have.
-- **Where it lives.** There is an `EvalTask` registry and `pensieve eval` already
-  (`Sources/PensieveKit/Eval/README.md`), so a recall bar has a natural home beside the existing
-  extraction / narration / description bars — and adding one would also close part of § "Naming has
-  no eval coverage".
-- **Denominator.** Recall needs "how many loose ends were really there", which no one can enumerate.
-  A per-session recorded set only measures recall *against what was noticed*, which is a floor, not a
-  true rate. Worth stating honestly in whatever the harness reports.
-
-*Revisit trigger:* the next extraction-quality question, or any session where a miss is noticed by
-hand — that is a free datapoint and currently nothing catches it.
-
----
-
-## The salience pipeline is built, wired, and has never been run (2026-08-15)
-
-**Two findings, one entry.** Surfaced by two independent adversarial reviews of the menu-bar popover
-spec — which proposed reusing the salient-first ordering, and so had to check whether it does
-anything. It does not. Both were verified against the live store on 2026-08-15.
-
-**1. `labelSuggestion` is empty on every row, so two shipped features are inert.**
-
-```
-labelSuggestion:  '' → 986 rows   (all of them)
-label (human):    '' → 864,  noise → 98,  salient → 24
-```
-
-`SalienceSuggester` (`Intelligence/SalienceSuggester.swift`) is the only writer, it is **offline and
-opt-in** behind `pensieve label-suggest` (`Sources/pensieve/Commands/LabelSuggest.swift:36`), and it
-has never been run here. The machinery is not missing — it is unexercised. Two consequences:
-
-- **`openAcrossNodes`'s salient-first tier is dead code in practice** (`LooseEndQueries.swift:40-45`).
-  The Loose Ends bucket's headline ordering — chosen on measured grounds over pure oldest-first,
-  which its own doc comment calls "grind through three repos" — currently *is* pure oldest-first.
-  The burn-down queue has been running in the mode the design rejected.
-- **Review Suggestions is structurally empty**, not merely quiet. `SalienceReviewQueries.pending`
-  requires `label == unlabeled && labelSuggestion != ""` (`:17`), and the second clause matches
-  nothing. The badge count has been an honest zero over a query that cannot return rows.
-
-*Smallest action:* run `pensieve label-suggest` once and re-check both surfaces. *Open question worth
-deciding first:* whether suggestion should stay a manual backfill at all, or run as part of
-extraction — 864 of 986 ends are unlabeled, and a one-off backfill leaves every future end unlabeled
-again.
-
-**2. `SalienceReviewQueries` holds a second copy of both the comparator and the N+1.**
-`:27-28` is byte-identical to `LooseEndQueries.swift:41-42`, and `:21` is its own inlined per-row
-`Event` point-query loop — outside the file, so "all four feeds share `attachEvents`" is true of
-`LooseEndQueries` only. Extracting one copy and leaving the other is how the two drift. Relevant the
-moment the batched-`attachEvents` work lands: **fix both or neither.**
-
-*Revisit trigger:* the batching change, or the first time Review Suggestions is expected to show
-anything.
-
----
-
-## `TextQuality.shorten` — two weak tests on correct code (2026-08-13)
-
-Parked at the end of the slice-5 run rather than fixed, because the process allows exactly one fix wave
-after the whole-branch review and these arrived in its scoped re-review. **Both are test-strength issues;
-the shipped implementation was traced correct three times independently.** Together they are ~3 lines.
-Recorded because this project has twice shipped vacuous tests and caught them only by mutation.
-
-- **The maximality assertion cannot catch the `+1`-dropped mutant.** `shortenBreaksOnWordBoundariesNeverMidWord`
-  gained an assertion that demonstrably kills the first-word-only mutant (mutation-verified both
-  directions). But a reviewer hand-traced that with *this* test input, dropping the `+1` for the joining
-  space produces a **byte-identical** 56-character output — so the assertion is structurally insensitive to
-  it, not merely unverified. *Smallest fix: a second input whose break margin is exactly one character.*
-  Failure mode if it regresses: labels come back one word short.
-- **`shortenNeverFusesWordsAcrossAnEmbeddedNewline` is vacuous against its own claim.** Its assertions only
-  check for the literal absence of `\n`, which its two sibling tests already prove by pinning exact strings.
-  A delete-only mutant (`replacingOccurrences(of: "\n", with: "")`) would fuse `agent`+`and` and still pass
-  it. *Smallest fix: assert the fused token is absent, or pin the exact string as its siblings do.*
-
-*Revisit trigger:* the next edit to `TextQuality.shorten`'s join arithmetic, or any pass that touches these
-tests.
-
----
-
-## Naming has no eval coverage, and the harness has a silent hole (2026-08-13)
-
-**Two findings, one entry.** Raised by an adversarial review of the slice-5 spec and confirmed
-against the code.
-
-**1. Strand naming was never eval-registered.** `eval-config.json` carries three bars —
-`extraction`, `narration`, `description` — and `Ingester.nameStrand`
-(`Sources/PensieveKit/Ingest/Ingester.swift:366-389`) is not among them, despite being a real
-model-backed task with its own prompt that writes a **name and description onto a canonical node**.
-So `CLAUDE.md`'s "new LLM-backed tasks must register an `EvalTask`" rule has a pre-existing
-exception nobody chose, on the highest-volume naming path in the app (99 of 281 node names).
-
-**Decision for slice 5 (2026-08-13):** its labeler does **not** register a bespoke task. Registering
-only the new path would leave the older, higher-volume one uncovered while implying naming is
-measured. Its quality is instead pinned by committed probes
-(`measurements/2026-08-13-slice5-label-quality/`), which for a single-prompt task is the more
-reproducible artifact anyway. **If naming gets a bar, it should cover both call sites at once.**
-
-**2. `CorpusBuilder` has two hardcoded task lists the guardrail does not check.** The
-registry↔config test (`Sources/PensieveKit/Eval/EvalTask.swift:22-30`, asserted by
-`Tests/PensieveKitTests/EvalConfigConsistencyTests.swift`) only checks that every task has a bar and
-every bar has a task. It does **not** check that a registered task can load corpus items — and
-`CorpusBuilder` names its tasks by hand in two places. **A task can register, have a bar, pass the
-whole suite, and silently load zero items, reporting nothing while looking healthy.** That is a
-guardrail with a hole in the exact shape of the mistake it exists to catch.
-
-*Revisit trigger:* the next time an `EvalTask` is added or the harness is touched — fix (2) then
-regardless, since it is a few lines and it currently makes (1) harder to close safely.
-
----
-
-## The `claude -p` self-capture loop left 427 rows behind — the BUG is fixed, the RESIDUE is not (2026-08-14)
-
-Measured while re-speccing transcript-passage chunking. **The bug itself is already fixed, twice** —
-this entry is only about the rows it left in the store. It was initially filed here as an open capture
-defect; that framing was wrong and is corrected below, because acting on it would mean re-fixing
-something that already works.
-
-**What is in the store:** 427 of the 1,099 `cc.session` events are Pensieve's own LLM calls. All carry
-cwd `/` (hence transcript paths under `~/.claude/projects/-/`, a directory that does not exist),
-**423 have exactly 1 prompt**, all are attributed to one node named literally `/`, and their
-`workSummary` values are summaries *of other sessions* — one leaking the scaffolding verbatim:
-*"The session is already summarized. Here it is in 1-2 sentences:"*.
-
-**Why it cannot recur.** `ClaudeCLIProvider.shellRun` pins `currentDirectoryURL` to
-`PensievePaths.llmScratchDirectory()`, and its comment already describes this exact failure —
-*"every extraction call became a Claude Code session at the filesystem root, got captured by the
-SessionEnd hook, and was re-ingested as 'work' (a feedback loop that produced a phantom project named
-'/')"*. `Ingester.ingestSession` then refuses `ProjectResolver.isDegenerateRoot` (`/` or `$HOME`) as a
-second line of defense, dropping such a session permanently. Both guards ship. Every one of the 427
-events is dated **2026-07**, consistent with the fix, and the `/` node is **archived**.
-
-**What is still open — purging the residue.** Those 427 summaries are in the BM25 corpus today,
-reachable under Include Archived, and they are model output *about* Pensieve's internals, which is the
-most confusing thing a search for Pensieve's own work can return. They also inflate any
-"sessions captured" figure by 39%: the transcript-availability measurement read 36% with them and 59%
-without, and the second number is the true one.
-
-Two options, both small:
-
-1. **Leave archived** (status quo). They are out of every normal view; only Include Archived reaches
-   them. Costs nothing, keeps a permanent 39% distortion in any count over `cc.session` events.
-2. **Purge** — delete the 427 events and the `/` node. There is no delete-events verb and `Ingester`
-   is the only canonical writer, so this is a one-off maintenance command rather than a feature. The
-   events cascade from the node, so deleting the node may be sufficient; verify before relying on it.
-
-*Revisit trigger:* the next time a count over `cc.session` events matters (a stats surface, a corpus
-measurement), or before anything reads archived event summaries into a prompt.
-
----
-
-## In-node find — highlight/document skew — OPEN, needs thinking (2026-08-12)
-
-Raised by the whole-branch review of `worktree-in-node-find` and **deliberately left unchanged** — the
-obvious fix trades the bug for a worse one, so this wants a design, not a patch.
-
-`NodeFindState.runs(for:text:)` takes an `anchor` and **ignores it**: highlighting is derived purely
-from the text handed to it. So during the window between a provenance row rendering its transcript and
-`noteRenderedProvenance` landing in the document, that row tints matches that are **not** in the "N
-matches" count and that ⌘G cannot reach. The count and the highlights disagree, briefly.
-
-**Why the one-line fix was rejected:** gating `runs` on document membership makes the same window show
-*no* highlights on text that visibly contains the query — a reader watching the phrase they typed go
-unmarked reads as broken, where a slightly-early highlight reads as fine. Missing highlights are the
-worse failure, so the skew was kept and flagged.
-
-**The real question is which of two models the pane should hold**, and it isn't a rendering detail:
-either the document is the single authority (and rows must not render until they're indexed — needs the
-sweep and the mount path to converge, or a placeholder), or highlights are locally derived and the
-*count* becomes the approximation (which weakens ⌘G's promise that the count is walkable). Note the
-transcript path is only 18 of 122 loose ends on the `Pensieve` node, so the window is rarer in practice
-than it looks in the code. *Revisit trigger:* the eyeball pass shows the skew is actually noticeable,
-or a future find surface makes the count load-bearing beyond ⌘G.
-
-**Settled at the same time, no work needed:** ⌘F on the Briefing **stays inert**. `FindCommands`
-disables it with no focused node and it does not fall back to the global field — that is the intended
-behaviour after the keybinding swap, not an oversight.
-
----
-
-## Transcript rendering — deferred siblings (2026-07-19, split out of the readability spec)
-
-Raised together while dogfooding the inline provenance view; **sub-project #1 (transcript
-readability — role bubbles, XML-tag callouts, heading type scale) SHIPPED 2026-07-26** (merged to
-`main` `4b184a3`; see CLAUDE.md ▸ Status). These two were split off because each is a different
-*kind* of decision, not a styling one — **both revisit triggers are now live.**
-
-- **Rich code blocks — syntax highlighting + diagram rendering.** *Medium–large; its own spec.*
-  Transcript code fences currently render unhighlighted (MarkdownUI default). Two separable pieces:
-  (1) **syntax highlighting** — needs a highlighter dependency (or a hand-rolled tokenizer for the
-  handful of languages that actually appear: Swift, shell, JSON, Markdown); (2) **diagram
-  rendering** — the harder half. **Note: the observed diagrams are Graphviz DOT** (`digraph … {}`
-  emitted by skill docs), **not Mermaid**, though Claude emits both depending on context. Neither has
-  a first-party macOS renderer: Mermaid means bundling mermaid.js in a `WKWebView`; DOT means a
-  WebView (viz.js) or a Swift layout engine. Both collide with **"platform primitives first"** and
-  add a heavyweight dependency to a view that today is pure SwiftUI. **Decide the DOT-vs-Mermaid
-  question with real corpus evidence before committing** — a Mermaid-only renderer may buy nothing.
-  *Revisit trigger:* transcript readability has shipped and code blocks are still the worst part of
-  the view.
-- **macOS Writing Tools on loose ends** (condense / summarize / explain). *Unknown feasibility;
-  spike first.* **Open question that gates the whole idea:** Writing Tools attaches to the standard
-  text system (`NSTextView`/`TextEditor`); MarkdownUI renders custom SwiftUI views, so Writing Tools
-  may never appear in that hierarchy at all. **Do a small spike before any design.** Second gate is
-  the **trust gate**: rewriting a loose end *in place* would mutate displayed provenance — the one
-  thing that must stay verbatim. A read-only "explain this" overlay is a different, safer feature
-  than "condense this text", and the spec must pick one deliberately. *Revisit trigger:* the spike
-  proves Writing Tools reachable from the loose-end surface.
 
 ---
 
@@ -1109,43 +1616,6 @@ returns **pointers, not passages** — and Pensieve already computes the passage
 
 ---
 
-## Widgets — DEFERRED (2026-07-08): blocked on App Groups needing a paid Team ID
-
-Attempted to pick up Widgets (the first *second process*). Hit a hard prerequisite during brainstorming and
-deferred with the user's agreement.
-
-**The blocker.** A macOS **WidgetKit extension is always sandboxed** — it cannot read the canonical store at
-`~/Library/Application Support/Pensieve/` (`PensievePaths.supportDirectory()`), which every current writer (git
-hooks via CLI, launchd daemon, app) and reader uses. The only way to share the store with the extension is an
-**App Group container** (`~/Library/Group Containers/<TeamID>.<group>/`), which on macOS requires the app to be
-**signed with a Team ID** and the `com.apple.security.application-groups` entitlement **provisioned**.
-
-**Why blocked now.** The app is **ad-hoc signed** (`CODE_SIGN_IDENTITY: "-"`, no `DEVELOPMENT_TEAM`), which has
-no Team ID. The only signing artifacts on the machine are corporate MDM/Configurator ones (an "Apple
-Configurator: Matchory GmbH" identity; a Microsoft *Intune MDM Agent* profile, team `UBF8T346G9`) — none carry
-App Groups. The user has a **free Personal Team** available (via Apple ID), but **free personal teams do not
-support the App Groups capability** (Apple gates it as paid; Xcode blocks adding it). ~85% confident this is a
-hard block for a personal team — a spike would confirm, but the odds favor failure.
-
-**Revisit trigger.** A **paid Apple Developer membership** (personal enrollment, or an acceptable paid org team)
-is in hand **and has activated**. *(2026-08-15: purchased, but not yet active — no team in Xcode ▸ Settings ▸
-Accounts, nothing on the Membership page, and no Apple Development cert on the machine. **The missing cert is
-not evidence either way** — Xcode mints one on first request, so the local state is identical whether the
-membership is live or absent, and Xcode caches no portal data to read offline. Check Xcode Accounts, not the
-filesystem.)* Then the first move is switching the app + a new widget target to Team-ID signing and moving the
-canonical store into an App Group container — a shared `PensievePaths.supportDirectory()` resolution that ALL
-writers (hooks/daemon/CLI/app) adopt, not just the app. **This same gate blocks CloudKit** (pillar #4) and any
-future extension; resolving the paid-membership + App-Group foundation unblocks the whole extension family at
-once. If a spike is ever run: sign with the team, add the App Group entitlement to both targets, and confirm
-`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` resolves non-nil in BOTH the app and the
-widget, and that the widget can read a file the app wrote there — that go/no-go gates everything else.
-
-**~~A third surface joined this gate on 2026-08-12: background sync itself.~~ Retracted 2026-08-13** — that
-outage was a stale LWCR, not a Team-ID problem, and the agent now spawns ad-hoc-signed with
-`codeSigningTeamID: ""`. See the next entry. This gate covers Focus filters, Widgets and CloudKit only.
-
----
-
 ## Background sync is dead — launchd won't spawn the agent — ✅ RESOLVED (2026-08-13)
 
 **Status: CLOSED. The agent has run every ~5 minutes since 2026-08-13T11:18:25Z** (`launchctl print`:
@@ -1266,60 +1736,6 @@ never pruned** and accumulate in the plist indefinitely. Low severity for a sing
 unbounded in principle. *Fix when convenient: prune `narrationCache` to the set of live node ids
 on refresh (intersect keys with `allNodes`). Trigger: an app-target cleanup pass, or if the plist
 ever grows noticeably.*
-
-## Code-quality review carries — 2026-07-07 (deferred / design questions)
-
-From a full code-quality + idiomatic-Swift review of the whole tree. Most findings were fixed in
-the same pass (Swift 6 mode on the app target — which caught a real non-`Sendable` `Ingester`
-crossing the `@MainActor` boundary; the inspector's in-`body` DB query; a `claude -p` timeout +
-off-cooperative-pool + SIGPIPE guard; `DatabaseReader` widening; `@Sendable` FSEvents callback; a
-`NodeKind` type; and a batch of smaller cleanups). These four were deliberately **not** taken on —
-too big, or a genuine design question.
-
-- **`AppModel` → `@Observable` migration** — ✅ **DONE (2026-07-19, app-quality cleanup pass; plan `plans/2026-07-19-appmodel-observable-migration.md`).** Turned out cleaner than feared: no `@EnvironmentObject` to rewire, only `RootView` needed `@Bindable`, and the named hotspots (`nodesForSelection`/`PaletteView.rows`) were already gone (IA rework + ⌘K retirement). Non-UI infra is `@ObservationIgnored`; the Opus whole-branch review caught one wrongly-silenced property (`allNodes`, read by bodies via `node(_:)`) breaking `RecallWindowView` cold-restore, fixed. *Original note below, for context.* — the app still uses `ObservableObject`/`@Published`, so
-  any `@Published` write invalidates *every* observing view. That's the root cause of a cluster of
-  small "recomputed in `body`" items: the (now-fixed) inspector re-query, `ContentListView.nodesForSelection()`
-  (filter + O(n log n) sort on every unrelated refresh), and `PaletteView.rows` (re-runs `matchingNodes`
-  each keystroke). `@Observable` scopes invalidation to the properties each view actually reads.
-  Deferred because it's a broad, non-surgical rewrite of every view's state wrappers in an untested
-  target. *Trigger: a dedicated app-target modernization pass, or when broad invalidation shows a cost.*
-- **Organizing-writes silent-failure surfacing** — `AppModel.move/merge/rename/retype/createNode`
-  `try?` the Kit op then unconditionally `refresh()`, so a failed *write* (as opposed to a read) is
-  invisible with no signal why. `try?`-degrade-to-empty is right for reads, worse for user-initiated
-  writes. Needs an error-presentation mechanism the app doesn't have yet. *Trigger: pair with the
-  first Settings/error-surface (same surface the `LSUIElement` toggle waits on).*
-- **`BriefingQueries.cards` N+1-inside-N+1** — fetches *all* events for every active node (no limit)
-  to read `events.first` + a since-count, then calls `LooseEndQueries.open` per node, which itself
-  re-fetches each loose end's source `Event` by id. Fine at single-user scale; a real fix is a query
-  restructuring that risks the tested default landing view for no practical gain today. *Trigger: if
-  the Briefing landing feels slow, or node/event volume grows materially.* (Related: the long-standing
-  "shared per-node latest-event + days-dormant + open-loose-end-count helper" carry under pillar #2.)
-- **`@MainActor` annotation on `AppModel`** — the model is main-actor-isolated by convention (only
-  ever accessed from views or explicitly-hopped `Task`s), but it’s a plain `class` with no
-  annotation. Adding `@MainActor final class AppModel` makes the compiler enforce the invariant,
-  simplifies closures that currently need `@MainActor in` or `Task { @MainActor in }`, and catches
-  any accidental off-main access at compile time. One-line change in declaration + removing the now-
-  redundant explicit isolation annotations in `start()`/`focusContextDidChange()`. *Trigger: next
-  touch of `AppModel`, or pair with the `@Observable` migration above.*
-- **`NodeKind` / `NodeState` / `EventKind` → real `RawRepresentable` enums** — ✅ **DONE (2026-07-19, app-quality cleanup pass) for `NodeKind` + `NodeState`.** They're now `: String, CaseIterable, Codable, Sendable, Equatable, QueryBindable` enums (same strings on disk, no migration, all SchemaV4–V9 tests pass). **`EventKind` was NOT done — it doesn't exist:** `Event.kind` values come from `CaptureKind` on the sacred append-only capture spool, deliberately left `String`. *Original note below.* — currently string
-  namespaces (`enum NodeKind { static let project = "project" ... }`). Making them real
-  `enum NodeKind: String, Codable, Sendable, CaseIterable { case project, strand, ... }` gives
-  exhaustive `switch` (the compiler catches a forgotten case), auto-`Codable`/`Equatable`, and
-  eliminates the possibility of a typo creating a silent wrong-kind. SQLiteData column adapters
-  handle `RawRepresentable` natively (no schema change — same strings on disk). The trade-off:
-  adding a new kind becomes a migration-sized change (new enum case + update all `switch`es),
-  but at the current rate (≤0.5 new kinds/month) that’s a feature, not a cost. *Trigger: next
-  model-layer refactor, or pair with the `@Observable` pass.*
-- **`Ingester.drain()` decode-failure poison-pill — design question, intentionally unchanged.**
-  permanently-undecodable `git.commit` / `git.checkout` / `cc.session.start` spool row throws every
-  drain and is left unmarked, so it's re-processed every launchd cycle forever; only the `cc.session`
-  branch distinguishes transient (retry) from permanent (drop-and-mark). This was **not** flipped
-  because the existing test `failingRowStaysPendingWhileGoodRowProcesses` encodes a deliberate "never
-  silently drop a capture row" decision, and the loop is invisible (`drain`'s `catch { continue }`
-  swallows the cause). The decision to make: keep data-preservation (retry forever, harmless for a
-  single row) vs. treat a *decode* failure as permanent (drop-and-mark) — ideally paired with drain
-  observability so a stuck row is at least logged. *Trigger: if a malformed capture row is ever
-  observed looping, or when adding drain logging/metrics.*
 
 ---
 
@@ -1598,116 +2014,3 @@ LLM-generated strand names** — those are provenance-bearing user data and must
 *Trigger: when the app grows real UI text worth translating (menu-bar step or the three-pane app);
 premature to catalog the two-label heartbeat window alone.*
 
----
-
-## Spike: statistical theme discovery across strands (`NLEmbedding`)
-
-**Parked:** 2026-07-03, during Phase 1B brainstorming.
-**Revisit when:** the grounded loose-end/summary layer (1B) is proven and we want the
-"broad picture of how strands unfold across the whole tree" — i.e. surfacing
-*recurring cross-cutting themes* ("you keep touching auth across three projects")
-rather than per-project state.
-
-**Idea:** use unsupervised statistical analysis (word2vec-style embeddings +
-clustering) over captured session/commit text and extracted loose ends to surface
-recurring themes and candidate cross-cutting strands/concepts automatically.
-
-**Constraints & the native path:**
-- **No Python, ever.** The Swift-native route is Apple's `NLEmbedding` (the
-  `NaturalLanguage` framework) for on-device word/sentence embeddings — no API key,
-  no external service, runs locally. This is the intended implementation surface.
-- **Grounding caveat (important).** Opaque embedding clusters are hard to *cite*,
-  which cuts against Pensieve's provenance-or-it-doesn't-exist north star. When we
-  build this, prefer using embeddings as a *retrieval/grouping aid* that feeds a
-  grounded LLM synthesis (which can cite real captured text), rather than surfacing
-  raw clusters as if they were findings. Themes must still trace to captured text.
-
-**Why it's a perfect Pensieve dogfood case:** this note is itself a `concept`/`topic`
-— a targeted exploration parked for later. When Pensieve can track a strand like this
-(let me forget it for a month, then reload full context and continue), it's working.
-
----
-
-## App: capture & instruct by talking to the system (prompt input → chat)
-
-**Requested:** 2026-07-05.
-
-**Idea, in two stages:**
-1. **Capture a strand by describing it** — a prompt/text input in the Pensieve UI where I
-   type a description of a new strand and it gets created (name + `description` + `kind`,
-   parented sensibly). The lightweight "quick add a thing I'm about to work on" surface,
-   as opposed to auto-birth from ≥2 captured events. Pairs with the organizing CLI
-   (`add-node`) but conversational and in-app.
-2. **Talk to the system** — a fuller Claude/OpenAI/Gemini chat session embedded in the app
-   for giving instructions in natural language ("nest auth under the platform node",
-   "what did I leave open on the sync daemon", "start a strand for X"). The chat drives the
-   same organizing/query operations the CLI exposes, plus grounded Q&A over captured state.
-
-**Scope note:** stage 1 (structured strand creation from a prompt) is achievable early and
-independently. Stage 2 (a full conversational agent surface) **can be deferred very late** —
-it's a large surface and not on the critical path.
-
-**Constraints & the native path:**
-- **Provider-agnostic** via the existing `LLMProvider` protocol (default shells out to
-  `claude -p`; I have a subscription, **no API key**). "Claude/OpenAI/Gemini" is a
-  someday-choice, not a requirement — don't hardcode a vendor.
-- **Grounding caveat.** When the chat *answers questions* about project state, it stays
-  under the provenance north star — cite captured text, don't fabricate. When it *creates a
-  strand* from my description, the name/description are my own words (user-authored metadata,
-  outside the trust gate, like `rename`), which is fine.
-- A prompt that creates or re-parents nodes is a **write** — it must go through the same
-  validated operations as the CLI (`add-node`/`nest`/`group`), including the deferred
-  cycle guard, not raw SQL from model output.
-
-**Stage 1 now specced:** describe-a-strand → structured create is designed in
-`specs/2026-07-05-pensieve-app-three-pane-design.md` (slice 5). Stage 2 (conversational agent)
-stays deferred to its own later spec.
-
-*Trigger: stage 1 once the app has real interactive UI (the three-pane app, past the
-read-only heartbeat/menu-bar steps). Stage 2 much later, once the read/query surface is solid.*
-
----
-
-## Forks as first-class: capture & visualize strand ancestry and orphans
-
-**Requested:** 2026-07-05.
-
-**The observation:** working is full of *forks*. Claude offers two choices and I pick one;
-I branch off to do something adjacent; I switch to another branch and carry on there. Each
-is a decision point that splits the work — and today the *road not taken* silently goes cold.
-The strands most likely to be forgotten are exactly the ones orphaned at a fork.
-
-**Idea:** make forks first-class in the strand model and surface them prominently, git-branch-like:
-- **Capture the fork** — a strand carries not just a parent (containment) but a *branched-from*
-  ancestry: which strand/decision-point it split off from, and when. Sibling strands sharing a
-  fork point are visibly related.
-- **Walk back the ancestry** — from any strand, trace its lineage back through the forks that
-  produced it (distinct from the `parentID` containment tree — this is *temporal/causal*
-  ancestry).
-- **Surface orphans at a fork** — when a fork has branches I started and left dormant, show them
-  as "picked up / left open" so I can consciously return to the road not taken.
-
-**Constraints & the native path:**
-- **Ground every fork in real captured signal**, not inference. Candidate sources already in
-  hand: `SessionBranch` (a session's git branch), git branch creation/switch, worktree
-  activity, and — harder — Claude offering explicit choices within a transcript. A fork edge
-  should trace to a captured event, consistent with the north star.
-- This is likely a **new edge type distinct from `parentID`** — closer to the deferred
-  *cross-cutting soft references* (`node_links`, cycles allowed) than to the strict containment
-  tree. Design it as causal/temporal lineage, not by overloading containment.
-- Detecting "Claude presented two choices and I picked one" from a transcript is the ambitious
-  part and may warrant its own spike; branch-switch forks from git/`SessionBranch` are the
-  tractable first cut.
-- **The full pannable "fork canvas" node-graph is parked here as a power-view** — a 2-D map of
-  decision points to walk when many strands accumulate. The app starts with the lightweight
-  *ancestry-trail + siblings* surface instead (chosen in the app design). Revisit the canvas once
-  strand volume makes the trail feel cramped.
-
-**App surface now specced:** the ancestry-trail + siblings view and the *Roads Not Taken* smart
-list are designed in `specs/2026-07-05-pensieve-app-three-pane-design.md` (slice 6), gated on this
-capture backend. This entry is the **capture backend** — the still-needed long pole; brainstorm it
-on its own before that slice.
-
-*Trigger: once strand auto-birth is proven in dogfooding and the app has a visualization surface
-worth walking a tree in (the three-pane app). Branch-switch forks first; transcript-choice
-detection as a later spike.*
