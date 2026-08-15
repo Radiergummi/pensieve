@@ -34,4 +34,12 @@ public enum PensieveDefaults {
     if bundleIdentifier == appDomain { return .standard }
     return UserDefaults(suiteName: appDomain) ?? .standard
   }
+
+  /// True when a custom support root has been persisted. Pulled out so every reader of
+  /// `customSupportRootKey` (the Advanced tab's status line, the Support Folder inspector's
+  /// picker) shares one rule instead of each restating "is it non-empty" — two copies of that
+  /// check drifting apart is exactly the defect class this project keeps finding elsewhere.
+  public static func isCustomSupportRoot(_ raw: String) -> Bool {
+    !raw.isEmpty
+  }
 }

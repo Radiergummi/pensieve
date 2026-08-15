@@ -16,11 +16,15 @@ struct SupportFolderInspector: View {
   @State private var refusal: String?
   @State private var measuredBytes: Int64 = 0
 
+  /// SwiftUI-observed, unlike a bare `UserDefaults` read — `locationBinding`'s `get` must be
+  /// guaranteed to re-evaluate against the real persisted value, or a cancelled folder panel
+  /// (which writes nothing) can leave the Picker showing "Custom" with nothing actually
+  /// persisted. `PensieveDefaults.shared()` resolves to `.standard` for the app process (the
+  /// same-domain guard in `PensieveDefaults.shared`), the same store `@AppStorage` defaults to.
+  @AppStorage(PensieveDefaults.customSupportRootKey) private var customSupportRootRaw = ""
+
   private var currentRoot: URL { PensievePaths.supportDirectory() }
-  private var isCustom: Bool {
-    PensieveDefaults.shared().string(forKey: PensieveDefaults.customSupportRootKey)?
-      .isEmpty == false
-  }
+  private var isCustom: Bool { PensieveDefaults.isCustomSupportRoot(customSupportRootRaw) }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {

@@ -14,12 +14,11 @@ struct AdvancedSettingsTab: View {
   @State private var syncStatus: SMAppService.Status = .notRegistered
   @State private var isInspectorPresented = false
 
-  /// True when a custom support root is persisted. Read directly rather than mirrored into
-  /// `@State`, matching how `SettingsView` reads `Preferences`.
-  private var isCustomRoot: Bool {
-    PensieveDefaults.shared().string(forKey: PensieveDefaults.customSupportRootKey)?
-      .isEmpty == false
-  }
+  /// SwiftUI-observed rather than a bare `UserDefaults` read, matching `SupportFolderInspector`'s
+  /// own backing store — both share `PensieveDefaults.isCustomSupportRoot` for the actual rule
+  /// rather than each restating "is it non-empty".
+  @AppStorage(PensieveDefaults.customSupportRootKey) private var customSupportRootRaw = ""
+  private var isCustomRoot: Bool { PensieveDefaults.isCustomSupportRoot(customSupportRootRaw) }
 
   var body: some View {
     Form {
