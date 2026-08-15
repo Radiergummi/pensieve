@@ -26,35 +26,33 @@ public enum PassageProvenance {
       try Event.where { $0.id.eq(passage.eventID) }.fetchOne(database)
     }) else { throw PassageProvenanceError.anchorEventMissing }
 
-    guard let path = ProvenanceQueries.transcriptPath(in: event),
-          FileManager.default.fileExists(atPath: path) else {
-      return PassageWindow(passage: passage, sourceEvent: event, messages: [],
-                           transcriptAvailable: false)
-    }
-    let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: path))
+    guard let session = ProvenanceQueries.parsedSession(for: event)
+    else { return unavailable(passage: passage, event: event) }
     return window(session: session, passage: passage, event: event, radius: radius)
   }
 
   /// The pure half, so a caller holding an already-parsed transcript does not re-parse it — the same
   /// split `ProvenanceQueries` makes for `ProvenanceLoader`.
+  ///
+  /// `requireUserPrompt: false` is the ONE way this differs from loose-end provenance, for the
+  /// reason in this type's doc comment. Everything else — resolving the stored index by identity,
+  /// the containment check that detects a shifted transcript, and the ±radius slice — comes from
+  /// the shared `TranscriptWindow.slice`.
   public static func window(session: ParsedSession, passage: Passage, event: Event,
                             radius: Int = 8) -> PassageWindow {
-    // The one-part guard. `messageIndex` addresses `ParsedSession.messages`, which only holds
-    // non-empty messages, so a compacted transcript can shift it — containment is what detects that.
-    guard let cited = session.messages.first(where: { $0.index == passage.messageIndex }),
-          cited.text.contains(passage.text) else {
-      return PassageWindow(passage: passage, sourceEvent: event, messages: [],
-                           transcriptAvailable: false)
-    }
-    let lower = max(0, passage.messageIndex - radius)
-    let upper = passage.messageIndex + radius
-    let messages = session.messages
-      .filter { $0.index >= lower && $0.index <= upper }
-      .map { ProvenanceMessage(index: $0.index, role: $0.role, text: $0.text,
-                               isCited: $0.index == passage.messageIndex,
-                               isUserPrompt: $0.isUserPrompt) }
+    guard let messages = TranscriptWindow.slice(session: session,
+                                                messageIndex: passage.messageIndex,
+                                                citedText: passage.text, requireUserPrompt: false,
+                                                radius: radius)
+    else { return unavailable(passage: passage, event: event) }
     return PassageWindow(passage: passage, sourceEvent: event, messages: messages,
                          transcriptAvailable: true)
+  }
+
+  /// The honest degrade, in one place — mirroring `ProvenanceQueries.unavailable`. Both guards
+  /// above reach it, so "no window, but the stored text still stands" has a single spelling.
+  private static func unavailable(passage: Passage, event: Event) -> PassageWindow {
+    PassageWindow(passage: passage, sourceEvent: event, messages: [], transcriptAvailable: false)
   }
 }
 

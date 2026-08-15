@@ -302,7 +302,7 @@ struct ContentListView: View {
 
 /// A small trailing marker on a search row whose owning node is archived, so archived work is never
 /// mistaken for live work. Rendered only when the Include Archived scope surfaced the row.
-private struct ArchivedBadge: View {
+struct ArchivedBadge: View {
   var body: some View {
     Text("Archived")
       .font(.caption2)

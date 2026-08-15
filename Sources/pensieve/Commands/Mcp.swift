@@ -293,8 +293,11 @@ enum PensieveMCP {
     let passageScope = SearchScope(visibleNodeIDs: scope.visibleNodeIDs, limit: max(2, limit / 2),
                                    includeArchived: scope.includeArchived,
                                    includeClosed: scope.includeClosed)
-    let passages = PassageQueries.search(query: query, scope: passageScope, store: searchStore,
-                                         database)
+    // Same `file` as the ranked half. A passage can never satisfy a path restriction, so this
+    // narrows the conversation list to nothing whenever one is set — which is the point: one array
+    // whose two halves answered different questions is worse than a shorter, coherent one.
+    let passages = PassageQueries.search(query: query, file: file, scope: passageScope,
+                                         store: searchStore, database)
     return try makeEncoder().encode(
       SearchPayload(items: items + passages.map { SearchItem(passage: $0) },
                     indexState: searchStore.state()))
@@ -345,7 +348,7 @@ private struct SearchItem: Encodable {
     nodeID = hit.nodeID.uuidString
     nodeName = hit.nodeName
     title = hit.title
-    snippet = hit.snippet.leading + hit.snippet.match + hit.snippet.trailing
+    snippet = hit.snippet.joined
     score = hit.score
     archived = hit.isArchived
     closed = hit.status.isClosed
@@ -358,8 +361,8 @@ private struct SearchItem: Encodable {
     kind = "passage"
     nodeID = passage.nodeID.uuidString
     nodeName = passage.nodeName
-    title = passage.role == .prompt ? "You asked" : "Claude answered"
-    snippet = passage.snippet.leading + passage.snippet.match + passage.snippet.trailing
+    title = passage.role.recallTitle
+    snippet = passage.snippet.joined
     score = passage.score
     archived = passage.isArchived
     closed = false   // a passage has no lifecycle of its own

@@ -195,7 +195,7 @@ public enum SessionContextQueries {
     }) else { return nil }
     let window = try PassageProvenance.window(database, passage: passage, radius: radius)
     return RecallBundle(
-      looseEndText: passage.role == .prompt ? "You asked" : "Claude answered",
+      looseEndText: passage.role.recallTitle,
       quote: passage.text,
       transcriptAvailable: window.transcriptAvailable,
       sessionOccurredAt: window.sourceEvent.occurredAt,

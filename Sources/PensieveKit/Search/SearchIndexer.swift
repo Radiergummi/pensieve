@@ -52,14 +52,16 @@ public struct SearchIndexer: Sendable {
   /// own hash: passages change only when a session is ingested, while nodes/loose ends/events change
   /// on every commit, so sharing one hash would rebuild ~50k passage documents for a one-line commit.
   ///
-  /// Reuses `corpusHash` — the passage items carry the same fields, and `files`/`language`/`status`
-  /// are constant across them, so the hash is still a faithful digest of what the table holds.
+  /// Guarded on `passageCorpusFingerprint`, NOT on `corpusHash(gatherPassages(…))` — see that
+  /// function for why. The order here is the point: the fingerprint is computed FIRST and the corpus
+  /// is gathered only once it has already decided a rebuild is due, so the unchanged case (which is
+  /// almost every call — this runs on every watch refresh) never touches passage text at all.
   public func syncPassages(_ database: any DatabaseReader) {
     guard store.isAvailable else { return }
+    guard let fingerprint = try? EmbeddableCorpus.passageCorpusFingerprint(database) else { return }
+    guard fingerprint != store.storedPassagesHash() else { return }
     guard let corpus = try? EmbeddableCorpus.gatherPassages(database) else { return }
-    let hash = Self.corpusHash(corpus)
-    guard hash != store.storedPassagesHash() else { return }
-    store.rebuildPassages(items: corpus, passagesHash: hash)
+    store.rebuildPassages(items: corpus, passagesHash: fingerprint)
   }
 
   /// FNV-1a over every field the index stores, sorted by (item id, language) so gather order cannot

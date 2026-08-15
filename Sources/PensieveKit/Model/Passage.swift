@@ -32,6 +32,11 @@ public struct Passage: Identifiable, Equatable, Sendable {
   /// The message's own timestamp, so a passage dates without joining its event.
   public var occurredAt: Date
   public var createdAt: Date
+  /// The `kind` a passage carries in the FTS5 index. One constant rather than a `"passage"` literal
+  /// at the producer and again at the resolver's guard: the two must agree, and a typo in the
+  /// producer would otherwise surface as a silently empty result rather than a compile error.
+  public static let searchKind = "passage"
+
   public init(id: UUID = UUID(), nodeID: UUID, eventID: UUID, turnIndex: Int, messageIndex: Int,
               role: PassageRole, text: String, occurredAt: Date, createdAt: Date = Date()) {
     self.id = id; self.nodeID = nodeID; self.eventID = eventID

@@ -8,7 +8,7 @@ import Foundation
 /// unchanged — the reason for overlap survives the switch from embeddings to BM25, because a phrase
 /// straddling a boundary matches neither side otherwise.
 public enum PassageChunker {
-  /// At or under this, the text is one passage. Matches the extractor's `truncate` budget.
+  /// At or under this, the text is one passage.
   public static let singleChunkLimit = 2000
   public static let windowLength = 1500
   public static let overlapLength = 200

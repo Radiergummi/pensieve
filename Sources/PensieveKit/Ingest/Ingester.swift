@@ -203,8 +203,9 @@ extension Ingester {
 
   /// Whether an event with this (sourceID, fingerprint) already exists — the dedup predicate,
   /// shared by `insertIfNew` and the git.commit/cc.session branches that dedup before extra work.
+  /// Derived from `existingEvent` so the predicate itself has exactly one definition.
   private func eventExists(_ database: Database, sourceID: UUID, fingerprint: String?) throws -> Bool {
-    try Event.where { $0.sourceID.eq(sourceID) && $0.fingerprint.eq(fingerprint) }.fetchCount(database) > 0
+    try existingEvent(database, sourceID: sourceID, fingerprint: fingerprint) != nil
   }
 
   /// Inserts the event only if no event with the same (sourceID, fingerprint) exists.

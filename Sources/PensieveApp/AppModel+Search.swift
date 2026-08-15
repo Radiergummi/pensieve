@@ -120,10 +120,13 @@ extension AppModel {
       }
       // Same scope, same query, separate list — passage BM25 scores are not comparable to the
       // ranked list's, so they are appended as their own section rather than merged. A second
-      // detached task (`PassageQueries.search` is synchronous), so both run concurrently rather
-      // than the passage read blocking behind the ranked one.
+      // detached task, so both run concurrently rather than the passage read blocking behind the
+      // ranked one — and it takes the SAME English-retry wrapper, because transcripts are
+      // overwhelmingly English even when what you typed is not.
       let passagesHandle = Task.detached {
-        PassageQueries.search(query: rawQuery, scope: scope, store: store, database)
+        await PassageQueries.searchTranslatingOnEmpty(
+          query: rawQuery, scope: scope, store: store, language: language, translator: translator,
+          database)
       }
       let hits = await rankedHandle.value
       let passages = await passagesHandle.value

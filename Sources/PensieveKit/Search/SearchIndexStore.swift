@@ -23,8 +23,6 @@ public struct SearchIndexStore: Sendable {
   /// surfaces rows the text index could not find at all, ranked by their own path relevance in a
   /// separate list appended BELOW the text hits.
   private static let ranking = "bm25(documents)"
-  private static let filesRanking = "bm25(document_files)"
-  private static let passagesRanking = "bm25(document_passages)"
 
   private let database: (any DatabaseWriter)?
   public var isAvailable: Bool { database != nil }
@@ -250,25 +248,25 @@ public struct SearchIndexStore: Sendable {
     }
   }
 
-  /// Passage candidates for a text query. Only `FTSQuery.terms` matter here — a passage has no file
-  /// paths, so the path shapes are irrelevant and a `pathOnly` query must return nothing rather than
-  /// matching passage prose against a path expression.
+  /// Passage candidates for a text query — but ONLY for a query carrying no path restriction.
+  ///
+  /// A passage has no file paths of its own: it comes from a conversation, not from a commit, so it
+  /// can never satisfy a path clause. Both restricted shapes therefore return nothing rather than a
+  /// list of prose matches that quietly ignore the narrowing the user asked for. `.pathOnly` is
+  /// obvious; `.textRestrictedByPath` is the one that matters, because dropping its path half and
+  /// matching the text alone is exactly how a `files:` directive (typed, or passed as MCP `search`'s
+  /// structured `file` parameter) ends up returning passages from work that never touched the file,
+  /// in the same array as ranked hits that were correctly restricted.
   public func searchPassages(_ query: FTSQuery, limit: Int,
                              includeArchived: Bool) -> [SearchIndexHit] {
     guard database != nil else { return [] }
     let match: String
     switch query.shape {
-    case .pathOnly: return []
-    case .textRestrictedByPath(let text, _): match = text
+    case .pathOnly, .textRestrictedByPath: return []
     case .textWithPathProbe(let text): match = text
     }
-    return fetch(sql: """
-      SELECT item_id, kind, node_id, -\(Self.passagesRanking) AS score
-      FROM document_passages
-      WHERE document_passages MATCH ?
-            AND \(Self.stateFilter(includeArchived: includeArchived))
-      ORDER BY \(Self.passagesRanking) LIMIT ?
-      """, arguments: [match, limit])
+    return rankedHits(in: "document_passages", matching: match, limit: limit,
+                      includeArchived: includeArchived)
   }
 
   /// Rows the PATH index matched, ranked by path relevance. Shared by the explicit `files:`
@@ -276,11 +274,26 @@ public struct SearchIndexStore: Sendable {
   /// never in how paths are queried or scored.
   private func pathHits(matching match: String, limit: Int,
                         includeArchived: Bool) -> [SearchIndexHit] {
+    rankedHits(in: "document_files", matching: match, limit: limit,
+               includeArchived: includeArchived)
+  }
+
+  /// One satellite table's own BM25-ranked candidates. `document_files` and `document_passages`
+  /// differ only in which table they read — same projection, same state allow-list, same ordering —
+  /// so they share one body rather than two SQL strings that must be kept in step. Only the two
+  /// single-table shapes come here; `documents` is not one of them, because its queries also carry
+  /// the status filter and the join that `.textRestrictedByPath` needs.
+  ///
+  /// `table` is a compile-time literal from the two call sites below, never caller input, so
+  /// interpolating it into the SQL adds no injection surface (`stateFilter` is likewise derived
+  /// from `NodeState`'s own raw values, and the MATCH expression comes from `FTSQueryBuilder`).
+  private func rankedHits(in table: String, matching match: String, limit: Int,
+                          includeArchived: Bool) -> [SearchIndexHit] {
     fetch(sql: """
-      SELECT item_id, kind, node_id, -\(Self.filesRanking) AS score
-      FROM document_files
-      WHERE document_files MATCH ? AND \(Self.stateFilter(includeArchived: includeArchived))
-      ORDER BY \(Self.filesRanking) LIMIT ?
+      SELECT item_id, kind, node_id, -bm25(\(table)) AS score
+      FROM \(table)
+      WHERE \(table) MATCH ? AND \(Self.stateFilter(includeArchived: includeArchived))
+      ORDER BY bm25(\(table)) LIMIT ?
       """, arguments: [match, limit])
   }
 

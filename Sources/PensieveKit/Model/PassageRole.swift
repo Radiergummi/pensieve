@@ -15,4 +15,16 @@ public enum PassageRole: String, QueryBindable, Sendable {
   /// Assistant prose. Tool calls never reach this: `extractText` reads only `text` blocks, so a
   /// tool-use-only message has empty text and never enters `ParsedSession.messages` at all.
   case reply
+
+  /// How a passage names itself to a model — the title MCP `search` returns and the label MCP
+  /// `recall` returns for the same item. One definition because those two must read as the same
+  /// thing: a model that finds a conversation and then reads it back sees this string twice, and
+  /// two copies drifting would make one call look like it answered about something else.
+  /// Not localized — this is wire text for a model, not app chrome.
+  public var recallTitle: String {
+    switch self {
+    case .prompt: return "You asked"
+    case .reply: return "Claude answered"
+    }
+  }
 }

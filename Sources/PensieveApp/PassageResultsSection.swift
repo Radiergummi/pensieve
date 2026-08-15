@@ -29,26 +29,25 @@ struct PassageResultsSection: View {
 private struct PassageResultRow: View {
   let hit: PassageHit
 
+  /// A stored passage already knows which side of the turn it came from, so this is a direct
+  /// mapping rather than `SpeakerClass.of`'s inference over a raw transcript role — but it resolves
+  /// to the same two cases, and therefore to the same localized labels.
+  private var speaker: SpeakerClass { hit.role == .prompt ? .you : .claude }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 6) {
         Image(systemName: hit.role == .prompt ? "person.crop.circle" : "sparkle")
           .foregroundStyle(.secondary)
         // Speaker is chrome and IS localized; the passage text below is captured content and is not.
-        Text(hit.role == .prompt ? "You" : "Claude")
+        // The label comes from `SpeakerClass`, the app's one speaker vocabulary, so this row cannot
+        // say "You" where the transcript views it links into say something else.
+        Text(speaker.label)
           .font(.system(size: 12, weight: .medium))
-        Text(hit.nodeName)
-          .font(.system(size: 12))
-          .foregroundStyle(.secondary)
+        Text(hit.nodeName).metaText()
         Spacer(minLength: 0)
-        Text(hit.occurredAt, format: .relative(presentation: .named))
-          .font(.system(size: 12))
-          .foregroundStyle(.secondary)
-        if hit.isArchived {
-          Text("Archived")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-        }
+        Text(hit.occurredAt, format: .relative(presentation: .named)).metaText()
+        if hit.isArchived { ArchivedBadge() }
       }
       SnippetText(snippet: hit.snippet)
         .font(.system(size: 13))

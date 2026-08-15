@@ -28,44 +28,40 @@ public enum ProvenanceQueries {
     }
     guard let event else { throw ProvenanceError.missingSourceEvent }
 
-    // transcriptPath lives in the cc.session detailJSON (see Ingester); decode as [String: String].
-    guard let path = transcriptPath(in: event), FileManager.default.fileExists(atPath: path)
+    guard let session = parsedSession(for: event)
     else { return unavailable(looseEnd: looseEnd, event: event) }
-
-    let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: path))
     return context(session: session, looseEnd: looseEnd, event: event, radius: radius)
   }
 
   /// The batch path: slice a window out of an ALREADY-PARSED session. A later batch loader parses
-  /// each transcript once and calls this per loose end, so the two-part guard below has exactly one
-  /// definition — a second copy is how a wrong-provenance highlight would get shipped.
+  /// each transcript once and calls this per loose end.
+  ///
+  /// The two-part guard ("never a wrong highlight": the cited message must be a user prompt AND
+  /// still contain the stored quote) lives in `TranscriptWindow.slice`, which passage provenance
+  /// shares — `requireUserPrompt` is the only thing the two callers disagree about, and a second
+  /// copy of the rest is how a wrong-provenance highlight would get shipped.
   public static func context(session: ParsedSession, looseEnd: LooseEnd, event: Event, radius: Int = 4) -> ProvenanceContext {
-    // Resolve by identity (index), not bare position — robust to parser-version drift.
-    guard let citedPosition = session.messages.firstIndex(where: { $0.index == looseEnd.sourceMessageIndex })
+    guard let window = TranscriptWindow.slice(session: session,
+                                              messageIndex: looseEnd.sourceMessageIndex,
+                                              citedText: looseEnd.quote, requireUserPrompt: true,
+                                              radius: radius)
     else { return unavailable(looseEnd: looseEnd, event: event) }
-
-    // Two-part guard so "never a wrong highlight" holds: the cited message must be a user prompt
-    // AND still contain the stored quote. Either fails → honest fallback. Normalize both sides the
-    // same way LooseEndVerifier did when it accepted the quote (it stores the raw model quote but
-    // verifies against whitespace-normalized text) — else a quote whose whitespace the model
-    // collapsed fails a raw `contains` and the inspector falsely reports the transcript as gone.
-    let citedMessage = session.messages[citedPosition]
-    guard citedMessage.isUserPrompt,
-          normalizeWhitespace(citedMessage.text).contains(normalizeWhitespace(looseEnd.quote))
-    else { return unavailable(looseEnd: looseEnd, event: event) }
-
-    let lowerIndex = max(0, citedPosition - radius)
-    let upperIndex = min(session.messages.count - 1, citedPosition + radius)
-    let window = session.messages[lowerIndex...upperIndex].map {
-      ProvenanceMessage(index: $0.index, role: $0.role, text: $0.text,
-                        isCited: $0.index == looseEnd.sourceMessageIndex, isUserPrompt: $0.isUserPrompt)
-    }
     return ProvenanceContext(looseEnd: looseEnd, sourceEvent: event, messages: window, transcriptAvailable: true)
   }
 
   /// transcriptPath lives in the cc.session detailJSON (see Ingester); decoded as [String: String].
   public static func transcriptPath(in event: Event) -> String? {
     (try? JSONDecoder().decode([String: String].self, from: Data(event.detailJSON.utf8)))?["transcriptPath"]
+  }
+
+  /// This event's transcript, parsed — or nil when it has aged out of Claude Code's retention
+  /// window. The single definition of "is this transcript still readable", shared by loose-end
+  /// provenance, passage provenance and `pensieve backfill-passages`; a per-caller copy of the
+  /// path-decode + existence-check pair is how the three would drift on what counts as gone.
+  public static func parsedSession(for event: Event) -> ParsedSession? {
+    guard let path = transcriptPath(in: event),
+          FileManager.default.fileExists(atPath: path) else { return nil }
+    return TranscriptParser.parse(fileURL: URL(fileURLWithPath: path))
   }
 
   private static func unavailable(looseEnd: LooseEnd, event: Event) -> ProvenanceContext {

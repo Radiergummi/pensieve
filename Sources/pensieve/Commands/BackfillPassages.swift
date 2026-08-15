@@ -32,8 +32,7 @@ struct BackfillPassages: ParsableCommand {
     var sessionsWithPassages = 0
 
     for event in events {
-      guard let path = ProvenanceQueries.transcriptPath(in: event),
-            FileManager.default.fileExists(atPath: path) else {
+      guard let session = ProvenanceQueries.parsedSession(for: event) else {
         transcriptsGone += 1
         continue
       }
@@ -41,7 +40,6 @@ struct BackfillPassages: ParsableCommand {
       let existing = try database.read { database in
         try Passage.where { $0.eventID.eq(event.id) }.fetchCount(database)
       }
-      let session = TranscriptParser.parse(fileURL: URL(fileURLWithPath: path))
       let passages = PassageExtractor.passages(from: session, nodeID: event.nodeID,
                                                eventID: event.id,
                                                fallbackDate: event.occurredAt)
@@ -50,9 +48,11 @@ struct BackfillPassages: ParsableCommand {
       sessionsWithPassages += 1
       written += passages.count
       guard !dryRun else { continue }
+      // The ingest path's own write, not a second copy of it: guard-before-delete and
+      // wholesale-replace are one durability rule, and the only surviving copy of a passage may be
+      // the one already stored.
       try database.write { database in
-        try Passage.where { $0.eventID.eq(event.id) }.delete().execute(database)
-        for passage in passages { try Passage.insert { passage }.execute(database) }
+        try Ingester.replacePassages(database, eventID: event.id, with: passages)
       }
     }
 
