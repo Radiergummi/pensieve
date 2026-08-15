@@ -94,15 +94,21 @@ extension AppModel {
   /// The work runs in a `Task.detached` that is stored and cancelled directly, NOT wrapped in an outer
   /// task: a detached task does not inherit cancellation, so cancelling a parent would leave the run
   /// going while the UI claimed it had stopped.
-  func startTranslationBackfill(trigger: TranslationBackfillTrigger = .manual) {
-    guard translationBackfillRun == nil, let translator else { return }
+  ///
+  /// - Returns: whether THIS call started a run. Reporting it directly rather than leaving the caller
+  ///   to infer it from `translationBackfillRun != nil` afterwards is what makes the answer about this
+  ///   call: a manual run that claimed the slot while an automatic caller was measuring coverage would
+  ///   satisfy that check and be miscredited to the caller that never started anything.
+  @discardableResult
+  func startTranslationBackfill(trigger: TranslationBackfillTrigger = .manual) -> Bool {
+    guard translationBackfillRun == nil, let translator else { return false }
     let language = TranslationTarget.resolved()
     // Coverage must be FOR this language, not merely present: a stale measurement from before a
     // language switch would otherwise hand this run language A's missing list to translate into
     // language B, silently skipping units A never needed. The row itself hides during that same
     // window (see `coverageRow`), so refusing here rather than measuring first keeps both in step.
     guard !language.isEmpty, let coverage = translationCoverage, coverage.language == language,
-          !coverage.missing.isEmpty else { return }
+          !coverage.missing.isEmpty else { return false }
     let missing = coverage.missing
     let store = translationStore
     // Built HERE, on the main actor, so `self` is captured before the detached task exists. `AppModel`
@@ -139,6 +145,7 @@ extension AppModel {
       translationRevision += 1              // repaint panes with the new text
       await translationDebouncer.schedule()  // ONE whole-corpus rebuild, not one per item
     }
+    return true
   }
 
   /// Stops after the unit in flight. Everything already written stays; re-pressing resumes.
@@ -174,10 +181,9 @@ extension AppModel {
     else { return false }
 
     await measureTranslationCoverage()
-    startTranslationBackfill(trigger: .automatic)
-    // Not `true`: `startTranslationBackfill` still refuses a coverage with nothing missing, which is
-    // the common case once the corpus has caught up.
-    let started = translationBackfillRun != nil
+    // Not unconditionally `true`: `startTranslationBackfill` still refuses a coverage with nothing
+    // missing, which is the common case once the corpus has caught up.
+    let started = startTranslationBackfill(trigger: .automatic)
     if started { AppLog.app.info("Idle translation pass started") }
     return started
   }

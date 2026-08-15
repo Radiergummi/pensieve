@@ -130,12 +130,8 @@ final class AppModel {
   /// `searchToken` guards `searchHits` — see `measureTranslationCoverage` for why it is required.
   @ObservationIgnored var translationCoverageToken = 0
 
-  /// A bulk translation in flight: the task and its progress as ONE value, not two kept in step by
-  /// convention. The invariant "progress is non-nil exactly while a task exists" was previously
-  /// asserted in three doc comments and enforced nowhere — it held only because nothing had yet been
-  /// inserted between the two assignments. It also split authority: the view chose its branch from the
-  /// progress but its Stop button acted on the task. Two copies of one fact is how they stop agreeing,
-  /// which is the same argument `SearchHitResolver` and `EmbeddableCorpus.corpusNodes` exist on.
+  /// The one slot a bulk translation occupies, manual or automatic. The type and the reasoning behind
+  /// it live with the code that builds it, in `AppModel+Translation.swift`.
   var translationBackfillRun: TranslationBackfillRun?
 
   /// Bumped when a loose end's status changes. Its own signal for the same reason
