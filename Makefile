@@ -9,8 +9,13 @@
 # GitHub-specific plumbing (xcbeautify annotations, result bundles) that has no
 # meaning locally — and because a fresh runner has nothing cached to begin with.
 
+# -destination names the Mac explicitly. Without it xcodebuild finds three matching
+# destinations (arm64 / x86_64 / Any Mac), prints "WARNING: Using the first of multiple
+# matching destinations" on every build, and picks arm64 — which is what this pins, so
+# the flag silences the notice without changing what gets built.
 XCODEBUILD_FLAGS = -project Pensieve.xcodeproj \
 	-configuration Debug -derivedDataPath ./.build-xcode \
+	-destination 'platform=macOS,arch=arm64' \
 	-skipMacroValidation -skipPackagePluginValidation
 
 PRODUCTS = ./.build-xcode/Build/Products/Debug

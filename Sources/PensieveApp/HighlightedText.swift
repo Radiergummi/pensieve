@@ -14,14 +14,19 @@ enum HighlightedTextStyle {
   case snippet
 }
 
-/// The app's ONE highlight renderer: a `Text` concatenation over `FindRun`s, so there is no index
-/// math and no full-string `AttributedString` round-trip. Defaults to the find style, since that is
-/// the style every call site written for in-node find already assumes.
+/// The app's ONE highlight renderer: it appends each `FindRun` to a single `AttributedString`, so
+/// there is still no index math — the runs arrive already split, and styling is applied to each as
+/// it is appended. Defaults to the find style, since that is the style every call site written for
+/// in-node find already assumes.
 ///
-/// `Text.background(_:)` does not compile in a `Text + Text` chain (it resolves to the generic
-/// `View.background(_:)`, which returns `ModifiedContent<Text, _>`, not `Text`). The `.find` tint is
-/// applied instead via `AttributedString.backgroundColor` on just the matched run, wrapped back into
-/// a `Text` (the `Text(AttributedString)` initializer returns `Text`, so it still concatenates).
+/// This was a `Text + Text` concatenation until `+` was deprecated in macOS 26. Styling moved onto
+/// the attributes that already carried the `.find` tint: `Text.background(_:)` never worked here
+/// anyway (it resolves to the generic `View.background(_:)`, which returns `ModifiedContent`, not
+/// `Text`), so the background always came from `AttributedString.backgroundColor`. Bold is carried
+/// by `inlinePresentationIntent`, NOT by the `font` attribute: this SDK's SwiftUI attribute scope
+/// has no `fontWeight`/`fontDesign` (both were probed and fail to resolve), and setting `font`
+/// outright would name a size and so override whatever the call site applies (`.prose()`,
+/// `.font(.caption)`, …). The presentation intent styles the run while leaving size inherited.
 struct HighlightedText: View {
   let runs: [FindRun]
   /// Character offset of the current match within this text, when it lives here. Ignored under
@@ -29,35 +34,35 @@ struct HighlightedText: View {
   var currentOffset: Int?
   var style: HighlightedTextStyle = .find
 
-  var body: some View { composed }
+  var body: some View { Text(composed) }
 
-  private var composed: Text {
-    var pieces: [Text] = []
+  private var composed: AttributedString {
+    var result = AttributedString()
     var offset = 0
     for run in runs {
       switch run {
       case .plain(let text):
-        pieces.append(Text(text))
+        result += AttributedString(text)
       case .match(let text):
-        pieces.append(matchText(text, offset: offset))
+        result += matchRun(text, offset: offset)
       }
       offset += run.text.count
     }
-    return pieces.reduce(Text(""), +)
+    return result
   }
 
-  private func matchText(_ text: String, offset: Int) -> Text {
+  private func matchRun(_ text: String, offset: Int) -> AttributedString {
+    var attributed = AttributedString(text)
+    attributed.inlinePresentationIntent = .stronglyEmphasized
     switch style {
     case .find:
       let isCurrent = currentOffset == offset
-      var attributed = AttributedString(text)
       attributed.backgroundColor = isCurrent ? Color.yellow : Color.yellow.opacity(0.35)
-      return Text(attributed)
-        .bold()
-        .foregroundColor(isCurrent ? Color.black : Color.primary)
+      attributed.foregroundColor = isCurrent ? Color.black : Color.primary
     case .snippet:
-      return Text(text).bold().foregroundColor(.accentColor)
+      attributed.foregroundColor = .accentColor
     }
+    return attributed
   }
 }
 

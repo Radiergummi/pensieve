@@ -102,11 +102,11 @@ struct LooseEndRow: View {
           // Was a hand-built `%lldd ago` whose catalog key said `%@d ago`, so it never matched and
           // rendered English inside a German window. Foundation formats the date instead — no
           // interpolated Int, no key, no way to mis-author it.
-          (Text(roleText)
-            + Text(verbatim: " · ")
-            + Text(view.occurredAt, format: .dateTime.year().month().day())
-            + Text(verbatim: " · ")
-            + Text(view.occurredAt, format: .relative(presentation: .named)))
+          Text(roleText
+            + NodeMeta.separator
+            + view.occurredAt.formatted(.dateTime.year().month().day())
+            + NodeMeta.separator
+            + view.occurredAt.formatted(.relative(presentation: .named)))
             .metaText()
         }
         .padding(12)

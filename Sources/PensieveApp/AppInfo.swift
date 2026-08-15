@@ -2,6 +2,9 @@ import AppKit
 
 /// The standard macOS About panel — the first-party primitive, not a hand-built window.
 enum AppInfo {
+  /// `NSApplication.shared` is main-actor isolated; the only caller is a `.commands` `Button`, which
+  /// is already on the main actor.
+  @MainActor
   static func showAboutPanel() {
     let credits = NSAttributedString(
       string: String(localized: "A personal tool for reloading context across parallel projects. Not a product."),

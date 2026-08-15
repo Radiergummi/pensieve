@@ -107,6 +107,8 @@ private func seedLooseEnd(_ database: any DatabaseWriter, text: String = "t", qu
 }
 
 /// Seeds a node in a given state with one loose end, returning both ids.
+/// Callers that seed a row only to assert it is *absent* from a feed ignore the ids.
+@discardableResult
 private func seedIn(_ database: any DatabaseWriter, nodeState: NodeState,
                     status: LooseEndStatus, resolvedAt: Date? = nil, label: String = "",
                     suggestion: String = "", daysAgo: Int = 0) throws -> (node: UUID, looseEnd: UUID) {

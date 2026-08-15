@@ -4,7 +4,7 @@ import Foundation
 @testable import PensieveKit
 
 @Test func goldSetRoundTripsAndScoresRecall() throws {
-  var goldSet = GoldSet(recall: ["x1": ["revisit retries", "call Bob"]], grounding: [:])
+  let goldSet = GoldSet(recall: ["x1": ["revisit retries", "call Bob"]], grounding: [:])
   let url = tempURL("gold", ext: "json")
   try goldSet.save(to: url)
   let loaded = GoldSet.load(from: url)
