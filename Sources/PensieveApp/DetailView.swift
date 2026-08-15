@@ -54,20 +54,32 @@ struct DetailView: View {
             if looseEnds.isEmpty {
               Text("None open.").foregroundStyle(.secondary)
             } else {
-              ForEach(looseEnds, id: \.looseEnd.id) { view in
-                LooseEndRow(view: view, loadProvenance: model.provenance,
-                            onLabel: model.setLooseEndLabel,
-                            displaySummary: model.displayed(field: .looseEndText,
-                                                            sourceText: view.looseEnd.text),
-                            onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
-                            onResolve: { id, status, previous, previousStamp in
-                              model.resolveLooseEnd(id, status, previous: previous,
-                                                    previousResolvedAt: previousStamp,
-                                                    undoManager: undoManager)
-                            },
-                            expandedLooseEndID: model.expandedLooseEndID, compact: false,
-                            find: find)
-                  .id(view.looseEnd.id)
+              // LAZY, and load-bearing: this pane is a plain `ScrollView`, so a `VStack` here builds
+              // and lays out EVERY row up front. On the measured store the largest node has 288 open
+              // ends and that cost ~3s of main-thread AttributeGraph work on every selection — the
+              // whole app froze. Sampling put the time in `LooseEndRow.body`, not the database (the
+              // full DB gather for that node is 61ms). The middle column never had the bug because
+              // it renders the SAME row inside a `List`.
+              //
+              // Scroll targeting still works: `focusCurrent()` publishes `scrollTarget` immediately
+              // for a mounted site, and `siteMounted` covers one that is not mounted yet — a case
+              // this container now produces routinely rather than only for collapsed provenance.
+              LazyVStack(alignment: .leading, spacing: 8) {
+                ForEach(looseEnds, id: \.looseEnd.id) { view in
+                  LooseEndRow(view: view, loadProvenance: model.provenance,
+                              onLabel: model.setLooseEndLabel,
+                              displaySummary: model.displayed(field: .looseEndText,
+                                                              sourceText: view.looseEnd.text),
+                              onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
+                              onResolve: { id, status, previous, previousStamp in
+                                model.resolveLooseEnd(id, status, previous: previous,
+                                                      previousResolvedAt: previousStamp,
+                                                      undoManager: undoManager)
+                              },
+                              expandedLooseEndID: model.expandedLooseEndID, compact: false,
+                              find: find)
+                    .id(view.looseEnd.id)
+                }
               }
             }
           }

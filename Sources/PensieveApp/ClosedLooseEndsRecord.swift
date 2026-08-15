@@ -25,23 +25,30 @@ struct ClosedLooseEndsRecord: View {
 
   var body: some View {
     DisclosureGroup(isExpanded: $isExpanded) {
-      ForEach(items, id: \.looseEnd.id) { view in
-        HStack(alignment: .top, spacing: 8) {
-          LooseEndStatusBadge(status: view.looseEnd.status)
-          LooseEndRow(view: view, loadProvenance: model.provenance,
-                      onLabel: model.setLooseEndLabel,
-                      displaySummary: model.displayed(field: .looseEndText,
-                                                      sourceText: view.looseEnd.text),
-                      onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
-                      onResolve: { id, status, previous, previousStamp in
-                        model.resolveLooseEnd(id, status, previous: previous,
-                                              previousResolvedAt: previousStamp,
-                                              undoManager: undoManager)
-                      },
-                      expandedLooseEndID: model.expandedLooseEndID,
-                      compact: false)
+      // LAZY for the same reason the open section above it is: a plain `ForEach` here builds every
+      // row the moment the disclosure opens. Latent today only because no node has closed ends yet —
+      // `resolveAllOpen` moves a whole node's worth in one action, and the largest is 288. Unlike the
+      // open section this one is not measured, because there is currently nothing to measure; it is
+      // the same container defect in the same pane.
+      LazyVStack(alignment: .leading, spacing: 8) {
+        ForEach(items, id: \.looseEnd.id) { view in
+          HStack(alignment: .top, spacing: 8) {
+            LooseEndStatusBadge(status: view.looseEnd.status)
+            LooseEndRow(view: view, loadProvenance: model.provenance,
+                        onLabel: model.setLooseEndLabel,
+                        displaySummary: model.displayed(field: .looseEndText,
+                                                        sourceText: view.looseEnd.text),
+                        onTranslate: { text in await model.translate(field: .looseEndText, sourceText: text) },
+                        onResolve: { id, status, previous, previousStamp in
+                          model.resolveLooseEnd(id, status, previous: previous,
+                                                previousResolvedAt: previousStamp,
+                                                undoManager: undoManager)
+                        },
+                        expandedLooseEndID: model.expandedLooseEndID,
+                        compact: false)
+          }
+          .id(view.looseEnd.id)
         }
-        .id(view.looseEnd.id)
       }
     } label: {
       Text("Done · \(items.count)").font(.callout).foregroundStyle(.secondary)
