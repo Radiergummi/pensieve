@@ -61,6 +61,7 @@ enum TranslationLanguageCatalog {
 struct TranslationSettingsTab: View {
   var model: AppModel
   @AppStorage(PensieveDefaults.translationTargetKey) private var translationTarget = TranslationTarget.off
+  @AppStorage(AppDefaults.idleTranslationEnabledKey) private var idleTranslationEnabled = true
 
   /// The single source of truth for "is this pack installed" — the picker's `⤓` marker, the status
   /// line and the backfill button's enablement all read it. It previously ALSO lived in a separate
@@ -136,6 +137,9 @@ struct TranslationSettingsTab: View {
       if #available(macOS 26, *) {
         packStatus
         coverageRow
+        Toggle("Translate automatically when idle", isOn: $idleTranslationEnabled)
+        Text("Runs after the Mac has been unused for a few minutes, and pauses in Low Power Mode or under heavy load.")
+          .font(.caption).foregroundStyle(.secondary)
       } else {
         Text("Translation requires macOS 26 or later.")
           .font(.caption).foregroundStyle(.secondary)

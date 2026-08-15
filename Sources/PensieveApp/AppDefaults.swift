@@ -8,6 +8,7 @@ enum AppDefaults {
   static let hideDockIconKey = "app.hideDockIcon"
   static let narrationEnabledKey = "app.narrationEnabled"
   static let backgroundSyncEnabledKey = "app.backgroundSyncEnabled"
+  static let idleTranslationEnabledKey = "app.idleTranslationEnabled"
 
   /// Narration is ON by default (matching the `@AppStorage(...) = true` in the views). Non-View
   /// readers (AppModel) must honor the same default — `UserDefaults.bool` alone reads false when
@@ -22,5 +23,14 @@ enum AppDefaults {
   static var backgroundSyncEnabled: Bool {
     UserDefaults.standard.object(forKey: backgroundSyncEnabledKey) == nil
       ? true : UserDefaults.standard.bool(forKey: backgroundSyncEnabledKey)
+  }
+
+  /// Idle translation is ON by default (matching the `@AppStorage(...) = true` in the view). The
+  /// policy reads this accessor, not `UserDefaults.bool` directly — which alone reads false when
+  /// unset and would disagree with the toggle before Settings has ever been opened, leaving the
+  /// feature silently off for exactly the users who never went looking for it.
+  static var idleTranslationEnabled: Bool {
+    UserDefaults.standard.object(forKey: idleTranslationEnabledKey) == nil
+      ? true : UserDefaults.standard.bool(forKey: idleTranslationEnabledKey)
   }
 }

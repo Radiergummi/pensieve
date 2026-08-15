@@ -1,6 +1,40 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Translate automatically when idle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch bei Inaktivität übersetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translate automatically when idle"
+          }
+        }
+      }
+    },
+    "Runs after the Mac has been unused for a few minutes, and pauses in Low Power Mode or under heavy load." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft, wenn der Mac einige Minuten unbenutzt war, und pausiert im Stromsparmodus oder bei hoher Auslastung."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runs after the Mac has been unused for a few minutes, and pauses in Low Power Mode or under heavy load."
+          }
+        }
+      }
+    },
     " · captured %@" : {
       "extractionState" : "manual",
       "localizations" : {
