@@ -20,12 +20,17 @@ extension Ingester {
   /// Best-effort in spirit but NOT swallowed: this runs inside the session's own write transaction,
   /// so a throw rolls the event back too. That is deliberate — an event whose passages failed to
   /// write would look ingested and be silently unrecallable.
+  ///
+  /// The guard runs BEFORE the delete: extraction yielding nothing is a NORMAL outcome (a
+  /// compacted, rewritten, or truncated transcript can legitimately parse to zero passages), not a
+  /// reason to discard the durable copy already stored — which may be the only copy left, since the
+  /// transcript it came from may no longer exist.
   func writePassages(_ database: Database, session: ParsedSession, nodeID: UUID,
                      eventID: UUID, fallbackDate: Date) throws {
-    try Passage.where { $0.eventID.eq(eventID) }.delete().execute(database)
     let passages = PassageExtractor.passages(from: session, nodeID: nodeID, eventID: eventID,
                                              fallbackDate: fallbackDate)
     guard !passages.isEmpty else { return }
+    try Passage.where { $0.eventID.eq(eventID) }.delete().execute(database)
     for passage in passages { try Passage.insert { passage }.execute(database) }
   }
 }

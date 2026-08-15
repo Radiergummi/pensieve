@@ -246,6 +246,10 @@ extension Ingester {
     for eventID in repointedEventIDs {
       try LooseEnd.where { $0.sourceEventID.eq(eventID) }
         .update { $0.nodeID = strand.id }.execute(database)
+      // Passages of those events must follow too: `passage.nodeID` is what retrieval and the
+      // search corpus both read, so a passage left behind names the wrong node in every surface.
+      try Passage.where { $0.eventID.eq(eventID) }
+        .update { $0.nodeID = strand.id }.execute(database)
     }
     return (strand.id, strand.id)
   }

@@ -118,3 +118,57 @@ import SQLiteData
   }
   #expect(events.count == 1, "still one event")
 }
+
+/// A re-ingest whose transcript has lost its conversation content (compaction, rewrite,
+/// truncation) must NOT wipe the durable copy already stored — that copy may be the only one left,
+/// since the transcript it came from may no longer exist. `writePassages` must check whether
+/// extraction produced anything BEFORE it deletes the event's existing passages, not after.
+@Test func reIngestWithNoExtractablePassagesKeepsTheStoredOnes() async throws {
+  let (repo, _) = try makeCommittedRepo()
+  let spool = try CaptureSpool(at: tempURL("passage-empty-reingest-spool"))
+  let database = try openCanonicalDatabase(at: tempURL("passage-empty-reingest-canon"))
+
+  let sessionID = UUID().uuidString
+  let transcript = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("\(sessionID).jsonl")
+  func userLine(_ text: String) -> String {
+    """
+    {"type":"user","cwd":"\(repo.path)","sessionId":"\(sessionID)",\
+    "timestamp":"2026-06-30T10:00:00Z","message":{"role":"user","content":"\(text)"}}
+    """
+  }
+  func assistantLine(_ text: String) -> String {
+    """
+    {"type":"assistant","sessionId":"\(sessionID)","timestamp":"2026-06-30T10:00:01Z",\
+    "message":{"role":"assistant","content":[{"type":"text","text":"\(text)"}]}}
+    """
+  }
+  func ingest() async throws {
+    try spool.append(kind: CaptureKind.ccSession,
+                     payload: try encodeJSON(SessionRefPayload(transcriptPath: transcript.path)))
+    _ = try await Ingester(spool: spool, database: database).drain()
+  }
+  func passageTexts() async throws -> [String] {
+    try await database.read { database in try Passage.all.fetchAll(database) }.map(\.text)
+  }
+
+  let firstLines = [userLine("first real question about the sync agent"),
+                     assistantLine("First substantive answer about launchd.")]
+  try firstLines.joined(separator: "\n").write(to: transcript, atomically: true, encoding: .utf8)
+  try await ingest()
+  #expect(try await passageTexts().count == 2)
+
+  // The transcript is rewritten (e.g. by compaction) down to a single line that still carries a
+  // `cwd` — so the session still attributes and the EVENT still dedupes on the same sessionID —
+  // but whose only content is "ok", which `TextQuality.isProse` rejects (under the 8-character
+  // floor). Extraction legitimately yields zero passages; this is a NORMAL outcome, not exotic.
+  try userLine("ok").write(to: transcript, atomically: true, encoding: .utf8)
+  try await ingest()
+
+  let afterEmptyReingest = try await passageTexts()
+  #expect(afterEmptyReingest.count == 2, "the previously-stored passages must survive an extraction that yields nothing")
+  let events = try await database.read { database in
+    try Event.where { $0.kind.eq(CaptureKind.ccSession) }.fetchAll(database)
+  }
+  #expect(events.count == 1, "still one event")
+}

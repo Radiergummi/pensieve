@@ -143,6 +143,12 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   let looseEnd = LooseEnd(nodeID: projectNodeID, sourceEventID: try #require(firstEvent?.id),
                           text: "x", quote: "some verbatim quote")
   try await database.write { database in try LooseEnd.insert { looseEnd }.execute(database) }
+  // A passage extracted (by a prior drain) from the same earlier event must move with it too —
+  // `passage.nodeID` is what retrieval and the search corpus both read, so a passage left behind
+  // names the wrong node in every surface.
+  let passage = Passage(nodeID: projectNodeID, eventID: try #require(firstEvent?.id), turnIndex: 0,
+                        messageIndex: 0, role: .prompt, text: "y", occurredAt: Date())
+  try await database.write { database in try Passage.insert { passage }.execute(database) }
 
   // Second drain: another (distinct) commit on the same branch — crosses the threshold,
   // strand is born. Written inline (not via spoolCommits, which always writes index `0` and
@@ -159,4 +165,6 @@ private func spoolSession(id: String, on branch: String, repo: URL, spool: Captu
   let strandID = try #require(strand?.id)
   let updated = try await database.read { database in try LooseEnd.where { $0.id.eq(looseEnd.id) }.fetchOne(database) }
   #expect(updated?.nodeID == strandID)
+  let updatedPassage = try await database.read { database in try Passage.where { $0.id.eq(passage.id) }.fetchOne(database) }
+  #expect(updatedPassage?.nodeID == strandID)
 }
