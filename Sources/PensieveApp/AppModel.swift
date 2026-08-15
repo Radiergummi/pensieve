@@ -135,19 +135,6 @@ final class AppModel {
   /// inserted between the two assignments. It also split authority: the view chose its branch from the
   /// progress but its Stop button acted on the task. Two copies of one fact is how they stop agreeing,
   /// which is the same argument `SearchHitResolver` and `EmbeddableCorpus.corpusNodes` exist on.
-  struct TranslationBackfillRun {
-    /// `Task.detached` deliberately — see `startTranslationBackfill`.
-    let task: Task<Int, Never>
-    /// The language this run translates INTO. Cancellation is cooperative, so a run outlives the
-    /// language switch that cancelled it by however long its in-flight unit takes; without this tag
-    /// the progress row rendered under the NEWLY selected language, claiming work toward a target
-    /// this run is not translating into. Every other piece of translation state on this branch
-    /// carries its language for exactly this reason — `TranslationCoverage.language` and
-    /// `TranslationSettingsTab.downloadingLanguage` — and this was the one that did not.
-    let language: String
-    var done: Int
-    let total: Int
-  }
   var translationBackfillRun: TranslationBackfillRun?
 
   /// Bumped when a loose end's status changes. Its own signal for the same reason
