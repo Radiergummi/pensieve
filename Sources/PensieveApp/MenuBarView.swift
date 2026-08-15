@@ -173,7 +173,12 @@ private struct MenuBarRow: View {
           NodeRowMeta(facts: facts)
         }
         Spacer()
-        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        // NOT `chevron.right`, which is the disclosure idiom — it promises a level below this one,
+        // inside this surface. The row leaves for the main window instead, so it takes the glyph
+        // macOS uses for exactly that. A drill-in level was specced and dropped: it would have shown
+        // 5 of the largest node's 299 open ends with no resolve verbs, duplicating the Loose Ends
+        // bucket, and decaying into a copy of Recent Activity as the queue is burned down.
+        Image(systemName: "arrow.up.forward").font(.caption).foregroundStyle(.tertiary)
       }
       // The padding stays inside the label (above this call), or the hover fill paints a wider
       // rectangle than the button actually hit-tests.
