@@ -49,10 +49,13 @@ INSTALLED_APP = /Applications/Pensieve.app
 # app build (MarkdownUI is an xcodebuild-only dependency), so depending on it
 # would invalidate the test record after every build.
 SWIFT_SOURCES := $(shell find Sources Tests Tools -type f -name '*.swift')
-TEST_INPUTS := Package.swift $(shell find Sources/PensieveKit Tests ! -name '.*')
+# Tests/ narrowed to the SwiftPM suite on purpose: `swift test` never builds the UI test target, so
+# globbing all of Tests/ would re-run the whole suite on every UI-test edit.
+TEST_INPUTS := Package.swift $(shell find Sources/PensieveKit Tests/PensieveKitTests ! -name '.*')
+UITEST_SOURCES := $(shell find Tests/PensieveUITests -type f -name '*.swift')
 BUILD_SOURCES := $(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
 
-.PHONY: help all test lint generate build cli uiprobe smoke install run clean
+.PHONY: help all test lint generate build cli uiprobe smoke uitest install run clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) \
@@ -87,7 +90,22 @@ $(UIPROBE): $(UIPROBE_SOURCES)
 	@swiftc -O $(UIPROBE_SOURCES) -o $@
 	@echo "ok: $@"
 
+uitest: .make/uitest ## Run the app UI test suite (launches a real window; not part of `all`)
+
 smoke: .make/smoke ## Verify the built bundle's embedded CLI launches
+
+# Deliberately outside `all`: this launches a real GUI window and holds focus for ~35s, which would
+# make the most-run command hostile to work alongside.
+#
+# The app writes its own defaults (lastOpenedAt among them), and a test run must not shift the real
+# Briefing baseline — so the domain is exported and restored around the suite. Best-effort: a crash
+# mid-suite skips the restore, but the export is still on disk at the path below.
+.make/uitest: $(APP_CLI) $(UITEST_SOURCES) | .make
+	@defaults export me.mazetti.pensieve /tmp/pensieve-defaults-backup.plist 2>/dev/null || true
+	@xcodebuild $(XCODEBUILD_FLAGS) -scheme Pensieve -only-testing:PensieveUITests test \
+		|| (defaults import me.mazetti.pensieve /tmp/pensieve-defaults-backup.plist 2>/dev/null; exit 1)
+	@defaults import me.mazetti.pensieve /tmp/pensieve-defaults-backup.plist 2>/dev/null || true
+	@touch $@
 
 .make/test: $(TEST_INPUTS) | .make
 	@swift test

@@ -90,7 +90,8 @@ targets:
         # checking as `swift test` — otherwise concurrency bugs slip through the Xcode build.
         SWIFT_VERSION: "6.0"
     scheme:
-      testTargets: []
+      testTargets:
+        - PensieveUITests
       # Disabled by default → a Build+Run uses the LIVE stores at
       # ~/Library/Application Support/Pensieve/. Tick these on in
       # Edit Scheme ▸ Run ▸ Arguments to sandbox against a throwaway
@@ -102,6 +103,26 @@ targets:
         - variable: PENSIEVE_CAPTURE_DB
           value: "/Users/moritz/Library/Application Support/Pensieve-Dev/capture.sqlite"
           isEnabled: false
+  PensieveUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - Tests/PensieveUITests
+    dependencies:
+      - target: Pensieve
+      - package: PensieveKit
+        product: PensieveKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.uitests
+        # Required: without it xcodebuild refuses to code sign the test bundle.
+        GENERATE_INFOPLIST_FILE: "YES"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGNING_REQUIRED: "NO"
+        SWIFT_VERSION: "6.0"
+        TEST_TARGET_NAME: Pensieve
+
   PensieveSyncAgent:
     type: tool
     platform: macOS
