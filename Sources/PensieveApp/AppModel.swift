@@ -143,7 +143,7 @@ final class AppModel {
     /// the progress row rendered under the NEWLY selected language, claiming work toward a target
     /// this run is not translating into. Every other piece of translation state on this branch
     /// carries its language for exactly this reason — `TranslationCoverage.language` and
-    /// `TranslationSettingsSection.downloadingLanguage` — and this was the one that did not.
+    /// `TranslationSettingsTab.downloadingLanguage` — and this was the one that did not.
     let language: String
     var done: Int
     let total: Int

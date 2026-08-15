@@ -52,12 +52,13 @@ enum TranslationLanguageCatalog {
   }
 }
 
-/// Settings ▸ Intelligence ▸ Translation. The target picker, language-pack status with a download
-/// affordance, a link to the OS pane that owns pack lifecycle, and the coverage/backfill row.
+/// Settings ▸ Translation. The target picker, language-pack status with a download affordance, a
+/// link to the OS pane that owns pack lifecycle, and the coverage/backfill row.
 ///
-/// Extracted from `IntelligenceSettingsTab` rather than grown inside it: CI runs `swiftlint --strict`
-/// with a 400-line cap and that file was already over half of it.
-struct TranslationSettingsSection: View {
+/// Its own tab rather than a section under Intelligence: the coverage measurement `.task` below runs
+/// a full corpus gather on appear, and nested under Intelligence it fired for anyone who opened
+/// Settings merely to change their LLM provider.
+struct TranslationSettingsTab: View {
   var model: AppModel
   @AppStorage(PensieveDefaults.translationTargetKey) private var translationTarget = TranslationTarget.off
 
@@ -82,6 +83,20 @@ struct TranslationSettingsSection: View {
   }
 
   var body: some View {
+    Form {
+      // No section header: the tab title already says Translation.
+      Section {
+        settings
+      } footer: {
+        Text("Generated summaries are translated on this device. Captured text, cited quotes and transcripts are never translated.")
+          .font(.caption).foregroundStyle(.secondary)
+      }
+    }
+    .formStyle(.grouped)
+    .frame(width: 460)
+  }
+
+  @ViewBuilder private var settings: some View {
     Picker("Translate generated text to", selection: $translationTarget) {
       Text("Off").tag(TranslationTarget.off)
       ForEach(options) { option in

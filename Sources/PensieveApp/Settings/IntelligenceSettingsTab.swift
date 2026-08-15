@@ -85,13 +85,6 @@ struct IntelligenceSettingsTab: View {
       if provider.wrappedValue == .cloud {
         Section("Cloud provider") { cloudSection }
       }
-
-      Section { TranslationSettingsSection(model: model) } header: {
-        Text("Translation")
-      } footer: {
-        Text("Generated summaries are translated on this device. Captured text, cited quotes and transcripts are never translated.")
-          .font(.caption).foregroundStyle(.secondary)
-      }
     }
     .formStyle(.grouped)
     .frame(width: 460)

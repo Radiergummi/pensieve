@@ -36,7 +36,7 @@ extension AppModel {
   ///
   /// The token is load-bearing, not defensive: `Task.detached` does not inherit cancellation and
   /// `Task<T, Never>.value` does not throw on it, so a measurement superseded by a language switch
-  /// (`.task(id: translationTarget)` in `TranslationSettingsSection`) still runs to completion and
+  /// (`.task(id: translationTarget)` in `TranslationSettingsTab`) still runs to completion and
   /// still resumes here. Landing after the newer one would latch `translationCoverage` to the OLD
   /// language, and both surfaces that read it require a language match — so the coverage line and the
   /// "Translate remaining" button would silently disappear for the rest of the Settings session.

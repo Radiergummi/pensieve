@@ -12,6 +12,8 @@ struct SettingsView: View {
         .tabItem { Label("General", systemImage: "gearshape") }
       IntelligenceSettingsTab(model: model)
         .tabItem { Label("Intelligence", systemImage: "sparkles") }
+      TranslationSettingsTab(model: model)
+        .tabItem { Label("Translation", systemImage: "translate") }
       AdvancedSettingsTab(model: model)
         .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
     }
