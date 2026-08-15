@@ -23,7 +23,7 @@ and indexed.
 ## Open items — the index
 
 **Tier 0 — Foundation** *(architecture review, 2026-08-15)*
-1. The app is 6,202 lines with no automated tests — and the smoke recipe renders no view body.
+1. The app is 6,202 lines with no automated tests — **half closed 2026-08-15** (UI harness shipped; the state machines are still untested).
 2. Two narration caches, and the shared one is write-only from MCP — so `prime` can rarely hit it.
 3. `Query/` is a namespace, not a layer — and the "only writer" invariant in `CLAUDE.md` is false.
 4. The LLM surface has outgrown its eval gate: 9 model-backed tasks, 3 bars, and the guardrail cannot see the gap.
@@ -40,6 +40,8 @@ Widgets · CloudKit.
 - Claude Design review — slice C (transcript reading, **live now**) and slice D (six items, each its own brainstorm).
 - Contextify scan — open items: honest staleness on the retrieval path, `pensieve doctor`, Live Recall, skill + researcher subagent.
 - P3 retrieval harness — **blocked on the user** writing 30–50 paraphrase queries.
+- Follow-ups from the popover + harness session — the dropped node-scoped Loose Ends surface, plus three verification-practice findings.
+- The UI harness has two known holes — the ordering test cannot cover its motivating defect; the sidebar-count test is probably vacuous.
 - Extraction recall has never been measured; live sessions could supply the gold set.
 - The salience pipeline is built, wired, and has never been run — two shipped features are inert.
 - Naming has no eval coverage, and the harness has a silent hole. *(Subsumed by F4; kept for its detail.)*
@@ -81,6 +83,14 @@ trigger-gated and listed last because their trigger has not arrived, not because
 
 ## F1. The app is 6,202 lines with no automated tests, and the smoke recipe renders no view body
 
+> **HALF CLOSED 2026-08-15** — the UI verification harness shipped (`uiprobe`, `PensieveUITests`,
+> `make uitest`, the `verify-app-ui` skill), and the smoke recipe that rendered no view body is
+> retired from `CLAUDE.md`. **What remains is route (a) below, which is the larger half:** the harness
+> asserts on *rendered output*, not on the state machines this finding actually names. `AppModel` + 7
+> extensions, `NodeFindState` and `NodeOrganizing` still have **no unit tests**, and they are logic
+> rather than chrome. A UI test can tell you the wrong thing rendered; it cannot tell you which
+> reducer got it wrong. See also "The UI harness has two known holes".
+
 **The largest verification hole in the project, and it grows with every slice.** `Sources/PensieveApp`
 has no unit tests by construction — it is an Xcode app target, outside `PensieveKitTests` — and the
 documented substitute (build + background-launch the inner Mach-O + `kill`) **executes no view body**:
@@ -105,7 +115,9 @@ testable today against a throwaway store; the state machines above are the first
 of `AppModel` into Kit as pure kernels. (b) is the longer-term shape but (a) buys the most immediately
 and does not require deciding where each piece belongs first.
 
-*Revisit trigger: now — before the next app slice, since every slice adds to the untested surface.*
+*Revisit trigger: still now. The UI harness bought coverage of what renders; route (a) — a plain unit
+test target exercising `AppModel` against a throwaway store — is untouched and is where the
+race-condition class of defect actually lives.*
 
 ---
 
@@ -737,6 +749,60 @@ two files (`RetrievalCorpus`, `RetrievalMetrics`), per-query-normalised operatin
 explicit `NO VIABLE THRESHOLD` verdict, no ROC-AUC, strategies `bm25` / `bm25Porter` / `vector` /
 `hybridRRF`, and a **pre-registered absolute floor** so the report can conclude "the incumbent is
 unusable". *Revisit trigger:* when the gold set exists.
+
+---
+
+## Follow-ups from the popover + harness session (2026-08-15)
+
+Everything left open by the eight reported menu-bar defects, the freeze fix, the batching change and
+the UI harness. The two harness holes have their own entry below; these are the rest.
+
+### Product — the popover's dropped level, deferred with reasons
+
+- **Node-scoped Loose Ends as a real surface.** The genuinely useful version of the drill-in level
+  that was specced and dropped: one node's triage queue with the resolve verbs (⌘⏎, undo), rather
+  than the cross-node **Loose Ends** bucket, which is all that exists today (`triageItems()` →
+  `openAcrossNodes`, and `SidebarSelection.triage` carries no node). Belongs in the main window with
+  undo, not a 320 pt popover. **Its own spec** — it needs a new selection state and a middle-column
+  mode. *Trigger: the next time burning down a single 299-item project feels like the wrong tool.*
+- **Type-select in the popover** (typing jumps to a project). Cheap now that a focus cursor exists;
+  five rows do not need it. *Trigger: the row cap rising above ~8.*
+- **Tab traversal of the footer.** Spike 2 showed Tab events do reach the popover, so it is possible;
+  the ⌘⏎/⌘R/⌘, shortcuts make it unnecessary. *Trigger: a report that Tab stops mid-surface.*
+
+### Verification practice — three things this session demonstrated rather than argued
+
+- **Human-verify carries are a gate, not a handover list.** The keyboard work shipped with a carry
+  ledger whose item 4 was literally *"What `Esc` actually does"* — and `Esc` did nothing, because
+  nothing had been written for it. The list was correct and was written *and then shipped past*. The
+  fix is procedural and free: a carry that can be discharged in the session must be discharged before
+  the work is reported complete, and only the ones genuinely needing the user's eyes (taste, German in
+  situ, VoiceOver) may be handed over. *Trigger: the next slice that ends with a carry ledger.*
+- **A plan's code should be compiled and linted before the plan is called ready.** The UI-harness plan
+  was detailed, well-reasoned and correct in design — and its code carried **nine** defects, none of
+  them design errors: a type that does not conform to `Error`, three `force_cast`s, three identifiers
+  below the length minimum, a 59-line body over a 50-line cap, two wrong `UserDefaults` keys whose
+  failure mode is *silent*, and three wrong assumptions about what the accessibility tree contains —
+  plus a verification step that greps for a string which never matched. Every one surfaced within
+  minutes of actually running it. *Trigger: writing the next implementation plan that contains code
+  blocks.*
+- **Audit the Kit suite for "asserts membership, not mapping".** `openExcludesConfirmedNoise…` put
+  four loose ends on one event and asserted only *which* rows came back, never their dates — so the
+  positional-zip batching bug would have passed it. Found only because the batching change went
+  looking for what it could break. The shape (assert the set, not the correspondence) is likely to
+  recur, and mutation is the only way to find it. *Trigger: the next refactor of a query that returns
+  joined rows.*
+
+### Smaller carries
+
+- **Two human-verify items from the popover keyboard work are still open**: VoiceOver reads a row as
+  one coherent label, and German in situ. Both need eyes, not a harness.
+- **`ClosedLooseEndsRecord`'s `LazyVStack` is reasoned, not measured.** The open section's fix was
+  A/B measured (row-render work down 15×); the closed record's identical fix was applied by analogy
+  because no node has closed loose ends yet. *Trigger: the first node with a large Done record.*
+- **Should `make uitest` run in CI?** It is deliberately outside `make all` because it steals focus
+  for ~35 s, which is right for a working session and possibly wrong for a headless runner, where
+  nothing would be interrupted. *Trigger: the next CI change.*
 
 ---
 
