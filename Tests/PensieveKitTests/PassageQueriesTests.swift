@@ -170,4 +170,116 @@ private func writeTranscript(_ pairs: [(prompt: String, reply: String)]) throws 
     #expect(try EmbeddableCorpus.gatherPassages(database).map(\.itemID) == items.map(\.itemID),
             "a second gather returns the same order")
   }
+
+  /// Turn dedupe: overlap and long replies both put several chunks of ONE conversation in the
+  /// candidate list, and the user must see one row, ranked by its best chunk.
+  @Test func chunksOfOneTurnCollapseToASingleHit() throws {
+    let database = try makePassageStore()
+    let store = tempSearchStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id)
+    let first = try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                                 messageIndex: 1, role: .reply,
+                                 text: "launchd refuses the spawn because the LWCR is stale")
+    let second = try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                                  messageIndex: 1, role: .reply,
+                                  text: "the LWCR is stale, so launchd refuses it again")
+    store.rebuildPassages(items: try EmbeddableCorpus.gatherPassages(database),
+                          passagesHash: "h1")
+
+    let hits = PassageQueries.search(query: "launchd",
+                                     scope: SearchScope(visibleNodeIDs: [node.id]),
+                                     store: store, database)
+    #expect(hits.count == 1, "two chunks of one turn are one conversation")
+    #expect([first.id, second.id].contains(hits[0].id))
+  }
+
+  @Test func twoDifferentTurnsStayTwoHits() throws {
+    let database = try makePassageStore()
+    let store = tempSearchStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id)
+    try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                      messageIndex: 0, role: .prompt, text: "why does launchd refuse")
+    try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 1,
+                      messageIndex: 2, role: .prompt, text: "does launchd log the reason")
+    store.rebuildPassages(items: try EmbeddableCorpus.gatherPassages(database),
+                          passagesHash: "h1")
+    let hits = PassageQueries.search(query: "launchd",
+                                     scope: SearchScope(visibleNodeIDs: [node.id]),
+                                     store: store, database)
+    #expect(hits.count == 2)
+  }
+
+  /// Turn 0 exists in EVERY session, so a dedupe key of `turnIndex` alone would collapse two
+  /// unrelated conversations into one row. This pins that the key includes the event.
+  @Test func turnZeroOfTwoDifferentSessionsStaysTwoHits() throws {
+    let database = try makePassageStore()
+    let store = tempSearchStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let firstEvent = try insertSessionEvent(database, nodeID: node.id)
+    let secondEvent = try insertSessionEvent(database, nodeID: node.id)
+    try insertPassage(database, nodeID: node.id, eventID: firstEvent.id, turnIndex: 0,
+                      messageIndex: 0, role: .prompt, text: "why does launchd refuse the spawn")
+    try insertPassage(database, nodeID: node.id, eventID: secondEvent.id, turnIndex: 0,
+                      messageIndex: 0, role: .prompt, text: "launchd again, a different session")
+    store.rebuildPassages(items: try EmbeddableCorpus.gatherPassages(database),
+                          passagesHash: "h1")
+    let hits = PassageQueries.search(query: "launchd",
+                                     scope: SearchScope(visibleNodeIDs: [node.id]),
+                                     store: store, database)
+    #expect(hits.count == 2)
+  }
+
+  /// The last line of grounding defense. A passage deleted from canonical after the index was built
+  /// must not surface, even though its index row still matches.
+  @Test func aPassageDeletedFromCanonicalDoesNotSurface() throws {
+    let database = try makePassageStore()
+    let store = tempSearchStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id)
+    let passage = try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                                   messageIndex: 0, role: .prompt,
+                                   text: "why does launchd refuse the spawn")
+    store.rebuildPassages(items: try EmbeddableCorpus.gatherPassages(database),
+                          passagesHash: "h1")
+    try database.write { database in
+      try Passage.where { $0.id.eq(passage.id) }.delete().execute(database)
+    }
+
+    let hits = PassageQueries.search(query: "launchd",
+                                     scope: SearchScope(visibleNodeIDs: [node.id]),
+                                     store: store, database)
+    #expect(hits.isEmpty)
+  }
+
+  /// Focus muting is applied after the index, like every other search path.
+  @Test func aMutedNodesPassagesAreFilteredOut() throws {
+    let database = try makePassageStore()
+    let store = tempSearchStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id)
+    try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                      messageIndex: 0, role: .prompt, text: "why does launchd refuse")
+    store.rebuildPassages(items: try EmbeddableCorpus.gatherPassages(database),
+                          passagesHash: "h1")
+    #expect(PassageQueries.search(query: "launchd", scope: SearchScope(visibleNodeIDs: []),
+                                  store: store, database).isEmpty)
+  }
+
+  @Test func theSnippetHighlightsWhyTheRowMatched() throws {
+    let database = try makePassageStore()
+    let store = tempSearchStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id)
+    try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                      messageIndex: 0, role: .prompt,
+                      text: "why does launchd refuse the spawn")
+    store.rebuildPassages(items: try EmbeddableCorpus.gatherPassages(database),
+                          passagesHash: "h1")
+    let hits = PassageQueries.search(query: "launchd",
+                                     scope: SearchScope(visibleNodeIDs: [node.id]),
+                                     store: store, database)
+    #expect(hits.first?.snippet.match.isEmpty == false)
+  }
 }
