@@ -30,9 +30,34 @@ private func makeTemporaryDirectory() throws -> URL {
   #expect(StoreRelocator.preflight(source: source, destination: occupied)
           == .destinationNotEmpty)
 
-  // A destination that does not exist yet is fine — the panel's "New Folder" produces exactly this.
-  let fresh = try makeTemporaryDirectory().appendingPathComponent("Pensieve", isDirectory: true)
+  // A destination path that does not exist yet is fine.
+  let freshParent = try makeTemporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: freshParent) }
+  let fresh = freshParent.appendingPathComponent("Pensieve", isDirectory: true)
   #expect(StoreRelocator.preflight(source: source, destination: fresh) == nil)
+}
+
+/// `FileManager.copyItem(at:to:)` throws whenever `to` already exists, in ANY form — not just a
+/// non-empty directory. An existing EMPTY directory (e.g. one just made via a save panel's
+/// "New Folder") and an existing regular file must each be refused too, and each pre-existing path
+/// must be left completely untouched by preflight itself (a pure, read-only check).
+@Test func preflightRefusesAnExistingEmptyDirectoryAndAnExistingRegularFile() throws {
+  let source = try makeTemporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: source) }
+
+  let emptyDirectory = try makeTemporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: emptyDirectory) }
+  #expect(StoreRelocator.preflight(source: source, destination: emptyDirectory)
+          == .destinationAlreadyExists)
+  #expect(FileManager.default.fileExists(atPath: emptyDirectory.path))
+
+  let regularFileParent = try makeTemporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: regularFileParent) }
+  let regularFile = regularFileParent.appendingPathComponent("Pensieve")
+  try Data("not a directory".utf8).write(to: regularFile)
+  #expect(StoreRelocator.preflight(source: source, destination: regularFile)
+          == .destinationNotADirectory)
+  #expect(FileManager.default.fileExists(atPath: regularFile.path))
 }
 
 /// Builds a realistic source: a canonical store with a known event count, a spool, and a
@@ -58,13 +83,14 @@ private func makePopulatedSource() throws -> URL {
 
 @Test func relocationMovesVerifiesCommitsAndRecycles() async throws {
   let source = try makePopulatedSource()
-  let destination = try makeTemporaryDirectory()
-    .appendingPathComponent("Pensieve", isDirectory: true)
+  let destinationParent = try makeTemporaryDirectory()
+  let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
   let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
   defer {
     try? FileManager.default.removeItem(at: source)
+    try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
   }
 
@@ -85,19 +111,38 @@ private func makePopulatedSource() throws -> URL {
   #expect(recycled.withLock { $0 } == true)
   #expect(report.oldFolderRecycled == true)
   #expect(report.movedBytes > 0)
+  #expect(report.recoveryIncomplete == false)
+}
+
+/// Asserts `operation` throws `RelocationError.verificationFailed`, ignoring the associated
+/// message (which embeds dynamic counts) — pinning the CASE, not just `RelocationError.self`,
+/// which any other case (e.g. `.lockUnavailable`) would also satisfy vacuously.
+private func expectVerificationFailed(_ operation: () async throws -> Void) async {
+  do {
+    try await operation()
+    Issue.record("expected .verificationFailed, but no error was thrown")
+  } catch let error as RelocationError {
+    guard case .verificationFailed = error else {
+      Issue.record("expected .verificationFailed, got \(error)")
+      return
+    }
+  } catch {
+    Issue.record("expected RelocationError.verificationFailed, got \(error)")
+  }
 }
 
 /// The commit point is the ONLY point of no return. A failure before it must leave the defaults
 /// key unwritten and the source intact, so the user's install is exactly as it was.
 @Test func aFailedVerificationLeavesNothingCommitted() async throws {
   let source = try makePopulatedSource()
-  let destination = try makeTemporaryDirectory()
-    .appendingPathComponent("Pensieve", isDirectory: true)
+  let destinationParent = try makeTemporaryDirectory()
+  let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
   let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
   defer {
     try? FileManager.default.removeItem(at: source)
+    try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
   }
 
@@ -107,7 +152,7 @@ private func makePopulatedSource() throws -> URL {
   // Corrupt the copy between the copy and the verification.
   relocator.corruptCopyForTesting = true
 
-  await #expect(throws: RelocationError.self) {
+  await expectVerificationFailed {
     _ = try await relocator.run(progress: { _ in })
   }
 
@@ -116,17 +161,114 @@ private func makePopulatedSource() throws -> URL {
   #expect(!FileManager.default.fileExists(atPath: destination.path))
 }
 
-/// The reason the verified-move story was chosen over the cheaper one: a git hook that fires
-/// during the copy writes to the OLD spool, and that row must still arrive.
-@Test func aRowWrittenDuringTheWindowIsRecovered() async throws {
+/// Capture hooks take no lock, so `capture.sqlite`/`-wal` can be copied mid-write. A torn/corrupt
+/// spool copy must fail verification too — before this fix only the canonical event count was
+/// checked, so a corrupt spool would still commit and become the live capture store.
+@Test func aCorruptSpoolCopyFailsVerification() async throws {
   let source = try makePopulatedSource()
-  let destination = try makeTemporaryDirectory()
-    .appendingPathComponent("Pensieve", isDirectory: true)
+  let destinationParent = try makeTemporaryDirectory()
+  let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
   let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
   defer {
     try? FileManager.default.removeItem(at: source)
+    try? FileManager.default.removeItem(at: destinationParent)
+    try? FileManager.default.removeItem(at: anchor)
+  }
+
+  var relocator = StoreRelocator(
+    source: source, destination: destination, anchor: anchor, defaults: defaults,
+    recycle: { _ in Issue.record("must not recycle after a failed verification"); return false })
+  relocator.afterCopyForTesting = { _ in
+    try Data("not a sqlite file".utf8).write(to: PensievePaths.captureURL(in: destination))
+  }
+
+  await expectVerificationFailed {
+    _ = try await relocator.run(progress: { _ in })
+  }
+
+  #expect(defaults.string(forKey: PensieveDefaults.customSupportRootKey) == nil)
+  #expect(FileManager.default.fileExists(atPath: PensievePaths.canonicalURL(in: source).path))
+  #expect(!FileManager.default.fileExists(atPath: destination.path))
+}
+
+/// The false-positive this closes: a fresh install relocated before its first capture has a
+/// migrated but EMPTY (0-event) canonical store. If verification ever creates a missing file on
+/// demand, a copy that dropped its canonical file entirely would "verify" clean (0 == 0) instead
+/// of failing — a missing file must always mean "the copy is missing it", never "zero events".
+@Test func aMissingCopiedCanonicalFileFailsVerificationRatherThanVacuouslyMatching() async throws {
+  let source = try makeTemporaryDirectory()
+  _ = try openCanonicalDatabase(at: PensievePaths.canonicalURL(in: source))   // migrated, 0 events
+  _ = try CaptureSpool(at: PensievePaths.captureURL(in: source))
+  let destinationParent = try makeTemporaryDirectory()
+  let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
+  let anchor = FileManager.default.temporaryDirectory
+    .appendingPathComponent("relocation-\(UUID().uuidString).lock")
+  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  defer {
+    try? FileManager.default.removeItem(at: source)
+    try? FileManager.default.removeItem(at: destinationParent)
+    try? FileManager.default.removeItem(at: anchor)
+  }
+
+  var relocator = StoreRelocator(
+    source: source, destination: destination, anchor: anchor, defaults: defaults,
+    recycle: { _ in Issue.record("must not recycle after a failed verification"); return false })
+  relocator.afterCopyForTesting = { _ in
+    try FileManager.default.removeItem(at: PensievePaths.canonicalURL(in: destination))
+  }
+
+  await expectVerificationFailed {
+    _ = try await relocator.run(progress: { _ in })
+  }
+
+  #expect(defaults.string(forKey: PensieveDefaults.customSupportRootKey) == nil)
+  #expect(FileManager.default.fileExists(atPath: PensievePaths.canonicalURL(in: source).path))
+  #expect(!FileManager.default.fileExists(atPath: destination.path))
+}
+
+/// A row `Ingester.drain()` cannot ingest (malformed payload) is left unmarked in the old spool —
+/// that must never be silently reported as "0 recovered, all clear", and the old folder must not
+/// be recycled while data may still be stranded there.
+@Test func anUnrecoverableRowBlocksRecycling() async throws {
+  let source = try makePopulatedSource()
+  let destinationParent = try makeTemporaryDirectory()
+  let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
+  let anchor = FileManager.default.temporaryDirectory
+    .appendingPathComponent("relocation-\(UUID().uuidString).lock")
+  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  defer {
+    try? FileManager.default.removeItem(at: source)
+    try? FileManager.default.removeItem(at: destinationParent)
+    try? FileManager.default.removeItem(at: anchor)
+  }
+
+  var relocator = StoreRelocator(
+    source: source, destination: destination, anchor: anchor, defaults: defaults,
+    recycle: { _ in Issue.record("must not recycle when recovery is incomplete"); return true })
+  relocator.afterCopyForTesting = { oldSource in
+    let spool = try CaptureSpool(at: PensievePaths.captureURL(in: oldSource))
+    try spool.append(kind: CaptureKind.gitCommit, payload: "not json")
+  }
+
+  let report = try await relocator.run(progress: { _ in })
+  #expect(report.recoveryIncomplete == true)
+  #expect(report.oldFolderRecycled == false)
+}
+
+/// The reason the verified-move story was chosen over the cheaper one: a git hook that fires
+/// during the copy writes to the OLD spool, and that row must still arrive.
+@Test func aRowWrittenDuringTheWindowIsRecovered() async throws {
+  let source = try makePopulatedSource()
+  let destinationParent = try makeTemporaryDirectory()
+  let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
+  let anchor = FileManager.default.temporaryDirectory
+    .appendingPathComponent("relocation-\(UUID().uuidString).lock")
+  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  defer {
+    try? FileManager.default.removeItem(at: source)
+    try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
   }
 
@@ -145,4 +287,5 @@ private func makePopulatedSource() throws -> URL {
 
   let report = try await relocator.run(progress: { _ in })
   #expect(report.recoveredRows == 1)
+  #expect(report.recoveryIncomplete == false)
 }

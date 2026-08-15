@@ -62,6 +62,14 @@ public final class CaptureSpool: Sendable {
     }
   }
 
+  /// Explicitly checkpoints and closes the underlying connection. Not needed on the ordinary
+  /// capture path — a `CaptureSpool` that goes out of scope closes on deinit too, and GRDB
+  /// documents that as sufficient for most callers — but `StoreRelocator` copies this file at the
+  /// filesystem level immediately after opening a spool in WAL mode, and that copy's correctness
+  /// depends on the WAL being folded back into the main file first, which deinit timing alone does
+  /// not promise.
+  func close() throws { try dbQueue.close() }
+
   /// Newest capture timestamp across ALL rows (including already-ingested), or nil if empty.
   /// This is the real-time "last capture" heartbeat and must survive ingestion.
   public func lastCaptureAt() throws -> Date? {
