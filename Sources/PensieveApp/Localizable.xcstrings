@@ -1,215 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Background sync" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hintergrund-Synchronisierung"
-          }
-        }
-      }
-    },
-    "Building the search index…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suchindex wird erstellt…"
-          }
-        }
-      }
-    },
-    "Results" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ergebnisse"
-          }
-        }
-      }
-    },
-    "The search index has not been built yet." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Suchindex wurde noch nicht erstellt."
-          }
-        }
-      }
-    },
-    "Top Hit" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bester Treffer"
-          }
-        }
-      }
-    },
-    "A file is in the way" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eine Datei blockiert den Pfad"
-          }
-        }
-      }
-    },
-    "Command-line tool" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Befehlszeilenprogramm"
-          }
-        }
-      }
-    },
-    "Enabled" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktiviert"
-          }
-        }
-      }
-    },
-    "Install command-line tool" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Befehlszeilenprogramm installieren"
-          }
-        }
-      }
-    },
-    "Points elsewhere" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verweist woanders hin"
-          }
-        }
-      }
-    },
-    "Repair" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reparieren"
-          }
-        }
-      }
-    },
-    "Replace" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ersetzen"
-          }
-        }
-      }
-    },
-    "Replace existing binary" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vorhandene Datei ersetzen"
-          }
-        }
-      }
-    },
-    "Replace the pensieve binary in ~/.local/bin with a link to the app’s copy?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die pensieve-Datei in ~/.local/bin durch einen Verweis auf die Kopie der App ersetzen?"
-          }
-        }
-      }
-    },
-    "Keep Pensieve synced in the background" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pensieve im Hintergrund synchronisieren"
-          }
-        }
-      }
-    },
-    "Needs approval" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Genehmigung erforderlich"
-          }
-        }
-      }
-    },
-    "Not found" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht gefunden"
-          }
-        }
-      }
-    },
-    "Off" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aus"
-          }
-        }
-      }
-    },
-    "Open Login Items Settings" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anmeldeobjekte-Einstellungen öffnen"
-          }
-        }
-      }
-    },
     " · captured %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -235,6 +26,23 @@
       "extractionState" : "manual",
       "shouldTranslate" : false
     },
+    "%lld closed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld abgeschlossen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld closed"
+          }
+        }
+      }
+    },
     "%lld loose ends" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -248,6 +56,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$(count)lld loose ends"
+          }
+        }
+      }
+    },
+    "%lld matches · searching transcripts %lld/%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Treffer · Transkripte werden durchsucht %2$lld/%3$lld"
           }
         }
       }
@@ -282,6 +101,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld new"
+          }
+        }
+      }
+    },
+    "%lld of %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld von %2$lld"
           }
         }
       }
@@ -350,6 +180,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$(count)lld to review"
+          }
+        }
+      }
+    },
+    "A file is in the way" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Datei blockiert den Pfad"
           }
         }
       }
@@ -448,6 +289,23 @@
         }
       }
     },
+    "archive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archiviert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archive"
+          }
+        }
+      }
+    },
     "Archive" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -481,6 +339,17 @@
         }
       }
     },
+    "Background sync" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hintergrund-Synchronisierung"
+          }
+        }
+      }
+    },
     "Base URL" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -488,6 +357,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Basis-URL"
+          }
+        }
+      }
+    },
+    "Building the search index…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suchindex wird erstellt…"
+          }
+        }
+      }
+    },
+    "Can’t delete “%@”" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ kann nicht gelöscht werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can’t delete “%@”"
           }
         }
       }
@@ -516,23 +413,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Canonical store"
-          }
-        }
-      }
-    },
-    "Can’t delete “%@”" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ kann nicht gelöscht werden"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Can’t delete “%@”"
           }
         }
       }
@@ -571,7 +451,18 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "erfasst"
+            "value" : "Erfassung läuft"
+          }
+        }
+      }
+    },
+    "Caution" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Achtung"
           }
         }
       }
@@ -583,6 +474,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Typ ändern"
+          }
+        }
+      }
+    },
+    "Claude" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude"
           }
         }
       }
@@ -636,6 +538,69 @@
         }
       }
     },
+    "Close %lld loose ends?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Ein loses Ende abschließen?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld lose Enden abschließen?"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Close one loose end?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Close %lld loose ends?"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Close All Loose Ends" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle losen Enden abschließen"
+          }
+        }
+      }
+    },
+    "Close all open loose ends…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle offenen losen Enden abschließen…"
+          }
+        }
+      }
+    },
     "Cloud (API)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -671,6 +636,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Farbe"
+          }
+        }
+      }
+    },
+    "Command" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehl"
+          }
+        }
+      }
+    },
+    "Command-line tool" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehlszeilenprogramm"
+          }
+        }
+      }
+    },
+    "Completed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abgeschlossen"
           }
         }
       }
@@ -738,23 +736,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anbieter nicht erreichbar. Schlüssel und Basis-URL prüfen."
-          }
-        }
-      }
-    },
-    "archive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "archiviert"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "archive"
           }
         }
       }
@@ -855,7 +836,24 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Löschen …"
+            "value" : "Löschen…"
+          }
+        }
+      }
+    },
+    "Description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschreibung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Description"
           }
         }
       }
@@ -871,6 +869,34 @@
         }
       }
     },
+    "Done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig"
+          }
+        }
+      }
+    },
+    "Done · %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erledigt · %lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done · %lld"
+          }
+        }
+      }
+    },
     "Dormant" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -878,6 +904,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ruhend"
+          }
+        }
+      }
+    },
+    "Drop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verwerfen"
           }
         }
       }
@@ -899,7 +936,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bearbeiten …"
+            "value" : "Bearbeiten…"
           }
         }
       }
@@ -911,6 +948,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Emoji"
+          }
+        }
+      }
+    },
+    "Enabled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiviert"
           }
         }
       }
@@ -932,7 +980,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wird abgerufen …"
+            "value" : "Wird abgerufen…"
           }
         }
       }
@@ -992,61 +1040,6 @@
         }
       }
     },
-    "Done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fertig"
-          }
-        }
-      }
-    },
-    "No matches" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Treffer"
-          }
-        }
-      }
-    },
-    "Search Everything" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alles durchsuchen"
-          }
-        }
-      }
-    },
-    "%lld of %lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld von %2$lld"
-          }
-        }
-      }
-    },
-    "%lld matches · searching transcripts %lld/%lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld Treffer · Transkripte werden durchsucht %2$lld/%3$lld"
-          }
-        }
-      }
-    },
     "Foundation Models" : {
       "localizations" : {
         "de" : {
@@ -1063,7 +1056,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Foundation Models ist auf diesem Mac nicht verfügbar – stattdessen wird claude -p verwendet."
+            "value" : "Foundation Models ist auf diesem Mac nicht verfügbar—stattdessen wird claude -p verwendet."
           }
         }
       }
@@ -1092,6 +1085,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Allgemein"
+          }
+        }
+      }
+    },
+    "Generate description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschreibung erstellen"
+          }
+        }
+      }
+    },
+    "Generated summaries are translated on this device. Captured text, cited quotes and transcripts are never translated." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generierte Zusammenfassungen werden auf diesem Gerät übersetzt. Erfasste Texte, zitierte Passagen und Transkripte werden nie übersetzt."
           }
         }
       }
@@ -1146,6 +1161,17 @@
         }
       }
     },
+    "Harness" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Harness"
+          }
+        }
+      }
+    },
     "Hide Dock icon (menu bar only)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1190,6 +1216,17 @@
         }
       }
     },
+    "Important" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wichtig"
+          }
+        }
+      }
+    },
     "Include Archived & Closed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1197,264 +1234,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Archivierte und Abgeschlossene einschließen"
-          }
-        }
-      }
-    },
-    "%lld closed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld abgeschlossen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld closed"
-          }
-        }
-      }
-    },
-    "Completed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abgeschlossen"
-          }
-        }
-      }
-    },
-    "Mark as done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Als erledigt markieren"
-          }
-        }
-      }
-    },
-    "Mark as Done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Als erledigt markieren"
-          }
-        }
-      }
-    },
-    "Mark as dropped" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Als verworfen markieren"
-          }
-        }
-      }
-    },
-    "Drop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verwerfen"
-          }
-        }
-      }
-    },
-    "Reopen" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wieder öffnen"
-          }
-        }
-      }
-    },
-    "Resolve Loose End" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loses Ende abschließen"
-          }
-        }
-      }
-    },
-    "Loose end done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erledigt"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
-          }
-        }
-      }
-    },
-    "Loose end dropped" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verworfen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dropped"
-          }
-        }
-      }
-    },
-    "No open loose ends" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine losen Enden offen"
-          }
-        }
-      }
-    },
-    "Nothing completed yet" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Noch nichts abgeschlossen"
-          }
-        }
-      }
-    },
-    "Done · %lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erledigt · %lld"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done · %lld"
-          }
-        }
-      }
-    },
-    "Close all open loose ends…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle offenen losen Enden abschließen …"
-          }
-        }
-      }
-    },
-    "Close %lld loose ends?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Ein loses Ende abschließen?"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld lose Enden abschließen?"
-                }
-              }
-            }
-          }
-        },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Close one loose end?"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Close %lld loose ends?"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "They can be reopened individually or with ⌘Z." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sie lassen sich einzeln oder mit ⌘Z wieder öffnen."
-          }
-        }
-      }
-    },
-    "Close All Loose Ends" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle losen Enden abschließen"
-          }
-        }
-      }
-    },
-    "this node" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dieser Knoten"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "this node"
           }
         }
       }
@@ -1477,6 +1256,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Inspektor"
+          }
+        }
+      }
+    },
+    "Install command-line tool" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehlszeilenprogramm installieren"
           }
         }
       }
@@ -1509,13 +1299,24 @@
         }
       }
     },
+    "Interrupted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterbrochen"
+          }
+        }
+      }
+    },
     "It may have changed since this menu opened. The view has been refreshed — try again." : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Es hat sich möglicherweise geändert, seit dieses Menü geöffnet wurde. Die Ansicht wurde aktualisiert — bitte erneut versuchen."
+            "value" : "Es hat sich möglicherweise geändert, seit dieses Menü geöffnet wurde. Die Ansicht wurde aktualisiert—bitte erneut versuchen."
           }
         },
         "en" : {
@@ -1539,6 +1340,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "It still has captured sources or activity that would return on the next sync."
+          }
+        }
+      }
+    },
+    "Keep Pensieve synced in the background" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve im Hintergrund synchronisieren"
           }
         }
       }
@@ -1622,6 +1434,40 @@
         }
       }
     },
+    "Loose end done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erledigt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "Loose end dropped" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verworfen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dropped"
+          }
+        }
+      }
+    },
     "Loose Ends" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1640,6 +1486,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als echtes loses Ende markieren"
+          }
+        }
+      }
+    },
+    "Mark as done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als erledigt markieren"
+          }
+        }
+      }
+    },
+    "Mark as Done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als erledigt markieren"
+          }
+        }
+      }
+    },
+    "Mark as dropped" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als verworfen markieren"
           }
         }
       }
@@ -1706,7 +1585,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zusammenführen mit …"
+            "value" : "Zusammenführen mit…"
           }
         }
       }
@@ -1756,7 +1635,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verschieben nach …"
+            "value" : "Verschieben nach…"
           }
         }
       }
@@ -1794,6 +1673,17 @@
         }
       }
     },
+    "Needs approval" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Genehmigung erforderlich"
+          }
+        }
+      }
+    },
     "Never" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1807,57 +1697,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Never"
-          }
-        }
-      }
-    },
-    "Description" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beschreibung"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Description"
-          }
-        }
-      }
-    },
-    "Suggest name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Namen vorschlagen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suggest name"
-          }
-        }
-      }
-    },
-    "What is this about?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Worum geht es?"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What is this about?"
           }
         }
       }
@@ -1879,7 +1718,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Neues Unterelement …"
+            "value" : "Neues Unterelement…"
           }
         }
       }
@@ -1930,6 +1769,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine erfasste Aktivität."
+          }
+        }
+      }
+    },
+    "No matches" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Treffer"
+          }
+        }
+      }
+    },
+    "No open loose ends" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine losen Enden offen"
           }
         }
       }
@@ -1990,6 +1851,17 @@
         }
       }
     },
+    "Not found" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht gefunden"
+          }
+        }
+      }
+    },
     "Not installed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2029,13 +1901,35 @@
         }
       }
     },
+    "Note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinweis"
+          }
+        }
+      }
+    },
+    "Nothing completed yet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nichts abgeschlossen"
+          }
+        }
+      }
+    },
     "Nothing here" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nichts hier"
+            "value" : "Hier ist noch nichts"
           }
         }
       }
@@ -2046,7 +1940,29 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nichts in Warteschlange"
+            "value" : "Nichts in der Warteschlange"
+          }
+        }
+      }
+    },
+    "Nothing to summarize" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts zusammenzufassen"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus"
           }
         }
       }
@@ -2090,6 +2006,17 @@
         }
       }
     },
+    "Open Login Items Settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldeobjekte-Einstellungen öffnen"
+          }
+        }
+      }
+    },
     "Open Logs Folder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2125,6 +2052,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OpenAI-kompatibel"
+          }
+        }
+      }
+    },
+    "Output" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgabe"
           }
         }
       }
@@ -2169,6 +2107,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wählt die beste Option auf dem Gerät – Foundation Models, falls verfügbar, sonst die Claude CLI."
+          }
+        }
+      }
+    },
+    "Points elsewhere" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verweist woanders hin"
+          }
+        }
+      }
+    },
+    "Prepare translation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung vorbereiten"
           }
         }
       }
@@ -2294,6 +2254,17 @@
         }
       }
     },
+    "Regenerate description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschreibung neu erstellen"
+          }
+        }
+      }
+    },
     "rename" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2318,6 +2289,83 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Umbenennen"
+          }
+        }
+      }
+    },
+    "Reopen" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wieder öffnen"
+          }
+        }
+      }
+    },
+    "Repair" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reparieren"
+          }
+        }
+      }
+    },
+    "Replace" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ersetzen"
+          }
+        }
+      }
+    },
+    "Replace existing binary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorhandene Datei ersetzen"
+          }
+        }
+      }
+    },
+    "Replace the pensieve binary in ~/.local/bin with a link to the app’s copy?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die pensieve-Datei in ~/.local/bin durch einen Verweis auf die Kopie der App ersetzen?"
+          }
+        }
+      }
+    },
+    "Resolve Loose End" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loses Ende abschließen"
+          }
+        }
+      }
+    },
+    "Results" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ergebnisse"
           }
         }
       }
@@ -2389,6 +2437,17 @@
         }
       }
     },
+    "Search Everything" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles durchsuchen"
+          }
+        }
+      }
+    },
     "Search symbols" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2428,13 +2487,24 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rückblick teilen …"
+            "value" : "Rückblick teilen…"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Share Recall…"
+          }
+        }
+      }
+    },
+    "Shell" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell"
           }
         }
       }
@@ -2534,6 +2604,17 @@
         }
       }
     },
+    "Skill" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill"
+          }
+        }
+      }
+    },
     "Smart Lists" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2586,6 +2667,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Strang"
+          }
+        }
+      }
+    },
+    "Suggest name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Namen vorschlagen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggest name"
           }
         }
       }
@@ -2646,6 +2744,28 @@
         }
       }
     },
+    "System" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        }
+      }
+    },
+    "System Note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Systemhinweis"
+          }
+        }
+      }
+    },
     "Task" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2653,6 +2773,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufgabe"
+          }
+        }
+      }
+    },
+    "Task Update" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufgaben-Update"
+          }
+        }
+      }
+    },
+    "The search index has not been built yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Suchindex wurde noch nicht erstellt."
           }
         }
       }
@@ -2670,6 +2812,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "the top level"
+          }
+        }
+      }
+    },
+    "They can be reopened individually or with ⌘Z." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie lassen sich einzeln oder mit ⌘Z wieder öffnen."
           }
         }
       }
@@ -2708,6 +2861,56 @@
         }
       }
     },
+    "this node" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dieser Knoten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "this node"
+          }
+        }
+      }
+    },
+    "Tool Error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkzeugfehler"
+          }
+        }
+      }
+    },
+    "Tool Use" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkzeugaufruf"
+          }
+        }
+      }
+    },
+    "Top Hit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bester Treffer"
+          }
+        }
+      }
+    },
     "Top level" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2730,6 +2933,50 @@
         }
       }
     },
+    "Translate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen"
+          }
+        }
+      }
+    },
+    "Translate generated text to" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generierte Texte übersetzen nach"
+          }
+        }
+      }
+    },
+    "Translation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung"
+          }
+        }
+      }
+    },
+    "Translation requires macOS 26 or later." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung erfordert macOS 26 oder neuer."
+          }
+        }
+      }
+    },
     "Type" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2737,6 +2984,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Typ"
+          }
+        }
+      }
+    },
+    "unarchive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "wiederhergestellt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unarchive"
           }
         }
       }
@@ -2759,23 +3023,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht festgelegt"
-          }
-        }
-      }
-    },
-    "unarchive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "wiederhergestellt"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "unarchive"
           }
         }
       }
@@ -2819,6 +3066,23 @@
         }
       }
     },
+    "What is this about?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Worum geht es?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What is this about?"
+          }
+        }
+      }
+    },
     "What's Next" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2841,182 +3105,6 @@
         }
       }
     },
-    "Generate description" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beschreibung erstellen"
-          }
-        }
-      }
-    },
-    "Regenerate description" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beschreibung neu erstellen"
-          }
-        }
-      }
-    },
-    "Nothing to summarize" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts zusammenzufassen"
-          }
-        }
-      }
-    },
-    "Caution" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Achtung"
-          }
-        }
-      }
-    },
-    "Important" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wichtig"
-          }
-        }
-      }
-    },
-    "Note" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hinweis"
-          }
-        }
-      }
-    },
-    "Command" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Befehl"
-          }
-        }
-      }
-    },
-    "Task Update" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aufgaben-Update"
-          }
-        }
-      }
-    },
-    "System Note" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Systemhinweis"
-          }
-        }
-      }
-    },
-    "Output" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ausgabe"
-          }
-        }
-      }
-    },
-    "Shell" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Shell"
-          }
-        }
-      }
-    },
-    "Tool Use" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Werkzeugaufruf"
-          }
-        }
-      }
-    },
-    "Tool Error" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Werkzeugfehler"
-          }
-        }
-      }
-    },
-    "Interrupted" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unterbrochen"
-          }
-        }
-      }
-    },
-    "Skill" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skill"
-          }
-        }
-      }
-    },
-    "Harness" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Harness"
-          }
-        }
-      }
-    },
     "You" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3024,94 +3112,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Du"
-          }
-        }
-      }
-    },
-    "Claude" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude"
-          }
-        }
-      }
-    },
-    "System" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "System"
-          }
-        }
-      }
-    },
-    "Translation" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung"
-          }
-        }
-      }
-    },
-    "Translate" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzen"
-          }
-        }
-      }
-    },
-    "Translate generated text to" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generierte Texte übersetzen nach"
-          }
-        }
-      }
-    },
-    "Prepare translation" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung vorbereiten"
-          }
-        }
-      }
-    },
-    "Translation requires macOS 26 or later." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung erfordert macOS 26 oder neuer."
-          }
-        }
-      }
-    },
-    "Generated summaries are translated on this device. Captured text, cited quotes and transcripts are never translated." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generierte Zusammenfassungen werden auf diesem Gerät übersetzt. Erfasste Texte, zitierte Passagen und Transkripte werden nie übersetzt."
           }
         }
       }
