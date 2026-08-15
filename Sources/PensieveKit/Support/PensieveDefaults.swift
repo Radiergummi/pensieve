@@ -24,8 +24,14 @@ public enum PensieveDefaults {
   /// app could write the custom-support-root key through `.standard` and fail to read it back
   /// through the suite instance, leaving a relocation invisible to the very process that performed
   /// it. The CLI and the launchd helper have different bundle identifiers and are unaffected.
-  public static func shared() -> UserDefaults {
-    if Bundle.main.bundleIdentifier == appDomain { return .standard }
+  ///
+  /// `bundleIdentifier` is injectable, separated from reading `Bundle.main` for the same reason
+  /// `supportDirectory(customRoot:)` and `indexURL(named:storeOverride:support:)` are: the real
+  /// source is process-global (the running binary's own Info.plist), which under `swift test` can
+  /// never equal `appDomain` — only the built app target's Info.plist does — so a test that only
+  /// ever called the zero-argument form could never exercise the `.standard` branch at all.
+  public static func shared(bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> UserDefaults {
+    if bundleIdentifier == appDomain { return .standard }
     return UserDefaults(suiteName: appDomain) ?? .standard
   }
 }
