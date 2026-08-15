@@ -184,6 +184,26 @@ public enum SessionContextQueries {
                                                  isCited: $0.isCited, isUserPrompt: $0.isUserPrompt) })
   }
 
+  /// `recall`, keyed by a passage instead of a loose end. Reuses `RecallBundle` unchanged: the shape
+  /// is already "a cited thing, its verbatim text, and the window around it", and a passage is
+  /// exactly that. `looseEndText` carries the node-facing label and `quote` the verbatim passage, so
+  /// a client that already handles loose-end recall needs no new field.
+  public static func recall(passageID: UUID, radius: Int,
+                            _ database: any DatabaseReader) throws -> RecallBundle? {
+    guard let passage = try database.read({ database in
+      try Passage.where { $0.id.eq(passageID) }.fetchOne(database)
+    }) else { return nil }
+    let window = try PassageProvenance.window(database, passage: passage, radius: radius)
+    return RecallBundle(
+      looseEndText: passage.role.recallTitle,
+      quote: passage.text,
+      transcriptAvailable: window.transcriptAvailable,
+      sessionOccurredAt: window.sourceEvent.occurredAt,
+      messages: window.messages.map { RecallMessage(index: $0.index, role: $0.role, text: $0.text,
+                                                    isCited: $0.isCited,
+                                                    isUserPrompt: $0.isUserPrompt) })
+  }
+
   /// Races `narrate` against a timeout; returns nil if the model doesn't answer in time (FM
   /// cold-start can be ≫ a couple seconds and the caller is blocking on the result).
   private static func narrateWithin(_ seconds: Double, builder: SummaryBuilder,

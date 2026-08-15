@@ -40,7 +40,10 @@ public struct SearchScope: Sendable {
 public enum SearchQueries {
   public static let minQueryLength = 2
   public static let resultCap = 50
-  private static let maxFetch = 2000
+  /// Hard cap on the grow-`k` loop. Internal rather than private because `PassageQueries` runs the
+  /// same loop over its own table and must stop at the same place — a second `2000` there is a
+  /// magic number that would silently diverge.
+  static let maxFetch = 2000
 
   public static func search(query rawQuery: String,
                             file: String? = nil,
@@ -95,15 +98,34 @@ public enum SearchQueries {
                                               _ database: any DatabaseReader) async -> [SearchHit] {
     let hits = search(query: rawQuery, file: file, scope: scope, store: store,
                       translations: translations, language: language, database)
-    guard hits.isEmpty, !language.isEmpty, let translator else { return hits }
+    guard hits.isEmpty,
+          let english = await englishRetryQuery(for: rawQuery, language: language,
+                                                translator: translator)
+    else { return hits }
+    return search(query: english, file: file, scope: scope, store: store,
+                  translations: translations, language: language, database)
+  }
+
+  /// The English query to retry with, or nil when a retry is pointless or impossible: translation
+  /// off, no translator, a query too short to translate meaningfully, a translation that failed, or
+  /// one that came back unchanged.
+  ///
+  /// Split out so every retrieval path can apply the SAME retry policy — the passage path needs it
+  /// at least as much as the ranked one, since transcripts are overwhelmingly English while the
+  /// query may not be. Deciding *when* to retry is the part that must not be reimplemented; the
+  /// two-line "run, and if empty run again" around it is each caller's own, and keeping it there is
+  /// what preserves the structural safety property: a retry can never regress a query that already
+  /// returned rows, because it only runs when the result was already empty.
+  public static func englishRetryQuery(for rawQuery: String, language: String,
+                                       translator: Translator?) async -> String? {
+    guard !language.isEmpty, let translator else { return nil }
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= minQueryLength,
           let english = await translator.translate(query, from: language,
                                                    to: TranslationTarget.sourceLanguage),
           english.caseInsensitiveCompare(query) != .orderedSame
-    else { return hits }
-    return search(query: english, file: file, scope: scope, store: store,
-                  translations: translations, language: language, database)
+    else { return nil }
+    return english
   }
 
   /// The node the user is most likely navigating to, selected by scanning the VISIBLE node set —

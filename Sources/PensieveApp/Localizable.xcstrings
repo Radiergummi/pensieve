@@ -3116,6 +3116,17 @@
         }
       }
     },
+    "From your conversations" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus deinen Gesprächen"
+          }
+        }
+      }
+    },
     "Ready to translate on this Mac." : {
       "extractionState" : "manual",
       "localizations" : {

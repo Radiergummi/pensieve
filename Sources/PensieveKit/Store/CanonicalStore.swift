@@ -186,4 +186,28 @@ private func registerRecentMigrations(on migrator: inout DatabaseMigrator) {
     // nothing filters on this column, it is only an ORDER BY key.
     try #sql(#"ALTER TABLE "looseEnds" ADD COLUMN "resolvedAt" TEXT"#).execute(database)
   }
+
+  migrator.registerMigration("v13-passages") { database in
+    // Additive: a new table only, no ALTER on an existing one, so every v4–v12 store opens
+    // unchanged. Both foreign keys CASCADE — a deleted node or a re-ingested event must not
+    // leave passages behind, because a passage whose anchor is gone can never be cited.
+    try #sql("""
+      CREATE TABLE "passages"(
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "nodeID" TEXT NOT NULL REFERENCES "nodes"("id") ON DELETE CASCADE,
+        "eventID" TEXT NOT NULL REFERENCES "events"("id") ON DELETE CASCADE,
+        "turnIndex" INTEGER NOT NULL,
+        "messageIndex" INTEGER NOT NULL,
+        "role" TEXT NOT NULL,
+        "text" TEXT NOT NULL,
+        "occurredAt" TEXT NOT NULL,
+        "createdAt" TEXT NOT NULL
+      ) STRICT
+      """).execute(database)
+    // The write path deletes by event before rewriting (idempotent re-ingest), and the corpus
+    // producer reads by node. Without these, both are full scans over the largest table in the
+    // store — and `looseEnds` already demonstrates the cost of a missing nodeID index.
+    try #sql(#"CREATE INDEX "idx_passages_event" ON "passages"("eventID")"#).execute(database)
+    try #sql(#"CREATE INDEX "idx_passages_node" ON "passages"("nodeID", "occurredAt")"#).execute(database)
+  }
 }

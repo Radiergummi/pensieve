@@ -158,9 +158,13 @@ final class AppModel {
   /// ⌘F search scope. `.all` opts archived nodes into results. Observable → drives the scope bar.
   enum SearchScope: Hashable { case active, all }
   var searchScope: SearchScope = .active
-  // All four are written by AppModel+Search.swift's runSearch()/clearSearch(), hence not private(set).
+  // All five are written by AppModel+Search.swift's runSearch()/clearSearch(), hence not private(set).
   /// The single ranked result list.
   var searchHits: [SearchHit] = []
+  /// Conversation-passage hits, rendered as their own "From your conversations" section below the
+  /// ranked list — a different FTS5 table with a different average document length, so its BM25
+  /// scores are not comparable to `searchHits`' and must never be interleaved with them.
+  var passageHits: [PassageHit] = []
   /// The node pinned above the list for guaranteed navigation. Selected by scanning the visible
   /// node set, NOT the capped list — see SearchQueries.topHit.
   var pinnedTopHit: SearchHit?
@@ -196,11 +200,6 @@ final class AppModel {
     guard let database else { return nil }
     return ProvenanceLoader(database: database)
   }()
-
-  /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
-  /// site that branches on search (the middle content, the refresh re-run, the detail one-home
-  /// override, clear-on-navigation) reads this, so the trimming rule can't drift.
-  var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
   private static let lastOpenedKey = "pensieve.lastOpenedAt"
 
@@ -372,11 +371,6 @@ final class AppModel {
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
 
-  /// Count of top-level project nodes, for the content-column header.
-  var projectCount: Int {
-    allNodes.filter { $0.parentID == nil && $0.kind == .project && $0.state == .active }.count
-  }
-
   /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
   func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
 
@@ -396,4 +390,8 @@ final class AppModel {
   // MARK: - Organizing writes
   // All of them — including the two modal commits — live in AppModel+Organizing.swift, alongside the
   // shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers.
+
+  // MARK: - Search · content header
+  // `isSearching` and `projectCount` live in AppModel+Search.swift / AppModel+Middle.swift — moved
+  // when the translation work pushed this file past the 400-line cap again. Stored state stays here.
 }

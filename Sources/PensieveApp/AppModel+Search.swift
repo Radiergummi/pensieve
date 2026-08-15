@@ -3,6 +3,11 @@ import Foundation
 import PensieveKit
 
 extension AppModel {
+  /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
+  /// site that branches on search (the middle content, the refresh re-run, the detail one-home
+  /// override, clear-on-navigation) reads this, so the trimming rule can't drift.
+  var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
   /// Index catch-up. Runs on launch + ⌘R **and** on every watch-driven refresh — the search index
   /// backs the only retrieval path, so anything the app just drained has to become findable without
   /// waiting for ⌘R or the 300 s agent, which the user may not even have approved.
@@ -38,7 +43,9 @@ extension AppModel {
       // each side's rebuild would then look like a corpus change to the other and undo it, forever.
       // `.production()` re-reads the target on every call (a Settings change lands without relaunch)
       // and already skips opening the translation store when the target is off.
-      SearchIndexer.production().sync(database)
+      let indexer = SearchIndexer.production()
+      indexer.sync(database)
+      indexer.syncPassages(database)
       // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
       // timeout is the whole reason this work is detached.
       let state = searchStore.state()
@@ -75,6 +82,7 @@ extension AppModel {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= SearchQueries.minQueryLength, let database else {
       searchHits = []
+      passageHits = []
       pinnedTopHit = nil
       expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
       return
@@ -98,6 +106,11 @@ extension AppModel {
     searchToken += 1
     let token = searchToken
     let store = searchStore
+    // Fully qualified: `AppModel.SearchScope` (the UI's active/all enum) shadows the Kit type of the
+    // same name inside this extension. Snapshotted once, before the Task, so the ranked search and
+    // the passage search (below) cannot see two different scopes if the user changes it mid-flight.
+    let scope = PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived,
+                                       includeClosed: includeClosed)
     // Pre-Task locals, read here on the main actor rather than inside the detached closure below.
     // Off means off: `translationStore`/`translator` are `lazy` and constructing either would open
     // a file/load a model, so they're touched only when a target is actually resolved.
@@ -105,18 +118,26 @@ extension AppModel {
     let translations = language.isEmpty ? nil : translationStore
     let translator = language.isEmpty ? nil : self.translator
     searchTask = Task { [weak self] in
-      let hits = await Task.detached {
-        // Fully qualified: `AppModel.SearchScope` (the UI's active/all enum) shadows the Kit type
-        // of the same name inside this extension.
+      let rankedHandle = Task.detached {
         await SearchQueries.searchTranslatingOnEmpty(
-          query: rawQuery,
-          scope: PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived,
-                                         includeClosed: includeClosed),
-          store: store, translations: translations, language: language, translator: translator,
+          query: rawQuery, scope: scope, store: store, translations: translations,
+          language: language, translator: translator, database)
+      }
+      // Same scope, same query, separate list — passage BM25 scores are not comparable to the
+      // ranked list's, so they are appended as their own section rather than merged. A second
+      // detached task, so both run concurrently rather than the passage read blocking behind the
+      // ranked one — and it takes the SAME English-retry wrapper, because transcripts are
+      // overwhelmingly English even when what you typed is not.
+      let passagesHandle = Task.detached {
+        await PassageQueries.searchTranslatingOnEmpty(
+          query: rawQuery, scope: scope, store: store, language: language, translator: translator,
           database)
-      }.value
+      }
+      let hits = await rankedHandle.value
+      let passages = await passagesHandle.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchHits = hits
+      self.passageHits = passages
     }
   }
 
@@ -136,6 +157,12 @@ extension AppModel {
     } else {
       selectSearchNode(hit.nodeID)
     }
+  }
+
+  /// A conversation-passage hit: like a node hit, drive the detail only. There is no cited row to
+  /// auto-expand — opening the transcript window in place is out of scope for this section.
+  func openPassage(_ hit: PassageHit) {
+    selectSearchNode(hit.nodeID)
   }
 
   /// A Spotlight/App-Intent loose-end open: resolve the loose end → its node (read-only lookup),
@@ -160,6 +187,7 @@ extension AppModel {
   func clearSearch() {
     searchText = ""
     searchHits = []
+    passageHits = []
     pinnedTopHit = nil
     expandedLooseEndID = nil
     searchTask?.cancel()

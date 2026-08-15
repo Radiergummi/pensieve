@@ -90,6 +90,34 @@ import SQLiteData
   #expect(reparented?.parentID == primaryResolution.project.id)
 }
 
+/// `passages.nodeID` has `ON DELETE CASCADE` on `nodes(id)`, and `group()` deletes the absorbed
+/// node after repointing every other child table — so an absorbed node's passages must be
+/// repointed too, or they are silently deleted with it. For a session whose transcript has since
+/// aged out (Claude Code's retention window), that stored copy is the only one left.
+@Test func groupPreservesPassages() throws {
+  let database = try openCanonicalDatabase(at: tempURL("group-passages"))
+  let resolver = ProjectResolver(database: database)
+
+  let primaryResolution = try resolver.resolve(path: "/p/primary-passages", kind: "gitRepo")
+  let secondaryResolution = try resolver.resolve(path: "/p/secondary-passages", kind: "claudeCode")
+
+  let event = Event(
+    nodeID: secondaryResolution.project.id, sourceID: secondaryResolution.source.id, occurredAt: Date(),
+    kind: CaptureKind.ccSession, summary: "session", detailJSON: "{}")
+  try database.write { database in try Event.insert { event }.execute(database) }
+
+  let passage = Passage(nodeID: secondaryResolution.project.id, eventID: event.id, turnIndex: 0,
+                        messageIndex: 0, role: .prompt, text: "a verbatim prompt", occurredAt: Date())
+  try database.write { database in try Passage.insert { passage }.execute(database) }
+
+  try ProjectResolver(database: database).group(primaryResolution.project.id, into: [secondaryResolution.project.id])
+
+  let passages = try database.read { database in try Passage.all.fetchAll(database) }
+  #expect(passages.count == 1)
+  #expect(passages.first?.id == passage.id)
+  #expect(passages.first?.nodeID == primaryResolution.project.id)
+}
+
 @Test func groupMergingParentIntoChildRerootsAtGrandparent() throws {
   let database = try openCanonicalDatabase(at: tempURL("group-selfcycle"))
   let grand = try #require(try NodeCommands.add(database, name: "Grand", kind: .domain, parent: nil, description: ""))

@@ -155,20 +155,30 @@ extension Ingester {
                                  "transcriptPath": payload.transcriptPath])
     let outcome = try writeSync { database -> SessionIngestOutcome in
       let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.claudeCode)
-      let dup = try eventExists(database, sourceID: source.id, fingerprint: Fingerprint.session(sessionID: session.sessionID))
-      if dup { return SessionIngestOutcome(inserted: false, born: nil, branch: nil) }
+      let fingerprint = Fingerprint.session(sessionID: session.sessionID)
+      // A duplicate event is NOT a no-op: the `SessionEnd` capture hook re-spools the same session
+      // as it grows, so the same sessionID arrives repeatedly with more messages each time (`TranscriptDiscovery.discover`
+      // skips any session that already has an event, so it is not the re-spool trigger). The event
+      // dedupes; the passages must be rewritten from the now-longer transcript.
+      if let existing = try existingEvent(database, sourceID: source.id, fingerprint: fingerprint) {
+        try writePassages(database, session: session, nodeID: existing.nodeID,
+                          eventID: existing.id, fallbackDate: row.timestamp)
+        return SessionIngestOutcome(inserted: false, born: nil, branch: nil)
+      }
       let branchKey: String? = {
         guard let sessionBranch = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(database),
               let raw = sessionBranch.branch else { return nil }
         return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sessionBranch.commonDir))
       }()
       let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.ccSession)
-      try Event.insert {
-        Event(nodeID: attr.nodeID, sourceID: source.id, occurredAt: session.endedAt ?? row.timestamp,
-              kind: CaptureKind.ccSession, summary: "session (\(session.userPromptCount) prompts)",
-              detailJSON: detail, fingerprint: Fingerprint.session(sessionID: session.sessionID),
-              branchKey: branchKey)
-      }.execute(database)
+      let event = Event(nodeID: attr.nodeID, sourceID: source.id,
+                        occurredAt: session.endedAt ?? row.timestamp,
+                        kind: CaptureKind.ccSession,
+                        summary: "session (\(session.userPromptCount) prompts)",
+                        detailJSON: detail, fingerprint: fingerprint, branchKey: branchKey)
+      try Event.insert { event }.execute(database)
+      try writePassages(database, session: session, nodeID: attr.nodeID, eventID: event.id,
+                        fallbackDate: row.timestamp)
       try resurfaceIfArchived(database, nodeID: attr.nodeID)
       return SessionIngestOutcome(inserted: true, born: attr.bornStrand, branch: branchKey)
     }
@@ -193,8 +203,9 @@ extension Ingester {
 
   /// Whether an event with this (sourceID, fingerprint) already exists — the dedup predicate,
   /// shared by `insertIfNew` and the git.commit/cc.session branches that dedup before extra work.
+  /// Derived from `existingEvent` so the predicate itself has exactly one definition.
   private func eventExists(_ database: Database, sourceID: UUID, fingerprint: String?) throws -> Bool {
-    try Event.where { $0.sourceID.eq(sourceID) && $0.fingerprint.eq(fingerprint) }.fetchCount(database) > 0
+    try existingEvent(database, sourceID: sourceID, fingerprint: fingerprint) != nil
   }
 
   /// Inserts the event only if no event with the same (sourceID, fingerprint) exists.
@@ -236,6 +247,10 @@ extension Ingester {
     // node too — repoint them so LooseEndQueries.open(nodeID: strand) doesn't miss them.
     for eventID in repointedEventIDs {
       try LooseEnd.where { $0.sourceEventID.eq(eventID) }
+        .update { $0.nodeID = strand.id }.execute(database)
+      // Passages of those events must follow too: `passage.nodeID` is what retrieval and the
+      // search corpus both read, so a passage left behind names the wrong node in every surface.
+      try Passage.where { $0.eventID.eq(eventID) }
         .update { $0.nodeID = strand.id }.execute(database)
     }
     return (strand.id, strand.id)

@@ -80,6 +80,7 @@ public struct ProjectResolver: Sendable {
         try Event.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(database)
         try LooseEnd.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(database)
         try Checkpoint.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(database)
+        try Passage.where { $0.nodeID.eq(other) }.update { $0.nodeID = primaryID }.execute(database)
         // Reattach other's children to the primary, skipping other absorbed nodes (deleted anyway).
         // Step 1 already lifted the primary off the absorbed set, so it is never among these children.
         let children = try Node.where { $0.parentID.eq(other) }.fetchAll(database)

@@ -6,6 +6,11 @@ import PensieveKit
 /// `AppModel.swift` when the two loose-end feeds pushed that file past SwiftLint's 400-line cap —
 /// the same reason the organizing writes already live in `AppModel+Organizing.swift`.
 extension AppModel {
+  /// Count of top-level project nodes, for the content-column header.
+  var projectCount: Int {
+    allNodes.filter { $0.parentID == nil && $0.kind == .project && $0.state == .active }.count
+  }
+
   /// The middle column's content for the current `sidebarSelection`. Pure/in-memory (children reads
   /// `allNodes`); the leaf case defers its loose-ends DB read to the view's `.task`.
   func middleKind() -> MiddleKind {

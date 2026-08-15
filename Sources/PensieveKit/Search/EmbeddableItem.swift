@@ -110,8 +110,7 @@ public enum EmbeddableCorpus {
       // results per search scope. Which nodes are eligible, and why, is `corpusNodes` — deliberately
       // not restated here, since restating it is how two copies of a filter stop agreeing.
       let nodes = try Self.corpusNodes(database)
-      let stateByNodeID = Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
-                                     uniquingKeysWith: { firstState, _ in firstState })
+      let stateByNodeID = Self.statesByNodeID(nodes)
       for node in nodes {
         out.append(.init(itemID: node.id.uuidString, kind: "node", nodeID: node.id.uuidString,
                          state: node.state.rawValue, text: [node.name, node.description].filter { !$0.isEmpty }.joined(separator: " — ")))
@@ -179,6 +178,77 @@ public enum EmbeddableCorpus {
       .filter { !$0.isEmpty }.joined(separator: " — ")
     items.append(EmbeddableItem(itemID: node.id.uuidString, kind: "node", nodeID: node.id.uuidString,
                                 state: node.state.rawValue, text: text, language: language))
+  }
+
+  /// The passage corpus, gathered from the CANONICAL `passages` table — not from transcripts. That
+  /// is the simplification storing text in canonical buys: the 2026-07-19 design needed a producer
+  /// with its own reconciliation path precisely because passages came from a different source than
+  /// everything else. They no longer do, so pruning is membership-driven for free.
+  ///
+  /// Separate from `gather` rather than a `kind == "passage"` branch inside it, because the passage
+  /// table rebuilds on its own hash: one mixed array would have to be partitioned and two hashes
+  /// reconciled inside `rebuild`, which is the kind-conditional shape `statusFilter`'s own comment
+  /// warns about.
+  public static func gatherPassages(_ database: any DatabaseReader) throws -> [EmbeddableItem] {
+    try database.read { database in
+      let stateByNodeID = Self.statesByNodeID(try Self.corpusNodes(database))
+      // Ordered so the corpus hash cannot depend on SQLite's arbitrary return order — the same
+      // reason `gather` orders events explicitly.
+      let passages = try Passage.order { ($0.occurredAt, $0.id) }.fetchAll(database)
+      return passages.compactMap { passage in
+        guard let state = stateByNodeID[passage.nodeID] else { return nil }
+        return EmbeddableItem(itemID: passage.id.uuidString, kind: Passage.searchKind,
+                              nodeID: passage.nodeID.uuidString, state: state,
+                              text: passage.text)
+      }
+    }
+  }
+
+  /// Each eligible node's own state, which is what every item carries so the query layer can scope
+  /// results per search scope — and, by lookup failure, what excludes items owned by a node
+  /// `corpusNodes` rejected.
+  private static func statesByNodeID(_ nodes: [Node]) -> [UUID: String] {
+    Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
+               uniquingKeysWith: { firstState, _ in firstState })
+  }
+
+  /// A digest of the passage corpus that reads NO passage text — the rebuild guard, split from the
+  /// gather it used to be computed from.
+  ///
+  /// Guarding on `corpusHash(gatherPassages(…))` cost more than the rebuild it existed to avoid:
+  /// measured on the real store (31,346 passages / ~15 MB of text), the unchanged-corpus path was
+  /// 0.60 s (0.21 gather + 0.42 hash) against 0.36 s to simply rebuild — and it runs on launch, ⌘R,
+  /// every debounced watch refresh and every 300 s daemon cycle. The gather's own hash is a faithful
+  /// digest of what the table holds; it is just far more work than deciding whether it MOVED.
+  ///
+  /// This reads the three columns that can change what the index rows say — the passage's id, its
+  /// node, and that node's state — and skips `text`, which is the expensive 15 MB and the whole
+  /// 0.42 s. Skipping it is sound because **a passage's text never changes under a fixed id**:
+  /// `Ingester.replacePassages` is the only writer and it deletes the event's rows and inserts
+  /// freshly-minted `Passage(id: UUID())`, so edited text always arrives as new ids. The repoint
+  /// sites (`Ingester.attributeToNode`, `ProjectResolver.group`) update `nodeID` and nothing else,
+  /// and archiving changes `Node.state` — both of which ARE read here.
+  ///
+  /// If a future writer ever UPDATEs `passages.text` in place, this guard stops noticing and the
+  /// index silently keeps the old prose. `passageFingerprintTracksAReplacedPassage` pins the rule
+  /// by running the supported path; a new in-place writer must fold text back in, or mint a new id.
+  public static func passageCorpusFingerprint(_ database: any DatabaseReader) throws -> String {
+    try database.read { database in
+      let stateByNodeID = Self.statesByNodeID(try Self.corpusNodes(database))
+      // Ordered by id so the digest cannot depend on SQLite's arbitrary return order, and sorted by
+      // the same key the rows are keyed on, so no post-sort is needed the way `corpusHash` needs one.
+      let rows = try Passage.select { ($0.id, $0.nodeID) }.order { $0.id }.fetchAll(database)
+      var hash = StableHash()
+      for (id, nodeID) in rows {
+        // Same membership rule the producer applies, so a passage the corpus excludes cannot move
+        // the fingerprint and force a rebuild that would change nothing.
+        guard let state = stateByNodeID[nodeID] else { continue }
+        hash.absorbField(id.uuidString)
+        hash.absorbField(nodeID.uuidString)
+        hash.absorbField(state)
+      }
+      return hash.hexValue
+    }
   }
 
   /// The ingester writes {"hash","branch","files"} for a commit, with `files` newline-joined.

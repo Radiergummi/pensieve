@@ -55,18 +55,24 @@ struct Mcp: AsyncParsableCommand {
            ])]),
            annotations: .init(readOnlyHint: true, openWorldHint: false)),
       Tool(name: "recall",
-           description: "Recall the surrounding transcript conversation around a loose end — reconstruct how a discussion went "
-             + "and how it resolved. Pass a loose_end_id from project_context.",
+           description: "Recall the surrounding transcript conversation around a loose end or a stored "
+             + "passage — reconstruct how a discussion went and how it resolved. Pass a loose_end_id "
+             + "from project_context, or a passage_id from search.",
            inputSchema: .object(["type": .string("object"), "properties": .object([
              "loose_end_id": .object(["type": .string("string"), "description": .string("UUID of a loose end from project_context")]),
+             "passage_id": .object(["type": .string("string"), "description": .string("UUID of a passage item from search")]),
              "radius": .object(["type": .string("number"), "description": .string("messages of context each side (default 8)")]),
-           ]), "required": .array([.string("loose_end_id")])]),
+           ])]),
            annotations: .init(readOnlyHint: true, openWorldHint: false)),
       Tool(name: "search",
            description: "Find across all your work — by keyword, by phrase, or by the files a commit touched. "
-             + "Every result is a real, cited item. `items` is ALREADY in relevance order: read it "
-             + "top-down and do not re-sort or threshold it by `score`, which is not comparable "
-             + "between items. `index_state` distinguishes an unbuilt index from a genuine miss.",
+             + "Every result is a real, cited item. `items` is ranked results FIRST, ALREADY in "
+             + "relevance order — read it top-down and do not re-sort or threshold it by `score`, "
+             + "which is not comparable between items — followed by stored conversation passages "
+             + "APPENDED as their own list, because their scores come from a different table and are "
+             + "not comparable to the ranked ones either. Pass a passage item's id to `recall` to read "
+             + "the surrounding discussion. `index_state` distinguishes an unbuilt index from a "
+             + "genuine miss.",
            inputSchema: .object(["type": .string("object"), "properties": .object([
              "query": .object(["type": .string("string"),
                                "description": .string("what to find; may be empty when `file` is given")]),
@@ -75,7 +81,8 @@ struct Mcp: AsyncParsableCommand {
                                 + "one) — combined with `query` it means both must match. To find everything that "
                                 + "touched a file, pass the filename as `query` on its own.")]),
              "limit": .object(["type": .string("number"), "minimum": .int(1),
-                               "description": .string("max results (default 8)")]),
+                               "description": .string("max ranked results (default 8); conversation passages are "
+                                 + "appended as a separate list of up to half that many")]),
              "include_archived": .object(["type": .string("boolean"),
                                           "description": .string("also search archived projects and closed loose ends (default false)")]),
            ]), "required": .array([])]),
@@ -121,13 +128,15 @@ struct Mcp: AsyncParsableCommand {
   }
 
   private static func handleRecall(params: CallTool.Parameters) throws -> CallTool.Result {
-    guard let idStr = params.arguments?["loose_end_id"]?.stringValue,
-          let id = UUID(uuidString: idStr) else {
-      return .init(content: [.text(text: "recall requires a valid loose_end_id (UUID)", annotations: nil, _meta: nil)], isError: true)
-    }
     let radius = params.arguments?["radius"]?.intValue ?? 8
-    let json = try PensieveMCP.recallJSON(looseEndID: id, radius: radius)
-    return PensieveMCP.result(json)
+    if let raw = params.arguments?["loose_end_id"]?.stringValue, let id = UUID(uuidString: raw) {
+      return PensieveMCP.result(try PensieveMCP.recallJSON(looseEndID: id, radius: radius))
+    }
+    if let raw = params.arguments?["passage_id"]?.stringValue, let id = UUID(uuidString: raw) {
+      return PensieveMCP.result(try PensieveMCP.recallJSON(passageID: id, radius: radius))
+    }
+    return .init(content: [.text(text: "recall requires a valid loose_end_id or passage_id (UUID)",
+                                 annotations: nil, _meta: nil)], isError: true)
   }
 
   private static func handleSearch(params: CallTool.Parameters) async throws -> CallTool.Result {
@@ -237,6 +246,14 @@ enum PensieveMCP {
     return try makeEncoder().encode(bundle)   // encodes `null` for an unknown id
   }
 
+  static func recallJSON(passageID: UUID, radius: Int) throws -> Data {
+    guard let database = try? openCanonicalReadOnly() else {
+      return try makeEncoder().encode(Optional<RecallBundle>.none)
+    }
+    let bundle = try SessionContextQueries.recall(passageID: passageID, radius: radius, database)
+    return try makeEncoder().encode(bundle)
+  }
+
   /// Unified "find across my work": BM25 over the on-device FTS5 index, the only retrieval path.
   /// Scope is all active nodes (MCP has no Focus context), widened by `include_archived`.
   /// `index_state` distinguishes "nothing matched" from "the index isn't built", which would
@@ -264,8 +281,26 @@ enum PensieveMCP {
     // `limit` is honoured by SearchQueries itself; there is no second engine to make room for, so
     // the payload no longer over-allocates and then truncates.
     let items = ranked.map { SearchItem(hit: $0) }
+    // Appended, never interleaved: passage scores come from a different FTS5 table with a different
+    // average document length, exactly like path hits. The array order is the contract the tool
+    // description states, and this preserves it.
+    //
+    // Passages get their own, smaller budget rather than sharing `limit`. Two lists in one array
+    // cannot both mean "at most `limit`" — and capping the concatenation instead would delete the
+    // passage list entirely whenever the ranked list is already full, which is the common case.
+    // Half, floored at two, keeps the conversation list present without letting it dominate the
+    // page. Derived from `scope` (not the raw parameters) so the two cannot drift apart.
+    let passageScope = SearchScope(visibleNodeIDs: scope.visibleNodeIDs, limit: max(2, limit / 2),
+                                   includeArchived: scope.includeArchived,
+                                   includeClosed: scope.includeClosed)
+    // Same `file` as the ranked half. A passage can never satisfy a path restriction, so this
+    // narrows the conversation list to nothing whenever one is set — which is the point: one array
+    // whose two halves answered different questions is worse than a shorter, coherent one.
+    let passages = PassageQueries.search(query: query, file: file, scope: passageScope,
+                                         store: searchStore, database)
     return try makeEncoder().encode(
-      SearchPayload(items: items, indexState: searchStore.state()))
+      SearchPayload(items: items + passages.map { SearchItem(passage: $0) },
+                    indexState: searchStore.state()))
   }
 
   /// A text tool result carrying the JSON payload + the result-size hint Claude Code honors.
@@ -313,10 +348,24 @@ private struct SearchItem: Encodable {
     nodeID = hit.nodeID.uuidString
     nodeName = hit.nodeName
     title = hit.title
-    snippet = hit.snippet.leading + hit.snippet.match + hit.snippet.trailing
+    snippet = hit.snippet.joined
     score = hit.score
     archived = hit.isArchived
     closed = hit.status.isClosed
+  }
+
+  /// A passage item. `kind` is `"passage"` and `id` is the passage UUID, which `recall`'s
+  /// `passage_id` accepts — so a model that finds a conversation can read it back in one more call.
+  init(passage: PassageHit) {
+    id = passage.id.uuidString
+    kind = "passage"
+    nodeID = passage.nodeID.uuidString
+    nodeName = passage.nodeName
+    title = passage.role.recallTitle
+    snippet = passage.snippet.joined
+    score = passage.score
+    archived = passage.isArchived
+    closed = false   // a passage has no lifecycle of its own
   }
 
   private enum CodingKeys: String, CodingKey {

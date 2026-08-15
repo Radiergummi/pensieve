@@ -68,14 +68,18 @@ struct ContentListView: View {
           ForEach(model.searchHits) { hit in searchRow(hit) }
         }
       }
+      PassageResultsSection(hits: model.passageHits) { model.openPassage($0) }
     }
     .overlay { searchEmptyState() }
   }
 
   /// "Nothing matched" and "the index isn't built" must not look the same — since BM25 became the
   /// only retrieval path, an unbuilt index would otherwise read as "you never worked on that".
+  /// Also gated on `passageHits`: this overlay covers the whole List, so without that check a query
+  /// that matched only a conversation passage (no ranked hit, no pinned node) would have its section
+  /// hidden underneath a "nothing matched" card.
   @ViewBuilder private func searchEmptyState() -> some View {
-    if model.searchHits.isEmpty && model.pinnedTopHit == nil {
+    if model.searchHits.isEmpty && model.pinnedTopHit == nil && model.passageHits.isEmpty {
       switch model.searchIndexState {
       case .building:
         ContentUnavailableView("Building the search index…", systemImage: "clock.arrow.circlepath")
@@ -298,7 +302,7 @@ struct ContentListView: View {
 
 /// A small trailing marker on a search row whose owning node is archived, so archived work is never
 /// mistaken for live work. Rendered only when the Include Archived scope surfaced the row.
-private struct ArchivedBadge: View {
+struct ArchivedBadge: View {
   var body: some View {
     Text("Archived")
       .font(.caption2)

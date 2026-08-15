@@ -11,6 +11,9 @@ public struct Snippet: Equatable, Sendable {
   public init(leading: String, match: String, trailing: String) {
     self.leading = leading; self.match = match; self.trailing = trailing
   }
+  /// The three runs as the one string they came from — the round-trip this type guarantees, for
+  /// callers (the MCP wire format) that carry the text without the highlight.
+  public var joined: String { leading + match + trailing }
 }
 
 public enum SnippetMaker {
