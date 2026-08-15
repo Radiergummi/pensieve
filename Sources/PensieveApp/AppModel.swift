@@ -362,36 +362,12 @@ final class AppModel {
     if isSearching { runSearch() }
   }
 
-  /// The Focus-visible node set. Extracted because five surfaces now need it (both refreshes, search
-  /// and the two cross-node loose-end feeds) and an inlined copy that drifted would scope one list
-  /// differently from the rest.
-  func visibleNodeIDs() -> Set<UUID> {
-    NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
-  }
-
-  func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
-
-  /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
-  func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
-
-  /// Children of `id` restricted to the same "world" as `id` itself — archived children under an
-  /// archived node, active children under an active one — so the two "worlds" don't bleed into
-  /// each other. The ONE state-scoped children filter: `middleKind()` and `detailShowsLooseEnds`
-  /// both call this so they can never disagree about whether `id` has visible children.
-  func visibleChildren(of id: UUID) -> [Node] {
-    let showArchived = node(id)?.state == .archived
-    return children(of: id).filter { ($0.state == .archived) == showArchived }
-  }
-
-  // MARK: - What the middle column shows
-  // `middleKind()`, `selectMiddleNode`, `middleTitle` and `detailShowsLooseEnds` live in
-  // AppModel+Middle.swift — moved there when the loose-end feeds pushed this file past the 400-line cap.
-
-  // MARK: - Organizing writes
-  // All of them — including the two modal commits — live in AppModel+Organizing.swift, alongside the
-  // shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers.
-
-  // MARK: - Search · content header
-  // `isSearching` and `projectCount` live in AppModel+Search.swift / AppModel+Middle.swift — moved
-  // when the translation work pushed this file past the 400-line cap again. Stored state stays here.
+  // MARK: - Behaviour that lives in sibling files
+  // Stored state stays here; each block below moved out when this file hit SwiftLint's 400-line cap.
+  // - AppModel+Middle.swift — `middleKind()`, `selectMiddleNode`, `middleTitle`,
+  //   `detailShowsLooseEnds`, `projectCount`, and the node-tree accessors those read
+  //   (`node(_:)`, `children(of:)`, `visibleChildren(of:)`, `visibleNodeIDs()`).
+  // - AppModel+Organizing.swift — every organizing write, including the two modal commits, plus the
+  //   shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers.
+  // - AppModel+Search.swift — `isSearching` and the search machinery.
 }

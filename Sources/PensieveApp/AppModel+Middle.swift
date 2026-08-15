@@ -2,10 +2,38 @@
 import Foundation
 import PensieveKit
 
-/// What the middle column shows, and how a tap there moves the selection. Split out of
-/// `AppModel.swift` when the two loose-end feeds pushed that file past SwiftLint's 400-line cap —
-/// the same reason the organizing writes already live in `AppModel+Organizing.swift`.
+/// What the middle column shows, how a tap there moves the selection, and the node-tree accessors
+/// those answers are computed from. Split out of `AppModel.swift` when the two loose-end feeds pushed
+/// that file past SwiftLint's 400-line cap — the same reason the organizing writes already live in
+/// `AppModel+Organizing.swift`. The accessors joined it later, for the same reason and because
+/// `middleKind()` and `detailShowsLooseEnds` are `visibleChildren(of:)`'s only callers.
 extension AppModel {
+  // MARK: - Node-tree accessors
+  // In-memory reads over `allNodes`, which `refresh()` keeps current. No DB access.
+
+  func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
+
+  /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
+  func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
+
+  /// Children of `id` restricted to the same "world" as `id` itself — archived children under an
+  /// archived node, active children under an active one — so the two "worlds" don't bleed into
+  /// each other. The ONE state-scoped children filter: `middleKind()` and `detailShowsLooseEnds`
+  /// both call this so they can never disagree about whether `id` has visible children.
+  func visibleChildren(of id: UUID) -> [Node] {
+    let showArchived = node(id)?.state == .archived
+    return children(of: id).filter { ($0.state == .archived) == showArchived }
+  }
+
+  /// The Focus-visible node set. Extracted because five surfaces now need it (both refreshes, search
+  /// and the two cross-node loose-end feeds) and an inlined copy that drifted would scope one list
+  /// differently from the rest.
+  func visibleNodeIDs() -> Set<UUID> {
+    NodeContextResolver.visibleNodeIDs(for: activeFocusContext, in: allNodes)
+  }
+
+  // MARK: - What the middle column shows
+
   /// Count of top-level project nodes, for the content-column header.
   var projectCount: Int {
     allNodes.filter { $0.parentID == nil && $0.kind == .project && $0.state == .active }.count
