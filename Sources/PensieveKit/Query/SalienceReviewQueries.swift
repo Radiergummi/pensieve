@@ -16,19 +16,10 @@ public enum SalienceReviewQueries {
       let ends = try LooseEnd
         .where { $0.label.eq(LooseEndLabel.unlabeled) && $0.labelSuggestion.neq("") }
         .fetchAll(database)
-      var views: [LooseEndView] = []
-      for looseEnd in ends {
-        guard let event = try Event.where({ $0.id.eq(looseEnd.sourceEventID) }).fetchOne(database) else { continue }
-        let days = Calendar.current.dateComponents([.day], from: event.occurredAt, to: now).day ?? 0
-        views.append(LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt, ageDays: days))
-      }
-      // Suggested-salient first (0 before 1), then oldest source first.
-      return views.sorted { left, right in
-        let leftRank = left.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
-        let rightRank = right.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
-        if leftRank != rightRank { return leftRank < rightRank }
-        return left.occurredAt < right.occurredAt
-      }
+      // Both the event join and the ordering are `LooseEndQueries`' — this used to inline its own
+      // copy of each, which is why the batching work had to fix both call sites or neither.
+      return try LooseEndQueries.attachEvents(ends, database, now: now)
+        .sorted(by: LooseEndQueries.suggestedSalientFirstThenOldest)
     }
   }
 

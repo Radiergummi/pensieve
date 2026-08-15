@@ -37,12 +37,23 @@ public enum LooseEndQueries {
   public static func openAcrossNodes(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>,
                                      now: Date) throws -> [LooseEndView] {
     try openViews(database, visibleNodeIDs: visibleNodeIDs, now: now)
-      .sorted { left, right in
-        let leftRank = left.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
-        let rightRank = right.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
-        if leftRank != rightRank { return leftRank < rightRank }
-        return left.occurredAt < right.occurredAt
-      }
+      .sorted(by: suggestedSalientFirstThenOldest)
+  }
+
+  /// Suggested-salient first (harvest the scarce positives), then oldest source. ONE definition:
+  /// `SalienceReviewQueries.pending` carried a byte-identical copy, and a copy is how two orderings
+  /// that are supposed to agree quietly stop agreeing.
+  ///
+  /// **Measured 2026-08-15: the salient tier is currently inert.** `labelSuggestion` is empty on all
+  /// 986 rows of the live store — its only writer, `SalienceSuggester`, is opt-in behind
+  /// `pensieve label-suggest` and has never been run — so this sorts as pure oldest-first, the very
+  /// ordering the comment below rejects. See backlog § "The salience pipeline is built, wired, and
+  /// has never been run".
+  static func suggestedSalientFirstThenOldest(_ left: LooseEndView, _ right: LooseEndView) -> Bool {
+    let leftRank = left.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
+    let rightRank = right.looseEnd.labelSuggestion == LooseEndLabel.salient ? 0 : 1
+    if leftRank != rightRank { return leftRank < rightRank }
+    return left.occurredAt < right.occurredAt
   }
 
   /// How many open loose ends the triage feed holds, without building it. A count query rather than
@@ -129,16 +140,42 @@ public enum LooseEndQueries {
   }
 
   /// Pairs each loose end with its source event's date, dropping any whose event has vanished —
-  /// the same rule `open` already applies, kept in one place so the four feeds cannot disagree.
-  private static func attachEvents(_ ends: [LooseEnd], _ database: Database,
-                                   now: Date) throws -> [LooseEndView] {
-    var views: [LooseEndView] = []
-    for looseEnd in ends {
-      guard let event = try Event.where({ $0.id.eq(looseEnd.sourceEventID) }).fetchOne(database)
-      else { continue }
+  /// the same rule `open` already applies, kept in one place so the feeds cannot disagree.
+  ///
+  /// `internal`, not `private`: `SalienceReviewQueries.pending` is the fifth caller and used to
+  /// carry its own inlined copy of this loop, which meant "all four feeds share it" was true only of
+  /// this file. Batching one copy and leaving the other would have made them diverge in cost as well
+  /// as in code.
+  static func attachEvents(_ ends: [LooseEnd], _ database: Database,
+                           now: Date) throws -> [LooseEndView] {
+    // ONE query for the distinct source events, then an id-keyed lookup, replacing a per-end point
+    // query. Measured on a copy of the live store, both arms warm, 9 iterations, min:
+    //
+    //     n=288   50.3 ms -> 6.6 ms     n=136   24.0 ms -> 2.9 ms     n=57   10.0 ms -> 1.4 ms
+    //
+    // ~7-8x, and the warm-up matters: an earlier run that timed the first node cold reported 66.8 ms
+    // for the batched version and looked like no improvement at all.
+    //
+    // The `Set` is not incidental. Loose ends routinely share a source event: 986 open ends across
+    // the measured store resolve to only 337 distinct events, ~2.9x redundancy, because one session
+    // yields many loose ends.
+    //
+    // Keyed by id, NEVER positional — several ends mapping to one event means position carries no
+    // information, and a zip silently drops the surplus. `eachLooseEndResolvesItsOwnSourceEvent`
+    // pins that and was mutation-verified against exactly that mistake.
+    let ids = Set(ends.map(\.sourceEventID))
+    guard !ids.isEmpty else { return [] }
+    let eventsByID = Dictionary(
+      try Event.where { $0.id.in(Array(ids)) }.fetchAll(database).map { ($0.id, $0) },
+      uniquingKeysWith: { first, _ in first })
+    // compactMap preserves the drop-when-the-source-event-has-vanished rule stated above. That path
+    // is unreachable through the schema — `sourceEventID` is NOT NULL REFERENCES events(id) ON
+    // DELETE CASCADE and GRDB enforces foreign keys, and the live store has zero orphans — so it is
+    // defence, not a case any test can construct honestly.
+    return ends.compactMap { looseEnd in
+      guard let event = eventsByID[looseEnd.sourceEventID] else { return nil }
       let days = Calendar.current.dateComponents([.day], from: event.occurredAt, to: now).day ?? 0
-      views.append(LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt, ageDays: days))
+      return LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt, ageDays: days)
     }
-    return views
   }
 }
