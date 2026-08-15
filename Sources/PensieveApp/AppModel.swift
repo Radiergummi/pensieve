@@ -110,6 +110,11 @@ final class AppModel {
   /// drainThenRefresh), so this never bumps on background liveness updates.
   private(set) var refreshToken = 0
 
+  /// A user-triggered drain+refresh is in flight. Tracked (not `@ObservationIgnored`) — the menu-bar
+  /// popover's heartbeat orb reads it to show a spinner. Set only by `refreshNow()`, so the
+  /// background liveness watches never spin it.
+  private(set) var isRefreshing = false
+
   /// Bumped when an on-demand translation lands. Its own signal rather than `refreshToken`, because
   /// a `refreshToken` bump means ⌘R: `DetailView` reads it as `isRefresh` and force-regenerates the
   /// narration through the LLM. Translating a loose end must repaint the pane, not re-narrate it.
@@ -252,7 +257,18 @@ final class AppModel {
   }
 
   /// On-demand equivalent of the launch drain+refresh, for the ⌘R Refresh menu command.
-  func refreshNow() async { await drainThenRefresh() }
+  ///
+  /// The flag exists for the menu-bar popover, where this command is otherwise indistinguishable from
+  /// a no-op: a drain that finds nothing new changes nothing on screen, correctly, and the user has no
+  /// way to tell that apart from a dead button. Deliberately NOT a guard against re-entry — ⌘R while
+  /// a refresh runs should still queue a second drain; this only reports. Two overlapping calls (⌘R
+  /// plus the popover button) will therefore clear the flag when the FIRST finishes, stopping the
+  /// spinner early. A counter would fix that, and is not worth it for a spinner.
+  func refreshNow() async {
+    isRefreshing = true
+    defer { isRefreshing = false }
+    await drainThenRefresh()
+  }
 
   private func drainThenRefresh() async {
     AppLog.app.info("Drain+refresh triggered")

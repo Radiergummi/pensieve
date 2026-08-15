@@ -116,6 +116,17 @@
         }
       }
     },
+    "%lld of %lld translated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld von %2$lld übersetzt"
+          }
+        }
+      }
+    },
     "%lld open" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -908,6 +919,17 @@
         }
       }
     },
+    "Download…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Herunterladen…"
+          }
+        }
+      }
+    },
     "Drop" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1074,6 +1096,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Foundation Models isn’t available on this Mac."
+          }
+        }
+      }
+    },
+    "From your conversations" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus deinen Gesprächen"
           }
         }
       }
@@ -1475,6 +1508,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lose Enden"
+          }
+        }
+      }
+    },
+    "Manage installed languages in System Settings…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installierte Sprachen in den Systemeinstellungen verwalten…"
           }
         }
       }
@@ -2133,6 +2177,17 @@
         }
       }
     },
+    "Preparing the language…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprache wird vorbereitet…"
+          }
+        }
+      }
+    },
     "Project" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2206,6 +2261,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beenden"
+          }
+        }
+      }
+    },
+    "Ready to translate on this Mac." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung auf diesem Mac vorbereitet."
           }
         }
       }
@@ -2481,6 +2547,17 @@
         }
       }
     },
+    "Settings…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen…"
+          }
+        }
+      }
+    },
     "Share Recall…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2639,6 +2716,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Status"
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stoppen"
           }
         }
       }
@@ -2844,6 +2932,17 @@
         }
       }
     },
+    "This language isn’t downloaded yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Sprache ist noch nicht heruntergeladen."
+          }
+        }
+      }
+    },
     "this loose end" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2951,6 +3050,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Generierte Texte übersetzen nach"
+          }
+        }
+      }
+    },
+    "Translate remaining" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbleibende Inhalte übersetzen"
+          }
+        }
+      }
+    },
+    "Translating %lld of %lld…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld von %2$lld werden übersetzt…"
           }
         }
       }
@@ -3112,116 +3233,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Du"
-          }
-        }
-      }
-    },
-    "From your conversations" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aus deinen Gesprächen"
-          }
-        }
-      }
-    },
-    "Ready to translate on this Mac." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bereit zum Übersetzen auf diesem Mac."
-          }
-        }
-      }
-    },
-    "This language isn’t downloaded yet." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Sprache ist noch nicht heruntergeladen."
-          }
-        }
-      }
-    },
-    "Preparing the language…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sprache wird vorbereitet …"
-          }
-        }
-      }
-    },
-    "Download…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Herunterladen …"
-          }
-        }
-      }
-    },
-    "Manage installed languages in System Settings…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Installierte Sprachen in den Systemeinstellungen verwalten …"
-          }
-        }
-      }
-    },
-    "Translating %lld of %lld…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld von %2$lld werden übersetzt …"
-          }
-        }
-      }
-    },
-    "%lld of %lld translated" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld von %2$lld übersetzt"
-          }
-        }
-      }
-    },
-    "Translate remaining" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restliche übersetzen"
-          }
-        }
-      }
-    },
-    "Stop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stoppen"
           }
         }
       }

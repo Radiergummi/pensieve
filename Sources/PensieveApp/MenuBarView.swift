@@ -19,6 +19,16 @@ extension MonitorSnapshot.Status {
     case .notSetUp: return String(localized: "Not set up")
     }
   }
+  /// Colour for the POPOVER orb only. The menu-bar glyph deliberately keeps no tint — it is a
+  /// template image, which is what lets macOS invert it for the wallpaper behind it and for Reduce
+  /// Transparency. Semantic system roles, like `SmartListKind.color` already uses.
+  var tint: Color {
+    switch self {
+    case .active: return .green
+    case .idle: return .secondary
+    case .notSetUp: return .orange
+    }
+  }
 }
 
 /// The menu-bar popover content: capture heartbeat + a short What's Next glance. Reads the shared
@@ -45,7 +55,17 @@ struct MenuBarView: View {
 
   @ViewBuilder private var heartbeat: some View {
     HStack(spacing: 6) {
-      Image(systemName: model.snapshot.status.glyph)
+      // The orb doubles as the refresh indicator — one moving part in a 320pt row, not two. The fixed
+      // frame keeps the status text from shifting when the spinner (wider than the glyph) swaps in.
+      ZStack {
+        if model.isRefreshing {
+          ProgressView().controlSize(.small)
+        } else {
+          Image(systemName: model.snapshot.status.glyph)
+            .foregroundStyle(model.snapshot.status.tint)
+        }
+      }
+      .frame(width: 16, height: 16)
       Text(statusLine).font(.callout).fontWeight(.medium)
       Spacer()
       Text("\(model.snapshot.looseEndCount) open").font(.caption).foregroundStyle(.secondary)
@@ -67,22 +87,43 @@ struct MenuBarView: View {
 
   @ViewBuilder private var footer: some View {
     HStack(spacing: 8) {
-      // Full-width primary: German cannot truncate a button that owns the row. `.borderedProminent`
-      // rather than a glass style — the `.window` popover surface is already system glass, so a
-      // glass button on it would be glass on glass. This also picks up the system accent colour.
+      // Leading primary, hugging its label. It used to fill the row, and the comment here claimed the
+      // fill was what stopped German truncating to `Pensieve öf…`. It was not: the fix was dropping
+      // from three buttons to one (backlog.md, 2026-08-12 verify pass). At a 320pt popover that leaves
+      // roughly 180pt of slack, which the Spacer below absorbs before the button ever gives up width.
+      // `.borderedProminent` rather than a glass style — the `.window` popover surface is already
+      // system glass, so a glass button on it would be glass on glass. It also picks up the accent.
       Button("Open Pensieve") {
         applyDeepLink(.briefing, model: model, openWindow: openWindow)
       }
       .buttonStyle(.borderedProminent)
-      .frame(maxWidth: .infinity)
 
+      Spacer(minLength: 8)
+
+      // Refresh lives in the ROW, not in the menu below. Clicking a menu item dismisses the popover,
+      // so a refresh started from there finished somewhere the user could not watch — which is what
+      // made a working command read as a no-op. Here it stays on screen and the orb above spins.
+      Button {
+        Task { await model.refreshNow() }
+      } label: {
+        Image(systemName: "arrow.clockwise")
+      }
+      .buttonStyle(.bordered)
+      .disabled(model.isRefreshing)
+      .help("Refresh")
+      .accessibilityLabel("Refresh")
+
+      // `.menuStyle(.button)` + `.buttonStyle(.bordered)` rather than `.borderlessButton`: the
+      // borderless style draws no hover or pressed state at all, so the control gave no sign it was
+      // a control. The bordered pair gets hover, press and a focus ring from the system.
       Menu {
-        Button("Refresh") { Task { await model.refreshNow() } }
+        SettingsLink { Text("Settings…") }
         Button("Quit") { NSApplication.shared.terminate(nil) }
       } label: {
         Image(systemName: "ellipsis")
       }
-      .menuStyle(.borderlessButton)
+      .menuStyle(.button)
+      .buttonStyle(.bordered)
       .fixedSize()
       .help("More actions")
       .accessibilityLabel("More actions")
@@ -97,11 +138,13 @@ struct MenuBarView: View {
     return statusLabel
   }
 
-  /// Local formatter instance (no shared mutable static — Swift 6 concurrency rule).
+  /// The SAME Foundation relative style the rows below already use (`NodeMeta.recency`), so the
+  /// popover carries one date vocabulary instead of two. It replaced a `RelativeDateTimeFormatter`
+  /// with `.abbreviated` units, which rendered German as "erfasst vor 2 m" directly above rows
+  /// reading "vor 3 Tagen". Being a format style rather than a formatter object, there is also no
+  /// shared-mutable-static question to answer.
   private static func relativeAge(_ date: Date) -> String {
-    let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .abbreviated
-    return formatter.localizedString(for: date, relativeTo: Date())
+    date.formatted(.relative(presentation: .named))
   }
 }
 
