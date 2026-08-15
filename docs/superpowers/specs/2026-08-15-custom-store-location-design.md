@@ -137,11 +137,15 @@ sites (`Sync.swift:10-15`, `PensieveSyncAgent.swift:17-22`) reach the store thro
 does the app. The check therefore goes in one function, not in every caller, and `SyncRunner` itself
 stays pure over its injected dependencies exactly as `SyncRunner.swift:9-23` intends.
 
-**The shared lock is held for the lifetime of the returned `DatabaseWriter`, not checked and
-released.** A check-and-release would pass, return a writer, and let a relocation begin one
-instruction later — the writer would then write into a directory being copied out from under it, which
-is the exact race the lock exists to prevent. The lock's file descriptor is therefore owned by the
-opened store and closed with it (which is also what makes a killed process release it, per test 2).
+**The shared lock is acquired once per process and held until the process exits**, not checked and
+released around each open. A check-and-release would pass, return a writer, and let a relocation begin
+one instruction later — the writer would then write into a directory being copied out from under it,
+which is the exact race the lock exists to prevent. Process lifetime is the right granularity because
+every canonical **writer** here is short-lived and exits when its work is done: `pensieve sync` and the
+launchd helper both run one cycle and terminate. The app is the one long-lived writer, and it never
+conflicts with itself because it performs relocation **before opening any store** (§3). The lock is
+therefore a `static let` acquired lazily on the first `openCanonical()` — no per-pool lifetime
+plumbing, and a killed process releases it automatically when the kernel closes its descriptors.
 
 Callers treat the throw as "not now", not as an error: `pensieve sync` prints a timestamped
 `relocation in progress, skipping` and exits **0**; the launchd helper logs the same line to `sync.log`
@@ -153,23 +157,38 @@ condition look like the dead-daemon incident of 2026-08-11.
 > the relocator opens — the source store it drains in step 1, the copy it verifies in step 4, and the
 > new store it drains into in step 6 — is opened by explicit URL through `openCanonicalDatabase(at:)`
 > and `CaptureSpool(at:)`, which take no lock.** That is deliberate and load-bearing, not incidental:
-> the locking variants are for *other* processes. The app's own pools are closed at step 2 and
-> reopened only after relaunch, so no legitimate re-entry through `openCanonical()` exists.
+> the locking variants are for *other* processes. Because the operation runs before `AppModel.start()`
+> (§3), the relocating instance has not yet called `openCanonical()` at all, so no legitimate
+> re-entry exists — but an implementer who later moves the operation into a running session would
+> reintroduce exactly this self-conflict.
 
 ### 3. The relocation operation
 
 One exclusive lock, one commit point, everything before it abortable with zero visible change.
 
+**It runs at launch, before the app opens anything.** Confirming the move writes a pending-relocation
+key and relaunches; the *new* instance performs the operation during startup, ahead of `AppModel.start()`,
+then clears the key and boots normally. This is the pattern Sparkle uses for updates, and it is what
+makes step 2 trivial instead of treacherous: at that point in launch there are no pools to close, no
+`ValueObservation` task holding a reference, no `FSEventStream` bound to the old directory, and no
+`lazy var searchStore` that cannot be reset. The alternative — tearing all of that down mid-session —
+means hunting every strong reference to the pool, and missing one leaves the app unable to release its
+own shared lock, failing its own relocation with "sync running, try again" forever.
+
+The user-visible cost is nil: the relaunch was already required (below), so this reorders it rather
+than adding one. The relaunching instance shows a determinate progress window and no main window until
+the move completes.
+
 | # | Step | On failure |
 |---|---|---|
-| 1 | Take exclusive lock. Drain spool → current canonical. | Lock held by a sync in flight → report "sync running, try again"; nothing changed. |
-| 2 | Close the app's pools; record current `Event` count (2,723 today). | — |
+| 1 | Take exclusive lock. Drain spool → current canonical. | Lock held by a sync in flight → report "sync running, try again"; clear the pending key and boot normally against the old root. |
+| 2 | Record current `Event` count (2,723 today). No pools to close — nothing is open yet. | — |
 | 3 | **Copy** the directory to `<destination>` — sidecars, `salience-corpus`, everything. | Delete partial destination; release; report. Old install untouched. |
 | 4 | Verify: per-file byte sizes match, **and** the copied canonical store opens and reports the same `Event` count. | As above. |
 | 5 | **Write `customSupportRoot`.** ← the only commit point | — |
 | 6 | Re-check the *old* spool for rows a hook wrote during 3–5; drain them into the new canonical store. | Best-effort; a failure here leaves the old folder in place and is reported, never silent. |
 | 7 | Move the old directory **to the Trash** via `NSWorkspace.recycle`. | Best-effort; a failure leaves 130 MB behind and says so. |
-| 8 | Relaunch the app. | — |
+| 8 | Clear the pending key, release the lock, continue booting against the new root. | — |
 
 **Copy, not `moveItem`.** `FileManager.moveItem` across volumes is internally a copy-then-delete that
 can leave partial state at the destination on failure, and moving to another disk is the whole point of
@@ -184,12 +203,18 @@ and prove less.
 **The Trash, not `unlink`.** Native, reversible, and if anything about the new location turns out
 wrong, 130 MB of canonical store is sitting in the Bin rather than gone.
 
-**Why the app relaunches.** `AppModel` holds a `lazy var searchStore` (`:192`, unresettable by
+**Why the app relaunches at all.** `AppModel` holds a `lazy var searchStore` (`:192`, unresettable by
 construction), two app-lifetime `FSEventStream` watches bound to the old directories (`:241-242`), a
 running `ValueObservation` task, and a narration cache keyed per DB path. Rebuilding all of that in
 place is a large, fragile surface for a setting changed roughly once, and subtly getting it wrong means
 the app watches a directory nothing writes to any more — a *silent* liveness failure, the worst class
 available. An explicit relaunch is what Xcode does for several of its own Locations.
+
+**The disposable indexes are allowed to be torn during the copy.** `SearchIndexStore` and the
+translation cache are opened by `AppModel` in the *outgoing* instance and may still be written up to
+the moment it terminates. They are hash-guarded and rebuildable by construction, so a slightly stale
+copy self-corrects on the next sync; only the canonical store and the spool need the lock's guarantee,
+and only those two are irreplaceable.
 
 **Two consequences documented rather than engineered around.** Long-lived `pensieve mcp` servers held
 open by running Claude Code sessions resolved their paths at startup and will read the recycled copy
