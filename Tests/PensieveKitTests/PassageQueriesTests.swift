@@ -48,10 +48,11 @@ private func insertPassage(_ database: any DatabaseWriter, nodeID: UUID, eventID
                            // from its count, the same device `SearchQueries.buildHits` uses). Every
                            // call site still passes both explicitly.
                            turnIndex: Int = 0, messageIndex: Int = 0, role: PassageRole,
-                           text: String) throws -> Passage {
+                           text: String,
+                           occurredAt: Date = Date(timeIntervalSince1970: 1_700_000_000)) throws -> Passage {
   let passage = Passage(nodeID: nodeID, eventID: eventID, turnIndex: turnIndex,
                         messageIndex: messageIndex, role: role, text: text,
-                        occurredAt: Date(timeIntervalSince1970: 1_700_000_000))
+                        occurredAt: occurredAt)
   try database.write { database in try Passage.insert { passage }.execute(database) }
   return passage
 }
@@ -135,5 +136,38 @@ private func writeTranscript(_ pairs: [(prompt: String, reply: String)]) throws 
     let query = try #require(FTSQueryBuilder.build("launchd", file: nil))
     #expect(store.searchPassages(query, limit: 10, includeArchived: false).isEmpty)
     #expect(store.searchPassages(query, limit: 10, includeArchived: true).count == 1)
+  }
+
+  /// `gatherPassages` decides what is eligible to be searched at all, so it is worth pinning
+  /// directly rather than through the store. Three properties in one pass: an item carries its
+  /// OWNING node's state (a passage has none of its own), a node in a state the corpus does not
+  /// index contributes nothing, and the order is deterministic — the corpus hash is computed over
+  /// this array, so an order that depended on SQLite's whim would rebuild the whole index on every
+  /// sync with nothing changed.
+  @Test func gatherPassagesCarriesOwningNodeStateInDeterministicOrder() throws {
+    let database = try makePassageStore()
+    let active = try insertNode(database, name: "Active")
+    let archived = try insertNode(database, name: "Archived", state: .archived)
+    let muted = try insertNode(database, name: "Muted", state: .muted)
+    let activeEvent = try insertSessionEvent(database, nodeID: active.id)
+    let archivedEvent = try insertSessionEvent(database, nodeID: archived.id)
+    let mutedEvent = try insertSessionEvent(database, nodeID: muted.id)
+    try insertPassage(database, nodeID: active.id, eventID: activeEvent.id, role: .prompt,
+                      text: "second in time, first alphabetically is irrelevant",
+                      occurredAt: Date(timeIntervalSince1970: 2_000))
+    try insertPassage(database, nodeID: archived.id, eventID: archivedEvent.id, role: .reply,
+                      text: "earliest of the three",
+                      occurredAt: Date(timeIntervalSince1970: 1_000))
+    try insertPassage(database, nodeID: muted.id, eventID: mutedEvent.id, role: .prompt,
+                      text: "a muted node contributes nothing",
+                      occurredAt: Date(timeIntervalSince1970: 3_000))
+
+    let items = try EmbeddableCorpus.gatherPassages(database)
+    #expect(items.count == 2, "the muted node's passage is not part of the corpus")
+    #expect(items.allSatisfy { $0.kind == "passage" })
+    #expect(items.map(\.state) == [NodeState.archived.rawValue, NodeState.active.rawValue],
+            "each item carries its owning node's state, ordered by occurredAt")
+    #expect(try EmbeddableCorpus.gatherPassages(database).map(\.itemID) == items.map(\.itemID),
+            "a second gather returns the same order")
   }
 }
