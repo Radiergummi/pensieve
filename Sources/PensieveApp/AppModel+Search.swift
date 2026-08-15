@@ -3,6 +3,11 @@ import Foundation
 import PensieveKit
 
 extension AppModel {
+  /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
+  /// site that branches on search (the middle content, the refresh re-run, the detail one-home
+  /// override, clear-on-navigation) reads this, so the trimming rule can't drift.
+  var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
   /// Index catch-up. Runs on launch + ⌘R **and** on every watch-driven refresh — the search index
   /// backs the only retrieval path, so anything the app just drained has to become findable without
   /// waiting for ⌘R or the 300 s agent, which the user may not even have approved.

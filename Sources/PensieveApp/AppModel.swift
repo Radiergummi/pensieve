@@ -201,11 +201,6 @@ final class AppModel {
     return ProvenanceLoader(database: database)
   }()
 
-  /// The single source of truth for "search mode is active" — a non-empty trimmed field. Every
-  /// site that branches on search (the middle content, the refresh re-run, the detail one-home
-  /// override, clear-on-navigation) reads this, so the trimming rule can't drift.
-  var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
   private static let lastOpenedKey = "pensieve.lastOpenedAt"
 
   init() {
@@ -376,11 +371,6 @@ final class AppModel {
 
   func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
 
-  /// Count of top-level project nodes, for the content-column header.
-  var projectCount: Int {
-    allNodes.filter { $0.parentID == nil && $0.kind == .project && $0.state == .active }.count
-  }
-
   /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
   func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
 
@@ -400,4 +390,8 @@ final class AppModel {
   // MARK: - Organizing writes
   // All of them — including the two modal commits — live in AppModel+Organizing.swift, alongside the
   // shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers.
+
+  // MARK: - Search · content header
+  // `isSearching` and `projectCount` live in AppModel+Search.swift / AppModel+Middle.swift — moved
+  // when the translation work pushed this file past the 400-line cap again. Stored state stays here.
 }
