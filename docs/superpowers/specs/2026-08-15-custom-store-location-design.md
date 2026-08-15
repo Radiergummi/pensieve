@@ -184,7 +184,7 @@ the move completes.
 | 1 | Take exclusive lock. Drain spool → current canonical. | Lock held by a sync in flight → report "sync running, try again"; clear the pending key and boot normally against the old root. |
 | 2 | Record current `Event` count (2,723 today). No pools to close — nothing is open yet. | — |
 | 3 | **Copy** the directory to `<destination>` — sidecars, `salience-corpus`, everything. | Delete partial destination; release; report. Old install untouched. |
-| 4 | Verify: per-file byte sizes match, **and** the copied canonical store opens and reports the same `Event` count. | As above. |
+| 4 | Verify: the copied canonical store opens and reports the same `Event` count, the copied spool reopens read-only, **and** `pensieve.sqlite`/`-wal`/`-shm` — the only files the exclusive lock actually quiesces — match the source byte-for-byte. | As above. |
 | 5 | **Write `customSupportRoot`.** ← the only commit point | — |
 | 6 | Re-check the *old* spool for rows a hook wrote during 3–5; drain them into the new canonical store. | Best-effort; a failure here leaves the old folder in place and is reported, never silent. |
 | 7 | Move the old directory **to the Trash** via `NSWorkspace.recycle`. | Best-effort; a failure leaves 130 MB behind and says so. |

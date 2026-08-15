@@ -201,37 +201,74 @@ public struct StoreRelocator {
     }
   }
 
-  /// STEP 4 — semantic verification. Per-file byte sizes catch truncation of ANY file in the
-  /// folder, not just the two the rest of this function understands — a copy that lost the WAL
-  /// tail, or the `passages`/`loose_ends` rows while `events` happened to still match, or simply
-  /// dropped the disposable search index, fails here instead of "verifying" clean. Opening the
-  /// copy and matching the event count then catches the failure that actually matters most,
-  /// without hashing 130 MB. The copied SPOOL is verified too — capture hooks take no lock, so
-  /// `capture.sqlite`/`-wal` can be copied mid-write, and a torn copy must not silently become the
-  /// live capture store the instant the commit lands.
+  /// STEP 4 — semantic verification. Opening the copy and matching the event count catches the
+  /// failure that matters most, without hashing 130 MB. The copied SPOOL is verified too — capture
+  /// hooks take no lock, so `capture.sqlite`/`-wal` can be copied mid-write, and a torn copy must
+  /// not silently become the live capture store the instant the commit lands.
+  ///
+  /// The per-file byte-size check runs LAST, and is scoped to `pensieve.sqlite`/`-wal`/`-shm`
+  /// ONLY — the three files the exclusive lock (STEP 1) actually quiesces: no admitted canonical
+  /// writer can coexist with it (`CanonicalWriterGate`/`StoreOpen.swift`), and `drainSourceSpool`
+  /// closes its own connections before the copy, so these three are the only files this run can
+  /// promise are frozen at snapshot time. Everything else under the support directory —
+  /// `capture.sqlite`/`-wal` (capture hooks take NO lock, by design), `narration-cache.sqlite`
+  /// (written by concurrent `pensieve mcp` warming, never through the gate), and the disposable
+  /// search/translation indexes — can legitimately differ in size across the copy window with
+  /// nothing lost, so a whole-tree comparison false-rejected a healthy copy on every one of them.
+  /// It runs last, after the event-count and spool-reopen checks, so a SQLite-level failure on the
+  /// files it now cares about (a corrupt/truncated `pensieve.sqlite`) surfaces the more specific
+  /// error those two already produce; this check is the narrower net behind them, catching what
+  /// they don't — a lost WAL tail, or `passages`/`loose_ends` rows dropped while `events` happened
+  /// to still match.
   ///
   /// `sourceSizes` is a snapshot taken BEFORE the copy started (see `run()`), not a re-measurement
   /// of the source taken now — a row a hook legitimately wrote to the source's spool during the
   /// copy window (recovered separately in STEP 6) would otherwise make an honest copy look
-  /// "truncated" by comparison to a source that has since grown.
+  /// "truncated" by comparison to a source that has since grown. `copyItem` itself is not atomic —
+  /// it reads each file as its enumerator reaches it — so even a canonical-store file legitimately
+  /// reflects the source somewhere INSIDE the copy window, not at the exact snapshot instant; the
+  /// exclusive lock is what makes that a non-issue for these three specific files (nothing else can
+  /// be writing them), not the snapshot timing.
   private func verifyCopy(expectedEvents: Int, sourceSizes: [String: Int64], manager: FileManager) throws {
     do {
-      let destinationSizes = Self.fileSizeMap(at: destination)
-      guard sourceSizes == destinationSizes else {
-        throw RelocationError.verificationFailed(
-          "byte sizes differ: \(sourceSizes.count) source path(s), \(destinationSizes.count) destination path(s)")
-      }
       let copiedEvents = try Self.eventCount(at: PensievePaths.canonicalURL(in: destination))
       guard copiedEvents == expectedEvents else {
         throw RelocationError.verificationFailed(
           "event count \(copiedEvents) != \(expectedEvents)")
       }
       _ = try CaptureSpool.readOnlyStats(at: PensievePaths.captureURL(in: destination))
+
+      let destinationSizes = Self.fileSizeMap(at: destination)
+      if let message = Self.canonicalStoreSizeMismatchMessage(source: sourceSizes, destination: destinationSizes) {
+        throw RelocationError.verificationFailed(message)
+      }
     } catch {
       try? manager.removeItem(at: destination)
       throw error is RelocationError ? error
         : RelocationError.verificationFailed(String(describing: error))
     }
+  }
+
+  /// The only files the exclusive lock genuinely quiesces (see `verifyCopy`'s doc comment).
+  private static let canonicalStoreFileNames = ["pensieve.sqlite", "pensieve.sqlite-wal", "pensieve.sqlite-shm"]
+
+  /// Scoped, not whole-tree: only `canonicalStoreFileNames`. A name absent from BOTH sides (a
+  /// fresh install may have no `-wal`/`-shm` yet) is fine; present on one side only, or differing
+  /// in size, is a mismatch — the message names the exact file and both byte counts instead of
+  /// just counting paths.
+  private static func canonicalStoreSizeMismatchMessage(
+    source: [String: Int64], destination: [String: Int64]
+  ) -> String? {
+    for name in canonicalStoreFileNames {
+      let sourceSize = source[name]
+      let destinationSize = destination[name]
+      guard sourceSize != destinationSize else { continue }
+      let sourceDescription = sourceSize.map(String.init) ?? "absent"
+      let destinationDescription = destinationSize.map(String.init) ?? "absent"
+      return "canonical store file size differs: \(name) — source \(sourceDescription), "
+        + "destination \(destinationDescription)"
+    }
+    return nil
   }
 
   /// STEP 6 — close the window: rows a hook wrote to the OLD spool during 3–5 still arrive.
