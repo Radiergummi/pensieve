@@ -95,9 +95,12 @@ All three doubts resolve in favour of building it: **`.onKeyPress` fires** insid
 panel, **`NSApp.isActive` is true** so focus rings are not suppressed (confirmed visually — a ring
 rendered), and **SwiftUI accepts a programmatic focus request**.
 
-**Implementation consequence, earned by the log:** arrows report `key=""` because they carry no
-character. Match on `.onKeyPress(.upArrow)` / `.onKeyPress(.downArrow)`; never inspect
-`press.key.character`.
+**A conclusion drawn here was wrong, and the build caught it.** Spike 2 logged `key=""` for arrows
+and this spec read that as "arrows arrive, they just carry no character — so match on
+`.onKeyPress(.upArrow)`". They do **not** arrive: the probe's handler sat on a `.focusable()`
+container that had focus itself, whereas the shipped rows hold focus and arrow keys are consumed as
+*move commands* before `onKeyPress` sees them. The correct binding is `.onMoveCommand`; `.onKeyPress`
+keeps only `Return`. See the risk table below.
 
 ### Why the design is arrows-first, not Tab-first
 
@@ -111,9 +114,10 @@ most users cannot reach, it is to put navigation somewhere that always works.
 
 **Rows gain an explicit selection.** The existing `VStack` of `MenuBarRow` buttons stays; each row
 becomes focusable, with an `@FocusState` cursor over the row identity. **Deliberately not a
-`List`** — the first draft proposed one for its free arrow handling, but spike 2 shows `.onKeyPress`
-works, so a `List` would buy arrow handling at the price of list chrome on the glass material and a
-sizing fight with a popover that currently self-sizes. Five uniform rows do not need it.
+`List`** — the first draft proposed one for its free arrow handling, which `.onMoveCommand` supplies
+without the list chrome on the glass material or a sizing fight with a popover that self-sizes. Five
+uniform rows do not need it. (The reason recorded here originally — "spike 2 shows `.onKeyPress`
+works" — was wrong for arrows; the conclusion happens to survive on the better reason.)
 
 | key | behaviour |
 |---|---|
@@ -122,7 +126,7 @@ sizing fight with a popover that currently self-sizes. Five uniform rows do not 
 | `⌘↩` | Open Pensieve (the footer primary) |
 | `⌘R` | Refresh — already the app's shortcut (`PensieveApp.swift:56`) |
 | `⌘,` | Settings, via the shipped `SettingsLink` |
-| `Esc` | close the popover (system behaviour; see risks) |
+| `Esc` | close the popover — **implemented**, via `.onExitCommand`; not system behaviour |
 
 **The footer is reached by shortcut, not by traversal.** This closes a self-contradiction the reviews
 caught in the first draft, which dismissed Tab as unreachable and then placed a primary action in the
@@ -160,24 +164,65 @@ Two things the reviews established that must carry into that change:
 
 **`openTop` is not built.** See "What the reviews changed".
 
-## Risks
+## Risks — all four resolved in build, by a third trace
 
-| risk | fallback |
+The first implementation shipped with four defects. None were caught by a green build; all four were
+found by using it and then instrumenting, not by re-reading the code.
+
+| risk as written | what actually happened |
 |---|---|
-| `.defaultFocus` does not take on first open | Set focus explicitly from `.task` — spike 2 shows programmatic focus is accepted. |
-| `Esc` may be consumed by the panel before SwiftUI sees it | Unverified, and low-stakes: if it cannot be observed, the system keeps whatever it already does. Not worth fighting the panel for. |
-| A focus ring on a row may read poorly against the popover's glass | Style the focused row with the same `.quaternary` fill the hover state already uses, rather than relying on the system ring. |
+| `.defaultFocus` does not take on first open | Non-issue. Setting focus from `.task` works. |
+| `Esc` may be consumed by the panel before SwiftUI sees it | It is **not** consumed — `.onExitCommand` receives it. The bug was that nothing was implemented for it, which the risk row obscured by framing it as an availability question. |
+| A focus ring on a row may read poorly against the popover's glass | Correct, but the fix was insufficient: styling the row drew the fill **in addition to** the system ring, which read as a permanent stray outline on the pre-focused first row. `.focusEffectDisabled()` is what makes the fill a replacement. |
+| — (not anticipated) | **Arrows were bound to the wrong API.** `.onKeyPress` never receives them: arrow keys are consumed as *move commands* first. The trace showed the handler receiving `\r` and never once an arrow, while `.onExitCommand` fired in the same session — which is what proved command propagation reaches the container, and therefore that `.onMoveCommand` would work. |
 
-## Human-verify carries
+### And one pre-existing bug this surfaced, affecting far more than the popover
 
-Need the installed app; a green build catches none of these.
+`applyDeepLink` called `NSApplication.shared.activate()`, the macOS 14 **cooperative** form, which
+**declines when another app is frontmost** — exactly the case where fronting is the point. Measured by
+logging window state through the function: identical activations alternated between raising the
+window and merely giving it key status behind other apps, tracking only whether Pensieve was already
+active.
 
-1. `↑`/`↓` move a visible row highlight; `↩` opens that node.
-2. `⌘↩`, `⌘R`, `⌘,` fire from the popover without the mouse.
-3. Focus lands on the first row on open — and does **not** crash or trap when What's Next is empty.
-4. What `Esc` actually does.
-5. VoiceOver reads a row as one coherent label.
-6. German in situ.
+This is the **single navigation entry point for every surface** — menu-bar clicks, external
+`pensieve://` opens, Spotlight taps, App Intents, Siri and Shortcuts. All of them have had it. Fixed
+with `NSRunningApplication.current.activate(options: [.activateAllWindows])`, which is not deprecated
+(`.activateIgnoringOtherApps` is) and actually raises rather than merely focusing.
+
+### Dismissing the popover has no first-party route
+
+Verified against the SwiftUI `.swiftinterface` for MacOSX26.5: `MenuBarExtra`'s `isInserted:` binding
+controls whether the item **exists**, not whether it is presented, and there is no presentation
+binding at all. The first attempt closed the `NSPanel` directly; that worked visually and was wrong —
+SwiftUI still believed the popover was presented, so the status item kept its highlight and the next
+click was spent resyncing instead of opening, costing one dead click every time.
+
+The shipped version clicks the `NSStatusBarButton` instead, which lets SwiftUI toggle the state that
+was out of sync. `NSStatusBarButton` is public AppKit, unlike the private `MenuBarExtraWindow<AnyView>`
+the first version had to identify by window level, and the button's `.on` state doubles as the "is it
+open" test and the no-op guard for external opens.
+
+## Human-verify — done 2026-08-15, all passing
+
+Every item below was verified against the installed app. Items 1–4 **failed on the first build** and
+are the reason the risk table above is now a record rather than a forecast.
+
+1. ✅ `↑`/`↓` move a visible row highlight; `↩` opens that node.
+2. ✅ `⌘↩`, `⌘R`, `⌘,` fire from the popover without the mouse. (`⌘↩` initially read as "no effect" —
+   it was firing all along, but hit the activation bug, so the window never came forward.)
+3. ✅ Focus lands on the first row on open.
+4. ✅ `Esc` closes the popover, **and a single click reopens it** — the second half is the one that
+   caught the stale-presentation-state bug, and a check for "does Esc close it" alone would have
+   passed the broken version.
+5. Outstanding: VoiceOver reads a row as one coherent label.
+6. Outstanding: German in situ.
+
+**Method note worth keeping.** Four defects shipped through a green build, zero lint violations and a
+passing suite. Every one was found by using the surface and then *instrumenting the paths* — logging
+which handler fired, with which key and modifiers, and what the window state was before and after.
+Reasoning about the code found none of them, and twice produced confident wrong diagnoses (an
+Enter-vs-click distinction that did not exist, and a "regression" in a path that had always been
+broken).
 
 ## Deferred, not foreclosed
 

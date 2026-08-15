@@ -54,27 +54,29 @@ struct MenuBarView: View {
     }
     .padding(12)
     .frame(width: 320)   // two-line rows need the room
-    // Arrows rather than Tab, and the reason is that Tab does not work for most people: macOS Full
-    // Keyboard Access is off by default, so it never reaches a Button. Arrows always do. The handlers
-    // sit on the container so they fire while any descendant row holds focus.
+    // Arrows go through `.onMoveCommand`, NOT `.onKeyPress`. This was measured, after shipping the
+    // wrong one: a trace showed the key-set handler receiving `\r` and never once an arrow, because
+    // arrow keys are consumed as MOVE COMMANDS before `onKeyPress` sees them. `.onExitCommand` firing
+    // in the same trace is what proved command-style propagation reaches this container at all, and
+    // therefore that `.onMoveCommand` would work where `.onKeyPress` could not.
     //
-    // Measured before being designed (spike 2, 2026-08-15): `.onKeyPress` DOES fire inside this
-    // `.nonactivatingPanel`, `NSApp.isActive` is true while the popover is open so focus rings are
-    // not suppressed, and a programmatic focus request is accepted.
-    //
-    // One handler over a key SET rather than three per-key handlers, because the per-key overload
-    // does not see modifiers: `.onKeyPress(.return)` also fires for ⌘↩, which is the footer's
-    // shortcut — so plain Return would have opened the focused node AND ⌘↩ would have opened the
-    // node and the briefing together. The guard makes the bare keys bare.
-    .onKeyPress(keys: [.upArrow, .downArrow, .return]) { press in
-      guard press.modifiers.isEmpty else { return .ignored }
-      switch press.key {
-      case .upArrow: return moveFocus(by: -1)
-      case .downArrow: return moveFocus(by: 1)
-      case .return: return activateFocusedRow()
-      default: return .ignored
+    // Still arrows rather than Tab as the designed route: Full Keyboard Access is off by default. Tab
+    // happens to work here anyway (the rows are `@FocusState` targets), which is a bonus, not the plan.
+    .onMoveCommand { direction in
+      switch direction {
+      case .up: moveFocus(by: -1)
+      case .down: moveFocus(by: 1)
+      default: break   // left/right have no meaning in a single column
       }
     }
+    // Return stays on `onKeyPress`, where the trace confirms it does arrive. The modifier guard is
+    // load-bearing: the per-key overload cannot see modifiers, so without it ⌘↩ would open the
+    // focused node here AND the briefing via the footer's shortcut.
+    .onKeyPress(keys: [.return]) { press in
+      press.modifiers.isEmpty ? activateFocusedRow() : .ignored
+    }
+    // Esc reaches this view (measured); it simply had no implementation before.
+    .onExitCommand { dismissMenuBarPopover() }
     .task {
       model.refreshGlance()   // refresh on open; the always-mounted label is kept live between opens by the liveness watches
       focusedRow = rows.first?.project.id   // nil when the queue is empty — no row to focus, and that is fine
@@ -86,15 +88,15 @@ struct MenuBarView: View {
   private var rows: [NextItem] { Array(model.lists.whatsNext.prefix(Self.maxRows)) }
 
   /// Clamped, not wrapping: with five rows, wrap-around costs more surprise than it saves keystrokes.
-  private func moveFocus(by offset: Int) -> KeyPress.Result {
+  /// Returns nothing — `.onMoveCommand`'s closure is not result-carrying, unlike `.onKeyPress`'s.
+  private func moveFocus(by offset: Int) {
     let ids = rows.map(\.project.id)
-    guard !ids.isEmpty else { return .ignored }
+    guard !ids.isEmpty else { return }
     guard let current = focusedRow, let index = ids.firstIndex(of: current) else {
       focusedRow = ids.first
-      return .handled
+      return
     }
     focusedRow = ids[min(max(index + offset, 0), ids.count - 1)]
-    return .handled
   }
 
   private func activateFocusedRow() -> KeyPress.Result {
@@ -261,11 +263,13 @@ private struct MenuBarRow: View {
       .rowHitArea()
     }
     .buttonStyle(.plain)
-    // Focus reuses the hover fill rather than the system focus ring: on the popover's glass material
-    // a ring reads as a stray outline (spike 2 rendered one around the whole 320pt container and it
-    // looked like a rendering bug), whereas the fill is the affordance this row already uses to mean
-    // "this one". Focus is drawn slightly stronger than hover so the two are distinguishable when
-    // the pointer and the cursor are on different rows.
+    // Focus reuses the hover fill rather than the system focus ring, and `.focusEffectDisabled()`
+    // is what makes that a replacement instead of an addition — without it the row drew BOTH, which
+    // read as a permanent stray outline on the first row (the popover focuses it on open so Return
+    // works without arrowing first). The fill is the affordance this row already uses for "this one";
+    // focus is drawn stronger than hover so the pointer and the cursor stay distinguishable on
+    // different rows.
+    .focusEffectDisabled()
     .background(.quaternary.opacity(isFocused ? 1 : (isHovering ? 0.6 : 0)),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     .onHover { isHovering = $0 }
