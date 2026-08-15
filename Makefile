@@ -99,12 +99,19 @@ smoke: .make/smoke ## Verify the built bundle's embedded CLI launches
 #
 # The app writes its own defaults (lastOpenedAt among them), and a test run must not shift the real
 # Briefing baseline — so the domain is exported and restored around the suite. Best-effort: a crash
-# mid-suite skips the restore, but the export is still on disk at the path below.
+# mid-suite skips the restore, but this run's export is still on disk at the path it prints.
+#
+# The backup path is per-run (mktemp), and the restore happens only if this run's own export actually
+# produced a file. A fixed path plus an unconditional restore is a trap: a failed export — silently
+# swallowed by `|| true` — is followed by importing a STALE backup left behind by an earlier run,
+# overwriting the live domain rather than leaving it untouched. That domain now carries the custom
+# store root, so the failure mode is a moved store, not a shifted Briefing date.
 .make/uitest: $(APP_CLI) $(UITEST_SOURCES) | .make
-	@defaults export me.mazetti.pensieve /tmp/pensieve-defaults-backup.plist 2>/dev/null || true
-	@xcodebuild $(XCODEBUILD_FLAGS) -scheme Pensieve -only-testing:PensieveUITests test \
-		|| (defaults import me.mazetti.pensieve /tmp/pensieve-defaults-backup.plist 2>/dev/null; exit 1)
-	@defaults import me.mazetti.pensieve /tmp/pensieve-defaults-backup.plist 2>/dev/null || true
+	@backup=$$(mktemp /tmp/pensieve-defaults-backup.XXXXXX); \
+	if ! defaults export me.mazetti.pensieve "$$backup" 2>/dev/null; then rm -f "$$backup"; backup=""; fi; \
+	xcodebuild $(XCODEBUILD_FLAGS) -scheme Pensieve -only-testing:PensieveUITests test; status=$$?; \
+	if [ -n "$$backup" ]; then defaults import me.mazetti.pensieve "$$backup" 2>/dev/null || true; rm -f "$$backup"; fi; \
+	exit $$status
 	@touch $@
 
 .make/test: $(TEST_INPUTS) | .make
