@@ -118,17 +118,32 @@ final class AppModel {
 
   /// Coverage as last measured, or nil when the target is off / not yet measured. Measured on demand
   /// from Settings, not on launch: it is 1,294 store reads today and nothing outside Settings shows it.
-  /// The language travels WITH the coverage, not as a separate token: a re-measure after a language
-  /// switch takes a full corpus gather, and during that window a token could only say "stale", while
-  /// the language itself lets both the backfill and the view compare against the CURRENT target and
-  /// refuse/hide on mismatch — the same stale-async-write shape slice 3a's narration window and
-  /// `DetailView`'s `loadedNodeID == node.id` gate already fixed.
-  var translationCoverage: (language: String, coverage: TranslationCoverage)?
-  /// Non-nil while a bulk translation is running: (done, total). Lives on the model, not the view, so
-  /// closing Settings does not kill a run and reopening it shows the run still going.
-  var translationBackfillProgress: (done: Int, total: Int)?
-  /// The running backfill. `Task.detached` deliberately — see `startTranslationBackfill`.
-  @ObservationIgnored var translationBackfillTask: Task<Int, Never>?
+  /// It carries the language it was measured for — see `TranslationCoverage.language`.
+  var translationCoverage: TranslationCoverage?
+  /// Guards `translationCoverage` against a stale write from a superseded measurement, exactly as
+  /// `searchToken` guards `searchHits` — see `measureTranslationCoverage` for why it is required.
+  @ObservationIgnored var translationCoverageToken = 0
+
+  /// A bulk translation in flight: the task and its progress as ONE value, not two kept in step by
+  /// convention. The invariant "progress is non-nil exactly while a task exists" was previously
+  /// asserted in three doc comments and enforced nowhere — it held only because nothing had yet been
+  /// inserted between the two assignments. It also split authority: the view chose its branch from the
+  /// progress but its Stop button acted on the task. Two copies of one fact is how they stop agreeing,
+  /// which is the same argument `SearchHitResolver` and `EmbeddableCorpus.corpusNodes` exist on.
+  struct TranslationBackfillRun {
+    /// `Task.detached` deliberately — see `startTranslationBackfill`.
+    let task: Task<Int, Never>
+    /// The language this run translates INTO. Cancellation is cooperative, so a run outlives the
+    /// language switch that cancelled it by however long its in-flight unit takes; without this tag
+    /// the progress row rendered under the NEWLY selected language, claiming work toward a target
+    /// this run is not translating into. Every other piece of translation state on this branch
+    /// carries its language for exactly this reason — `TranslationCoverage.language` and
+    /// `TranslationSettingsSection.downloadingLanguage` — and this was the one that did not.
+    let language: String
+    var done: Int
+    let total: Int
+  }
+  var translationBackfillRun: TranslationBackfillRun?
 
   /// Bumped when a loose end's status changes. Its own signal for the same reason
   /// `translationRevision` is: the feeds and the detail pane key their reload `.task` on

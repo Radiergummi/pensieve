@@ -11,7 +11,7 @@ import Foundation
      TranslatableUnit(field: .looseEndText, sourceText: "Check the log")]
   }
 
-  @Test func partialCoverageCountsPerFieldAndInTotal() {
+  @Test func partialCoverageCounts() {
     let store = TranslationStore(url: tempURL("coverage-partial"))
     store.put(field: .nodeName, sourceText: "Background sync", language: "de", text: "Hintergrund")
     store.put(field: .looseEndText, sourceText: "Check the log", language: "de", text: "Log prüfen")
@@ -19,9 +19,8 @@ import Foundation
     let coverage = TranslationCoverage.measure(units: units(), store: store, language: "de")
     #expect(coverage.translated == 2)
     #expect(coverage.total == 4)
-    #expect(coverage.fields.first { $0.field == .looseEndText }?.translated == 1)
-    #expect(coverage.fields.first { $0.field == .looseEndText }?.total == 2)
-    #expect(coverage.fields.first { $0.field == .nodeDescription }?.translated == 0)
+    // `translated` is derived from `missing`, so the two can never contradict each other.
+    #expect(coverage.translated == coverage.total - coverage.missing.count)
   }
 
   /// `missing` is what the backfill consumes, so it must be exactly the complement of what is stored.
@@ -59,14 +58,12 @@ import Foundation
     #expect(coverage.missing.isEmpty)
   }
 
-  /// A field with no units must not appear at all, rather than appearing as "0 of 0" — a zero-total
-  /// row reads as a failure in a UI that lists it.
-  @Test func fieldsWithNoUnitsAreAbsent() {
-    let store = TranslationStore(url: tempURL("coverage-absent-field"))
-    let coverage = TranslationCoverage.measure(
-      units: [TranslatableUnit(field: .nodeName, sourceText: "Only a name")],
-      store: store, language: "de")
-    #expect(coverage.fields.count == 1)
-    #expect(coverage.fields.first?.field == .nodeName)
+  /// The measurement carries the language it was made FOR. Load-bearing, not decoration: the backfill
+  /// refuses a coverage whose language is not the current target, which is what stops a run started
+  /// after a language switch from translating language A's missing list into language B.
+  @Test func coverageCarriesTheLanguageItWasMeasuredFor() {
+    let store = TranslationStore(url: tempURL("coverage-language-tag"))
+    #expect(TranslationCoverage.measure(units: units(), store: store, language: "de").language == "de")
+    #expect(TranslationCoverage.measure(units: units(), store: store, language: "fr").language == "fr")
   }
 }

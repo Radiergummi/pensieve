@@ -9,28 +9,24 @@ import Foundation
 /// Counted by DISTINCT source text, because that is how `TranslationStore` is keyed — see
 /// `TranslatableCorpus`.
 public struct TranslationCoverage: Sendable {
-  public struct Field: Sendable, Hashable {
-    public let field: TranslationField
-    public let translated: Int
-    public let total: Int
-    public init(field: TranslationField, translated: Int, total: Int) {
-      self.field = field
-      self.translated = translated
-      self.total = total
-    }
-  }
-
-  /// Only fields with at least one unit. A "0 of 0" row reads as a failure in a list.
-  public let fields: [Field]
-  /// The units with no stored translation, in corpus order — the backfill's work list. The same list
-  /// the count above is derived from, so the readout and the work can never disagree.
+  /// The language this was measured FOR, carried ON the measurement rather than beside it. A re-measure
+  /// after a language switch takes a full corpus gather, and during that window a caller holding the
+  /// previous result must be able to tell that it belongs to the previous language — otherwise the
+  /// backfill translates language A's missing list into language B. The same stale-async-write shape
+  /// slice 3a's narration window and `DetailView`'s `loadedNodeID == node.id` gate already fixed.
+  public let language: String
+  /// Every unit the corpus can look up, translated or not.
+  public let total: Int
+  /// The units with no stored translation, in corpus order — the backfill's work list. Deliberately the
+  /// ONLY count kept: `translated` is derived from it, so the number shown and the work done cannot
+  /// disagree.
   public let missing: [TranslatableUnit]
 
-  public var translated: Int { fields.reduce(0) { $0 + $1.translated } }
-  public var total: Int { fields.reduce(0) { $0 + $1.total } }
+  public var translated: Int { total - missing.count }
 
-  public init(fields: [Field], missing: [TranslatableUnit]) {
-    self.fields = fields
+  public init(language: String, total: Int, missing: [TranslatableUnit]) {
+    self.language = language
+    self.total = total
     self.missing = missing
   }
 
@@ -39,23 +35,10 @@ public struct TranslationCoverage: Sendable {
   /// follow.
   public static func measure(units: [TranslatableUnit], store: TranslationStore,
                              language: String) -> TranslationCoverage {
-    guard !language.isEmpty else { return TranslationCoverage(fields: [], missing: []) }
-    var totals: [TranslationField: Int] = [:]
-    var translatedCounts: [TranslationField: Int] = [:]
-    var missing: [TranslatableUnit] = []
-    for unit in units {
-      totals[unit.field, default: 0] += 1
-      if store.translation(field: unit.field, sourceText: unit.sourceText, language: language) != nil {
-        translatedCounts[unit.field, default: 0] += 1
-      } else {
-        missing.append(unit)
-      }
+    guard !language.isEmpty else { return TranslationCoverage(language: language, total: 0, missing: []) }
+    let missing = units.filter {
+      store.translation(field: $0.field, sourceText: $0.sourceText, language: language) == nil
     }
-    // `allCases` order, so the readout is stable across runs rather than dictionary order.
-    let fields = TranslationField.allCases.compactMap { field -> Field? in
-      guard let total = totals[field] else { return nil }
-      return Field(field: field, translated: translatedCounts[field] ?? 0, total: total)
-    }
-    return TranslationCoverage(fields: fields, missing: missing)
+    return TranslationCoverage(language: language, total: units.count, missing: missing)
   }
 }

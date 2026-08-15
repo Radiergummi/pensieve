@@ -106,9 +106,9 @@ public enum EmbeddableCorpus {
                                   text: text, language: language,
                                   status: looseEnd.status.rawValue))
       }
-      // Active AND archived: archiving hides work from the normal views, it does not make the work
-      // unrecallable. `muted` stays out of the corpus entirely. Each item carries its owning node's
-      // real state, which is what lets the query layer scope results per search scope.
+      // Each item carries its owning node's real state, which is what lets the query layer scope
+      // results per search scope. Which nodes are eligible, and why, is `corpusNodes` — deliberately
+      // not restated here, since restating it is how two copies of a filter stop agreeing.
       let nodes = try Self.corpusNodes(database)
       let stateByNodeID = Dictionary(nodes.map { ($0.id, $0.state.rawValue) },
                                      uniquingKeysWith: { firstState, _ in firstState })
@@ -117,14 +117,9 @@ public enum EmbeddableCorpus {
                          state: node.state.rawValue, text: [node.name, node.description].filter { !$0.isEmpty }.joined(separator: " — ")))
         appendTranslatedNodeDocument(for: node, into: &out, translations: translations, language: language)
       }
-      // Open AND closed. Closing hides work from the live views; it does not make the work
-      // unrecallable — the same reasoning that put archived nodes in this corpus. Each item carries
-      // its own status, which is what lets the query layer scope per search scope.
-      //
-      // `label = "noise"` stays EXCLUDED, and that asymmetry is deliberate: 👎 asserts the text was
-      // never a loose end at all, so indexing it would pollute retrieval, whereas a closed end was
-      // real work someone finished. `isOpen` conflates the two, so this predicate spells them out
-      // separately instead of reusing it.
+      // Each item carries its own status, which is what lets the query layer scope per search scope.
+      // Which loose ends are eligible — open AND closed, `noise` excluded, and why that asymmetry is
+      // deliberate — is `corpusLooseEnds`.
       let ends = try Self.corpusLooseEnds(database)
       for looseEnd in ends {
         guard let state = stateByNodeID[looseEnd.nodeID] else { continue }

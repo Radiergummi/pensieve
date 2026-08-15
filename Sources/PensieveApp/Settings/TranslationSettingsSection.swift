@@ -26,53 +26,60 @@ struct TranslationLanguageOption: Identifiable, Hashable {
 /// Measured on this machine: 38 supported languages, of which 9 are English variants reporting
 /// `.unsupported` (en→en) and drop out by that status alone — no hand-maintained exclusion list.
 enum TranslationLanguageCatalog {
+  /// Concurrent, and the ordering objection does not apply: the results are re-sorted by name below,
+  /// so collection order cannot affect what this returns. Measured on this machine — `supportedLanguages`
+  /// 9.7 ms, then 38 serial `status(from:to:)` probes 184 ms (~4.8 ms each, warm) versus 82 ms through
+  /// a task group. This runs on every Settings open, and the picker shows only "Off" until it lands.
   static func load() async -> [TranslationLanguageOption] {
     let availability = LanguageAvailability()
     let english = Locale.Language(identifier: TranslationTarget.sourceLanguage)
-    var options: [TranslationLanguageOption] = []
-    // Serial rather than a TaskGroup: the probe returned all 38 statuses instantly, so concurrency
-    // would buy nothing measurable and cost deterministic ordering. (The spec says "concurrently";
-    // this is a deliberate simplification, recorded rather than silent.)
-    for language in await availability.supportedLanguages {
-      let status = await availability.status(from: english, to: language)
-      guard status != .unsupported else { continue }
-      let code = language.minimalIdentifier
-      options.append(TranslationLanguageOption(code: code,
-                                               name: TranslationTarget.displayName(for: code),
-                                               isInstalled: status == .installed))
+    let options = await withTaskGroup(of: TranslationLanguageOption?.self) { group in
+      for language in await availability.supportedLanguages {
+        group.addTask {
+          let status = await availability.status(from: english, to: language)
+          guard status != .unsupported else { return nil }
+          let code = language.minimalIdentifier
+          return TranslationLanguageOption(code: code,
+                                           name: TranslationTarget.displayName(for: code),
+                                           isInstalled: status == .installed)
+        }
+      }
+      return await group.reduce(into: [TranslationLanguageOption]()) { found, option in
+        if let option { found.append(option) }
+      }
     }
     return options.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-  }
-
-  /// Whether the pack for `language` is installed right now. Re-read after a download so the status
-  /// line reflects reality rather than the fact that a sheet was shown.
-  static func isInstalled(_ language: String) async -> Bool {
-    guard !language.isEmpty else { return false }
-    let status = await LanguageAvailability().status(
-      from: Locale.Language(identifier: TranslationTarget.sourceLanguage),
-      to: Locale.Language(identifier: language))
-    return status == .installed
   }
 }
 
 /// Settings ▸ Intelligence ▸ Translation. The target picker, language-pack status with a download
 /// affordance, a link to the OS pane that owns pack lifecycle, and the coverage/backfill row.
 ///
-/// Extracted from `IntelligenceSettingsTab` rather than grown inside it: that file is 261 lines and CI
-/// runs `swiftlint --strict` with a 400-line cap.
+/// Extracted from `IntelligenceSettingsTab` rather than grown inside it: CI runs `swiftlint --strict`
+/// with a 400-line cap and that file was already over half of it.
 struct TranslationSettingsSection: View {
   var model: AppModel
   @AppStorage(PensieveDefaults.translationTargetKey) private var translationTarget = TranslationTarget.off
 
+  /// The single source of truth for "is this pack installed" — the picker's `⤓` marker, the status
+  /// line and the backfill button's enablement all read it. It previously ALSO lived in a separate
+  /// `@State isInstalled` refreshed on its own schedule, and because `options` was loaded once and
+  /// never reloaded, a completed download flipped the status line to "Ready to translate" while the
+  /// picker row directly above still carried `⤓`. One representation, reloaded after a download.
   @State private var options: [TranslationLanguageOption] = []
-  @State private var isInstalled = false
   /// The language a Download tap actually captured, or nil while nothing is in flight. Compared
   /// synchronously against `translationTarget` (not reset from inside the async download closure) so
   /// switching the picker mid-download can never mount a `.translationTask` for the newly selected
   /// language — see `packStatus` below.
   @State private var downloadingLanguage: String?
+  /// Whether this window is the one the user is looking at. Watched, not merely read — see the
+  /// `.onChange` below.
+  @Environment(\.controlActiveState) private var controlActiveState
 
   private var isOff: Bool { translationTarget == TranslationTarget.off }
+  private var isInstalled: Bool {
+    options.first { $0.code == translationTarget }?.isInstalled ?? false
+  }
 
   var body: some View {
     Picker("Translate generated text to", selection: $translationTarget) {
@@ -93,7 +100,22 @@ struct TranslationSettingsSection: View {
     // flight every time Settings merely reopens — and "closing Settings does not kill a run, and
     // reopening shows it still going" is this feature's whole point. `.onChange` fires only on an
     // actual change, so a language switch cancels a stale run without touching one just opened into.
-    .onChange(of: translationTarget) { _, _ in model.cancelTranslationBackfill() }
+    .onChange(of: translationTarget) { _, _ in
+      model.cancelTranslationBackfill()
+      // Synchronous with the picker write, which is the whole point — see `downloadingLanguage`.
+      downloadingLanguage = nil
+    }
+    // The "Manage installed languages in System Settings…" button below sends the user OUT to install
+    // a pack while this window stays open, and `options` was loaded exactly once. On return the picker
+    // still showed `⤓`, the status line still read "isn't downloaded yet", and — since `isInstalled`
+    // derives from `options` — "Translate remaining" stayed disabled for a pack that was in fact
+    // installed, recoverable only by closing and reopening Settings. Re-probing when this window
+    // becomes key again is the narrowest signal that covers it, and it catches a pack DELETED out
+    // there just as well. Cheap enough to run on a window focus: measured 82 ms through the task group.
+    .onChange(of: controlActiveState) { _, state in
+      guard state == .key else { return }
+      Task { options = await TranslationLanguageCatalog.load() }
+    }
 
     if !isOff {
       if #available(macOS 26, *) {
@@ -139,7 +161,9 @@ struct TranslationSettingsSection: View {
             // already switched languages. Only the closure whose captured language still matches the
             // live selection may write outcome state — a superseded closure writes nothing.
             guard downloadingLanguage == translationTarget else { return }
-            isInstalled = await TranslationLanguageCatalog.isInstalled(downloadingLanguage)
+            // Reloading the whole catalog rather than probing this one language keeps installed-status
+            // in ONE place: the picker's `⤓` markers refresh with the status line instead of drifting.
+            options = await TranslationLanguageCatalog.load()
             self.downloadingLanguage = nil
           }
       } else if isInstalled {
@@ -151,19 +175,6 @@ struct TranslationSettingsSection: View {
         Spacer()
         Button("Download…") { downloadingLanguage = translationTarget }
       }
-    }
-    .task(id: translationTarget) {
-      // Third instance of the same guard on this file (the download mount above and the coverage
-      // measurement in `body` are the other two): `LanguageAvailability().status(from:to:)` returns a
-      // value and never throws, so `.task(id:)` cancelling this body on a picker switch does not stop
-      // it from resuming and writing anyway. Capture-and-recheck makes a superseded probe a no-op
-      // instead of an out-of-order write — without it, a slower `de` probe can overwrite a faster `uk`
-      // probe's `false` with `true`, and `isInstalled` then lies about the language actually selected.
-      let language = translationTarget
-      downloadingLanguage = nil
-      let installed = await TranslationLanguageCatalog.isInstalled(language)
-      guard language == translationTarget else { return }
-      isInstalled = installed
     }
   }
 
@@ -182,28 +193,36 @@ struct TranslationSettingsSection: View {
   /// mid-run nils out every call while the counter still climbs to the total). "Translating N of M…"
   /// is honest in that degraded path and leaves the coverage row's own "translated" meaning only what
   /// it actually measured from the store.
+  ///
+  /// The progress branch carries the same language gate as the coverage branch, for the same reason:
+  /// cancellation is cooperative, so a run cancelled by a language switch keeps existing until its
+  /// in-flight unit returns, and rendering its counter under the new selection would attribute that
+  /// work to the wrong target. Showing nothing during that window is the honest state.
   @available(macOS 26, *)
   @ViewBuilder private var coverageRow: some View {
-    if let progress = model.translationBackfillProgress {
+    if let run = model.translationBackfillRun, run.language == translationTarget {
       VStack(alignment: .leading, spacing: 4) {
-        ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
+        ProgressView(value: Double(run.done), total: Double(max(run.total, 1)))
         HStack {
-          Text("Translating \(progress.done) of \(progress.total)…")
+          Text("Translating \(run.done) of \(run.total)…")
             .font(.caption).foregroundStyle(.secondary)
           Spacer()
           Button("Stop") { model.cancelTranslationBackfill() }
         }
       }
-    } else if let measured = model.translationCoverage, measured.language == translationTarget {
-      let coverage = measured.coverage
+    } else if let coverage = model.translationCoverage, coverage.language == translationTarget {
       HStack {
         Text("\(coverage.translated) of \(coverage.total) translated")
           .font(.caption).foregroundStyle(.secondary)
         Spacer()
         // Nothing missing: the count already says so. A second sentence beside it would stutter.
         if !coverage.missing.isEmpty {
+          // The run check is not redundant with the branch above: a run cancelled by a language
+          // switch survives its in-flight unit, so this branch can be the one rendering while
+          // `startTranslationBackfill`'s own `translationBackfillRun == nil` guard would still refuse.
+          // A button that silently does nothing is worse than one that says it cannot yet.
           Button("Translate remaining") { model.startTranslationBackfill() }
-            .disabled(!isInstalled)
+            .disabled(!isInstalled || model.translationBackfillRun != nil)
         }
       }
     }
