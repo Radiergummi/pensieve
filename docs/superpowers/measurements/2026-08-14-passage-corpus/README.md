@@ -125,3 +125,80 @@ Test run with 1 test in 1 suite passed after 0.798 seconds.
 | Gate threshold | ~2 s |
 
 **Gate verdict: PASSES, with headroom to spare.** 0.733 s is well under the ~2 s threshold — at roughly a third of the budget for an overshoot corpus already ~1.6× the measured real one. The per-table hash (whole-drop-and-reinsert on any passage-corpus change, guarded by `passages_hash` so an unchanged corpus costs one read) is sufficient; incremental indexing is not required by this measurement. No STOP condition applies.
+
+## `pensieve backfill-passages` — real backfill against the live store (Task 9)
+
+**Date:** 2026-08-15. Ran `pensieve backfill-passages` (no `--dry-run`, no `PENSIEVE_DB`) against the
+real live canonical store at `~/Library/Application Support/Pensieve/pensieve.sqlite`.
+
+**A pre-registered gate check first re-verified this task's own premise against Task 1's numbers
+above.** The command's dry-run initially printed "sessions with a live transcript: 376" against
+Task 1's measured 396 — a 20-session gap that exceeded the ±10 tolerance and triggered a stop.
+Investigation (a temporary stderr diagnostic, reverted before committing) found the gap was not a
+wrong premise: 20 of the 396 live-transcript sessions are degenerate two-message transcripts that
+`TranscriptParser`/`PassageExtractor` correctly parse but correctly extract zero passages from (a
+two-message session — e.g. a session that started and ended with no exchange the parser classifies
+as an extractable prompt/reply — legitimately has nothing recallable). The command's own counter
+had conflated "file exists" with "extraction produced something," so a healthy run looked like 20
+sessions were missing. Fixed by splitting the single counter into `liveTranscripts` (file exists)
+and `sessionsWithPassages` (extraction yielded ≥1 passage); the corrected dry-run then reported
+exactly **396 live / 710 gone**, matching Task 1 bit-for-bit, with the 20-session gap now reported
+explicitly as "20 yielded no passages" rather than hidden inside a misleading total.
+
+**This is worth recording explicitly for a future reader:** 20 of the 396 live-transcript
+`cc.session` events yield zero passages, and that is expected, not a defect — a two-message
+session (started and ended without an exchange the parser treats as an extractable prompt/reply)
+has nothing recallable to extract. `376 + 20 = 396` reconciles exactly.
+
+### Real run output
+
+```
+sessions with a live transcript: 396 (20 yielded no passages)
+transcripts gone, unrecoverable:  710
+sessions contributing passages:   376 (0 already had them)
+passages written: 31346
+passage index rebuilt
+```
+
+### Verification (read-only, `?mode=ro`)
+
+```sql
+select role, count(*) from passages group by role;
+-- prompt|4418
+-- reply|26928        (4418 + 26928 = 31346, matching "passages written")
+
+select count(distinct eventID) from passages;
+-- 376                (matches "sessions contributing passages")
+```
+
+| Metric | Value |
+|---|---|
+| Passage rows — `prompt` | 4,418 |
+| Passage rows — `reply` | 26,928 |
+| Passage rows — total | **31,346** |
+| Distinct events with passages | 376 |
+| `pensieve.sqlite` size (post-backfill) | **31 MB** |
+| `search-index.sqlite` size (post-backfill) | **28 MB** |
+
+Against Task 1's `estimatedDocuments` of 31,174: the real count of 31,346 lands within ~0.6% of
+the estimate — the formula (`prompts + replies + over2000×2`) held up well against the actual
+extractor output. The spec's original ~30 MB canonical-store projection is also confirmed: the
+live `pensieve.sqlite` grew to 31 MB after the backfill.
+
+### Idempotence (second run, same command, same store)
+
+```
+sessions with a live transcript: 396 (20 yielded no passages)
+transcripts gone, unrecoverable:  710
+sessions contributing passages:   376 (376 already had them)
+passages written: 31346
+passage index rebuilt
+```
+
+`select count(*) from passages;` → **31346**, unchanged from the first run.
+
+**Idempotent, confirmed:** `passages written` is identical (31,346) between the two runs;
+`already had them` on the second run equals `sessions contributing passages` (376 == 376) — not
+the live-transcript count (396), which is what the plan's Step 5 wording would have implied before
+this task's counter fix; and the raw row count in `passages` is unchanged. The delete-then-insert
+per event is confirmed harmless to re-run.
