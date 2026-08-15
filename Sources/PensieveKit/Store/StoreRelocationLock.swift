@@ -15,10 +15,30 @@ public final class StoreRelocationLock: @unchecked Sendable {
   private let descriptor: Int32
 
   /// `~/Library/Caches/me.mazetti.pensieve/relocation.lock` — a path that never relocates.
+  ///
+  /// Scoped off `PENSIEVE_DB`, exactly how `PensievePaths.indexURL(named:storeOverride:)` already
+  /// scopes disposable indexes: an env-scoped store gets an env-scoped anchor. Without this, every
+  /// `PENSIEVE_DB`-scoped run (every test, `PENSIEVE_DB=/tmp/x pensieve sync`, the app's own
+  /// smoke-launch) contends for the REAL anchor even though it never touches the real store — which
+  /// is how `make test` came to hold the developer's actual relocation lock SHARED for the whole
+  /// test process (refusing a real relocation attempted mid-run) while a real relocation could make
+  /// an unrelated `PENSIEVE_DB`-scoped test run fail.
   public static func anchorURL() -> URL {
-    PensievePaths.homeDirectory()
-      .appendingPathComponent("Library/Caches/me.mazetti.pensieve", isDirectory: true)
-      .appendingPathComponent("relocation.lock")
+    anchorURL(storeOverride: ProcessInfo.processInfo.environment["PENSIEVE_DB"])
+  }
+
+  /// The rule itself, separated from reading the environment so it is testable without mutating
+  /// process-global state — `setenv` is process-global and Swift Testing runs suites in parallel,
+  /// the same reason `PensievePaths.indexURL(named:storeOverride:support:)` was split out.
+  static func anchorURL(storeOverride: String?) -> URL {
+    guard let storeOverride else {
+      return PensievePaths.homeDirectory()
+        .appendingPathComponent("Library/Caches/me.mazetti.pensieve", isDirectory: true)
+        .appendingPathComponent("relocation.lock")
+    }
+    let store = URL(fileURLWithPath: storeOverride)
+    let prefix = store.deletingPathExtension().lastPathComponent
+    return store.deletingLastPathComponent().appendingPathComponent("\(prefix)-relocation.lock")
   }
 
   /// Acquires the lock, or returns nil if it is held incompatibly. Creating the anchor is

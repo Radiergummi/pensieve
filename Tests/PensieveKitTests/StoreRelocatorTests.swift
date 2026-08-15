@@ -4,11 +4,27 @@ import SQLiteData
 import os
 @testable import PensieveKit
 
-private func makeTemporaryDirectory() throws -> URL {
+/// Internal, not private: shared with `StoreRelocatorVerificationAndCommitTests.swift`, the
+/// sibling file the I1/I2 fix-wave tests live in (split out to keep this file under the repo's
+/// 400-line lint cap).
+func makeTemporaryDirectory() throws -> URL {
   let url = FileManager.default.temporaryDirectory
     .appendingPathComponent("reloc-\(UUID().uuidString)", isDirectory: true)
   try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
   return url
+}
+
+/// `removePersistentDomain(forName:)` alone does NOT delete the backing plist file — verified
+/// directly: it survives even after an explicit `synchronize()`, because cfprefsd's on-disk
+/// write-back is asynchronous and not guaranteed to happen before this test process exits.
+/// Without also unlinking the file, every test run using a throwaway suite left a fresh
+/// `relocation-test-<uuid>.plist` behind in `~/Library/Preferences` regardless of the
+/// `removePersistentDomain` call — 51 were found on this machine from prior runs.
+func removeSuiteDefaults(_ defaults: UserDefaults, named suiteName: String) {
+  defaults.removePersistentDomain(forName: suiteName)
+  let path = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent("Library/Preferences/\(suiteName).plist").path
+  try? FileManager.default.removeItem(atPath: path)
 }
 
 /// Every refusal names its own reason. A generic failure here would leave the user guessing which
@@ -64,7 +80,7 @@ private func makeTemporaryDirectory() throws -> URL {
 /// disposable index that must travel with the root. Inserts a real Event (not just a Node) so the
 /// event-count verification the relocator performs actually discriminates a good copy from a bad
 /// one — a Node-only fixture would make that check vacuously 0 == 0.
-private func makePopulatedSource() throws -> URL {
+func makePopulatedSource() throws -> URL {
   let source = try makeTemporaryDirectory()
   let database = try openCanonicalDatabase(at: PensievePaths.canonicalURL(in: source))
   let node = Node(name: "N")
@@ -87,11 +103,16 @@ private func makePopulatedSource() throws -> URL {
   let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
-  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  // The domain is removed in the `defer` below — without it, every run of this test leaves a
+  // `relocation-test-<uuid>.plist` behind in `~/Library/Preferences` forever (51 found on this
+  // machine from prior runs before this fix).
+  let suiteName = "relocation-test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
   defer {
     try? FileManager.default.removeItem(at: source)
     try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
+    removeSuiteDefaults(defaults, named: suiteName)
   }
 
   let recycled = OSAllocatedUnfairLock(initialState: false)
@@ -117,7 +138,7 @@ private func makePopulatedSource() throws -> URL {
 /// Asserts `operation` throws `RelocationError.verificationFailed`, ignoring the associated
 /// message (which embeds dynamic counts) — pinning the CASE, not just `RelocationError.self`,
 /// which any other case (e.g. `.lockUnavailable`) would also satisfy vacuously.
-private func expectVerificationFailed(_ operation: () async throws -> Void) async {
+func expectVerificationFailed(_ operation: () async throws -> Void) async {
   do {
     try await operation()
     Issue.record("expected .verificationFailed, but no error was thrown")
@@ -139,11 +160,16 @@ private func expectVerificationFailed(_ operation: () async throws -> Void) asyn
   let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
-  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  // The domain is removed in the `defer` below — without it, every run of this test leaves a
+  // `relocation-test-<uuid>.plist` behind in `~/Library/Preferences` forever (51 found on this
+  // machine from prior runs before this fix).
+  let suiteName = "relocation-test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
   defer {
     try? FileManager.default.removeItem(at: source)
     try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
+    removeSuiteDefaults(defaults, named: suiteName)
   }
 
   var relocator = StoreRelocator(
@@ -170,11 +196,16 @@ private func expectVerificationFailed(_ operation: () async throws -> Void) asyn
   let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
-  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  // The domain is removed in the `defer` below — without it, every run of this test leaves a
+  // `relocation-test-<uuid>.plist` behind in `~/Library/Preferences` forever (51 found on this
+  // machine from prior runs before this fix).
+  let suiteName = "relocation-test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
   defer {
     try? FileManager.default.removeItem(at: source)
     try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
+    removeSuiteDefaults(defaults, named: suiteName)
   }
 
   var relocator = StoreRelocator(
@@ -205,11 +236,16 @@ private func expectVerificationFailed(_ operation: () async throws -> Void) asyn
   let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
-  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  // The domain is removed in the `defer` below — without it, every run of this test leaves a
+  // `relocation-test-<uuid>.plist` behind in `~/Library/Preferences` forever (51 found on this
+  // machine from prior runs before this fix).
+  let suiteName = "relocation-test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
   defer {
     try? FileManager.default.removeItem(at: source)
     try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
+    removeSuiteDefaults(defaults, named: suiteName)
   }
 
   var relocator = StoreRelocator(
@@ -237,11 +273,16 @@ private func expectVerificationFailed(_ operation: () async throws -> Void) asyn
   let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
-  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  // The domain is removed in the `defer` below — without it, every run of this test leaves a
+  // `relocation-test-<uuid>.plist` behind in `~/Library/Preferences` forever (51 found on this
+  // machine from prior runs before this fix).
+  let suiteName = "relocation-test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
   defer {
     try? FileManager.default.removeItem(at: source)
     try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
+    removeSuiteDefaults(defaults, named: suiteName)
   }
 
   var relocator = StoreRelocator(
@@ -265,11 +306,16 @@ private func expectVerificationFailed(_ operation: () async throws -> Void) asyn
   let destination = destinationParent.appendingPathComponent("Pensieve", isDirectory: true)
   let anchor = FileManager.default.temporaryDirectory
     .appendingPathComponent("relocation-\(UUID().uuidString).lock")
-  let defaults = UserDefaults(suiteName: "relocation-test-\(UUID().uuidString)")!
+  // The domain is removed in the `defer` below — without it, every run of this test leaves a
+  // `relocation-test-<uuid>.plist` behind in `~/Library/Preferences` forever (51 found on this
+  // machine from prior runs before this fix).
+  let suiteName = "relocation-test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
   defer {
     try? FileManager.default.removeItem(at: source)
     try? FileManager.default.removeItem(at: destinationParent)
     try? FileManager.default.removeItem(at: anchor)
+    removeSuiteDefaults(defaults, named: suiteName)
   }
 
   var relocator = StoreRelocator(

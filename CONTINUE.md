@@ -708,40 +708,26 @@ path itself automatable needs the defaults domain isolated first (a launch-argum
 work, filed in `backlog.md`, not done here. Everything below is therefore the *first* real exercise of
 this feature, not a confirmation of something already checked:
 
-- **The pane reads better.** Each location's path is on its own line, legible, non-monospaced,
-  selectable (no more `.truncationMode(.middle)` swallowing the middle of `/Users/…nsieve/pensieve.sqlite`
-  into a tooltip-only string); the `arrow.right` reveals the *correct* file in Finder for each of Support
-  Folder / Canonical Store / Capture Spool / Logs; switching between Settings tabs never jumps the window
-  (width stays pinned at 460 on all four tabs).
-- **A same-volume move** (e.g. to `~/Documents`) completes, relaunches, and shows the same project count
-  and loose-end count as before.
-- **A cross-volume move** (an external disk) does the same. **This is the case the lock exists for** —
-  a same-volume move alone cannot exercise the inode-binding hazard `StoreRelocationLock`'s anchor was
-  placed outside the support folder to avoid.
-- **The old folder is in the Bin, not gone** — `StoreRelocator` recycles via `NSWorkspace`, never
-  `unlink`.
-- **`pensieve list` (the freshly built CLI, not the stale `~/.local/bin` symlink) agrees with the app**
-  after the move — the cross-process proof that a separate process actually reads the defaults key
-  rather than a cached in-process value.
-- **`tail -f ~/Library/Logs/Pensieve/sync.log`** shows the launchd `PensieveSyncAgent` resuming against
-  the new location within ~300 s. **This closes the one open risk stated in the spec itself:**
-  `PensieveDefaults.shared()`'s cross-process reads are proven from a CLI context (translation settings,
-  `llmProvider`) but had never been verified from a **launchd-spawned helper** specifically until this
-  check runs for real.
-- **A `git commit` DURING the move** still shows up afterward — the step-6 property
-  (`StoreRelocator.recoverPendingRows`) in situ: commit mid-copy, let the relocation finish, confirm the
-  event isn't lost and isn't duplicated.
-- **Reverting to Default** (via the ⓘ inspector's Location picker) moves the data back to
-  `~/Library/Application Support/Pensieve` the same verified way.
-- **German in situ** for the ~23 new keys (measured against `main` by diffing `Localizable.xcstrings`,
-  not guessed): the pane's "Default"/"Custom" status, the ⓘ modal's "Location"/"Choose", the confirmation
-  dialog's "Move and Relaunch" and its body copy, the progress window's "Moving Pensieve's data…" and
-  failure text, and all nine `RelocationError` case messages (not writable, inside the source, is the
-  source, not empty, already exists, not a directory, insufficient space, sync in progress, verification
-  failed).
-- **A refused relocation reports its specific reason**, not a generic failure — try moving onto the
-  current root, onto a non-empty folder, and onto a read-only destination and confirm each gets its own
-  message rather than one shared string.
-- **Menu-bar-only flow:** with the main window never opened this session (`.accessory`/hide-Dock mode),
-  request a move from Settings reached via the menu-bar item, and confirm the app still relaunches and
-  completes rather than getting stuck with a dead menu bar and no window.
+The list below is the final whole-branch review's own ordering, replacing an earlier draft list —
+items 1 and 2 are the acceptance tests for this pass's fixes (I1: revert-to-default now clears the
+key instead of writing it; the cross-process CLI proof was always required, never exercised):
+
+1. A same-volume move to `~/Documents`, then `pensieve list` **from the freshly built CLI, not the
+   stale `~/.local/bin` symlink**, agreeing with the app — the only real proof a separate process
+   reads the key.
+2. **Revert to Default** (via the ⓘ inspector's Location picker), confirming the pane reads
+   Default afterwards and the picker can be moved again — this is the acceptance test for this
+   pass's I1 fix (`StoreRelocator` now clears `customSupportRootKey` on a revert instead of
+   persisting the default's own absolute path).
+3. A cross-volume move to an external disk — the only case exercising the inode hazard the anchor
+   placement exists for — then a boot with that disk **unplugged**, to see what an absent custom
+   root looks like (currently: an empty world with no explanation — filed as M4 in `backlog.md`).
+4. `tail -f ~/Library/Logs/Pensieve/sync.log` for the launchd helper resuming against the new
+   location within ~300 s. This closes the spec's own open risk (cross-process defaults from a
+   launchd context, never verified from a launchd-spawned process) **and** the stale-LWCR
+   question — confirm the agent runs again on the *next ordinary launch*, not just eventually.
+5. A `git commit` **during** the copy, confirming the event arrives afterward and is not
+   duplicated.
+6. The **menu-bar-only flow** (hide-Dock `.accessory`, main window never opened) — the path with
+   the least evidence behind it, whose failure mode was "a dead app with no explanation."
+7. The old folder in the Bin, not gone; German in situ for the ~23 keys.

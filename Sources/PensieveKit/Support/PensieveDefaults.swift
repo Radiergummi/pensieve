@@ -39,7 +39,15 @@ public enum PensieveDefaults {
   /// `customSupportRootKey` (the Advanced tab's status line, the Support Folder inspector's
   /// picker) shares one rule instead of each restating "is it non-empty" — two copies of that
   /// check drifting apart is exactly the defect class this project keeps finding elsewhere.
+  ///
+  /// Delegates to `PensievePaths.supportDirectory(customRoot:)` rather than restating its own
+  /// notion of "non-empty" — that resolver trims whitespace and requires an absolute path before
+  /// honouring a stored value, so a naive `!raw.isEmpty` (or even `!raw.isEmpty && raw.hasPrefix
+  /// ("/")`, which still misses a leading-whitespace value the resolver trims first) would read
+  /// "Custom" in the UI for a value the resolver silently treats as absent — the two paths
+  /// disagreeing while looking like they agree. Comparing resolved directories instead makes that
+  /// unrepresentable by construction.
   public static func isCustomSupportRoot(_ raw: String) -> Bool {
-    !raw.isEmpty
+    PensievePaths.supportDirectory(customRoot: raw) != PensievePaths.defaultSupportDirectory()
   }
 }

@@ -53,8 +53,36 @@ private func temporaryAnchor() -> URL {
 /// The anchor is deliberately NOT inside the support directory. flock binds to an inode, so a
 /// cross-volume copy would hand the writer a different inode of an identically-named file and the
 /// guard would evaporate in exactly the case it exists for.
+///
+/// Uses the PURE `storeOverride: nil` form, not the live zero-argument `anchorURL()` — the
+/// zero-argument form now reads `PENSIEVE_DB` (see `anchorFollowsAnOverriddenStore` below), and
+/// `setenv` is process-global: a concurrently-running test that sets `PENSIEVE_DB` (e.g.
+/// `openCanonicalHonorsDBOverride`) would otherwise make this test observe an overridden anchor
+/// and fail spuriously under Swift Testing's parallel execution.
 @Test func anchorIsOutsideTheSupportDirectory() {
-  let anchor = StoreRelocationLock.anchorURL().path
+  let anchor = StoreRelocationLock.anchorURL(storeOverride: nil).path
   #expect(!anchor.hasPrefix(PensievePaths.defaultSupportDirectory().path))
   #expect(anchor.hasSuffix("/Library/Caches/me.mazetti.pensieve/relocation.lock"))
+}
+
+/// An env-scoped store must get an env-scoped anchor — mirrors
+/// `PensievePaths.indexURL(named:storeOverride:support:)`. Without this, every `PENSIEVE_DB`-scoped
+/// run (every test, `PENSIEVE_DB=/tmp/x pensieve sync`, the app's smoke-launch) contends for the
+/// REAL anchor even though it never touches the real store. Tested via the pure, injectable form —
+/// never by mutating the real environment, since `setenv` is process-global and Swift Testing runs
+/// suites in parallel.
+@Test func anchorFollowsAnOverriddenStore() {
+  // No override: byte-identical to the historical path, so the real anchor is unaffected.
+  // Compared against a value built independently of `anchorURL()`'s own env read — never against
+  // the live zero-argument call, which a concurrently-running env-mutating test could perturb.
+  let fallback = PensievePaths.homeDirectory().path + "/Library/Caches/me.mazetti.pensieve/relocation.lock"
+  #expect(StoreRelocationLock.anchorURL(storeOverride: nil).path == fallback)
+
+  // Overridden: a sibling of the throwaway store, never the real Caches path.
+  #expect(StoreRelocationLock.anchorURL(storeOverride: "/tmp/throwaway.sqlite").path
+          == "/tmp/throwaway-relocation.lock")
+
+  // Two throwaway stores in one directory do not share an anchor.
+  #expect(StoreRelocationLock.anchorURL(storeOverride: "/tmp/a.sqlite")
+          != StoreRelocationLock.anchorURL(storeOverride: "/tmp/b.sqlite"))
 }

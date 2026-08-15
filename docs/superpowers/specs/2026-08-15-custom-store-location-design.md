@@ -216,10 +216,16 @@ the moment it terminates. They are hash-guarded and rebuildable by construction,
 copy self-corrects on the next sync; only the canonical store and the spool need the lock's guarantee,
 and only those two are irreplaceable.
 
-**Two consequences documented rather than engineered around.** Long-lived `pensieve mcp` servers held
+**Three consequences documented rather than engineered around.** Long-lived `pensieve mcp` servers held
 open by running Claude Code sessions resolved their paths at startup and will read the recycled copy
 until those sessions restart. `~/.local/bin/pensieve` and the git hooks need no change whatever, since
-they resolve paths at every invocation.
+they resolve paths at every invocation. And if the custom support folder is unreachable at launch (the
+external-disk case: it was moved there and the disk is now unplugged), `PensievePaths.supportDirectory()`
+still resolves to the stored path and every read against it comes back empty — the app opens to zero
+projects, zero loose ends, with nothing in the UI explaining why (M4 in `backlog.md`, added by the final
+whole-branch review). No corruption and nothing lost — the moment the disk is reconnected, everything
+reappears — but the empty state itself carries no explanation, and building one was judged out of scope
+for this design's first cut.
 
 ### 4. The UI
 

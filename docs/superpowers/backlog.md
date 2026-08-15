@@ -1477,31 +1477,66 @@ of the eight task reviews — all fixed; see the ledger for the full account.
   `.lockUnavailable` (recoverable via the Continue affordance, not fatal) — but per `CLAUDE.md`, skipping
   the refresh also leaves a stale LWCR for that one session, the documented `EX_CONFIG` spawn-failure
   mode.
-- **The `"Custom"` catalog entry has no `en` localization** and falls back to its raw key text —
-  harmless because the key happens to equal the desired English string, but inconsistent with its
-  sibling `"Default"`, which has a full `en` entry. Pre-existing, not introduced by this branch, but both
-  the Locations-pane status label and the ⓘ inspector's picker render it.
+- **Corrected:** this entry previously claimed the `"Custom"` catalog entry had no `en`
+  localization. Re-checked against `Localizable.xcstrings:782-798` directly: Task 8 already added a
+  full `en` entry ("Custom") alongside `de` ("Benutzerdefiniert") — the claim was stale by the time
+  it was written here. A confidently wrong doc claim is worse than none, so it is corrected rather
+  than left standing.
 - **The inspector's byte-size line reads "Zero KB" until the async measurement `.task` completes** —
   cosmetic, self-correcting, and consistent with the app's existing progressive-loading style elsewhere.
 
-### Carries from the review rounds (recorded, not fixed — for the final whole-branch review to triage)
+### Carries from the review rounds
 
-- **`PensieveDefaults.isCustomSupportRoot(_:)` checks only `!raw.isEmpty`**, while the Kit resolver
-  `PensievePaths.supportDirectory(customRoot:)` requires non-empty **and** absolute (a relative root is
-  treated as absent, because it would resolve against launchd's `/`). A non-empty *relative* value would
-  therefore read as "Custom" in the UI while the resolver silently falls back to the default. This is
-  unchanged from before the run's fix (which only deduplicated an existing predicate into a shared
-  helper) and is unreachable today — the only writer persists an `NSOpenPanel`-returned absolute URL —
-  but it is exactly the two-paths-that-should-agree drift class `CLAUDE.md` names as this project's
-  recurring defect (the one that forced the `SearchHitResolver` extraction and, separately, let the
-  loose-end index filter and its canonical re-check disagree about `isOpen`). Now that one shared helper
-  exists, aligning it with the resolver is a one-line change: `!raw.isEmpty && raw.hasPrefix("/")`.
+- **Resolved by the final whole-branch review's fix wave (2026-08-15):** the item previously recorded
+  here — `PensieveDefaults.isCustomSupportRoot(_:)` checking only `!raw.isEmpty` while the Kit resolver
+  `PensievePaths.supportDirectory(customRoot:)` also requires an absolute path — is fixed. Rather than
+  the suggested one-line `!raw.isEmpty && raw.hasPrefix("/")` (which the review caught as still
+  insufficient — the resolver trims whitespace *first*, so a leading-whitespace value would still
+  disagree), `isCustomSupportRoot` now **delegates** to `PensievePaths.supportDirectory(customRoot:)`
+  and compares the resolved directory against the default, making the two paths agree by construction
+  rather than by two independently-maintained predicates.
 - **An environment incident during Task 4's fix round:** the host disk filled to 100% (679 MB free)
   mid-fix, blocking Bash/Write/Edit and leaving one file in a state the implementer could not revert by
   hand — resolved by freeing space (`make clean` in this worktree, then cleaning ~20 GB of stale
   `.build`/`.build-xcode` across four other worktrees plus 45 leaked temp trees) rather than by discarding
   any uncommitted work. No commits or fixes were lost; recorded here only because a future session
   hitting `ENOSPC` mid-edit in this repo should know it has happened before and how it was recovered.
+
+### Deferred from the final whole-branch review (ship-with-it, 2026-08-15)
+
+- **M2 — an interrupted relocation leaves a partial destination that blocks retrying to the same
+  folder.** `preflight` correctly refuses a non-empty destination, and a relocation that dies
+  mid-copy leaves exactly that: a partial, non-empty destination directory. The behaviour is correct
+  and non-destructive (nothing is lost, nothing commits) but unhelpful — the user must manually clear
+  the partial folder before retrying the same destination, with no UI affordance telling them why.
+  *Revisit trigger:* a real interrupted-relocation report from actual use.
+- **M4 — a missing custom root renders as an empty world with no explanation.** If the custom
+  support folder is unreachable at launch (the classic case: it lived on an external disk that is
+  now unplugged), `PensievePaths.supportDirectory()` still resolves to the stored path, and every
+  read against it comes back empty — the app opens to zero projects, zero loose ends, with nothing
+  in the UI saying *why*. Also recorded in the design spec's own "documented rather than engineered
+  around" list (`docs/superpowers/specs/2026-08-15-custom-store-location-design.md`). *Revisit
+  trigger:* this is the human-verify checklist's item 3 in `CONTINUE.md` — running it is what turns
+  this from a predicted gap into a described one.
+- **The `relocation-test-*.plist` cleanup is best-effort, not provably complete, because of a real
+  OS-level race outside application control.** `StoreRelocatorTests.swift` and
+  `StoreRelocatorVerificationAndCommitTests.swift` now `removePersistentDomain(forName:)` **and**
+  directly `removeItem` the backing plist in every test's `defer` (closing the literal 51-file litter
+  found on this machine — all removed). Measured directly, though: `removePersistentDomain` alone
+  never deletes the on-disk file (confirmed with an explicit `synchronize()` immediately after, which
+  still left the file in place), and even the combined remove-and-unlink is racing `cfprefsd`'s own
+  asynchronous write-back of the *original* `.set()` — a throwaway probe script showed anywhere from
+  0/10 to 10/10 of freshly-deleted suite files reappearing after a **3-second** sleep, so this is not
+  a timing window any bounded in-test wait can close reliably. Repeated `make -B test` runs after the
+  fix showed roughly half of the 8 suite-creating tests still leaving a file behind per run (down from
+  8/8 before). A one-time sweep (`rm -f ~/Library/Preferences/relocation-test-*.plist`) was run as
+  part of this fix and left the directory clean at the time of writing, but a future session should
+  expect to find a handful again, not zero. *Revisit trigger:* if this genuinely needs to hit zero,
+  the real fix is to stop giving `StoreRelocator.defaults` a disk-backed `UserDefaults(suiteName:)`
+  suite in tests at all (a protocol/mock seam) rather than trying to out-race `cfprefsd` — out of
+  scope for this fix wave. The same disk-backed-suite-in-`defer` pattern is already used by
+  `PreferencesTests`, `SystemStatusTests`, `DefaultProviderTests` and `TranslationTargetTests`, so this
+  is a pre-existing, project-wide limitation, not one specific to this branch.
 
 *Revisit trigger for the whole section:* the human-verify checklist in `CONTINUE.md` — the end-to-end
 move has never been run (Tasks 6 and 8 carry build-and-inspection evidence only; see that file's own

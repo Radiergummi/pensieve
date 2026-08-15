@@ -36,6 +36,12 @@ public struct StoreRelocator {
   let destination: URL
   let anchor: URL
   let defaults: UserDefaults
+  /// What counts as "the default" at the commit point (see `run()`, STEP 5). Injectable for the
+  /// same reason `anchor` and `defaults` are: a test asserting the revert-to-default behaviour
+  /// must NEVER be exercised against the real `PensievePaths.defaultSupportDirectory()`, which is
+  /// the developer's actual, live support folder — injecting a temp directory here lets a test
+  /// treat ITS destination as "the default" without the comparison ever touching the real path.
+  let defaultDestination: URL
   let recycle: @Sendable (URL) -> Bool
 
   /// Test seams. Both default to inert. They exist because the two properties that matter most —
@@ -47,9 +53,12 @@ public struct StoreRelocator {
   public init(source: URL, destination: URL,
               anchor: URL = StoreRelocationLock.anchorURL(),
               defaults: UserDefaults = PensieveDefaults.shared(),
+              defaultDestination: URL = PensievePaths.defaultSupportDirectory(),
               recycle: @escaping @Sendable (URL) -> Bool) {
     self.source = source; self.destination = destination
-    self.anchor = anchor; self.defaults = defaults; self.recycle = recycle
+    self.anchor = anchor; self.defaults = defaults
+    self.defaultDestination = defaultDestination
+    self.recycle = recycle
   }
 
   /// Cheap, pure-ish refusals run before anything is copied, each naming its own reason.
@@ -110,6 +119,11 @@ public struct StoreRelocator {
     let expectedEvents = try Self.eventCount(at: sourceCanonicalURL)
     progress(0.05)
 
+    // Snapshot the source's per-file sizes right before the copy starts (post-drain, so it
+    // reflects what is actually about to be copied) and BEFORE `afterCopyForTesting`/a real hook
+    // write can land on the source — a row arriving in the recovery window must never be mistaken
+    // for a truncated copy.
+    let sourceSizesBeforeCopy = Self.fileSizeMap(at: source)
     try performCopy(manager: manager)
     progress(0.75)
 
@@ -118,11 +132,19 @@ public struct StoreRelocator {
       try? Data().write(to: PensievePaths.canonicalURL(in: destination))
     }
 
-    try verifyCopy(expectedEvents: expectedEvents, manager: manager)
+    try verifyCopy(expectedEvents: expectedEvents, sourceSizes: sourceSizesBeforeCopy, manager: manager)
     progress(0.85)
 
-    // STEP 5 — THE COMMIT POINT.
-    defaults.set(destination.path, forKey: PensieveDefaults.customSupportRootKey)
+    // STEP 5 — THE COMMIT POINT. Reverting TO the default clears the key instead of persisting
+    // the default's absolute path — otherwise `isCustomSupportRoot` would read "Custom" forever
+    // after a successful revert, and picking Default a second time would resolve
+    // `currentRoot == destination` and be refused as `.destinationIsSource`, making the picker
+    // permanently stuck on "Custom" with no way back except `defaults delete`.
+    if destination.standardizedFileURL == defaultDestination.standardizedFileURL {
+      defaults.removeObject(forKey: PensieveDefaults.customSupportRootKey)
+    } else {
+      defaults.set(destination.path, forKey: PensieveDefaults.customSupportRootKey)
+    }
 
     let recovery = await recoverPendingRows(sourceSpoolURL: sourceSpoolURL, manager: manager)
     progress(0.95)
@@ -179,13 +201,26 @@ public struct StoreRelocator {
     }
   }
 
-  /// STEP 4 — semantic verification. Byte sizes catch truncation; opening the copy and matching
-  /// the event count catches the failure that actually matters, without hashing 130 MB. The copied
-  /// SPOOL is verified too — capture hooks take no lock, so `capture.sqlite`/`-wal` can be copied
-  /// mid-write, and a torn copy must not silently become the live capture store the instant the
-  /// commit lands.
-  private func verifyCopy(expectedEvents: Int, manager: FileManager) throws {
+  /// STEP 4 — semantic verification. Per-file byte sizes catch truncation of ANY file in the
+  /// folder, not just the two the rest of this function understands — a copy that lost the WAL
+  /// tail, or the `passages`/`loose_ends` rows while `events` happened to still match, or simply
+  /// dropped the disposable search index, fails here instead of "verifying" clean. Opening the
+  /// copy and matching the event count then catches the failure that actually matters most,
+  /// without hashing 130 MB. The copied SPOOL is verified too — capture hooks take no lock, so
+  /// `capture.sqlite`/`-wal` can be copied mid-write, and a torn copy must not silently become the
+  /// live capture store the instant the commit lands.
+  ///
+  /// `sourceSizes` is a snapshot taken BEFORE the copy started (see `run()`), not a re-measurement
+  /// of the source taken now — a row a hook legitimately wrote to the source's spool during the
+  /// copy window (recovered separately in STEP 6) would otherwise make an honest copy look
+  /// "truncated" by comparison to a source that has since grown.
+  private func verifyCopy(expectedEvents: Int, sourceSizes: [String: Int64], manager: FileManager) throws {
     do {
+      let destinationSizes = Self.fileSizeMap(at: destination)
+      guard sourceSizes == destinationSizes else {
+        throw RelocationError.verificationFailed(
+          "byte sizes differ: \(sourceSizes.count) source path(s), \(destinationSizes.count) destination path(s)")
+      }
       let copiedEvents = try Self.eventCount(at: PensievePaths.canonicalURL(in: destination))
       guard copiedEvents == expectedEvents else {
         throw RelocationError.verificationFailed(
@@ -233,14 +268,28 @@ public struct StoreRelocator {
   }
 
   public static func directorySize(at url: URL) -> Int64 {
+    fileSizeMap(at: url).values.reduce(0, +)
+  }
+
+  /// Every file under `url`, keyed by its path RELATIVE to `url` so a source tree and a copied
+  /// destination tree (different absolute roots, same layout) compare directly. Shares one
+  /// enumerator with `directorySize` rather than walking the tree twice — two near-identical
+  /// filesystem walks drifting apart is the exact defect class this project keeps getting bitten
+  /// by (`SearchHitResolver`, the loose-end `isOpen` filter).
+  static func fileSizeMap(at url: URL) -> [String: Int64] {
     guard let enumerator = FileManager.default.enumerator(
-      at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
-    var total: Int64 = 0
+      at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return [:] }
+    let rootPath = url.standardizedFileURL.path
+    var sizes: [String: Int64] = [:]
     for case let fileURL as URL in enumerator {
       let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-      total += Int64(size)
+      let standardizedPath = fileURL.standardizedFileURL.path
+      let relativePath = standardizedPath.hasPrefix(rootPath + "/")
+        ? String(standardizedPath.dropFirst(rootPath.count + 1))
+        : standardizedPath
+      sizes[relativePath] = Int64(size)
     }
-    return total
+    return sizes
   }
 
   static func checkFreeSpace(needed: Int64, at destination: URL) throws {
