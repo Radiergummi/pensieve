@@ -30,9 +30,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   /// Retire the legacy hand-installed agent, then (if enabled and safe) register the bundled one.
-  /// Guarded off `.build` paths so a throwaway smoke-launch never touches real Login Items.
+  /// Guarded off `.build` paths so a throwaway smoke-launch never touches real Login Items. Also
+  /// guarded off a pending relocation: the registered agent runs with `RunAtLoad`, so launchd would
+  /// spawn a competing writer that takes the exclusive relocation lock before the Window's own
+  /// `.task` gets a chance to. The next ordinary launch (pending key cleared) registers normally.
   private func configureBackgroundSync() {
     guard BackgroundSyncGuard.shouldManage(bundlePath: Bundle.main.bundlePath) else { return }
+    guard RelocationLauncher.pendingDestination() == nil else { return }
     // Legacy boot-out runs launchctl synchronously → keep it off the main thread.
     Task.detached {
       DaemonInstaller.unload(plistURL: PensievePaths.launchAgentURL(), uid: String(getuid()))

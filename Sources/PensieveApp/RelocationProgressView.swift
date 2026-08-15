@@ -22,6 +22,10 @@ struct RelocationProgressView: View {
         Text(failure).font(.callout).foregroundStyle(.secondary)
         Text("Pensieve is still using its previous location. Nothing was lost.")
           .font(.callout).foregroundStyle(.secondary)
+        if let onContinue {
+          Button("Continue") { onContinue() }
+            .keyboardShortcut(.defaultAction)
+        }
       } else if recoveryIncomplete {
         Label("Pensieve’s data was moved", systemImage: "checkmark.circle")
           .font(.headline)

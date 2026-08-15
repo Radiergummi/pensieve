@@ -292,6 +292,11 @@ struct MenuBarLabel: View {
     Image(systemName: model.snapshot.status.glyph)
       .task {
         appDelegate.model = model   // flushes any URL that arrived before the model was wired
+        // A pending relocation needs the main window's own .task to actually run it — but a
+        // menu-bar-only user (hidden Dock, or the window simply closed) may never have one open.
+        // Force it open rather than leaving the app stuck: a relocation started from Settings
+        // reachable via the menu bar is a normal flow, not an edge case.
+        if RelocationLauncher.pendingDestination() != nil { openWindow(id: "main") }
         model.start()               // idempotent (guarded in AppModel)
       }
       .onChange(of: model.pendingDeepLink) { _, link in
