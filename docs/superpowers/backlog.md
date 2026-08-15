@@ -1389,6 +1389,127 @@ live, default-on, and currently diluting the grounded context fed to Claude via 
 
 ---
 
+## Custom store location — one relocatable support folder, and a readable Locations pane — DONE (2026-08-15, branch `worktree-custom-store-location`, through `1985efe`)
+
+Shipped a user-settable support folder (one root, persisted in the shared app defaults) and a verified
+copy-verify-commit-recycle move, replacing the fixed `~/Library/Application Support/Pensieve` location.
+Collapsed four independently-drifting path resolvers into one pure `PensievePaths.supportDirectory(customRoot:)`;
+anchored the relocation lock outside the moving directory (inode binding); left git hooks lock-free by
+design and recovered anything they wrote during the copy window post-commit; redesigned the Locations
+pane Xcode-shape because the real complaint was unreadable, unselectable truncation, not width. Full
+detail in `CLAUDE.md` Status. Spec/plan: `{specs,plans}/2026-08-15-custom-store-location*`; execution
+ledger `.superpowers/sdd/2026-08-15-custom-store-location/progress.md` — nine tasks, several plan defects
+found and fixed in execution (a test that exercised check-and-release semantics the shipped code doesn't
+have, a nonexistent `ByteCountFormatStyle` initializer, a 60-line function over the repo's lint cap, a
+fixture payload that could not decode, and — the most serious — a Critical preflight hole that would have
+deleted or unlinked a user's existing folder or file), plus ten further Important findings across four
+of the eight task reviews — all fixed; see the ledger for the full account.
+
+### Deliberately left open by this design
+
+- **Per-file custom paths.** One root only. The store, spool, narration cache, search index and
+  translation cache all already derive from `supportDirectory()`, so a single knob moves everything with
+  no half-relocated state representable; per-file granularity would only add surface no one has asked
+  for. *Revisit trigger:* a real need to keep, say, the search index on a faster disk than the canonical
+  store.
+- **A custom Logs location.** The launchd helper writes `sync.log` itself at a fixed path
+  (`~/Library/Logs/Pensieve`); a second cross-process knob for a directory nothing else reads from buys
+  nothing today. *Revisit trigger:* Logs actually needing to move (e.g. disk-space pressure specific to
+  that folder).
+- **Isolating the defaults domain so the relocation becomes automatable.** `make uitest` isolates the
+  SQLite store via a temp path but not `UserDefaults` — `RelocationLauncher` and `StoreRelocator` write
+  into the same shared `me.mazetti.pensieve` domain the real 185-project install reads, so no automated
+  test may trigger an actual relocation without risking that live install (ruling R9 in the execution
+  ledger). A launch-argument override reaches `NSArgumentDomain` for reads, but the relocator's own
+  `defaults.set` would still persist past it — genuinely isolating the write path is its own piece of
+  work. *Revisit trigger:* wanting real CI coverage of the relocation state machine rather than
+  build-and-inspection evidence for Tasks 6 and 8.
+- **The stale `.bak` files and the retired `preferences.json`** already sitting in the support directory
+  (debris from earlier features) are now copied on every relocation along with everything else. Mentioned
+  per surgical-change discipline, not cleaned up — this branch's job was to move the folder faithfully,
+  not to tidy its contents.
+
+### Deferred minors from this run (all reviewed, all judged not worth their fix)
+
+- **`flock` is acquired inside an `OSAllocatedUnfairLock` critical section** (`StoreOpen.swift:41-44`,
+  `CanonicalWriterGate.admit`) — a documented anti-pattern for unfair locks, since the `open`/`flock`
+  syscalls can take real time under an unfair lock meant only for cheap, bounded critical sections.
+  Judged low-impact: `LOCK_NB` never blocks, and the syscalls run at most once per process instance,
+  behind the `nil` fast path on every later call. *Revisit trigger:* `admit()` ever moving onto a hot
+  path.
+- **`make test` now creates and holds `~/Library/Caches/me.mazetti.pensieve/relocation.lock` SHARED for
+  the whole test process**, because the pre-existing `openCanonicalHonorsDBOverride` test calls
+  production `openCanonical()`. Consequence: a relocation attempted during a test run is refused ("try
+  again"), and a test run started during a relocation fails. Honest and recoverable, but worth deciding
+  whether the test suite ought to be gate-free before this surprises someone.
+- **`StoreRelocator.swift:110`** — with the read-only-open fix for verification, a source holding a
+  spool but NO `pensieve.sqlite` (a repo where git hooks ran before the app ever opened the canonical
+  store) aborts with a raw GRDB `SQLITE_CANTOPEN` rather than a typed `RelocationError`. The *outcome* is
+  correct (source stays intact, nothing commits); only the error's shape leaks, and the app presents an
+  untyped error on that one path.
+- **`recoverPendingRows` opens a writable canonical pool (`:210`) and never explicitly closes it.** This
+  runs post-commit with no filesystem copy after it, so it's harmless — noted only for symmetry with the
+  explicit closes added elsewhere in the same file.
+- **Other CLI commands (`Checkpoint`, `Track`, `Ingest`, …) call `openCanonical()` unguarded** and will
+  exit non-zero if invoked during a relocation. Correctly out of scope — the brief named only the two
+  scheduled/automated processes (`pensieve sync`, the launchd helper) — but worth deciding whether a
+  manual command failing loudly mid-relocation (rather than deferring like the two automated callers do)
+  is the experience actually wanted.
+- **The determinate progress bar sits at a flat 5% for the entire copy step**, so its stated anti-hang
+  rationale (showing real progress) isn't actually achieved for the step that takes the most wall time.
+- **Shell metacharacter quoting in the relaunch helper** (`RelocationLauncher.relaunch`'s `/bin/sh -c`
+  string interpolating the bundle path and PID) is unescaped. Low risk in practice — both values come
+  from the OS, not user input — but not defensively quoted.
+- **A swallowed spawn failure in the relaunch helper terminates the app silently** if `Process.run()`
+  throws — no error surfaced, the app just quits.
+- **`recycle:`'s closure returns a success value it cannot actually know**, and calls into AppKit
+  (`NSWorkspace`) off the main actor.
+- **`String(describing:)` is used as user-facing failure text** for `RelocationError` cases the mapping
+  table doesn't cover — plan-mandated, not an oversight; the real fix would be a full `LocalizedError`
+  conformance over `RelocationError`, which the spec didn't call for.
+- **`AppModel.swift` sits at 396 of the `swiftlint --strict` 400-line cap** after this branch — the next
+  line added to it (by any future feature) trips CI. Worth knowing before starting the next app-side
+  task, not something this branch could fix without an unrelated refactor.
+- **Skipping `configureBackgroundSync()` on the relocating launch** (the fix for the sync-agent race
+  above) reduces the self-conflict race rather than eliminating it: a registration surviving from a
+  *previous* launch still carries `StartInterval 300` and can fire mid-relocation anyway. Safe either way
+  — the relocator either already holds the exclusive lock (agent defers cleanly) or loses with
+  `.lockUnavailable` (recoverable via the Continue affordance, not fatal) — but per `CLAUDE.md`, skipping
+  the refresh also leaves a stale LWCR for that one session, the documented `EX_CONFIG` spawn-failure
+  mode.
+- **The `"Custom"` catalog entry has no `en` localization** and falls back to its raw key text —
+  harmless because the key happens to equal the desired English string, but inconsistent with its
+  sibling `"Default"`, which has a full `en` entry. Pre-existing, not introduced by this branch, but both
+  the Locations-pane status label and the ⓘ inspector's picker render it.
+- **The inspector's byte-size line reads "Zero KB" until the async measurement `.task` completes** —
+  cosmetic, self-correcting, and consistent with the app's existing progressive-loading style elsewhere.
+
+### Carries from the review rounds (recorded, not fixed — for the final whole-branch review to triage)
+
+- **`PensieveDefaults.isCustomSupportRoot(_:)` checks only `!raw.isEmpty`**, while the Kit resolver
+  `PensievePaths.supportDirectory(customRoot:)` requires non-empty **and** absolute (a relative root is
+  treated as absent, because it would resolve against launchd's `/`). A non-empty *relative* value would
+  therefore read as "Custom" in the UI while the resolver silently falls back to the default. This is
+  unchanged from before the run's fix (which only deduplicated an existing predicate into a shared
+  helper) and is unreachable today — the only writer persists an `NSOpenPanel`-returned absolute URL —
+  but it is exactly the two-paths-that-should-agree drift class `CLAUDE.md` names as this project's
+  recurring defect (the one that forced the `SearchHitResolver` extraction and, separately, let the
+  loose-end index filter and its canonical re-check disagree about `isOpen`). Now that one shared helper
+  exists, aligning it with the resolver is a one-line change: `!raw.isEmpty && raw.hasPrefix("/")`.
+- **An environment incident during Task 4's fix round:** the host disk filled to 100% (679 MB free)
+  mid-fix, blocking Bash/Write/Edit and leaving one file in a state the implementer could not revert by
+  hand — resolved by freeing space (`make clean` in this worktree, then cleaning ~20 GB of stale
+  `.build`/`.build-xcode` across four other worktrees plus 45 leaked temp trees) rather than by discarding
+  any uncommitted work. No commits or fixes were lost; recorded here only because a future session
+  hitting `ENOSPC` mid-edit in this repo should know it has happened before and how it was recovered.
+
+*Revisit trigger for the whole section:* the human-verify checklist in `CONTINUE.md` — the end-to-end
+move has never been run (Tasks 6 and 8 carry build-and-inspection evidence only; see that file's own
+"Human-verify carries — custom store location" section for why automation cannot cover it) — so that
+checklist is the first real exercise of this feature and may reorder everything above.
+
+---
+
 ## Translation settings — pack management, coverage & backfill — DONE (2026-08-14, branch `worktree-translation-settings`, through `1ac2cab`)
 
 Shipped the control surface the on-device translation slice never built: a picker over the **29 targets

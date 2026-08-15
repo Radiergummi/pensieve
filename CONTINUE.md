@@ -689,3 +689,59 @@ the sheet's Save owns `.keyboardShortcut(.defaultAction)` and the Description fi
 - `pensieve list` shows the node where the app said it would.
 - German in situ: `open -a Pensieve --args -AppleLanguages '(de)'` — check "Beschreibung",
   "Namen vorschlagen", "Worum geht es?" and that none of them truncate.
+
+## Human-verify carries — custom store location (needs the built app installed at `/Applications` + the real store)
+
+**The end-to-end move is UNVERIFIED BY AUTOMATION, and this is not a gap that could have been closed
+cheaply.** `make uitest` isolates the SQLite store behind a temp path, but it does **not** isolate
+`UserDefaults` — `RelocationLauncher.requestRelocation` writes `pendingRelocationDestination` and
+`StoreRelocator` writes `customSupportRoot` into the same shared `me.mazetti.pensieve` domain the real,
+185-project install reads. An automated test that actually triggered a relocation would repoint that
+live install at a temp folder the moment the test ran, and setting the pending key on the live app would
+start a real relocation at its *next* ordinary launch. So the execution ledger drew a hard line
+(ruling R9): **Task 7** (the Locations-pane redesign — pure presentation, read-only) has real
+accessibility-tree evidence from a scratch-built `uiprobe` against its own throwaway store. **Tasks 6**
+(launch-time relocation gating) **and 8** (the ⓘ inspector, folder picker, confirmation dialog) have
+**build-and-inspection evidence only** — no view body in either has ever executed. Making the relocation
+path itself automatable needs the defaults domain isolated first (a launch-argument override reaches
+`NSArgumentDomain`, but the relocator's own `defaults.set` would still persist past it) — that is real
+work, filed in `backlog.md`, not done here. Everything below is therefore the *first* real exercise of
+this feature, not a confirmation of something already checked:
+
+- **The pane reads better.** Each location's path is on its own line, legible, non-monospaced,
+  selectable (no more `.truncationMode(.middle)` swallowing the middle of `/Users/…nsieve/pensieve.sqlite`
+  into a tooltip-only string); the `arrow.right` reveals the *correct* file in Finder for each of Support
+  Folder / Canonical Store / Capture Spool / Logs; switching between Settings tabs never jumps the window
+  (width stays pinned at 460 on all four tabs).
+- **A same-volume move** (e.g. to `~/Documents`) completes, relaunches, and shows the same project count
+  and loose-end count as before.
+- **A cross-volume move** (an external disk) does the same. **This is the case the lock exists for** —
+  a same-volume move alone cannot exercise the inode-binding hazard `StoreRelocationLock`'s anchor was
+  placed outside the support folder to avoid.
+- **The old folder is in the Bin, not gone** — `StoreRelocator` recycles via `NSWorkspace`, never
+  `unlink`.
+- **`pensieve list` (the freshly built CLI, not the stale `~/.local/bin` symlink) agrees with the app**
+  after the move — the cross-process proof that a separate process actually reads the defaults key
+  rather than a cached in-process value.
+- **`tail -f ~/Library/Logs/Pensieve/sync.log`** shows the launchd `PensieveSyncAgent` resuming against
+  the new location within ~300 s. **This closes the one open risk stated in the spec itself:**
+  `PensieveDefaults.shared()`'s cross-process reads are proven from a CLI context (translation settings,
+  `llmProvider`) but had never been verified from a **launchd-spawned helper** specifically until this
+  check runs for real.
+- **A `git commit` DURING the move** still shows up afterward — the step-6 property
+  (`StoreRelocator.recoverPendingRows`) in situ: commit mid-copy, let the relocation finish, confirm the
+  event isn't lost and isn't duplicated.
+- **Reverting to Default** (via the ⓘ inspector's Location picker) moves the data back to
+  `~/Library/Application Support/Pensieve` the same verified way.
+- **German in situ** for the ~23 new keys (measured against `main` by diffing `Localizable.xcstrings`,
+  not guessed): the pane's "Default"/"Custom" status, the ⓘ modal's "Location"/"Choose", the confirmation
+  dialog's "Move and Relaunch" and its body copy, the progress window's "Moving Pensieve's data…" and
+  failure text, and all nine `RelocationError` case messages (not writable, inside the source, is the
+  source, not empty, already exists, not a directory, insufficient space, sync in progress, verification
+  failed).
+- **A refused relocation reports its specific reason**, not a generic failure — try moving onto the
+  current root, onto a non-empty folder, and onto a read-only destination and confirm each gets its own
+  message rather than one shared string.
+- **Menu-bar-only flow:** with the main window never opened this session (`.accessory`/hide-Dock mode),
+  request a move from Settings reached via the menu-bar item, and confirm the app still relaunches and
+  completes rather than getting stuck with a dead menu bar and no window.
