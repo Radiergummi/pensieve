@@ -66,11 +66,13 @@ struct Mcp: AsyncParsableCommand {
            annotations: .init(readOnlyHint: true, openWorldHint: false)),
       Tool(name: "search",
            description: "Find across all your work — by keyword, by phrase, or by the files a commit touched. "
-             + "Every result is a real, cited item. `items` is ALREADY in relevance order: read it "
-             + "top-down and do not re-sort or threshold it by `score`, which is not comparable "
-             + "between items. `index_state` distinguishes an unbuilt index from a genuine miss. "
-             + "Results include stored conversation passages — pass a passage item's id to `recall` "
-             + "to read the surrounding discussion.",
+             + "Every result is a real, cited item. `items` is ranked results FIRST, ALREADY in "
+             + "relevance order — read it top-down and do not re-sort or threshold it by `score`, "
+             + "which is not comparable between items — followed by stored conversation passages "
+             + "APPENDED as their own list, because their scores come from a different table and are "
+             + "not comparable to the ranked ones either. Pass a passage item's id to `recall` to read "
+             + "the surrounding discussion. `index_state` distinguishes an unbuilt index from a "
+             + "genuine miss.",
            inputSchema: .object(["type": .string("object"), "properties": .object([
              "query": .object(["type": .string("string"),
                                "description": .string("what to find; may be empty when `file` is given")]),
@@ -79,7 +81,8 @@ struct Mcp: AsyncParsableCommand {
                                 + "one) — combined with `query` it means both must match. To find everything that "
                                 + "touched a file, pass the filename as `query` on its own.")]),
              "limit": .object(["type": .string("number"), "minimum": .int(1),
-                               "description": .string("max results (default 8)")]),
+                               "description": .string("max ranked results (default 8); conversation passages are "
+                                 + "appended as a separate list of up to half that many")]),
              "include_archived": .object(["type": .string("boolean"),
                                           "description": .string("also search archived projects and closed loose ends (default false)")]),
            ]), "required": .array([])]),
@@ -281,7 +284,17 @@ enum PensieveMCP {
     // Appended, never interleaved: passage scores come from a different FTS5 table with a different
     // average document length, exactly like path hits. The array order is the contract the tool
     // description states, and this preserves it.
-    let passages = PassageQueries.search(query: query, scope: scope, store: searchStore, database)
+    //
+    // Passages get their own, smaller budget rather than sharing `limit`. Two lists in one array
+    // cannot both mean "at most `limit`" — and capping the concatenation instead would delete the
+    // passage list entirely whenever the ranked list is already full, which is the common case.
+    // Half, floored at two, keeps the conversation list present without letting it dominate the
+    // page. Derived from `scope` (not the raw parameters) so the two cannot drift apart.
+    let passageScope = SearchScope(visibleNodeIDs: scope.visibleNodeIDs, limit: max(2, limit / 2),
+                                   includeArchived: scope.includeArchived,
+                                   includeClosed: scope.includeClosed)
+    let passages = PassageQueries.search(query: query, scope: passageScope, store: searchStore,
+                                         database)
     return try makeEncoder().encode(
       SearchPayload(items: items + passages.map { SearchItem(passage: $0) },
                     indexState: searchStore.state()))
