@@ -1,0 +1,20 @@
+salient	Every phase should yield a working artifact.	intelligence after 1A; every phase should yield a working artifact, so 1B layers cleanly on top of the working ingestion from 1A.
+salient	Moving to more pressing things.	a while ago, I set up Rector for automatic refactorings in the app, but predictably added way too many rules at once, and the changes it made resulted in a few subtle bugs and a diff so big that I couldn't figure out what exactly went wrong, so I stopped there and moved to more pressing things.
+salient	Why don't we collect the project conventions up front, during the planning phase?	one thing i don't understand - why don't we collect the project conventions up front, during the planning phase?
+salient	Streamlining jobs.	one more thing I noted; we also want to streamline jobs , e.g. use dispatch(new SomeJob()) over SomeJob::dispatch(), use the proper modern traits in them, etc.
+salient	we'll probabl need to merge develop in because a rebase would be too costly	let's update this branch, we'll probabl need to merge develop in because a rebase would be too costly
+salient	Would it perhaps be better to try and write it again from scratch with the updated branch?	i'd say fold them into the spec, but I'm wondering - would it perhaps be better to try and write it again from scratch with the updated branch?
+salient	Maybe we should just rewrite the plan from scratch, though?	maybe we should just rewrite the plan from scratch, though?
+noise	Why is that, and can i fix it?	Why is that, and can i fix it?
+noise	can we instead assert the error was reported?	no, you don't. we want the report() behaviour, no plain logging. can we instead assert the error was reported?
+noise	apply the same scrutiny and improvements to the rest of the feature branch's code too?	now you've seen the changes I've made on top of yours, can you help me apply the same scrutiny and improvements to the rest of the feature branch's code too?
+noise	spawn two independent sub-agents	Spawn two independent sub-agents to review the spec adversarially from different angles, then reconcile their feedback and improve the spec if necessary
+noise	Review and address them if necessary	Review and address them if necessary, then resolve the threads.
+noise	Resolve the threads	then resolve the threads.
+noise	check and address them if necessary	copilot left some review comments, check and address them if necessary, then respond to and resolve each
+noise	Set up a tracking document with enough context.	before we start with anything, i want to set up a tracking document with enough context so a new session could take over later to write the remaining specs.
+noise	Ensure that the customers->partner_integrations FK uses restrict on delete.	one more thing; we probably need to ensure that the customers->partner_integrations FK uses restrict on delete, so no partner integration with existing customers or credentials assigned can be dropped.
+noise	can we fix this?	can we fix this?
+noise	Can we simplify this somehow, so lab authors can either use a slash command in a comment on the issue, or just toggle it differently?	The deployment process has a way of reading feature flags from Linear labels, but that's messing up our linear Labels. Can we simplify this somehow, so lab authors can either use a slash command in a comment on the issue, or just toggle it differently?
+noise	Improve on the unpushed diff for convention violations.	everything this branch touches. let's be good scouts and improve on what we come across.
+noise	Solve the issue of adding the rules method back when it is removed.	no! do not add the rules method back when i remove it! this is possible using attributes. solve it.

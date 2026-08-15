@@ -902,7 +902,18 @@ has never been run here. The machinery is not missing — it is unexercised. Two
   requires `label == unlabeled && labelSuggestion != ""` (`:17`), and the second clause matches
   nothing. The badge count has been an honest zero over a query that cannot return rows.
 
-*Smallest action:* run `pensieve label-suggest` once and re-check both surfaces. *Open question worth
+*Status 2026-08-15:* trialled at `--limit 20` (the first run this pipeline has ever had) and then
+**reverted** — the noise calls looked right, the salient calls did not, and a full pass would hand over
+a ~986-item audit queue whose ordering is unaudited guesses until worked. Baseline + read:
+`measurements/2026-08-15-salience-prompt-baseline/`. Handed to a fresh session to improve the prompt
+first: `docs/superpowers/HANDOVER-salience-prompt.md`.
+
+**The unblocker found while trialling it:** the salience eval's gold set is a synthetic 10-quote
+starter, but **122 hand-adjudicated labels already sit in `LooseEnd.label`** (24 salient / 98 noise,
+all with usable quotes) — which is the ~100–150 real quotes its own README asks for. Prompt iteration
+is unmeasurable until those two are connected, and trivially measurable afterwards. Mind the class
+imbalance: "everything is noise" scores 80% accuracy, so the metric must be precision/recall on the
+salient class. *Open question worth
 deciding first:* whether suggestion should stay a manual backfill at all, or run as part of
 extraction — 864 of 986 ends are unlabeled, and a one-off backfill leaves every future end unlabeled
 again.
