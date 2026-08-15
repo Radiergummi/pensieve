@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import PensieveKit
@@ -8,18 +9,48 @@ struct PensieveApp: App {
   @State private var model = AppModel()
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+  // Launch-time relocation state. `pendingRelocation` is read once, at launch — it drives whether
+  // the relocation runs at all this session, never whether it is STILL pending (the persisted key
+  // is the only thing `RelocationLauncher.clearPending()` can act on).
+  @State private var relocationFraction: Double?
+  @State private var relocationFailure: String?
+  @State private var relocationRecoveryIncomplete = false
+  @State private var relocationAcknowledged = false
+  private let pendingRelocation = RelocationLauncher.pendingDestination()
+
   var body: some Scene {
     // A single unique window — the correct primitive for one main window. `Window` gives the standard
     // menu bar, ⌘Q, and scene frame restoration for free. A real .app bundle makes the app `.regular`
     // by default, so no manual activation-policy is needed; the icon comes from the bundled .icon.
     Window("Pensieve", id: "main") {
-      RootView(model: model)
-        // Honest minimum = content.min (240) + detail.min (360) + inspector.min (260) = 860 — the
-        // widest always-reachable config (inspector open, sidebar auto-collapsed). This floors the
-        // window so no state clips; the sidebar (200) fits on top whenever the window is wider.
-        .frame(minWidth: 860, minHeight: 480)
-        .softScrollEdges()
-        .task { model.start() }   // idempotent (guarded in AppModel)
+      // The relocation must finish — success or failure — before RootView (and therefore
+      // AppModel.start(), driven from RootView's own .task) is ever reached. That ordering is
+      // the whole point of running this at launch: nothing is open yet to tear down.
+      Group {
+        if let pendingRelocation, relocationFailure == nil,
+           (relocationFraction ?? 0) < 1 || (relocationRecoveryIncomplete && !relocationAcknowledged) {
+          RelocationProgressView(destination: pendingRelocation.path,
+                                 fraction: relocationFraction ?? 0,
+                                 failure: nil,
+                                 recoveryIncomplete: relocationRecoveryIncomplete,
+                                 onContinue: { relocationAcknowledged = true })
+        } else if let relocationFailure {
+          RelocationProgressView(destination: pendingRelocation?.path ?? "",
+                                 fraction: 1, failure: relocationFailure)
+        } else {
+          RootView(model: model)
+            .task { model.start() }   // idempotent (guarded in AppModel); reached only post-relocation
+        }
+      }
+      // Honest minimum = content.min (240) + detail.min (360) + inspector.min (260) = 860 — the
+      // widest always-reachable config (inspector open, sidebar auto-collapsed). This floors the
+      // window so no state clips; the sidebar (200) fits on top whenever the window is wider.
+      .frame(minWidth: 860, minHeight: 480)
+      .softScrollEdges()
+      .task {
+        guard let pendingRelocation else { return }
+        await performRelocation(to: pendingRelocation)
+      }
     }
     .defaultSize(width: 1040, height: 660)
     .windowResizability(.contentMinSize)
@@ -67,6 +98,29 @@ struct PensieveApp: App {
     Settings {
       SettingsView(model: model)
         .softScrollEdges()
+    }
+  }
+
+  /// Runs before `AppModel.start()` — nothing is open yet, which is what makes this safe.
+  /// The pending key is cleared on EVERY exit path: a key surviving a failure would retry the
+  /// move on every launch forever. `error` is not assumed to be a `RelocationError` — a source
+  /// folder with a spool but no canonical store throws a raw GRDB error instead.
+  @MainActor
+  private func performRelocation(to destination: URL) async {
+    let source = PensievePaths.supportDirectory()
+    do {
+      let report = try await StoreRelocator(
+        source: source, destination: destination,
+        recycle: { NSWorkspace.shared.recycle([$0], completionHandler: nil); return true }
+      ).run(progress: { fraction in
+        Task { @MainActor in relocationFraction = fraction }
+      })
+      RelocationLauncher.clearPending()
+      relocationRecoveryIncomplete = report.recoveryIncomplete
+      relocationFraction = 1
+    } catch {
+      RelocationLauncher.clearPending()
+      relocationFailure = String(describing: error)
     }
   }
 }

@@ -10,6 +10,11 @@ enum AppDefaults {
   static let backgroundSyncEnabledKey = "app.backgroundSyncEnabled"
   static let idleTranslationEnabledKey = "app.idleTranslationEnabled"
 
+  /// Set by Settings when the user confirms a move; read at the NEXT launch, before any store is
+  /// opened. Cleared once the relocation finishes, succeeds or fails — a key that survived a
+  /// failure would retry the move on every launch forever.
+  static let pendingRelocationDestinationKey = "pendingRelocationDestination"
+
   /// Narration is ON by default (matching the `@AppStorage(...) = true` in the views). Non-View
   /// readers (AppModel) must honor the same default — `UserDefaults.bool` alone reads false when
   /// unset, which would disagree with the views before Settings is ever opened.

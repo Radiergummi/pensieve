@@ -201,6 +201,13 @@ final class AppModel {
 
   func start() {
     guard !started else { return }
+    // `start()` is reachable from three places — the main window's RootView, the always-mounted
+    // menu-bar label (so What's Next isn't empty even if the main window never opened), and a
+    // recall window — and only the FIRST of those is gated on a launch-time relocation finishing.
+    // Without this guard the menu-bar label would open the OLD store while the relocation is still
+    // copying it. `started` is deliberately left false so whichever call happens once the pending
+    // key clears still runs normally.
+    guard RelocationLauncher.pendingDestination() == nil else { return }
     started = true
     AppLog.app.info("App started, canonical=\(resolvedCanonicalURL().path, privacy: .public) spool=\(resolvedSpoolURL().path, privacy: .public)")
     // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.

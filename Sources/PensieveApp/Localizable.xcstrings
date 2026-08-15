@@ -740,6 +740,17 @@
         }
       }
     },
+    "Continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter"
+          }
+        }
+      }
+    },
     "Couldn’t %@ “%@”" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1729,6 +1740,28 @@
         }
       }
     },
+    "Moving Pensieve’s data failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verschieben der Daten von Pensieve fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Moving Pensieve’s data…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daten von Pensieve werden verschoben…"
+          }
+        }
+      }
+    },
     "Muted" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2152,6 +2185,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pensieve-Kontext"
+          }
+        }
+      }
+    },
+    "Pensieve is still using its previous location. Nothing was lost." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve verwendet weiterhin den vorherigen Speicherort. Es ist nichts verloren gegangen."
+          }
+        }
+      }
+    },
+    "Pensieve’s data was moved" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Daten von Pensieve wurden verschoben"
           }
         }
       }
@@ -2733,6 +2788,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Intelligente Listen"
+          }
+        }
+      }
+    },
+    "Some captured work was still pending, so the previous location was kept." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einige erfasste Daten waren noch ausstehend, daher wurde der vorherige Speicherort beibehalten."
           }
         }
       }
