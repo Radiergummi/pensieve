@@ -1,5 +1,6 @@
 import Foundation
 import PensieveKit
+import SQLiteData
 
 @main
 enum PensieveSyncAgent {
@@ -14,9 +15,17 @@ enum PensieveSyncAgent {
     let line: String
     let now = Date().ISO8601Format()
     do {
+      let database: any DatabaseWriter
+      do {
+        database = try openCanonical()
+      } catch StoreError.relocationInProgress {
+        SyncLog.append("\(now) sync: relocation in progress, skipping\n",
+          to: PensievePaths.syncLogURL())
+        return
+      }
       let syncResult = try await SyncRunner(
         spool: try openSpool(),
-        database: try openCanonical(),
+        database: database,
         provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()),
         projectsDir: PensievePaths.claudeProjectsURL(),
         searchIndexer: .production()).run()
