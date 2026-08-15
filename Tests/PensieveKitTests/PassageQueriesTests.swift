@@ -312,4 +312,76 @@ private func writeTranscript(_ pairs: [(prompt: String, reply: String)]) throws 
                                      store: store, database)
     #expect(hits.count == 10, "ten distinct turns, one hit each")
   }
+
+  /// A reply passage must get its window. The loose-end guard is two-part (isUserPrompt AND
+  /// contains-quote); reusing it here would fail for every assistant passage, which is half the
+  /// corpus. This test exists to pin that the guard is containment-only.
+  @Test func aReplyPassageResolvesItsWindow() throws {
+    let database = try makePassageStore()
+    let transcript = try writeTranscript([(prompt: "why does launchd refuse the spawn",
+                                           reply: "Because the LWCR is stale.")])
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id,
+                                       transcriptPath: transcript.path)
+    // messageIndex 1 is the ASSISTANT message: writeTranscript emits user at 0, assistant at 1.
+    let passage = try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                                   messageIndex: 1, role: .reply,
+                                   text: "Because the LWCR is stale.")
+    let window = try PassageProvenance.window(database, passage: passage, radius: 4)
+    #expect(window.transcriptAvailable)
+    #expect(window.messages.contains { $0.isCited })
+    #expect(window.messages.first { $0.isCited }?.text.contains("LWCR is stale") == true)
+  }
+
+  /// Degrade, never drop — the inversion of the 2026-07-19 design, which had no stored text to fall
+  /// back on. The stored passage IS the citation once the transcript is gone.
+  @Test func aMissingTranscriptDegradesHonestly() throws {
+    let database = try makePassageStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id,
+                                       transcriptPath: "/nonexistent/gone.jsonl")
+    let passage = try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                                   messageIndex: 1, role: .reply,
+                                   text: "Because the LWCR is stale.")
+    let window = try PassageProvenance.window(database, passage: passage, radius: 4)
+    #expect(!window.transcriptAvailable)
+    #expect(window.messages.isEmpty)
+    #expect(window.passage.text == "Because the LWCR is stale.")
+  }
+
+  /// Compaction rewrites transcripts. If the message at the stored index no longer contains the
+  /// stored text, the window is withheld rather than highlighting the wrong message.
+  @Test func compactionThatMovedTheTextWithholdsTheWindow() throws {
+    let database = try makePassageStore()
+    let transcript = try writeTranscript([(prompt: "a completely different question now",
+                                           reply: "A completely different answer now.")])
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id,
+                                       transcriptPath: transcript.path)
+    let passage = try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                                   messageIndex: 1, role: .reply,
+                                   text: "Because the LWCR is stale.")
+    let window = try PassageProvenance.window(database, passage: passage, radius: 4)
+    #expect(!window.transcriptAvailable)
+  }
+
+  @Test func recallByPassageIDReturnsABundle() throws {
+    let database = try makePassageStore()
+    let transcript = try writeTranscript([(prompt: "why does launchd refuse the spawn",
+                                           reply: "Because the LWCR is stale.")])
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id,
+                                       transcriptPath: transcript.path)
+    let passage = try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: 0,
+                                   messageIndex: 0, role: .prompt,
+                                   text: "why does launchd refuse the spawn")
+    let bundle = try SessionContextQueries.recall(passageID: passage.id, radius: 4, database)
+    #expect(bundle?.transcriptAvailable == true)
+    #expect(bundle?.quote == "why does launchd refuse the spawn")
+  }
+
+  @Test func recallByUnknownPassageIDReturnsNil() throws {
+    let database = try makePassageStore()
+    #expect(try SessionContextQueries.recall(passageID: UUID(), radius: 4, database) == nil)
+  }
 }

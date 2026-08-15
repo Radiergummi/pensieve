@@ -64,7 +64,7 @@ public enum ProvenanceQueries {
   }
 
   /// transcriptPath lives in the cc.session detailJSON (see Ingester); decoded as [String: String].
-  static func transcriptPath(in event: Event) -> String? {
+  public static func transcriptPath(in event: Event) -> String? {
     (try? JSONDecoder().decode([String: String].self, from: Data(event.detailJSON.utf8)))?["transcriptPath"]
   }
 
