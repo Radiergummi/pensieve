@@ -46,6 +46,7 @@ struct AdvancedSettingsTab: View {
     }
     .formStyle(.grouped)
     .frame(width: 460)
+    .sheet(isPresented: $isInspectorPresented) { SupportFolderInspector() }
     .task {
       // Poll while the tab is visible; `.task` cancels on disappear. Keeps the relative
       // times ("2 minutes ago") and the agent status honest without a resident observer.

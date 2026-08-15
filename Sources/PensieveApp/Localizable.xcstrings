@@ -821,6 +821,12 @@
             "state" : "translated",
             "value" : "Benutzerdefiniert"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom"
+          }
         }
       }
     },
@@ -3350,6 +3356,172 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Du"
+          }
+        }
+      }
+    },
+    "Location" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ort"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Location"
+          }
+        }
+      }
+    },
+    "Choose" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auswählen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose"
+          }
+        }
+      }
+    },
+    "Move and Relaunch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewegen und neu starten"
+          }
+        }
+      }
+    },
+    "Move Pensieve’s data to %@?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieves Daten nach %@ bewegen?"
+          }
+        }
+      }
+    },
+    "%@ will be copied. The old folder is moved to the Bin after verification, and Pensieve relaunches." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ werden kopiert. Der alte Ordner wird nach der Überprüfung in den Papierkorb bewegt, und Pensieve startet neu."
+          }
+        }
+      }
+    },
+    "Pensieve already uses that folder." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve verwendet diesen Ordner bereits."
+          }
+        }
+      }
+    },
+    "Choose a folder outside Pensieve’s current one." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einen Ordner außerhalb des aktuellen Pensieve-Ordners auswählen."
+          }
+        }
+      }
+    },
+    "That folder already contains a Pensieve folder with files in it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Ordner enthält bereits einen Pensieve-Ordner mit Dateien."
+          }
+        }
+      }
+    },
+    "An empty folder already exists there. Remove it first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dort existiert bereits ein leerer Ordner. Bitte zuerst entfernen."
+          }
+        }
+      }
+    },
+    "That’s a file, not a folder." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das ist eine Datei, kein Ordner."
+          }
+        }
+      }
+    },
+    "Pensieve can’t write to that folder." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve kann nicht in diesen Ordner schreiben."
+          }
+        }
+      }
+    },
+    "There isn’t enough free space on that disk." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Volume ist nicht genügend freier Speicherplatz."
+          }
+        }
+      }
+    },
+    "A sync is running. Try again in a moment." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Synchronisierung läuft. Bitte gleich erneut versuchen."
+          }
+        }
+      }
+    },
+    "The copied data didn’t verify. Nothing was changed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die kopierten Daten konnten nicht überprüft werden. Es wurde nichts geändert."
           }
         }
       }
