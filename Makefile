@@ -28,6 +28,11 @@ PBXPROJ = Pensieve.xcodeproj/project.pbxproj
 APP_CLI = $(APP)/Contents/Helpers/pensieve
 CLI = $(PRODUCTS)/pensieve
 
+# The UI probe: a development tool, deliberately outside Sources/ because BUILD_SOURCES globs that
+# directory — a probe there would trigger a full app rebuild on every probe edit.
+UIPROBE = ./.build/uiprobe
+UIPROBE_SOURCES := $(shell find Tools/uiprobe -type f -name '*.swift')
+
 # SMAppService pins the sync agent's registration to path + cdhash, so the app
 # only works as a background-sync host from here — not from DerivedData.
 INSTALLED_APP = /Applications/Pensieve.app
@@ -43,11 +48,11 @@ INSTALLED_APP = /Applications/Pensieve.app
 # Package.resolved is deliberately NOT an input: xcodebuild rewrites it on every
 # app build (MarkdownUI is an xcodebuild-only dependency), so depending on it
 # would invalidate the test record after every build.
-SWIFT_SOURCES := $(shell find Sources Tests -type f -name '*.swift')
+SWIFT_SOURCES := $(shell find Sources Tests Tools -type f -name '*.swift')
 TEST_INPUTS := Package.swift $(shell find Sources/PensieveKit Tests ! -name '.*')
 BUILD_SOURCES := $(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
 
-.PHONY: help all test lint generate build cli smoke install run clean
+.PHONY: help all test lint generate build cli uiprobe smoke install run clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) \
@@ -74,6 +79,13 @@ generate: $(PBXPROJ) ## Regenerate Pensieve.xcodeproj from project.yml
 build: $(APP_CLI) ## Build Pensieve.app (also builds and embeds the CLI)
 
 cli: $(CLI) ## Build only the embedded pensieve CLI
+
+uiprobe: $(UIPROBE) ## Build the accessibility probe for driving the running app
+
+$(UIPROBE): $(UIPROBE_SOURCES)
+	@mkdir -p $(dir $@)
+	@swiftc -O $(UIPROBE_SOURCES) -o $@
+	@echo "ok: $@"
 
 smoke: .make/smoke ## Verify the built bundle's embedded CLI launches
 
