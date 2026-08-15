@@ -29,26 +29,42 @@ public struct PassageHit: Identifiable, Sendable, Equatable {
 ///
 /// Best-effort: an unavailable index or an untypeable query yields `[]`, never a throw.
 public enum PassageQueries {
+  // Matches `SearchQueries.maxFetch` deliberately — same hard cap on the grow loop below. Declared
+  // here rather than reusing that one because it is `private` there and the plan requires
+  // `SearchQueries.swift` to stay untouched.
+  private static let maxFetch = 2000
+
   public static func search(query rawQuery: String, scope: SearchScope, store: SearchIndexStore,
                             _ database: any DatabaseReader) -> [PassageHit] {
     let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard store.isAvailable, query.count >= SearchQueries.minQueryLength,
           let ftsQuery = FTSQueryBuilder.build(rawQuery, file: nil) else { return [] }
 
-    // Over-fetch for the same reasons the text path does — Focus-muting, exclusions and stale rows
-    // all drop candidates after the index — plus one specific to passages: several chunks of one
-    // turn collapse into a single hit, so the candidate:hit ratio is structurally worse than 1:1.
-    let candidates = store.searchPassages(ftsQuery, limit: max(scope.limit * 8, 50),
-                                          includeArchived: scope.includeArchived)
-    guard !candidates.isEmpty else { return [] }
+    // Over-fetch, and grow the window if post-index filtering starved the result below `limit` —
+    // Focus-muting, exclusions and stale rows all drop candidates after the index, and passages have
+    // one more reason the text path does not: several chunks of one turn collapse into a single hit,
+    // so the candidate:hit ratio is structurally worse than 1:1. Termination is the sibling's: enough
+    // hits, the index has no more rows, or the hard cap.
+    var fetchCount = max(scope.limit * 8, 50)
+    while true {
+      let candidates = store.searchPassages(ftsQuery, limit: fetchCount,
+                                            includeArchived: scope.includeArchived)
+      guard !candidates.isEmpty else { return [] }
 
-    do {
-      return try database.read { database in
-        try resolve(candidates, terms: ftsQuery.terms, scope: scope, database)
+      let hits: [PassageHit]
+      do {
+        hits = try database.read { database in
+          try resolve(candidates, terms: ftsQuery.terms, scope: scope, database)
+        }
+      } catch {
+        Log.search.error("PassageQueries: canonical read failed: \(error, privacy: .public)")
+        return []
       }
-    } catch {
-      Log.search.error("PassageQueries: canonical read failed: \(error, privacy: .public)")
-      return []
+
+      if hits.count >= scope.limit || candidates.count < fetchCount || fetchCount >= maxFetch {
+        return hits
+      }
+      fetchCount = min(fetchCount * 4, maxFetch)
     }
   }
 

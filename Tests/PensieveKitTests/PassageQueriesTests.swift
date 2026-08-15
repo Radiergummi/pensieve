@@ -281,5 +281,35 @@ private func writeTranscript(_ pairs: [(prompt: String, reply: String)]) throws 
                                      scope: SearchScope(visibleNodeIDs: [node.id]),
                                      store: store, database)
     #expect(hits.first?.snippet.match.isEmpty == false)
+    #expect(hits.first?.snippet.match.lowercased().contains("launchd") == true)
+  }
+
+  /// The collapse makes the candidate:hit ratio structurally worse than 1:1, so a single-shot
+  /// over-fetch can starve the page. Ten turns, each split into several chunks, must still return
+  /// ten hits rather than however many survive one fixed window.
+  @Test func manyChunkedTurnsStillFillThePage() throws {
+    let database = try makePassageStore()
+    let store = tempSearchStore()
+    let node = try insertNode(database, name: "Pensieve")
+    let event = try insertSessionEvent(database, nodeID: node.id)
+    // Explicit, strictly turn-major occurredAt: `gatherPassages` orders by `(occurredAt, id)`, so
+    // this pins the corpus (and therefore the index insertion / rowid) order to turn-major,
+    // chunk-minor — the layout that makes a single fixed-size window land on only the first few
+    // turns rather than a random cross-section of all twenty.
+    for turn in 0..<20 {
+      for chunk in 0..<10 {
+        try insertPassage(database, nodeID: node.id, eventID: event.id, turnIndex: turn,
+                          messageIndex: turn * 2, role: .reply,
+                          text: "launchd refuses the spawn, chunk \(chunk) of turn \(turn)",
+                          occurredAt: Date(timeIntervalSince1970: 1_700_000_000
+                                           + Double(turn * 10 + chunk)))
+      }
+    }
+    store.rebuildPassages(items: try EmbeddableCorpus.gatherPassages(database),
+                          passagesHash: "h1")
+    let hits = PassageQueries.search(query: "launchd",
+                                     scope: SearchScope(visibleNodeIDs: [node.id], limit: 10),
+                                     store: store, database)
+    #expect(hits.count == 10, "ten distinct turns, one hit each")
   }
 }
