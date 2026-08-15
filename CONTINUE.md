@@ -361,8 +361,10 @@ recall (#2) and its two 2026-07-19 follow-ups were built, measured worse than BM
   first** — MarkdownUI's custom views may put it out of reach entirely).
 
 **Blocked — do not start:** Widgets + CloudKit need a **paid Apple Developer team** (App Groups / Team-ID
-entitlement). That single gate unblocks the whole extension family at once; revisit only when a paid
-membership is in hand. See `backlog.md` "Widgets — DEFERRED".
+entitlement). That single gate unblocks the whole extension family at once (Focus filters too); revisit only
+when a paid membership is in hand **and active** — *purchased 2026-08-15, but not yet showing in Xcode ▸
+Settings ▸ Accounts or on the Membership page, so the gate is still closed*. See `backlog.md`
+"Widgets — DEFERRED".
 
 ## LIVE deployment state
 
