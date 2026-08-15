@@ -39,6 +39,10 @@ struct MenuBarView: View {
 
   private static let maxRows = 5
 
+  /// The keyboard cursor over the What's Next rows. Nil when nothing is focused — including the
+  /// legitimate case where there are no rows at all.
+  @FocusState private var focusedRow: UUID?
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       heartbeat
@@ -50,7 +54,53 @@ struct MenuBarView: View {
     }
     .padding(12)
     .frame(width: 320)   // two-line rows need the room
-    .task { model.refreshGlance() }   // refresh on open; the always-mounted label is kept live between opens by the liveness watches
+    // Arrows rather than Tab, and the reason is that Tab does not work for most people: macOS Full
+    // Keyboard Access is off by default, so it never reaches a Button. Arrows always do. The handlers
+    // sit on the container so they fire while any descendant row holds focus.
+    //
+    // Measured before being designed (spike 2, 2026-08-15): `.onKeyPress` DOES fire inside this
+    // `.nonactivatingPanel`, `NSApp.isActive` is true while the popover is open so focus rings are
+    // not suppressed, and a programmatic focus request is accepted.
+    //
+    // One handler over a key SET rather than three per-key handlers, because the per-key overload
+    // does not see modifiers: `.onKeyPress(.return)` also fires for ⌘↩, which is the footer's
+    // shortcut — so plain Return would have opened the focused node AND ⌘↩ would have opened the
+    // node and the briefing together. The guard makes the bare keys bare.
+    .onKeyPress(keys: [.upArrow, .downArrow, .return]) { press in
+      guard press.modifiers.isEmpty else { return .ignored }
+      switch press.key {
+      case .upArrow: return moveFocus(by: -1)
+      case .downArrow: return moveFocus(by: 1)
+      case .return: return activateFocusedRow()
+      default: return .ignored
+      }
+    }
+    .task {
+      model.refreshGlance()   // refresh on open; the always-mounted label is kept live between opens by the liveness watches
+      focusedRow = rows.first?.project.id   // nil when the queue is empty — no row to focus, and that is fine
+    }
+  }
+
+  /// The rows actually rendered, and the single source for both the view and the key handlers — a
+  /// second `prefix` call somewhere else is how the cursor would come to address a row nobody sees.
+  private var rows: [NextItem] { Array(model.lists.whatsNext.prefix(Self.maxRows)) }
+
+  /// Clamped, not wrapping: with five rows, wrap-around costs more surprise than it saves keystrokes.
+  private func moveFocus(by offset: Int) -> KeyPress.Result {
+    let ids = rows.map(\.project.id)
+    guard !ids.isEmpty else { return .ignored }
+    guard let current = focusedRow, let index = ids.firstIndex(of: current) else {
+      focusedRow = ids.first
+      return .handled
+    }
+    focusedRow = ids[min(max(index + offset, 0), ids.count - 1)]
+    return .handled
+  }
+
+  private func activateFocusedRow() -> KeyPress.Result {
+    guard let focusedRow else { return .ignored }
+    applyDeepLink(.node(focusedRow), model: model, openWindow: openWindow)
+    return .handled
   }
 
   @ViewBuilder private var heartbeat: some View {
@@ -73,14 +123,14 @@ struct MenuBarView: View {
   }
 
   @ViewBuilder private var whatsNext: some View {
-    let items = Array(model.lists.whatsNext.prefix(Self.maxRows))
-    if items.isEmpty {
+    if rows.isEmpty {
       Text("Nothing queued").font(.callout).foregroundStyle(.secondary)
     } else {
-      ForEach(items, id: \.project.id) { item in
-        MenuBarRow(item: item) {
+      ForEach(rows, id: \.project.id) { item in
+        MenuBarRow(item: item, isFocused: focusedRow == item.project.id) {
           applyDeepLink(.node(item.project.id), model: model, openWindow: openWindow)
         }
+        .focused($focusedRow, equals: item.project.id)
       }
     }
   }
@@ -93,10 +143,16 @@ struct MenuBarView: View {
       // roughly 180pt of slack, which the Spacer below absorbs before the button ever gives up width.
       // `.borderedProminent` rather than a glass style — the `.window` popover surface is already
       // system glass, so a glass button on it would be glass on glass. It also picks up the accent.
+      //
+      // The footer is reached by SHORTCUT, not by tab traversal. Arrows are bound to the row cursor
+      // above, and Tab does not reach a Button unless Full Keyboard Access is on — which it is not by
+      // default. Without these three, a keyboard user could move the cursor and open a node and still
+      // have no route to any footer action.
       Button("Open Pensieve") {
         applyDeepLink(.briefing, model: model, openWindow: openWindow)
       }
       .buttonStyle(.borderedProminent)
+      .keyboardShortcut(.return, modifiers: .command)
 
       Spacer(minLength: 8)
 
@@ -109,6 +165,7 @@ struct MenuBarView: View {
         Image(systemName: "arrow.clockwise")
       }
       .buttonStyle(.bordered)
+      .keyboardShortcut("r", modifiers: .command)
       .disabled(model.isRefreshing)
       .help("Refresh")
       .accessibilityLabel("Refresh")
@@ -118,6 +175,7 @@ struct MenuBarView: View {
       // a control. The bordered pair gets hover, press and a focus ring from the system.
       Menu {
         SettingsLink { Text("Settings…") }
+          .keyboardShortcut(",", modifiers: .command)
         Button("Quit") { NSApplication.shared.terminate(nil) }
       } label: {
         Image(systemName: "ellipsis")
@@ -158,12 +216,29 @@ struct MenuBarView: View {
 /// to rebuild `nodeRowFacts` for this one line.
 private struct MenuBarRow: View {
   let item: NextItem
+  /// Whether the keyboard cursor is on this row. Passed in rather than read from a local
+  /// `@FocusState`, because the arrow handlers live on the container and the row must render the
+  /// same state they move.
+  let isFocused: Bool
   let action: () -> Void
 
   private var facts: NodeRowFacts {
     NodeRowFacts(lastActivityAt: item.lastActivityAt, openLooseEnds: item.openLooseEnds)
   }
   @State private var isHovering = false
+
+  /// The two-line layout reads to VoiceOver as two unrelated fragments — a bare name, then a
+  /// detached "vor 3 Tagen · 288 offen". One label keeps the row a single utterance.
+  ///
+  /// Comma-joined rather than `NodeMeta.separator`: "·" is punctuation for the eye, and VoiceOver
+  /// reads it aloud as "middle dot". `verbatim` because every component is already localized —
+  /// re-localizing an assembled sentence would look for a key that cannot exist.
+  private var spokenLabel: Text {
+    let parts = [item.project.name,
+                 NodeMeta.recencyLabel(facts.lastActivityAt),
+                 NodeMeta.openCount(facts.openLooseEnds)]
+    return Text(verbatim: parts.joined(separator: ", "))
+  }
 
   var body: some View {
     Button(action: action) {
@@ -186,9 +261,18 @@ private struct MenuBarRow: View {
       .rowHitArea()
     }
     .buttonStyle(.plain)
-    .background(.quaternary.opacity(isHovering ? 1 : 0),
+    // Focus reuses the hover fill rather than the system focus ring: on the popover's glass material
+    // a ring reads as a stray outline (spike 2 rendered one around the whole 320pt container and it
+    // looked like a rendering bug), whereas the fill is the affordance this row already uses to mean
+    // "this one". Focus is drawn slightly stronger than hover so the two are distinguishable when
+    // the pointer and the cursor are on different rows.
+    .background(.quaternary.opacity(isFocused ? 1 : (isHovering ? 0.6 : 0)),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     .onHover { isHovering = $0 }
+    // The two-line layout reads to VoiceOver as two unrelated fragments — a bare name, then a
+    // detached "vor 3 Tagen · 288 offen". One label keeps the row a single utterance.
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(spokenLabel)
   }
 }
 
