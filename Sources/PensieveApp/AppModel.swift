@@ -161,6 +161,10 @@ final class AppModel {
   // All four are written by AppModel+Search.swift's runSearch()/clearSearch(), hence not private(set).
   /// The single ranked result list.
   var searchHits: [SearchHit] = []
+  /// Conversation-passage hits, rendered as their own "From your conversations" section below the
+  /// ranked list — a different FTS5 table with a different average document length, so its BM25
+  /// scores are not comparable to `searchHits`' and must never be interleaved with them.
+  var passageHits: [PassageHit] = []
   /// The node pinned above the list for guaranteed navigation. Selected by scanning the visible
   /// node set, NOT the capped list — see SearchQueries.topHit.
   var pinnedTopHit: SearchHit?

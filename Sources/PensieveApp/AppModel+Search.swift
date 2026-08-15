@@ -77,6 +77,7 @@ extension AppModel {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard query.count >= SearchQueries.minQueryLength, let database else {
       searchHits = []
+      passageHits = []
       pinnedTopHit = nil
       expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
       return
@@ -100,6 +101,11 @@ extension AppModel {
     searchToken += 1
     let token = searchToken
     let store = searchStore
+    // Fully qualified: `AppModel.SearchScope` (the UI's active/all enum) shadows the Kit type of the
+    // same name inside this extension. Snapshotted once, before the Task, so the ranked search and
+    // the passage search (below) cannot see two different scopes if the user changes it mid-flight.
+    let scope = PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived,
+                                       includeClosed: includeClosed)
     // Pre-Task locals, read here on the main actor rather than inside the detached closure below.
     // Off means off: `translationStore`/`translator` are `lazy` and constructing either would open
     // a file/load a model, so they're touched only when a target is actually resolved.
@@ -107,18 +113,23 @@ extension AppModel {
     let translations = language.isEmpty ? nil : translationStore
     let translator = language.isEmpty ? nil : self.translator
     searchTask = Task { [weak self] in
-      let hits = await Task.detached {
-        // Fully qualified: `AppModel.SearchScope` (the UI's active/all enum) shadows the Kit type
-        // of the same name inside this extension.
+      let rankedHandle = Task.detached {
         await SearchQueries.searchTranslatingOnEmpty(
-          query: rawQuery,
-          scope: PensieveKit.SearchScope(visibleNodeIDs: visible, includeArchived: includeArchived,
-                                         includeClosed: includeClosed),
-          store: store, translations: translations, language: language, translator: translator,
-          database)
-      }.value
+          query: rawQuery, scope: scope, store: store, translations: translations,
+          language: language, translator: translator, database)
+      }
+      // Same scope, same query, separate list — passage BM25 scores are not comparable to the
+      // ranked list's, so they are appended as their own section rather than merged. A second
+      // detached task (`PassageQueries.search` is synchronous), so both run concurrently rather
+      // than the passage read blocking behind the ranked one.
+      let passagesHandle = Task.detached {
+        PassageQueries.search(query: rawQuery, scope: scope, store: store, database)
+      }
+      let hits = await rankedHandle.value
+      let passages = await passagesHandle.value
       guard let self, self.searchToken == token, !Task.isCancelled else { return }
       self.searchHits = hits
+      self.passageHits = passages
     }
   }
 
@@ -138,6 +149,12 @@ extension AppModel {
     } else {
       selectSearchNode(hit.nodeID)
     }
+  }
+
+  /// A conversation-passage hit: like a node hit, drive the detail only. There is no cited row to
+  /// auto-expand — opening the transcript window in place is out of scope for this section.
+  func openPassage(_ hit: PassageHit) {
+    selectSearchNode(hit.nodeID)
   }
 
   /// A Spotlight/App-Intent loose-end open: resolve the loose end → its node (read-only lookup),
@@ -162,6 +179,7 @@ extension AppModel {
   func clearSearch() {
     searchText = ""
     searchHits = []
+    passageHits = []
     pinnedTopHit = nil
     expandedLooseEndID = nil
     searchTask?.cancel()
