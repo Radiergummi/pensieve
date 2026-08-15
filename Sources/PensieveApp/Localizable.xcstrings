@@ -824,6 +824,23 @@
         }
       }
     },
+    "Default" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default"
+          }
+        }
+      }
+    },
     "delete" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2128,23 +2145,6 @@
         }
       }
     },
-    "Open Logs Folder" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Protokollordner öffnen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open Logs Folder"
-          }
-        }
-      }
-    },
     "Open Pensieve" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2693,6 +2693,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle anzeigen"
+          }
+        }
+      }
+    },
+    "Show details" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details anzeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show details"
           }
         }
       }

@@ -12,6 +12,14 @@ struct AdvancedSettingsTab: View {
 
   @State private var status: SystemStatus?
   @State private var syncStatus: SMAppService.Status = .notRegistered
+  @State private var isInspectorPresented = false
+
+  /// True when a custom support root is persisted. Read directly rather than mirrored into
+  /// `@State`, matching how `SettingsView` reads `Preferences`.
+  private var isCustomRoot: Bool {
+    PensieveDefaults.shared().string(forKey: PensieveDefaults.customSupportRootKey)?
+      .isEmpty == false
+  }
 
   var body: some View {
     Form {
@@ -27,13 +35,13 @@ struct AdvancedSettingsTab: View {
       }
 
       Section("Store & Logs") {
-        pathRow("Canonical store", resolvedCanonicalURL())
-        pathRow("Capture spool", resolvedSpoolURL())
-        pathRow("Support folder", PensievePaths.supportDirectory())
-        pathRow("Logs", PensievePaths.logsDirectory())
-        Button("Open Logs Folder") {
-          NSWorkspace.shared.open(PensievePaths.logsDirectory())
-        }
+        LocationRow(title: "Support folder",
+                    url: PensievePaths.supportDirectory(),
+                    status: isCustomRoot ? "Custom" : "Default",
+                    onInspect: { isInspectorPresented = true })
+        LocationRow(title: "Canonical store", url: resolvedCanonicalURL())
+        LocationRow(title: "Capture spool", url: resolvedSpoolURL())
+        LocationRow(title: "Logs", url: PensievePaths.logsDirectory())
       }
     }
     .formStyle(.grouped)
@@ -56,26 +64,6 @@ struct AdvancedSettingsTab: View {
     case .notRegistered: return "Off"
     case .notFound: return "Not found"
     @unknown default: return "Off"
-    }
-  }
-
-  /// A full store path does NOT fit 460 pt — truncate in the middle and put the whole path in a
-  /// tooltip, so the row can never blow out the window.
-  @ViewBuilder private func pathRow(_ title: LocalizedStringKey, _ url: URL) -> some View {
-    LabeledContent(title) {
-      HStack(spacing: 8) {
-        Text(url.path)
-          .font(.caption.monospaced())
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .help(url.path)
-        Button("Reveal in Finder") {
-          NSWorkspace.shared.activateFileViewerSelecting([url])
-        }
-        .buttonStyle(.link)
-        .fixedSize()
-      }
     }
   }
 
