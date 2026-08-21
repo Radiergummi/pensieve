@@ -13,18 +13,33 @@ func tempSearchStore() -> SearchIndexStore {
   SearchIndexStore(url: tempURL("search-index"))
 }
 
+/// The repo-local git config every test repo needs, in one place so the two creation sites cannot
+/// drift apart.
+///
+/// These tests must not inherit the developer's git configuration. The branch is pinned on both axes
+/// `Git.defaultBranch` consults: `--initial-branch` (at the call site) fixes the branch that actually
+/// gets created, and the repo-local `init.defaultBranch` overrides any global setting, which
+/// `defaultBranch` checks first.
+///
+/// Signing is pinned OFF for a harder-won reason. This machine sets `commit.gpgsign=true` globally
+/// with an SSH signer behind a Secure-Enclave agent, which refuses to sign in a non-interactive run
+/// ("Couldn't sign message (signer): agent refused operation?"). `git commit` then fails with
+/// "fatal: failed to write commit object", `rev-parse HEAD` returns nil, and the force-unwrap at the
+/// call site raises a fatal error that kills the ENTIRE test process — so the suite dies mid-run
+/// having reported only unrelated passing tests. Nothing here signs anything, so turn it off.
+func configureTestRepo(at path: String) {
+  _ = Git.run(["config", "init.defaultBranch", "main"], in: path)
+  _ = Git.run(["config", "user.email", "t@t.co"], in: path)
+  _ = Git.run(["config", "user.name", "T"], in: path)
+  _ = Git.run(["config", "commit.gpgsign", "false"], in: path)
+}
+
 /// Creates a fresh temp git repo with a single commit and returns its path and HEAD hash.
 func makeCommittedRepo(message: String = "first commit") throws -> (repo: URL, hash: String) {
   let repo = tempURL("repo", ext: nil)
   try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-  // Pin the branch on both axes Git.defaultBranch consults, so these tests don't
-  // inherit the machine's git configuration: --initial-branch fixes the branch that
-  // actually gets created, and the repo-local init.defaultBranch overrides any
-  // global setting, which defaultBranch checks first.
   _ = Git.run(["init", "--initial-branch=main"], in: repo.path)
-  _ = Git.run(["config", "init.defaultBranch", "main"], in: repo.path)
-  _ = Git.run(["config", "user.email", "t@t.co"], in: repo.path)
-  _ = Git.run(["config", "user.name", "T"], in: repo.path)
+  configureTestRepo(at: repo.path)
   try "hello".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
   _ = Git.run(["add", "-A"], in: repo.path)
   _ = Git.run(["commit", "-m", message], in: repo.path)
