@@ -33,10 +33,11 @@ and indexed.
 
 **Tier 1 — Product pillars** — Roadmap §. Open: slice 6 (forks, gated on the capture backend) ·
 CloudKit + iOS · system-integration surfaces · FSEvents real-time capture · additional source types ·
-analytics. **The Apple signing gate is CLOSED as of 2026-08-21** — paid team `TH593VRB6W`, Focus filters
-confirmed working, App Groups proven to provision. Widgets and CloudKit are now ordinary unbuilt features,
-each wanting its own brainstorm; neither is blocked. *(CloudKit was never actually on this gate — an App
-Group is same-device, CloudKit is cross-device. See "Widgets" below.)*
+analytics. **The Apple *membership* gate is closed as of 2026-08-21** — paid team `TH593VRB6W`, and Focus
+filters confirmed working. One residue remains: the App Group entitlement signs but `secd` **ignores it** for
+want of a provisioning profile, so the sandboxed half is unproven — resolve that before Widgets. CloudKit is
+now an ordinary unbuilt feature wanting its own brainstorm, and was never actually on this gate: an App Group
+is same-device, CloudKit is cross-device. Both detailed under "Widgets" below.
 
 **Tier 2 — Quality, measurement & known defects**
 - Claude Design review — slice C (transcript reading, **live now**) and slice D (six items, each its own brainstorm).
@@ -44,6 +45,8 @@ Group is same-device, CloudKit is cross-device. See "Widgets" below.)*
 - P3 retrieval harness — **blocked on the user** writing 30–50 paraphrase queries.
 - Follow-ups from the popover + harness session — the dropped node-scoped Loose Ends surface, plus three verification-practice findings.
 - The UI harness has one remaining hole — the ordering test cannot cover its motivating defect. *(The vacuous sidebar-count test was closed 2026-08-16.)*
+- String-catalog symbol generation was a latent build break, fixed 2026-08-21 — and a *cached build hid it*.
+- The test suite was broken by the developer's own git signing config; fixed 2026-08-21 — and a *stale record hid it*.
 - Extraction recall has never been measured; live sessions could supply the gold set.
 - The salience pipeline is built, wired, and has never been run — two shipped features are inert.
 - Naming has no eval coverage, and the harness has a silent hole. *(Subsumed by F4; kept for its detail.)*
@@ -54,7 +57,7 @@ Group is same-device, CloudKit is cross-device. See "Widgets" below.)*
 
 **Tier 3 — Parked, trigger-gated**
 - Transcript rendering siblings — rich code blocks (syntax + DOT/Mermaid), Writing Tools on loose ends.
-- Widgets — **unblocked 2026-08-21** (App Groups provisions). Now an ordinary unbuilt feature; the container shape is decided (publish a digest, do not move the store). Wants a brainstorm.
+- Widgets — **half-unblocked 2026-08-21**: the App Group entitlement signs but `secd` ignores it for want of a provisioning profile, so the sandboxed half is unproven. Container shape is decided (publish a digest, do not move the store). Needs the profile resolved, then a brainstorm.
 - Spike: statistical theme discovery across strands (`NLEmbedding`).
 - Talk to the system, **stage 2** — the conversational agent (stage 1 shipped 2026-08-13).
 - Forks as first-class — the capture backend; the long pole gating app slice 6.
@@ -808,6 +811,50 @@ the UI harness. The two harness holes have their own entry below; these are the 
 
 ---
 
+## Two local-verification traps, both fixed 2026-08-21 — and both hidden by caching
+
+Recorded together because they share one lesson: **`make`'s step caching can report green over a step that
+would fail if it actually ran.** Both were found only by forcing (`make -B`), and one of them had been silently
+skipped for six days.
+
+**1. `STRING_CATALOG_GENERATE_SYMBOLS` cannot coexist with the hand-authored catalog.** XcodeGen's setting
+presets turn it on (it appears in the generated `.pbxproj` but was never in `project.yml`). Symbol generation
+derives a Swift symbol per catalog key, and because *the keys ARE the UI strings*, several differ only by case
+or trailing punctuation — `Archive`/`archive`, `Delete`/`Delete…`, `New Child`/`New Child…`,
+`LLM Provider`/`LLM provider`, `Mark as Done`/`Mark as done`, `None open`/`None open.`, `Idle`/`idle`,
+`Merge`/`merge`, `Rename`/`rename`, `Unarchive`/`unarchive` — and each pair collides. 25 hard errors, plus two
+keys rejected outright (`Type` is too close to a Swift keyword; `%@` yields no derivable symbol). **Deduplicating
+is NOT the fix**: a key must match its Swift literal character-for-character or German silently falls back to
+English, so the collisions are load-bearing. Nothing reads the generated symbols — the app uses plain
+`Text("…")` — so it is now `STRING_CATALOG_GENERATE_SYMBOLS: "NO"` in `project.yml`, sibling to the existing
+`SWIFT_EMIT_LOC_STRINGS: "NO"` and for a closely related reason. **Why it looked intermittent:** the build phase
+only runs when the derived symbol file is stale, so the identical tree built clean and then failed 25 minutes
+later.
+
+**2. The test suite inherited the developer's commit signing.** `makeCommittedRepo` pinned branch and identity
+into each temp repo — its comment even says the point is not to "inherit the machine's git configuration" — but
+not signing. This machine sets `commit.gpgsign=true` globally with an SSH signer behind a Secure-Enclave agent
+(Secretive), which refuses to sign non-interactively: `Couldn't sign message (signer): agent refused
+operation?` → `fatal: failed to write commit object`. So `git commit` failed, `rev-parse HEAD` returned nil,
+and **the force-unwrap at `TestSupport.swift:31` raised a fatal error that killed the entire test process** —
+the suite died mid-run having printed only unrelated passing tests, with no summary and no named failing test.
+Fixed by a shared `configureTestRepo(at:)` in `TestSupport.swift` (used by both repo-creation sites, so they
+cannot drift) which also sets `commit.gpgsign false`. Verified both directions: the bare sequence fails, the
+pinned sequence commits. Suite now **786 tests in 17 suites passed**.
+
+**Why it hid for six days:** `.make/test` was dated 2026-08-15 and the *inputs* (`Sources`, `Tests`) had not
+changed since, so every `make all` and `make run` treated the suite as up to date and skipped it — including
+the `make run` that installed to `/Applications`. A green `make all` therefore certified nothing about the
+tests. **When verification matters, force it.**
+
+**Left alone deliberately (follow-up):** six further `Git.run(…)!` force-unwraps in the tests
+(`StrandBirthTests` ×2, `IngesterTests` ×3, `RefineProjectNamesTests` ×1). With the config fixed they all
+succeed, so changing them is out of scope here — but the failure *mode* is bad out of proportion to the bug: any
+future git-environment problem kills the whole process instead of failing one named test. Worth converting to a
+throwing unwrap in one pass.
+
+---
+
 ## The UI harness has two known holes (2026-08-15, recorded at build time)
 
 > **HOLE 2 CLOSED 2026-08-16** — by lifting the debugged tests from the parallel
@@ -1186,14 +1233,30 @@ mint**; both appeared once the account was re-added. The Team ID is also readabl
 `OU` field: `security find-certificate -a -c "Apple Development" -p | openssl x509 -noout -subject`. Note the
 personal team was **converted in place** — the same Team ID appears in certs minted both before and after
 purchase, so a pre-purchase cert does not imply a free team.)* Team-ID signing and Focus filters are already
-done and confirmed (see the Focus-filter entry); **App Groups provisioning is now PROVEN — 2026-08-21, it is a
-GO.** `project.yml` gained a `Pensieve.entitlements` carrying only `com.apple.security.application-groups =
-["TH593VRB6W.me.mazetti.pensieve"]`, signing moved `Manual → Automatic`, and the Makefile gained
-`-allowProvisioningUpdates`. The signed app reports the entitlement under a full `Apple Development → WWDR →
-Apple Root CA` chain with `TeamIdentifier=TH593VRB6W`, and a probe binary signed with the same entitlement
-resolved `~/Library/Group Containers/TH593VRB6W.me.mazetti.pensieve` and wrote to it. **No portal work and no
-embedded provisioning profile were needed** — `Contents/embedded.provisionprofile` is absent and the build still
-signs and runs, so a non-sandboxed macOS app takes this entitlement locally.
+done and confirmed (see the Focus-filter entry); **App Groups is HALF open — corrected 2026-08-21, later the
+same day, after an initial "PROVEN — GO" that was overstated.** `project.yml` gained a `Pensieve.entitlements`
+carrying only `com.apple.security.application-groups = ["TH593VRB6W.me.mazetti.pensieve"]`, signing moved
+`Manual → Automatic`, and the Makefile gained `-allowProvisioningUpdates`. What is genuinely true: the
+entitlement **signs** — the app reports it under a full `Apple Development → WWDR → Apple Root CA` chain with
+`TeamIdentifier=TH593VRB6W` — and the container at
+`~/Library/Group Containers/TH593VRB6W.me.mazetti.pensieve` exists and is writable.
+
+**What is NOT true: the entitlement is not honoured.** `secd` and `trustd` log, on every app launch:
+`Entitlement com.apple.security.application-groups=("TH593VRB6W.me.mazetti.pensieve") is ignored because of
+invalid application signature or incorrect provisioning profile`. No provisioning profile exists —
+`~/Library/Developer/Xcode/UserData/Provisioning Profiles/` is empty, `Contents/embedded.provisionprofile` is
+absent, and the build log prints `Signing Identity:` but never `Provisioning Profile:`, so
+`-allowProvisioningUpdates` created nothing. **The container test could not have caught this**: as the probe
+below established, `containerURL(forSecurityApplicationGroupIdentifier:)` performs no entitlement check for an
+unsandboxed process, so it resolves whether or not the entitlement is honoured. The app half therefore works by
+accident (it is not sandboxed and can write the path directly); **the widget half — the only half that needs the
+entitlement — is unproven and currently would fail.**
+
+**Before Widgets, this must be resolved:** obtain a Mac Development provisioning profile that includes the App
+Group. `xcodebuild -allowProvisioningUpdates` alone did not produce one in a non-interactive shell; the likely
+requirement is an authenticated Xcode account session (Xcode ▸ Settings ▸ Accounts ▸ Download Manual Profiles,
+or a first interactive build), or registering the App ID + group in the portal and wiring a downloaded profile.
+Until then treat App Groups as **provisionable in principle, not yet functioning**.
 
 **Two claims previously recorded here are WRONG; a probe disproved both.** (1) It said a non-sandboxed app *must*
 use the Team-ID-prefixed group id and that the wrong form yields `nil` with no diagnostic. In fact **all three
@@ -2052,6 +2115,51 @@ separate outage that happens to have been masked by this trigger. Next suspect, 
 identity from ad-hoc to team-signed can make macOS treat it as a **new** login item, so check System Settings ▸
 General ▸ Login Items & Extensions before anything else. Capture is unaffected (git hooks do not need the
 agent) — only the 300 s auto-drain is.
+
+**Investigated 2026-08-21 (later same day). Not fixed. Root cause narrowed to a Launch Constraint Violation;
+four hypotheses eliminated.** The failure is precise and reproducible: `launchctl kickstart` spawns the helper,
+which is `SIGKILL`ed in ~57 ms with `EXC_CRASH / SIGKILL (Code Signature Invalid)` and
+`termination {namespace: CODESIGNING, code: 4, indicator: "Launch Constraint Violation"}`. launchd logs
+`error info: c[5]p[1]m[1]e[0], (Constraint not matched) launch type 0, failure proc [vc: 3]`.
+
+**Why the log simply stopped instead of filling with errors** — the thing that made this look like "the agent
+never ran": launchd logs `removing service since it exited with consistent failure` and **deletes the job**.
+Once removed it never retries, so `StartInterval 300` produces nothing and `runs = 0` /
+`job state = uninitialized` is what a fresh `launchctl print` shows. An empty log here means *removed*, not
+*idle*. Re-registration (relaunching the app) brings the job back, and it fails again on first spawn.
+
+**Eliminated, with evidence — do not re-test these:**
+1. *Login-item approval.* `sfltool dumpbtm` shows `Disposition: [enabled, allowed, not notified]` and
+   `launchctl print-disabled` shows `enabled`. This was the entry's own "next suspect"; it is wrong.
+2. *Stale LWCR.* `properties` does show `needs LWCR update` after a failure (launchd logs
+   `Requesting LWCR update on next spawn`), but a full `launchctl bootout` + app relaunch produces a job with a
+   **fresh** LWCR and no `needs LWCR update` — and the very next spawn still dies the same way. So
+   `registerIfNeeded()`'s unregister-then-register is working as documented; a stale LWCR is not the cause.
+3. *Duplicate LaunchServices registrations.* `lsregister -dump` listed **five** bundles claiming
+   `me.mazetti.pensieve` (`/Applications` plus four build products across DerivedData and three worktrees) —
+   exactly the hazard `CLAUDE.md` warns about, and a plausible way for smd to resolve
+   `parent bundle identifier` to the wrong app. Unregistered all four, leaving only `/Applications`;
+   re-registered; still fails. Worth keeping clean regardless.
+4. *Helper signing-identifier mismatch.* The helper's code-signing identifier is `PensieveSyncAgent` (a `tool`
+   target has no Info.plist, so codesign falls back to the file name) while the launchd `Label` is
+   `me.mazetti.pensieve.sync`, and `PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.sync` in `project.yml` does
+   **not** change it. Re-signed the installed helper in place with `-i me.mazetti.pensieve.sync` (deep verify
+   OK); still fails. The mismatch is real and arguably worth fixing on its own, but it is not this bug.
+
+**Leading untested hypothesis.** The app's App Group entitlement is unbacked by a provisioning profile, and
+`secd`/`trustd` already declare it *"ignored because of invalid application signature or incorrect provisioning
+profile"* (see the Widgets entry). If the OS treats the parent app's signature as invalid for entitlement
+purposes, an LWCR requiring a validly-signed `me.mazetti.pensieve` parent could fail for that reason. **The
+decisive experiment** is to build and install with `CODE_SIGN_ENTITLEMENTS` removed and re-test the spawn — one
+variable, one build. Note this cannot be the *original* cause: `sync.log` stops 2026-08-17T23:36Z, days before
+either the team-signing or the entitlement change, and the machine has not rebooted since 2026-08-13 and had no
+OS update (macOS 26.6.1 installed 2026-08-02). So expect **two** causes — whatever stopped it on 08-17, plus
+whatever real team signing now introduces by creating an enforceable LWCR where ad-hoc signing created none.
+
+**Unrelated defect found in passing, worth its own entry:** the 88 undrained spool rows are not merely waiting
+on the agent — they fail on ingest with `IngestError.unattributableSession`
+(`me.mazetti.pensieve:ingest` logs `Spool row NNNNN failed: …unattributableSession` in bulk). They would keep
+failing with the agent healthy, so auto-drain being dead is not the whole story behind the arrears.
 
 </details>
 
