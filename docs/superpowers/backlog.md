@@ -2161,6 +2161,47 @@ on the agent — they fail on ingest with `IngestError.unattributableSession`
 (`me.mazetti.pensieve:ingest` logs `Spool row NNNNN failed: …unattributableSession` in bulk). They would keep
 failing with the agent healthy, so auto-drain being dead is not the whole story behind the arrears.
 
+**Round 2, 2026-08-22. Three more hypotheses eliminated — seven total. Still not fixed.**
+
+5. *The App Group entitlement.* Built and installed with `CODE_SIGN_ENTITLEMENTS` removed (only
+   `get-task-allow` left in the signature): **fails identically.** So the unprofiled entitlement is not the
+   cause, and today's App Groups work did not break this.
+6. *Team signing itself.* Reverted all four targets to the pre-2026-08-21 config (`CODE_SIGN_IDENTITY: "-"`,
+   `CODE_SIGNING_REQUIRED: "NO"`, no `CODE_SIGN_STYLE`), confirmed `Signature=adhoc` / `TeamIdentifier=not set`
+   on both app and helper, and installed: **fails identically.** The failure is independent of signing
+   altogether — which also means the earlier "expect two causes" guess is probably wrong.
+7. *A disabled parent app record in BTM.* The parent (`2.me.mazetti.pensieve`) reads
+   `Disposition: [disabled, allowed, not notified]` while the child agent reads `[enabled, allowed, …]`, which
+   looked decisive. **A control disproved it:** ChatGPT (`2.com.openai.chat`) and Karabiner
+   (`2.org.pqrs.Karabiner-Elements-Non-Privileged-Agents-v2`) both have `disabled` parents with `enabled`
+   agent children, and both work. **A `disabled` parent app record is normal.** Do not chase it again, and note
+   the earlier round's grep error that started it: `grep -A6 pensieve.sync` shows the *child*; the parent is a
+   separate record five lines above its own `Identifier:` line.
+
+**Two unexplained differences that are still live leads:**
+- **`notified` bit.** Every working third-party agent is `[enabled, allowed, notified] (0xb)`; Pensieve's is
+  `[enabled, allowed, not notified] (0x3)`. The user was apparently never notified about this background item.
+- **No bundle identity in the helper.** `otool -s __TEXT __info_plist` on `PensieveSyncAgent` returns nothing —
+  it is a bare Mach-O, because the target is `type: tool` with no Info.plist, and `PRODUCT_BUNDLE_IDENTIFIER`
+  does **not** put one in the binary. The working comparators are nested `.app` bundles
+  (`Karabiner-Core-Service.app`). Untested fix: `CREATE_INFOPLIST_SECTION_IN_BINARY` +
+  `GENERATE_INFOPLIST_FILE` on the agent target, so the binary carries `CFBundleIdentifier`.
+  **Caveat that weakens it:** this same bare binary ran fine until 08-17, so a purely static property cannot
+  explain the change on its own.
+
+**What the evidence now points at.** Every *static* property of the build has been ruled out (signing, team,
+entitlements, identifier, registration count, parent disposition). The machine did not reboot (up since 08-13)
+and did not update (macOS 26.6.1 from 08-02). So the thing that changed on 08-17 is **system-side state for
+this label** — a corrupt or wedged BTM/launchd record. The child's `Generation` is now 36 after roughly eight
+register/unregister cycles today, against 15 for the parent. The sanctioned reset is `sfltool resetbtm`, which
+is **system-wide**: it clears every app's background-item approval on this Mac and forces re-approval of all of
+them. That is a user decision, not a debugging step to take unilaterally — but it is now the most likely fix.
+
+**Cheap next steps, in order:** (a) the `CREATE_INFOPLIST_SECTION_IN_BINARY` experiment — one build, no system
+risk, low prior but not yet tried; (b) `sfltool resetbtm` with the user's explicit consent, then re-approve
+Pensieve and re-test; (c) if both fail, reconsider whether an `.app`-bundled agent (the shape every working
+comparator uses) is simply the supported configuration.
+
 </details>
 
 **Superseded by the resolution above (2026-08-13).** The Team-ID revisit trigger no longer applies to this
