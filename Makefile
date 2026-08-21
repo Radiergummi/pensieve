@@ -13,10 +13,15 @@
 # destinations (arm64 / x86_64 / Any Mac), prints "WARNING: Using the first of multiple
 # matching destinations" on every build, and picks arm64 — which is what this pins, so
 # the flag silences the notice without changing what gets built.
+#
+# -allowProvisioningUpdates is required, not optional: signing is Automatic and the app carries an
+# App Group entitlement, so xcodebuild has to register/refresh the App ID and profile with Apple.
+# Without the flag it fails with "No profiles for 'me.mazetti.pensieve' were found" instead.
 XCODEBUILD_FLAGS = -project Pensieve.xcodeproj \
 	-configuration Debug -derivedDataPath ./.build-xcode \
 	-destination 'platform=macOS,arch=arm64' \
-	-skipMacroValidation -skipPackagePluginValidation
+	-skipMacroValidation -skipPackagePluginValidation \
+	-allowProvisioningUpdates
 
 PRODUCTS = ./.build-xcode/Build/Products/Debug
 APP = $(PRODUCTS)/Pensieve.app

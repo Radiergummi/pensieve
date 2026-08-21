@@ -33,8 +33,10 @@ and indexed.
 
 **Tier 1 — Product pillars** — Roadmap §. Open: slice 6 (forks, gated on the capture backend) ·
 CloudKit + iOS · system-integration surfaces · FSEvents real-time capture · additional source types ·
-analytics. Blocked on the Apple signing gate: Widgets · CloudKit — both now waiting only on the
-App Groups spike, not on the membership. *(Focus filters came off this gate 2026-08-21.)*
+analytics. **The Apple signing gate is CLOSED as of 2026-08-21** — paid team `TH593VRB6W`, Focus filters
+confirmed working, App Groups proven to provision. Widgets and CloudKit are now ordinary unbuilt features,
+each wanting its own brainstorm; neither is blocked. *(CloudKit was never actually on this gate — an App
+Group is same-device, CloudKit is cross-device. See "Widgets" below.)*
 
 **Tier 2 — Quality, measurement & known defects**
 - Claude Design review — slice C (transcript reading, **live now**) and slice D (six items, each its own brainstorm).
@@ -52,7 +54,7 @@ App Groups spike, not on the membership. *(Focus filters came off this gate 2026
 
 **Tier 3 — Parked, trigger-gated**
 - Transcript rendering siblings — rich code blocks (syntax + DOT/Mermaid), Writing Tools on loose ends.
-- Widgets — the paid Team ID landed 2026-08-21, so the open question is now whether **App Groups actually provisions** *(shared with CloudKit; Focus filters are no longer on this gate)*.
+- Widgets — **unblocked 2026-08-21** (App Groups provisions). Now an ordinary unbuilt feature; the container shape is decided (publish a digest, do not move the store). Wants a brainstorm.
 - Spike: statistical theme discovery across strands (`NLEmbedding`).
 - Talk to the system, **stage 2** — the conversational agent (stage 1 shipped 2026-08-13).
 - Forks as first-class — the capture backend; the long pole gating app slice 6.
@@ -1157,7 +1159,7 @@ readability — role bubbles, XML-tag callouts, heading type scale) SHIPPED 2026
 
 ---
 
-## Widgets — DEFERRED (2026-07-08): blocked on App Groups needing a paid Team ID
+## Widgets — DEFERRED (2026-07-08), UNBLOCKED (2026-08-21): App Groups provisions
 
 Attempted to pick up Widgets (the first *second process*). Hit a hard prerequisite during brainstorming and
 deferred with the user's agreement.
@@ -1184,27 +1186,52 @@ mint**; both appeared once the account was re-added. The Team ID is also readabl
 `OU` field: `security find-certificate -a -c "Apple Development" -p | openssl x509 -noout -subject`. Note the
 personal team was **converted in place** — the same Team ID appears in certs minted both before and after
 purchase, so a pre-purchase cert does not imply a free team.)* Team-ID signing and Focus filters are already
-done and confirmed (see the Focus-filter entry); **App Groups provisioning remains untested** and is now the
-only open question. The next move is switching a new widget target to Team-ID signing and moving the
-canonical store into an App Group container — a shared `PensievePaths.supportDirectory()` resolution that ALL
-writers (hooks/daemon/CLI/app) adopt, not just the app. **This same gate blocks CloudKit** (pillar #4) and any
-future extension; resolving the paid-membership + App-Group foundation unblocks the whole extension family at
-once. When the spike is run: add the App Group entitlement to both targets and confirm
-`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` resolves non-nil in BOTH the app and the
-widget, and that the widget can read a file the app wrote there — that go/no-go gates everything else.
-**Two things to get right first.** (1) Signing switches from `CODE_SIGN_STYLE: Manual` to Automatic the moment a
-capability needs provisioning, and the Makefile's `xcodebuild` calls carry **no `-allowProvisioningUpdates`** —
-without it the build fails with "no profile matching". (2) Pensieve ships **no entitlements file at all**, so it
-is **not sandboxed**, and on macOS a non-sandboxed app must use a **Team-ID-prefixed** group identifier
-(`TH593VRB6W.me.mazetti.pensieve`) while the always-sandboxed widget uses the plain `group.` form — the wrong
-form makes `containerURL(...)` return **nil with no diagnostic**, which would read as a false no-go. Register
-the group identifier you actually intend to keep: portal identifiers are not always deletable. Do **not** enable
-the sandbox or hardened runtime alongside this — the app must keep reading `~/Library/Application Support` and
-shelling out to `claude -p`.
+done and confirmed (see the Focus-filter entry); **App Groups provisioning is now PROVEN — 2026-08-21, it is a
+GO.** `project.yml` gained a `Pensieve.entitlements` carrying only `com.apple.security.application-groups =
+["TH593VRB6W.me.mazetti.pensieve"]`, signing moved `Manual → Automatic`, and the Makefile gained
+`-allowProvisioningUpdates`. The signed app reports the entitlement under a full `Apple Development → WWDR →
+Apple Root CA` chain with `TeamIdentifier=TH593VRB6W`, and a probe binary signed with the same entitlement
+resolved `~/Library/Group Containers/TH593VRB6W.me.mazetti.pensieve` and wrote to it. **No portal work and no
+embedded provisioning profile were needed** — `Contents/embedded.provisionprofile` is absent and the build still
+signs and runs, so a non-sandboxed macOS app takes this entitlement locally.
+
+**Two claims previously recorded here are WRONG; a probe disproved both.** (1) It said a non-sandboxed app *must*
+use the Team-ID-prefixed group id and that the wrong form yields `nil` with no diagnostic. In fact **all three
+forms resolved** (`TH593VRB6W.me.mazetti.pensieve`, `group.me.mazetti.pensieve`,
+`TH593VRB6W.group.me.mazetti.pensieve`). (2) Worse for anyone using it as a test: the same binary **with the
+entitlement stripped entirely still resolved the container**. For an unsandboxed process
+`containerURL(forSecurityApplicationGroupIdentifier:)` is effectively path construction — **it performs no
+entitlement check**. Consequences: the CLI and the sync agent need **no** entitlement to participate (good, and
+it makes the store-migration option cheaper than assumed); but a resolving `containerURL` from an unsandboxed
+process is **worthless as a go/no-go** for the sandboxed case. Naming rules and entitlement enforcement only
+begin under a sandbox, which cannot be tested without a real widget target. Plan for macOS wanting
+`<TeamID>.<name>` and iOS wanting `group.<name>`, and **treat it as unverified until a widget exists**.
+
+**CloudKit was never on this gate — that framing was a conceptual error.** An App Group is a *same-device,
+cross-process* mechanism; CloudKit is *cross-device*. They share only the paid membership. Correspondingly, an
+**iOS companion shares nothing through the Mac's App Group** — that boundary is CloudKit's. An App Group is how
+the iOS app would share with *its own* widget, in a container separate from the Mac's.
+
+**Decision 2026-08-21: publish a snapshot; do NOT move the canonical store (yet).** The store is 37 MB beside a
+34 MB search index with a live 1.5 MB WAL, held concurrently by the app, five `pensieve mcp` processes, the
+300 s sync agent and every git hook. Against that, moving it in buys little and costs a lot:
+- **WAL forces write access.** A WAL-mode database cannot be opened read-only — readers write `-shm` and may
+  recover the `-wal`. A "read-only" widget would hold genuine write access to canonical data.
+- **Extension budgets.** Widget extensions get seconds of CPU and tight memory (iOS commonly ~30 MB); opening
+  and WAL-recovering a 37 MB store per timeline refresh is a jetsam candidate.
+- **`0xdead10cc`.** iOS terminates a suspended process still holding a file lock — SQLite locks included — on a
+  *shared-container* file. This is the classic app-plus-widget crash, and it bears directly on the companion.
+So the app publishes a small digest into the group container and the widget renders something it cannot damage.
+`PensievePaths.defaultSupportDirectory()` (`Sources/PensieveKit/Support/PensievePaths.swift`) remains the single
+seam and the only place naming `~/Library/Application Support/Pensieve`, so the full migration stays available:
+resolve to the group container only once a canonical store exists there, which makes the flip atomic with the
+move. **Revisit if a widget needs real queries** — arbitrary search, a node picker over the whole tree, live
+BM25 — rather than a precomputed view. Do **not** enable the sandbox or hardened runtime alongside any of this:
+the app must keep reading `~/Library/Application Support` and shelling out to `claude -p`.
 
 **~~A third surface joined this gate on 2026-08-12: background sync itself.~~ Retracted 2026-08-13** — that
 outage was a stale LWCR, not a Team-ID problem, and the agent now spawns ad-hoc-signed with
-`codeSigningTeamID: ""`. See Archive ▸ "Background sync is dead — launchd won't spawn the agent". This gate covers Focus filters, Widgets and CloudKit only.
+`codeSigningTeamID: ""`. See Archive ▸ "Background sync is dead — launchd won't spawn the agent". This gate covered Focus filters and Widgets only — and is closed as of 2026-08-21. CloudKit was mis-filed here; it needs the paid membership but not an App Group.
 
 ---
 
