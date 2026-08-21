@@ -154,6 +154,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.sync
+        # A `tool` target has no Info.plist, so `codesign` names the binary after the FILE
+        # (Identifier=PensieveSyncAgent) and `otool -s __TEXT __info_plist` finds nothing —
+        # PRODUCT_BUNDLE_IDENTIFIER above does NOT reach the binary on its own. Every working
+        # third-party background agent on this machine is a nested `.app` with a real bundle
+        # identity, so give this one the equivalent: an Info.plist section carrying
+        # CFBundleIdentifier, embedded in the Mach-O.
+        GENERATE_INFOPLIST_FILE: "YES"
+        CREATE_INFOPLIST_SECTION_IN_BINARY: "YES"
         CODE_SIGN_IDENTITY: "Apple Development"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_ALLOWED: "YES"

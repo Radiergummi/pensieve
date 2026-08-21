@@ -2202,6 +2202,59 @@ risk, low prior but not yet tried; (b) `sfltool resetbtm` with the user's explic
 Pensieve and re-test; (c) if both fail, reconsider whether an `.app`-bundled agent (the shape every working
 comparator uses) is simply the supported configuration.
 
+**RESOLVED 2026-08-22 — root cause: launchd held a STALE BTM UUID.** Nine hypotheses died before this one; it
+was never about signing, entitlements, identifiers or approvals.
+
+**The mechanism.** The bundled agent's plist uses `BundleProgram` — a path *relative* to the app bundle
+(`Contents/Library/Helpers/PensieveSyncAgent`). launchd does not store an absolute path; it resolves that
+relative path by looking the parent bundle up **through the job's BTM record UUID**. When the launchd job's
+`BTM uuid` no longer matches the live BTM record, `copy_bundle_path()` fails and the job dies before `main()`:
+
+```
+Could not find and/or execute program specified by service: 3: No such process:
+  Contents/Library/Helpers/PensieveSyncAgent
+Service could not initialize: copy_bundle_path(<stale-uuid>, 501, 0),
+  error 0x6f - Invalid or missing Program/ProgramArguments
+```
+
+Diagnose it by comparing the two directly — this is the check that would have saved a day:
+```
+launchctl print gui/$UID/me.mazetti.pensieve.sync | grep 'BTM uuid'
+sfltool dumpbtm | grep -B3 'Name: PensieveSyncAgent' | grep UUID:
+```
+Equal ⇒ fine. Different ⇒ this bug.
+
+**Why it presented as a code-signing failure.** While the UUID was stale, the spawn was killed earlier in the
+sequence with `EXC_CRASH / SIGKILL (Code Signature Invalid)` and
+`termination {namespace: CODESIGNING, indicator: "Launch Constraint Violation"}`. That error names code signing
+and is **actively misleading**: `codesign --verify --deep --strict` passed the whole time, and the failure
+reproduced identically under team signing AND full ad-hoc signing. Only after `sfltool resetbtm` did the
+symptom change to the honest `exit code 78: EX_CONFIG`, which is what finally named the real problem. **Treat
+"Launch Constraint Violation" on an SMAppService agent as "cannot resolve the program", not "bad signature".**
+
+**The fix that worked**, in this order — a `bootout` alone is NOT enough, because `smd` re-submits the job with
+the same cached UUID:
+1. quit the app, `launchctl bootout gui/$UID/me.mazetti.pensieve.sync`
+2. `sfltool resetbtm`  *(system-wide: clears every app's background-item approvals; already-running helpers keep
+   running, and apps re-register on next launch, but this is a real cost and needs the user's consent)*
+3. relaunch `/Applications/Pensieve.app` so `registerIfNeeded()` mints a fresh record
+4. confirm the two UUIDs match, then `launchctl kickstart -p gui/$UID/me.mazetti.pensieve.sync`
+
+Result: `state = running`, and the spool started draining (76 → 70 undrained within four minutes) with the
+newest canonical event advancing from 18:59 to 22:10. Note the agent writes **one log line per completed pass**,
+so a silent `sync.log` during a long first pass is normal — check the undrained count, not the log.
+
+**Whether `resetbtm` was strictly required is unproven.** Steps 1+3+4 alone were tried earlier and failed, but
+always with the stale UUID still in place; it is possible that a bootout + re-register cycle would suffice if
+BTM ever hands out a fresh UUID without a reset. If this recurs, try 1+3+4 first and only escalate to the reset.
+
+**Kept from this investigation** (`project.yml`, `PensieveSyncAgent` target): `GENERATE_INFOPLIST_FILE` +
+`CREATE_INFOPLIST_SECTION_IN_BINARY`. This did **not** fix the bug, but it is correct on its own terms — a
+`tool` target has no Info.plist, so `codesign` was naming the binary after the *file*
+(`Identifier=PensieveSyncAgent`) while the launchd `Label` is `me.mazetti.pensieve.sync`, and
+`PRODUCT_BUNDLE_IDENTIFIER` alone does not reach the binary. With the embedded section the signing identifier
+now derives correctly from `CFBundleIdentifier`, with no `codesign -i` hack.
+
 </details>
 
 **Superseded by the resolution above (2026-08-13).** The Team-ID revisit trigger no longer applies to this
