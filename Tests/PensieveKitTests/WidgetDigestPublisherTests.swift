@@ -70,3 +70,16 @@ private func seedProject(_ database: any DatabaseWriter, path: String, context: 
   let digest = try #require(WidgetDigest.read(from: destination))
   #expect(digest.items.count == WidgetDigest.maximumItems)
 }
+
+/// A publish failure must never propagate: this runs inside a sync pass and inside a UI refresh.
+@Test func publishQuietlySwallowsAnUnwritableDestination() throws {
+  let database = try openCanonicalDatabase(at: tempURL("widget-quiet"))
+  _ = try seedProject(database, path: "/p/x", context: nil, openLooseEnds: 1)
+  // Directly exercising the throwing form proves the error is real...
+  #expect(throws: (any Error).self) {
+    try WidgetDigestPublisher.publish(database: database, now: Date(), activeContext: "",
+                                      to: URL(fileURLWithPath: "/dev/null/nope/digest.json"))
+  }
+  // ...and the quiet form must not rethrow it.
+  WidgetDigestPublisher.publishQuietly(database: database)
+}
