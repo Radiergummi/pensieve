@@ -15,6 +15,9 @@ settings:
     # Paid individual membership (activated 2026-08-21). Set once here so the four targets that
     # sign cannot drift onto different teams — a nested helper on another team fails validation.
     DEVELOPMENT_TEAM: TH593VRB6W
+    # An app extension's CFBundleShortVersionString must match its containing app's exactly, so
+    # both read one value from here rather than each target carrying its own copy to drift apart.
+    MARKETING_VERSION: "0.2"
 packages:
   PensieveKit:
     path: .
@@ -86,7 +89,6 @@ targets:
         PRODUCT_NAME: Pensieve
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve
         ASSETCATALOG_COMPILER_APPICON_NAME: Pensieve
-        MARKETING_VERSION: "0.2"
         CODE_SIGN_IDENTITY: "Apple Development"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_ALLOWED: "YES"
