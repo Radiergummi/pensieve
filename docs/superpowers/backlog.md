@@ -1229,6 +1229,24 @@ move. **Revisit if a widget needs real queries** — arbitrary search, a node pi
 BM25 — rather than a precomputed view. Do **not** enable the sandbox or hardened runtime alongside any of this:
 the app must keep reading `~/Library/Application Support` and shelling out to `claude -p`.
 
+**The capability set the user intends to reach (drafted 2026-08-21, deliberately NOT shipped yet).** A
+hand-written `Pensieve.entitlements` in the `main` checkout — unwired, since `project.yml` there still had
+`CODE_SIGN_IDENTITY: "-"` — listed the eventual target: `com.apple.developer.icloud-container-identifiers`
+(`iCloud.me.mazetti.pensieve`), `com.apple.developer.icloud-services` (`CloudKit`),
+`com.apple.developer.aps-environment` (`development`), `com.apple.developer.ubiquity-kvstore-identifier`,
+`com.apple.developer.shared-with-you`, `com.apple.developer.suggested-actions`, and
+`com.apple.developer.devicecheck.app-attest-opt-in`. Recorded here and **overridden** in the shipped file,
+which carries the App Group alone, for three reasons. (1) The draft used the plain `group.me.mazetti.pensieve`
+form where the shipped file uses `TH593VRB6W.me.mazetti.pensieve` — **a different group id is a different
+container**, and per the probe above an unsandboxed process resolves either without complaint, so the mismatch
+would stay invisible until a widget existed. (2) Wiring `icloud-container-identifiers` under automatic signing
+makes the next build **register an iCloud container in the Apple account** — a portal write, for pillar #4,
+which is still gated on the unresolved F7 per-device-state decision. Add it *with* the CloudKit spec, not
+before. (3) `shared-with-you`, `suggested-actions` and app-attest correspond to nothing Pensieve does today;
+every entitlement is attack surface and a provisioning dependency, so they should arrive with the feature that
+needs them. The key list above IS the record — reinstate from it when each feature lands, checking the group-id
+form against the shipped file first.
+
 **~~A third surface joined this gate on 2026-08-12: background sync itself.~~ Retracted 2026-08-13** — that
 outage was a stale LWCR, not a Team-ID problem, and the agent now spawns ad-hoc-signed with
 `codeSigningTeamID: ""`. See Archive ▸ "Background sync is dead — launchd won't spawn the agent". This gate covered Focus filters and Widgets only — and is closed as of 2026-08-21. CloudKit was mis-filed here; it needs the paid membership but not an App Group.
