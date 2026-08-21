@@ -2241,7 +2241,7 @@ the same cached UUID:
 4. confirm the two UUIDs match, then `launchctl kickstart -p gui/$UID/me.mazetti.pensieve.sync`
 
 Result: `state = running`, and the spool started draining (76 → 70 undrained within four minutes) with the
-newest canonical event advancing from 18:59 to 22:10. Note the agent writes **one log line per completed pass**,
+newest canonical event advancing from 18:59 to 22:10. **A full pass then completed on its own** — `last exit code = 0`, `job state = exited`, and `sync.log` gained `2026-08-21T22:19:58Z sync: ingested 3 event(s), discovered 4 session(s), extracted 40 loose end(s)`, the first unattended sync since 08-17. Note the agent writes **one log line per completed pass**,
 so a silent `sync.log` during a long first pass is normal — check the undrained count, not the log.
 
 **Whether `resetbtm` was strictly required is unproven.** Steps 1+3+4 alone were tried earlier and failed, but
