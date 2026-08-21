@@ -29,6 +29,9 @@ enum PensieveSyncAgent {
         provider: makeDefaultLLMProvider(defaults: PensieveDefaults.shared()),
         projectsDir: PensievePaths.claudeProjectsURL(),
         searchIndexer: .production()).run()
+      // The widget must be correct with the app closed, which is most of its life. Quiet by
+      // contract: a publish failure must not turn a successful sync into a failed one.
+      WidgetDigestPublisher.publishQuietly(database: database)
       line = "\(now) sync: ingested \(syncResult.ingested) event(s), discovered \(syncResult.discovered) session(s), "
         + "extracted \(syncResult.extracted) loose end(s)\n"
     } catch {

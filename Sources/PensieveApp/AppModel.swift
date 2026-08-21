@@ -6,6 +6,7 @@ import SQLiteData
 import GRDB
 import os
 import PensieveKit
+import WidgetKit
 
 @MainActor
 @Observable
@@ -301,6 +302,8 @@ final class AppModel {
     refresh()
     syncSearchIndexes()   // work just drained must become findable without waiting for ⌘R
     await reindexSpotlight()
+    if let database { WidgetDigestPublisher.publishQuietly(database: database) }
+    WidgetCenter.shared.reloadAllTimelines()
   }
 
   private func reindexSpotlight() async { await SpotlightIndexer.reindex(activeContext: activeFocusContext) }
@@ -311,6 +314,9 @@ final class AppModel {
     guard new != activeFocusContext else { return }
     AppLog.app.info("Focus context changed: '\(self.activeFocusContext, privacy: .public)' -> '\(new, privacy: .public)'")
     activeFocusContext = new
+    // The digest is pre-filtered by context, so a Focus switch invalidates it.
+    if let database { WidgetDigestPublisher.publishQuietly(database: database) }
+    WidgetCenter.shared.reloadAllTimelines()
     refresh()
     Task { await SpotlightIndexer.reindex(activeContext: new) }
   }
