@@ -16,7 +16,7 @@ struct PensieveWindow {
 /// granted, so a window listed with no title is the signal that the grant is missing — which is why
 /// such windows are returned rather than filtered out.
 func pensieveWindows() -> [PensieveWindow] {
-  let pensievePIDs = Set(
+  let pensieveProcessIdentifiers = Set(
     NSRunningApplication.runningApplications(withBundleIdentifier: pensieveBundleIdentifier)
       .map(\.processIdentifier)
   )
@@ -26,7 +26,7 @@ func pensieveWindows() -> [PensieveWindow] {
   }
   return raw.compactMap { entry in
     guard let processIdentifier = entry[kCGWindowOwnerPID as String] as? pid_t,
-          pensievePIDs.contains(processIdentifier),
+          pensieveProcessIdentifiers.contains(processIdentifier),
           let windowIdentifier = entry[kCGWindowNumber as String] as? CGWindowID else { return nil }
     var bounds = CGRect.zero
     if let boundsDictionary = entry[kCGWindowBounds as String] as? [String: Any] {
@@ -45,21 +45,21 @@ func pensieveWindows() -> [PensieveWindow] {
 /// which the plan specified and which does not compile — `String` does not conform to `Error`, and
 /// the alternative (a retroactive `extension String: Error`) would inflict that conformance on
 /// every string in the tool.
-struct ProbeFailure: Error {
+struct TargetProcessResolutionError: Error {
   let message: String
 }
 
 /// Resolves which Pensieve process to target. A fixture-backed instance and the live app share a
 /// bundle identifier, so an ambiguous target is an error rather than a coin flip.
-func resolveTargetProcess(explicit: pid_t?) -> Result<pid_t, ProbeFailure> {
+func resolveTargetProcess(explicit: pid_t?) -> Result<pid_t, TargetProcessResolutionError> {
   if let explicit { return .success(explicit) }
   let running = NSRunningApplication.runningApplications(withBundleIdentifier: pensieveBundleIdentifier)
   switch running.count {
-  case 0: return .failure(ProbeFailure(message: "Pensieve is not running"))
+  case 0: return .failure(TargetProcessResolutionError(message: "Pensieve is not running"))
   case 1: return .success(running[0].processIdentifier)
   default:
-    let pids = running.map { String($0.processIdentifier) }.joined(separator: ", ")
-    return .failure(ProbeFailure(
-      message: "\(running.count) Pensieve instances running (pids: \(pids)) — pass --pid"))
+    let processIdentifierList = running.map { String($0.processIdentifier) }.joined(separator: ", ")
+    return .failure(TargetProcessResolutionError(
+      message: "\(running.count) Pensieve instances running (pids: \(processIdentifierList)) — pass --pid"))
   }
 }

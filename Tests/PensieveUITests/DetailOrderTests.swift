@@ -1,6 +1,7 @@
 import XCTest
 import PensieveKit
 
+@MainActor
 final class DetailOrderTests: XCTestCase {
   /// Loose ends render above Recent Activity.
   ///
@@ -19,7 +20,12 @@ final class DetailOrderTests: XCTestCase {
   func testLooseEndsRenderAboveRecentActivity() throws {
     let application = try launchPensieve(locale: "en")
 
-    let colibri = application.staticTexts["Colibri"]
+    // Scoped to `.cells` (a SwiftUI `List`, the same convention `SidebarCountTests` uses for sidebar
+    // rows) rather than a bare `staticTexts["Colibri"]` or `.firstMatch`: `BriefingView` renders a
+    // plain `Text(briefingCard.node.name)` for Colibri outside any List, in both its card and quiet
+    // rows, so an unscoped lookup can match more than one element at once. Every candidate navigates
+    // to the same node, so scoping to one is correct, not just convenient.
+    let colibri = application.cells.staticTexts["Colibri"]
     XCTAssertTrue(colibri.waitForExistence(timeout: 20), "fixture tree never rendered")
     colibri.click()
 
@@ -48,7 +54,8 @@ final class DetailOrderTests: XCTestCase {
   func testCitedQuoteRendersVerbatim() throws {
     let application = try launchPensieve(locale: "en")
 
-    let colibri = application.staticTexts["Colibri"]
+    // See the doc comment on the other test's `colibri` lookup for why this is scoped to `.cells`.
+    let colibri = application.cells.staticTexts["Colibri"]
     XCTAssertTrue(colibri.waitForExistence(timeout: 20))
     colibri.click()
 

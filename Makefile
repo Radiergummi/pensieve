@@ -124,7 +124,7 @@ smoke: .make/smoke ## Verify the built bundle's embedded CLI launches
 
 # XcodeGen skips the write when the generated project would be identical, so the
 # touch is what stops every later make from regenerating it again.
-$(PBXPROJ): project.yml $(shell find Sources SyncAgent -type d)
+$(PBXPROJ): project.yml $(shell find Sources SyncAgent Tests/PensieveUITests -type d)
 	@xcodegen generate
 	@touch $@
 

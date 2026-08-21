@@ -41,7 +41,7 @@ Widgets · CloudKit.
 - Contextify scan — open items: honest staleness on the retrieval path, `pensieve doctor`, Live Recall, skill + researcher subagent.
 - P3 retrieval harness — **blocked on the user** writing 30–50 paraphrase queries.
 - Follow-ups from the popover + harness session — the dropped node-scoped Loose Ends surface, plus three verification-practice findings.
-- The UI harness has two known holes — the ordering test cannot cover its motivating defect; the sidebar-count test is probably vacuous.
+- The UI harness has one remaining hole — the ordering test cannot cover its motivating defect. *(The vacuous sidebar-count test was closed 2026-08-16.)*
 - Extraction recall has never been measured; live sessions could supply the gold set.
 - The salience pipeline is built, wired, and has never been run — two shipped features are inert.
 - Naming has no eval coverage, and the harness has a silent hole. *(Subsumed by F4; kept for its detail.)*
@@ -808,8 +808,13 @@ the UI harness. The two harness holes have their own entry below; these are the 
 
 ## The UI harness has two known holes (2026-08-15, recorded at build time)
 
-Both are in `Tests/PensieveUITests`, both known and neither fixed, because a test that looks like
-coverage and is not is this project's recurring defect.
+> **HOLE 2 CLOSED 2026-08-16** — by lifting the debugged tests from the parallel
+> `worktree-app-ui-verification` branch, whose work main had never received: main's line
+> re-implemented the harness independently on 2026-08-15 and so missed the later fixes. Hole 1
+> stands; the branch did not close it either.
+
+Both are in `Tests/PensieveUITests`, because a test that looks like coverage and is not is this
+project's recurring defect.
 
 **1. The ordering test cannot cover the defect it was written for.** The motivating bug was slice A
 moving the recap *below* the loose ends while the parallel in-node-find branch still emitted the
@@ -820,14 +825,21 @@ not *that* assertion. *Closing it needs a way to render a recap without an LLM c
 seeding the narration cache through the argument domain, which is a test-only path and needs
 checking that it is not a production seam.*
 
-**2. `testSidebarShowsFixtureCounts` is weak and probably vacuous.** It asserts
-`application.staticTexts["3"].exists`, and the fixture renders "3" in at least two unrelated places
-(the open-loose-end count and the What's Next project count), so it would pass with the count feature
-broken. It was **not** mutation-verified; the ordering test was. Its second assertion — that the
-archived node stays out of the main tree — is sound. *Smallest fix: match the count within its own
-sidebar row rather than anywhere in the window.*
+**2. ~~`testSidebarShowsFixtureCounts` is weak and probably vacuous.~~ CLOSED 2026-08-16.** It
+asserted `application.staticTexts["3"].exists`, and the fixture renders "3" in at least two unrelated
+places (the open-loose-end count and the What's Next count), so it would pass with the count feature
+broken. Its second assertion — that the archived node stays out of the main tree — turned out to be
+worse than vacuous, not sound: `sidebar.archived.expanded` persists across runs, so on a host where
+Archived starts *expanded*, "Old Prototype" already exists before the check runs and the bare
+`XCTAssertFalse` reports a **false leak** against correct code.
 
-*Revisit trigger:* the next change to sidebar counts or to detail-pane ordering.
+Replaced by two tests: `testLooseEndsCountMatchesFixture` scopes the count to the cell containing
+"Loose Ends", and `testArchivedSeparateFromProjectsPersonalReachable` reveals both sections through a
+state-derived helper (`revealSidebarSection`, which checks visibility before clicking rather than
+blind-toggling) and asserts `frame.minY` against the "Archived" heading — correct regardless of
+either section's starting state.
+
+*Revisit trigger:* the next change to detail-pane ordering (hole 1), or to sidebar counts.
 
 ---
 
