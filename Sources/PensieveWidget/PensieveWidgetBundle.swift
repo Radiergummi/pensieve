@@ -1,40 +1,52 @@
 import SwiftUI
 import WidgetKit
+import PensieveKit
 
 @main
 struct PensieveWidgetBundle: WidgetBundle {
   var body: some Widget { WhatsNextWidget() }
 }
 
-struct ProbeEntry: TimelineEntry {
+struct WhatsNextEntry: TimelineEntry {
   let date: Date
-  let resolved: String
+  let presentation: WidgetPresentation
+  /// What the digest was filtered by ("work"/"personal"/nil), read from the same decoded digest as
+  /// `presentation` — `WidgetDigest.presentation(for:now:)` does not surface it on its own.
+  let context: String?
 }
 
-struct ProbeProvider: TimelineProvider {
-  func placeholder(in context: Context) -> ProbeEntry { ProbeEntry(date: Date(), resolved: "…") }
+struct WhatsNextProvider: TimelineProvider {
+  func placeholder(in context: Context) -> WhatsNextEntry {
+    WhatsNextEntry(date: Date(), presentation: .noData, context: nil)
+  }
 
-  func getSnapshot(in context: Context, completion: @escaping (ProbeEntry) -> Void) {
+  func getSnapshot(in context: Context, completion: @escaping (WhatsNextEntry) -> Void) {
     completion(entry())
   }
 
-  func getTimeline(in context: Context, completion: @escaping (Timeline<ProbeEntry>) -> Void) {
-    completion(Timeline(entries: [entry()], policy: .after(Date().addingTimeInterval(900))))
+  func getTimeline(in context: Context, completion: @escaping (Timeline<WhatsNextEntry>) -> Void) {
+    // WidgetKit budgets reloads regardless; the app calls reloadAllTimelines() for the moments
+    // that actually matter (a Focus switch, a store refresh).
+    completion(Timeline(entries: [entry()], policy: .after(Date().addingTimeInterval(15 * 60))))
   }
 
-  /// TEMPORARY: proves whether the sandbox honours the App Group entitlement.
-  private func entry() -> ProbeEntry {
-    let group = "TH593VRB6W.me.mazetti.pensieve"
-    let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
-    return ProbeEntry(date: Date(), resolved: url?.path ?? "NIL — entitlement not honoured")
+  /// All the judgement lives in PensieveKit, where tests can reach it. This is a lookup.
+  private func entry() -> WhatsNextEntry {
+    let now = Date()
+    let digest = WidgetDigest.read(from: PensievePaths.widgetDigestURL())
+    return WhatsNextEntry(date: now,
+                          presentation: WidgetDigest.presentation(for: digest, now: now),
+                          context: digest?.context)
   }
 }
 
 struct WhatsNextWidget: Widget {
   var body: some WidgetConfiguration {
-    StaticConfiguration(kind: "WhatsNext", provider: ProbeProvider()) { entry in
-      Text(entry.resolved).font(.caption2).padding()
+    StaticConfiguration(kind: "WhatsNext", provider: WhatsNextProvider()) { entry in
+      WhatsNextView(presentation: entry.presentation, context: entry.context)
     }
+    .configurationDisplayName("What's Next")
+    .description("Which projects to pick up.")
     .supportedFamilies([.systemSmall, .systemMedium])
   }
 }

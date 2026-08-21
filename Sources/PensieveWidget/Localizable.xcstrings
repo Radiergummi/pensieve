@@ -1,0 +1,41 @@
+{
+  "sourceLanguage" : "en",
+  "version" : "1.0",
+  "strings" : {
+    "as of %@" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Stand %@" } }
+      }
+    },
+    "%lld open" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld offen" } }
+      }
+    },
+    "Nothing open" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts offen" } }
+      }
+    },
+    "Nothing open in %@" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts offen in %@" } }
+      }
+    },
+    "Open Pensieve to get started" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve öffnen, um zu beginnen" } }
+      }
+    },
+    "Update Pensieve" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve aktualisieren" } }
+      }
+    },
+    "What's Next" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Als Nächstes" } }
+      }
+    }
+  }
+}

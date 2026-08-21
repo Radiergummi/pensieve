@@ -231,6 +231,11 @@ targets:
         CODE_SIGNING_ALLOWED: "YES"
         CODE_SIGNING_REQUIRED: "YES"
         CODE_SIGN_ENTITLEMENTS: PensieveWidget.entitlements
+        # Same reason as the app target: with a hand-authored String Catalog, compiler string
+        # extraction rewrites the *source* Localizable.xcstrings on every build (reorders keys,
+        # resets German states). The catalog is still compiled into the extension regardless; keys
+        # are reconciled by hand.
+        SWIFT_EMIT_LOC_STRINGS: "NO"
         # Same reason as the app target: XcodeGen's presets turn this on, and generated symbols
         # cannot coexist with a hand-authored catalog whose keys differ only by case/punctuation.
         STRING_CATALOG_GENERATE_SYMBOLS: "NO"
