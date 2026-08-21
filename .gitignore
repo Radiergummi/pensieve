@@ -9,6 +9,7 @@ Pensieve.xcodeproj/
 # Makefile step records — "this ran and passed against these sources"
 .make/
 Sources/PensieveApp/Info.plist
+Sources/PensieveWidget/Info.plist
 .swiftpm/
 
 # Eval harness — private work text + run outputs, never committed

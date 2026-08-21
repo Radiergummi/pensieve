@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- A widget extension is ALWAYS sandboxed by the system, so unlike Pensieve.entitlements
+	     (which must stay unsandboxed to read ~/Library/Application Support and run `claude -p`)
+	     this target opts in. Do not "reconcile" the two files; the difference is deliberate. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- The only way this sandbox can see the digest the app publishes. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>TH593VRB6W.me.mazetti.pensieve</string>
+	</array>
+</dict>
+</plist>

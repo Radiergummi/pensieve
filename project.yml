@@ -60,6 +60,11 @@ targets:
         copy:
           destination: wrapper
           subpath: Contents/Helpers
+      - target: PensieveWidget
+        embed: true
+        codeSign: true
+        copy:
+          destination: plugins
     info:
       path: Sources/PensieveApp/Info.plist
       properties:
@@ -191,3 +196,40 @@ targets:
         CODE_SIGNING_REQUIRED: "YES"
         SWIFT_VERSION: "6.0"
     scheme: {}
+  PensieveWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Sources/PensieveWidget
+    dependencies:
+      - package: PensieveKit
+        product: PensieveKit
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    info:
+      path: Sources/PensieveWidget/Info.plist
+      properties:
+        CFBundleName: PensieveWidget
+        CFBundleDisplayName: Pensieve
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        # Without this the German catalog is compiled but never selected.
+        CFBundleLocalizations:
+          - en
+          - de
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_NAME: PensieveWidget
+        PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.widget
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGNING_REQUIRED: "YES"
+        CODE_SIGN_ENTITLEMENTS: PensieveWidget.entitlements
+        # Same reason as the app target: XcodeGen's presets turn this on, and generated symbols
+        # cannot coexist with a hand-authored catalog whose keys differ only by case/punctuation.
+        STRING_CATALOG_GENERATE_SYMBOLS: "NO"
+        SWIFT_VERSION: "6.0"
