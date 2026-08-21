@@ -33,8 +33,8 @@ and indexed.
 
 **Tier 1 — Product pillars** — Roadmap §. Open: slice 6 (forks, gated on the capture backend) ·
 CloudKit + iOS · system-integration surfaces · FSEvents real-time capture · additional source types ·
-analytics. Blocked on the Apple signing gate: Focus filters (built, correct, cannot attach) ·
-Widgets · CloudKit.
+analytics. Blocked on the Apple signing gate: Widgets · CloudKit — both now waiting only on the
+App Groups spike, not on the membership. *(Focus filters came off this gate 2026-08-21.)*
 
 **Tier 2 — Quality, measurement & known defects**
 - Claude Design review — slice C (transcript reading, **live now**) and slice D (six items, each its own brainstorm).
@@ -52,7 +52,7 @@ Widgets · CloudKit.
 
 **Tier 3 — Parked, trigger-gated**
 - Transcript rendering siblings — rich code blocks (syntax + DOT/Mermaid), Writing Tools on loose ends.
-- Widgets — blocked on App Groups needing a paid Team ID *(the same gate as Focus filters + CloudKit)*.
+- Widgets — the paid Team ID landed 2026-08-21, so the open question is now whether **App Groups actually provisions** *(shared with CloudKit; Focus filters are no longer on this gate)*.
 - Spike: statistical theme discovery across strands (`NLEmbedding`).
 - Talk to the system, **stage 2** — the conversational agent (stage 1 shipped 2026-08-13).
 - Forks as first-class — the capture backend; the long pole gating app slice 6.
@@ -467,7 +467,7 @@ availability + deployment-target floors at each surface's spec time.
 - **Siri / Apple Intelligence** — *medium, Xcode-gated; strong.* Grounded Q&A + describe→create strand. Part of pillar #5.
 - **Shortcuts** — *medium; strong.* User-composable automations over the same intents.
 - **Spotlight actions** (App Intents in Spotlight, expanded in macOS 26) — *small atop App Intents; good.* Run actions by typing.
-- **Focus filters** (`SetFocusFilterIntent`) — ✅ **DONE (2026-07-07, merged to `main` `171c0e6`).** A macOS Focus restricts the main window + menu-bar + Spotlight to its context. Shipped: migration v9 `nodes.context` (`work`/`personal`/unset) + tested `NodeContextResolver` (subtree inheritance + mute-opposite/show-unset predicate); `PensieveFocusFilter: SetFocusFilterIntent` (optional param = deactivation signal) → `UserDefaults` → `AppModel` observes + re-filters + reindexes; a Context picker in the New/Edit modal; German l10n. Spec/plan: `{specs,plans}/2026-07-07-focus-filters*`. **Deferred follow-ups:** notification muting ("mute personal nudges" — moot until notifications exist); a bulk/right-click "Set Context" action; >2 contexts; CLI `--context`. **⚠️ BLOCKED at runtime (2026-08-11): ad-hoc signing.** The filter appears in System Settings but **"Add" is permanently disabled** — `linkd` refuses an app with no Team ID (`requiresValidatedBundle`), so the sheet can never prepare the intent instance. Diagnosed in full in `CLAUDE.md`; needs an Apple-issued signing cert (no self-signed workaround — team IDs come only from Apple-issued certs). Until then the Work/Personal machinery is reachable only by writing `pensieve.activeFocusContext` in `UserDefaults` directly; **an in-app manual Context switcher is the obvious unblocked alternative and wants its own brainstorm.** *(2026-08-15: a paid membership was purchased but has not activated — gate still closed. See the Widgets deferral entry for how to check, and how not to.)* **This is the cheapest first test once it does activate** — the feature is already shipped and correct, so a re-sign alone should flip it on with zero code changes.
+- **Focus filters** (`SetFocusFilterIntent`) — ✅ **DONE (2026-07-07, merged to `main` `171c0e6`).** A macOS Focus restricts the main window + menu-bar + Spotlight to its context. Shipped: migration v9 `nodes.context` (`work`/`personal`/unset) + tested `NodeContextResolver` (subtree inheritance + mute-opposite/show-unset predicate); `PensieveFocusFilter: SetFocusFilterIntent` (optional param = deactivation signal) → `UserDefaults` → `AppModel` observes + re-filters + reindexes; a Context picker in the New/Edit modal; German l10n. Spec/plan: `{specs,plans}/2026-07-07-focus-filters*`. **Deferred follow-ups:** notification muting ("mute personal nudges" — moot until notifications exist); a bulk/right-click "Set Context" action; >2 contexts; CLI `--context`. **⚠️ Was BLOCKED at runtime 2026-08-11 (ad-hoc signing) — ✅ RESOLVED 2026-08-21, with zero code changes, exactly as predicted.** The symptom: the filter appeared in System Settings but **"Add" was permanently disabled**, because `linkd` refuses an app with no Team ID (`requiresValidatedBundle`) and the sheet can never prepare the intent instance. **The real blocker was never the membership.** The machine's `Apple Development` certs (team `TH593VRB6W`) had been valid since 2026-07-06, but the login keychain was missing the **WWDR G3** intermediate that issued them — it held G5 plus three copies of the one that expired Feb 2023 — so no chain reached a self-signed root. `security find-identity -v -p codesigning` therefore hid them (1 of 3 "valid") and `codesign` failed with `unable to build chain to self-signed root` / `errSecInternalComponent`. **Note `security verify-cert -p codeSign` reported "successful" the whole time the chain was broken — it is useless as a check here.** Fix: import `AppleWWDRCAG3.cer` from apple.com/certificateauthority, then swap `project.yml` off `CODE_SIGN_IDENTITY: "-"` to `DEVELOPMENT_TEAM: TH593VRB6W` + `Apple Development` + `CODE_SIGN_STYLE: Manual` (Manual keeps it local: no portal writes, no App ID, no profile). `linkd` then logs `Accepting [pid]:me.mazetti.pensieve … com.apple.linkd.autoShortcut` instead of `Rejecting invalid client`, "Add" enables, and activating the Focus persists `pensieve.activeFocusContext = work`. **Verification gotcha:** `perform()` fires on Focus **activation**, not when the filter is added, so the defaults key stays absent until the Focus is actually switched on — an absent key right after configuring proves nothing. The in-app manual Context switcher is no longer needed as a *workaround*, though it may still be wanted on its own merits.
 - **Services menu** (`NSServices`) — *small; medium.* Select text anywhere → create a strand.
 - **URL scheme / deep links** (`pensieve://`) — ✅ **DONE (v0.2, 2026-07-06).** Registered scheme + tested `DeepLink` router (`briefing`/`node/<uuid>`/`smartlist/<kind>`); menu-bar item is the first consumer. Every later surface links back through it.
 
@@ -1168,25 +1168,39 @@ hooks via CLI, launchd daemon, app) and reader uses. The only way to share the s
 **App Group container** (`~/Library/Group Containers/<TeamID>.<group>/`), which on macOS requires the app to be
 **signed with a Team ID** and the `com.apple.security.application-groups` entitlement **provisioned**.
 
-**Why blocked now.** The app is **ad-hoc signed** (`CODE_SIGN_IDENTITY: "-"`, no `DEVELOPMENT_TEAM`), which has
-no Team ID. The only signing artifacts on the machine are corporate MDM/Configurator ones (an "Apple
-Configurator: Matchory GmbH" identity; a Microsoft *Intune MDM Agent* profile, team `UBF8T346G9`) — none carry
-App Groups. The user has a **free Personal Team** available (via Apple ID), but **free personal teams do not
-support the App Groups capability** (Apple gates it as paid; Xcode blocks adding it). ~85% confident this is a
-hard block for a personal team — a spike would confirm, but the odds favor failure.
+**~~Why blocked now.~~ Resolved 2026-08-21.** *(Historical: the app was **ad-hoc signed*** (`CODE_SIGN_IDENTITY:
+"-"`, no `DEVELOPMENT_TEAM`)*, so it had no Team ID, and the only signing artifacts on the machine were
+corporate MDM/Configurator ones (an "Apple Configurator: Matchory GmbH" identity; a Microsoft Intune MDM Agent
+profile, team `UBF8T346G9`) — none carrying App Groups. The free-Personal-Team question is moot: the membership
+is paid.)* All four targets now sign with `DEVELOPMENT_TEAM: TH593VRB6W`, so **"needs a Team ID" is satisfied**;
+what is still unproven is whether the `com.apple.security.application-groups` entitlement **provisions**.
 
-**Revisit trigger.** A **paid Apple Developer membership** (personal enrollment, or an acceptable paid org team)
-is in hand **and has activated**. *(2026-08-15: purchased, but not yet active — no team in Xcode ▸ Settings ▸
-Accounts, nothing on the Membership page, and no Apple Development cert on the machine. **The missing cert is
-not evidence either way** — Xcode mints one on first request, so the local state is identical whether the
-membership is live or absent, and Xcode caches no portal data to read offline. Check Xcode Accounts, not the
-filesystem.)* Then the first move is switching the app + a new widget target to Team-ID signing and moving the
+**Revisit trigger — ✅ FIRED 2026-08-21.** The paid **individual** membership is active on team `TH593VRB6W`
+(agreement accepted). *(How it was confirmed, since the obvious signals all misled: **Xcode ▸ Settings ▸
+Accounts kept reading "Personal Team" from a stale cache** long after the portal was correct, so that label is
+**not** a paid-vs-free signal — the earlier advice to watch it was wrong. The reliable signal is the existence
+of `Apple Distribution` and `Developer ID Application` certs, **neither of which a free Personal Team can
+mint**; both appeared once the account was re-added. The Team ID is also readable locally, from the dev cert's
+`OU` field: `security find-certificate -a -c "Apple Development" -p | openssl x509 -noout -subject`. Note the
+personal team was **converted in place** — the same Team ID appears in certs minted both before and after
+purchase, so a pre-purchase cert does not imply a free team.)* Team-ID signing and Focus filters are already
+done and confirmed (see the Focus-filter entry); **App Groups provisioning remains untested** and is now the
+only open question. The next move is switching a new widget target to Team-ID signing and moving the
 canonical store into an App Group container — a shared `PensievePaths.supportDirectory()` resolution that ALL
 writers (hooks/daemon/CLI/app) adopt, not just the app. **This same gate blocks CloudKit** (pillar #4) and any
 future extension; resolving the paid-membership + App-Group foundation unblocks the whole extension family at
-once. If a spike is ever run: sign with the team, add the App Group entitlement to both targets, and confirm
+once. When the spike is run: add the App Group entitlement to both targets and confirm
 `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` resolves non-nil in BOTH the app and the
 widget, and that the widget can read a file the app wrote there — that go/no-go gates everything else.
+**Two things to get right first.** (1) Signing switches from `CODE_SIGN_STYLE: Manual` to Automatic the moment a
+capability needs provisioning, and the Makefile's `xcodebuild` calls carry **no `-allowProvisioningUpdates`** —
+without it the build fails with "no profile matching". (2) Pensieve ships **no entitlements file at all**, so it
+is **not sandboxed**, and on macOS a non-sandboxed app must use a **Team-ID-prefixed** group identifier
+(`TH593VRB6W.me.mazetti.pensieve`) while the always-sandboxed widget uses the plain `group.` form — the wrong
+form makes `containerURL(...)` return **nil with no diagnostic**, which would read as a false no-go. Register
+the group identifier you actually intend to keep: portal identifiers are not always deletable. Do **not** enable
+the sandbox or hardened runtime alongside this — the app must keep reading `~/Library/Application Support` and
+shelling out to `claude -p`.
 
 **~~A third surface joined this gate on 2026-08-12: background sync itself.~~ Retracted 2026-08-13** — that
 outage was a stale LWCR, not a Team-ID problem, and the agent now spawns ad-hoc-signed with
@@ -1984,9 +1998,15 @@ That architecture demonstrably worked on this machine.
 `me.mazetti.pensieve.backgroundsync` from the rename experiment), both inert and `disabled`. macOS prunes
 them when the app is removed; `sfltool resetbtm` would clear them but is system-wide and not worth it.
 
-*Revisit trigger:* the paid Apple Developer membership lands (same trigger as Widgets/CloudKit/Focus
-filters — **one gate now unblocks four things**). First check after signing with a real Team ID: does the
-agent spawn? If yes, this entry closes and the `registerIfNeeded()` doc comment needs correcting.
+*Revisit trigger:* ~~the paid Apple Developer membership lands~~ — **fired 2026-08-21, and this entry does NOT
+close.** The app was team-signed (`TH593VRB6W`) and installed to `/Applications`, and the agent **still did not
+spawn**: `launchctl print gui/$UID/me.mazetti.pensieve.sync` reports `job state = uninitialized`, `last exit code
+= (never exited)`, `active count = 0`, and `~/Library/Logs/Pensieve/sync.log` stops at **2026-08-17T23:36Z**.
+Note the log gap **predates the re-sign by four days**, so the Team ID neither caused nor fixed this — it is a
+separate outage that happens to have been masked by this trigger. Next suspect, untested: switching the helper's
+identity from ad-hoc to team-signed can make macOS treat it as a **new** login item, so check System Settings ▸
+General ▸ Login Items & Extensions before anything else. Capture is unaffected (git hooks do not need the
+agent) — only the 300 s auto-drain is.
 
 </details>
 

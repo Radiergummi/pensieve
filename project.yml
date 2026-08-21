@@ -12,6 +12,9 @@ settings:
     # XcodeGen's project-level default is 5.0; every target already overrides it to 6.0, but a
     # target added without that override would silently compile in Swift 5 mode. Set the default.
     SWIFT_VERSION: "6.0"
+    # Paid individual membership (activated 2026-08-21). Set once here so the four targets that
+    # sign cannot drift onto different teams — a nested helper on another team fails validation.
+    DEVELOPMENT_TEAM: TH593VRB6W
 packages:
   PensieveKit:
     path: .
@@ -79,9 +82,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve
         ASSETCATALOG_COMPILER_APPICON_NAME: Pensieve
         MARKETING_VERSION: "0.2"
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Manual
         CODE_SIGNING_ALLOWED: "YES"
-        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_REQUIRED: "YES"
         # OFF on purpose: with a hand-authored String Catalog, compiler string extraction rewrites
         # the *source* Localizable.xcstrings on every build (reorders keys, resets German states).
         # The catalog is still compiled into the app regardless; keys are reconciled by hand.
@@ -117,9 +121,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.uitests
         # Required: without it xcodebuild refuses to code sign the test bundle.
         GENERATE_INFOPLIST_FILE: "YES"
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Manual
         CODE_SIGNING_ALLOWED: "YES"
-        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_REQUIRED: "YES"
         SWIFT_VERSION: "6.0"
         TEST_TARGET_NAME: Pensieve
 
@@ -134,9 +139,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.sync
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Manual
         CODE_SIGNING_ALLOWED: "YES"
-        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_REQUIRED: "YES"
         SWIFT_VERSION: "6.0"
   PensieveCLI:
     type: tool
@@ -156,8 +162,9 @@ targets:
       base:
         PRODUCT_NAME: pensieve
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.cli
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Manual
         CODE_SIGNING_ALLOWED: "YES"
-        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_REQUIRED: "YES"
         SWIFT_VERSION: "6.0"
     scheme: {}
