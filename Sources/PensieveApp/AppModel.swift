@@ -214,7 +214,7 @@ final class AppModel {
     database = try? openCanonicalDatabase(at: resolvedCanonicalURL())
     loadNarrationCache()
     spool = try? CaptureSpool(at: resolvedSpoolURL())   // persistent — see the property note above
-    activeFocusContext = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
+    activeFocusContext = UserDefaults.standard.string(forKey: PensieveDefaults.activeFocusContextKey) ?? ""
     Task { await drainThenRefresh() }
 
     // Liveness (retires the 3 s Timer). Watches are app-lifetime (this AppModel never deinits),
@@ -307,7 +307,7 @@ final class AppModel {
 
   /// UserDefaults changed — if the active Focus context flipped, re-filter the window + reindex.
   private func focusContextDidChange() {
-    let new = UserDefaults.standard.string(forKey: FocusFilterDefaults.activeContextKey) ?? ""
+    let new = UserDefaults.standard.string(forKey: PensieveDefaults.activeFocusContextKey) ?? ""
     guard new != activeFocusContext else { return }
     AppLog.app.info("Focus context changed: '\(self.activeFocusContext, privacy: .public)' -> '\(new, privacy: .public)'")
     activeFocusContext = new

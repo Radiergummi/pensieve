@@ -2,11 +2,6 @@ import AppIntents
 import Foundation
 import PensieveKit
 
-/// Where the active Focus context is persisted (single process — no App Group). "" = no filter.
-enum FocusFilterDefaults {
-  static let activeContextKey = "pensieve.activeFocusContext"
-}
-
 /// The two explicit contexts, as a Focus-filter parameter. Raw values match `NodeContext` constants;
 /// the exhaustive `nodeContext` switch fails to compile if a case is added (no drift).
 enum FocusContextOption: String, AppEnum {
@@ -43,7 +38,7 @@ struct PensieveFocusFilter: SetFocusFilterIntent {
   }
 
   @MainActor func perform() async throws -> some IntentResult {
-    UserDefaults.standard.set(context?.nodeContext ?? "", forKey: FocusFilterDefaults.activeContextKey)
+    UserDefaults.standard.set(context?.nodeContext ?? "", forKey: PensieveDefaults.activeFocusContextKey)
     return .result()
   }
 }

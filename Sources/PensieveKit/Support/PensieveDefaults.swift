@@ -16,6 +16,11 @@ public enum PensieveDefaults {
   /// process that resolves a Pensieve path.
   public static let customSupportRootKey = "customSupportRoot"
 
+  /// Written by the app's Focus filter on Focus activation, read by every process that must agree
+  /// with what the window shows — including the sync agent, which publishes the widget digest.
+  /// Lives here rather than in the app target for that reason: the agent cannot see app-target types.
+  public static let activeFocusContextKey = "pensieve.activeFocusContext"
+
   /// The app's defaults domain, read from the CLI/daemon. Falls back to `.standard` if the suite
   /// can't be opened (never nil).
   ///

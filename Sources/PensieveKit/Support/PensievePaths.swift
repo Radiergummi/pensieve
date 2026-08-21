@@ -121,6 +121,26 @@ public enum PensievePaths {
     homeDirectory().appendingPathComponent(".local/bin/pensieve")
   }
 
+  /// The App Group. Team-ID-prefixed on purpose: an App Group is same-device, so a future iOS
+  /// companion gets its own container regardless and a `group.`-prefixed name buys nothing here.
+  public static let appGroupIdentifier = "TH593VRB6W.me.mazetti.pensieve"
+
+  /// ONE resolution for every process. The sandboxed widget must ask the system; the sync agent and
+  /// the CLI carry no entitlement and fall back to construction. Measured: for an unsandboxed
+  /// process `containerURL` performs no entitlement check, so the two branches agree byte-for-byte.
+  public static func groupContainerDirectory() -> URL {
+    if let url = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: appGroupIdentifier) { return url }
+    return homeDirectory()
+      .appendingPathComponent("Library/Group Containers/\(appGroupIdentifier)", isDirectory: true)
+  }
+
+  /// The widget's read-only view of "what's next". A file, not a database: a WAL store cannot be
+  /// opened read-only, and an extension must never hold write access to canonical data.
+  public static func widgetDigestURL() -> URL {
+    groupContainerDirectory().appendingPathComponent("widget-digest.json")
+  }
+
   /// Ensures the parent directory of a database file exists before it's opened.
   public static func ensureParentDirectory(of url: URL) throws {
     try FileManager.default.createDirectory(

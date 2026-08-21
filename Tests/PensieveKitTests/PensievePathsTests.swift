@@ -88,3 +88,25 @@ import Foundation
                                  storeOverride: "/tmp/throwaway.sqlite", support: support).path
           == "/tmp/throwaway-search-index.sqlite")
 }
+
+/// The widget is sandboxed and must resolve the container through `containerURL`; the sync agent and
+/// the CLI carry no App Group entitlement. Measured 2026-08-21: for an UNSANDBOXED process
+/// `containerURL(forSecurityApplicationGroupIdentifier:)` performs no entitlement check and is
+/// effectively path construction — it resolved for three different naming forms and even with the
+/// entitlement stripped. So both branches land on the same path, and this pins that they agree
+/// rather than leaving two resolutions to drift.
+@Test func groupContainerAndDigestPathsAreStable() {
+  let home = PensievePaths.homeDirectory().path
+  #expect(PensievePaths.appGroupIdentifier == "TH593VRB6W.me.mazetti.pensieve")
+  #expect(PensievePaths.groupContainerDirectory().path
+          == home + "/Library/Group Containers/TH593VRB6W.me.mazetti.pensieve")
+  #expect(PensievePaths.widgetDigestURL().path
+          == PensievePaths.groupContainerDirectory().path + "/widget-digest.json")
+}
+
+/// The Focus key must live in PensieveKit, not the app target: the publisher runs in the sync agent
+/// too, and a second copy of this string is how the agent and the app would disagree about which
+/// context is active.
+@Test func activeFocusContextKeyIsTheStringTheAppAlreadyWrote() {
+  #expect(PensieveDefaults.activeFocusContextKey == "pensieve.activeFocusContext")
+}
