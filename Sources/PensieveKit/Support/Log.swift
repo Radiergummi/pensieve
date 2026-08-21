@@ -10,4 +10,5 @@ enum Log {
   static let discovery  = Logger(subsystem: "me.mazetti.pensieve", category: "discovery")
   static let semantic   = Logger(subsystem: "me.mazetti.pensieve", category: "semantic")
   static let search     = Logger(subsystem: "me.mazetti.pensieve", category: "search")
+  static let widget     = Logger(subsystem: "me.mazetti.pensieve", category: "widget")
 }
