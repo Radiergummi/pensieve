@@ -94,6 +94,17 @@ targets:
         # the *source* Localizable.xcstrings on every build (reorders keys, resets German states).
         # The catalog is still compiled into the app regardless; keys are reconciled by hand.
         SWIFT_EMIT_LOC_STRINGS: "NO"
+        # OFF for the same reason as the line above, and it is not optional here: XcodeGen's setting
+        # presets turn STRING_CATALOG_GENERATE_SYMBOLS on, and generated symbols cannot coexist with
+        # this hand-authored catalog. The keys ARE the UI strings, so several differ only by case or
+        # trailing punctuation — "Archive"/"archive", "Delete"/"Delete…", "New Child"/"New Child…",
+        # "LLM Provider"/"LLM provider", "None open"/"None open." — and each such pair derives the
+        # same Swift symbol, which is a hard build error (25 of them). Deduplicating is NOT the fix:
+        # a key must match its Swift literal character-for-character or German silently falls back to
+        # English. Nothing reads the generated symbols (the app uses plain `Text("…")` literals), so
+        # generation buys nothing and costs a broken build. The failure is intermittent because the
+        # step only runs when the derived symbol file is stale, so a cached build hides it.
+        STRING_CATALOG_GENERATE_SYMBOLS: "NO"
         # Match PensieveKit's Swift 6 language mode so the app target gets the same strict-concurrency
         # checking as `swift test` — otherwise concurrency bugs slip through the Xcode build.
         SWIFT_VERSION: "6.0"
