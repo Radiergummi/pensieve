@@ -1240,13 +1240,32 @@ both worth remembering:
    regression test that seeds the *earned-finished* state (`openLooseEnds == 0` AND
    `closedLooseEnds > 0`) rather than the "never measured" state, which would have been vacuous.
 
-**Still unverified, and neither is a code defect:**
-- **No provisioning profile exists**, so `secd` still ignores the App Group entitlement and the widget has
-  never been observed rendering. Only an interactive Xcode build can mint one (no App Store Connect key,
-  no Xcode session token ⇒ no headless path). Until then the sandboxed half — including whether a
-  sandboxed macOS extension accepts the Team-ID-prefixed group id at all — is untested. If it rejects it,
-  the fix is one constant plus two entitlements files, but the registered portal identifier may not be
-  deletable.
+**✅ RESOLVED 2026-08-22 — App Groups now provisions AND is honoured at runtime.** The widget reads the
+digest. Evidence, not inspection: the `secd`/`trustd` "entitlement is ignored" line no longer appears on
+launch; the container at `~/Library/Group Containers/group.me.mazetti.pensieve` is *system-provisioned*
+(`containermanagerd` metadata + managed `Library/`, which only the OS creates); and the appex logs
+`timeline: fresh items=8 age=0s` per render. What it took, in order — every step was load-bearing:
+1. **The group id had to become `group.me.mazetti.pensieve`.** Only the `group.` form can be registered as
+   an App Group in the portal, and that registration is the prerequisite for a profile. Side effect worth
+   knowing: `group.` promotes App Groups to a **provisioned** entitlement, so it fails at BUILD time
+   without a profile instead of failing silently at runtime. Team-ID-prefixed forms build fine and are
+   then ignored — which is exactly how this hid for a month.
+2. **An Apple account in Xcode ▸ Settings ▸ Accounts.** `DVTDeveloperAccountManagerAppleIDLists` was empty;
+   `-allowProvisioningUpdates` mints nothing without it.
+3. **The Mac registered as a device** (Provisioning UDID, not Hardware UUID).
+4. **Portal-side: App Group registered, App Groups capability enabled on `me.mazetti.pensieve`, and an
+   EXPLICIT App ID created for `me.mazetti.pensieve.widget`.** Until that last one existed Xcode fell back
+   to a wildcard `TH593VRB6W.*` profile, and a wildcard App ID can never carry App Groups.
+5. **Deleting `~/Library/Developer/Xcode/UserData/Provisioning Profiles/*.provisionprofile`.** Xcode served
+   STALE cached profiles for several builds after the portal was already correct. This step is the one that
+   makes the portal and the build agree; without it the build keeps embedding a profile with no app-group.
+
+Two traps for next time. Xcode's `CODE_SIGN_STYLE: Automatic` **ignores a manually downloaded profile** and
+mints its own `Mac Team Provisioning Profile: …`, so downloading one is not the fix. And a green build
+proves nothing here — only decoding `Contents/embedded.provisionprofile` does:
+`security cms -D -i … | PlistBuddy -c 'Print :Entitlements'`.
+
+**Still unverified, and not a code defect:**
 - **The sync agent's publish was never observed completing.** Reviewed at `PensieveSyncAgent.swift:32-34`
   and identical to the proven app path, but each `make run` re-registers the agent and killed the
   kickstarted pass. Re-baseline the digest mtime and wait for one `sync.log` line to confirm.
@@ -1298,11 +1317,13 @@ unsandboxed process, so it resolves whether or not the entitlement is honoured. 
 accident (it is not sandboxed and can write the path directly); **the widget half — the only half that needs the
 entitlement — is unproven and currently would fail.**
 
-**Before Widgets, this must be resolved:** obtain a Mac Development provisioning profile that includes the App
-Group. `xcodebuild -allowProvisioningUpdates` alone did not produce one in a non-interactive shell; the likely
-requirement is an authenticated Xcode account session (Xcode ▸ Settings ▸ Accounts ▸ Download Manual Profiles,
-or a first interactive build), or registering the App ID + group in the portal and wiring a downloaded profile.
-Until then treat App Groups as **provisionable in principle, not yet functioning**.
+**✅ This was resolved on 2026-08-22** — see the RESOLVED block at the top of this entry for the five steps
+and the two traps. Provisioning is now also **headless**: an App Store Connect API key (Admin role) lives at
+`~/.appstoreconnect/private_keys/`, with its id and issuer in the gitignored `.authkey.mk`, and the Makefile
+appends `-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID` when that file is present.
+Verified by deleting every local profile and rebuilding: two fresh profiles were minted with no GUI step.
+(Caveat: the Xcode session was still logged in, so this proves the key path works, not that the key alone
+suffices.)
 
 **Two claims previously recorded here are WRONG; a probe disproved both.** (1) It said a non-sandboxed app *must*
 use the Team-ID-prefixed group id and that the wrong form yields `nil` with no diagnostic. In fact **all three
