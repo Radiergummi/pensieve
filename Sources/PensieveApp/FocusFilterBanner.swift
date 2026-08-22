@@ -1,5 +1,6 @@
 // Sources/PensieveApp/FocusFilterBanner.swift
 import SwiftUI
+import PensieveKit
 
 /// Says out loud that a Focus filter is scoping what the middle column shows.
 ///
@@ -21,9 +22,7 @@ struct FocusFilterBanner: View {
       HStack(spacing: 5) {
         // Decorative — the text beside it already says "Focus", so VoiceOver would hear it twice.
         Image(systemName: "moon.fill").imageScale(.small).accessibilityHidden(true)
-        // `context` is user Focus-context data, not chrome — interpolated verbatim, never localized,
-        // matching the widget header's rule for the same value.
-        Text("Filtered by Focus · \(context)")
+        Text("Filtered by Focus · \(localizedContext)")
         Spacer(minLength: 0)
       }
       .font(.caption).fontWeight(.medium)
@@ -32,6 +31,26 @@ struct FocusFilterBanner: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(.bar)
       .overlay(alignment: .bottom) { Divider() }
+    }
+  }
+
+  /// The context is chrome, not captured content: it names one of the two contexts the app itself
+  /// writes, and the organizing picker that sets it is localized — so interpolating the raw value
+  /// left a bare "work" sitting in German chrome. Reuses that picker's catalog keys rather than
+  /// adding new ones, which is also why no new German had to be written for this.
+  ///
+  /// Note this names the CONTEXT, never the Focus. A Focus of any name — including a custom one —
+  /// reaches Pensieve only by picking Work or Personal in the filter's parameter, and no public API
+  /// hands an app the active Focus's own display name.
+  ///
+  /// So only "work" and "personal" can arrive here: that parameter is a two-case `AppEnum`, and
+  /// `PensieveFocusFilter.perform()` is the only writer of the default this reads. The fallback is
+  /// what Swift asks of a `String` switch, not a case that occurs.
+  private var localizedContext: String {
+    switch context {
+    case NodeContext.work: return String(localized: "Work")
+    case NodeContext.personal: return String(localized: "Personal")
+    default: return context
     }
   }
 }

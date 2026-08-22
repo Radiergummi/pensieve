@@ -6,14 +6,15 @@ import XCTest
 /// is not. Either alone would pass against a banner that is always visible, or never.
 @MainActor
 final class FocusBannerTests: XCTestCase {
-  /// German, because the banner is chrome and must be localized — and because the context name beside
-  /// it is user data that must survive verbatim. One launch proves both halves of that rule at once.
+  /// German, because the banner is chrome and must be localized — and the context name beside it is
+  /// chrome too: "work" is what the app stores, "Arbeit" is what a German reader must see. Asserting
+  /// the whole line proves both at once, and goes red if either half regresses.
   func testBannerNamesTheActiveContextInGermanChrome() throws {
     let application = try launchPensieve(locale: "de", focusContext: "work")
     XCTAssertTrue(application.staticTexts["Briefing"].waitForExistence(timeout: 20))
 
-    XCTAssertTrue(application.staticTexts["Nach Fokus gefiltert · work"].exists,
-                  "no Focus banner while a context is active — the filter is scoping the column silently")
+    XCTAssertTrue(application.staticTexts["Nach Fokus gefiltert · Arbeit"].exists,
+                  "no Focus banner while a context is active, or a context name left untranslated")
   }
 
   /// The absence half. Runs in English so a missing German catalog entry could never be what makes
