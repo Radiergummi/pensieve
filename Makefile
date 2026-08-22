@@ -67,7 +67,15 @@ INSTALLED_APP = /Applications/Pensieve.app
 SWIFT_SOURCES := $(shell find Sources Tests Tools -type f -name '*.swift')
 # Tests/ narrowed to the SwiftPM suite on purpose: `swift test` never builds the UI test target, so
 # globbing all of Tests/ would re-run the whole suite on every UI-test edit.
-TEST_INPUTS := Package.swift $(shell find Sources/PensieveKit Tests/PensieveKitTests ! -name '.*')
+#
+# Sources/PensieveApp and Sources/PensieveWidget are inputs even though `swift test` never COMPILES
+# them: CatalogCoverageTests reads both trees and their .xcstrings to check that every rendered
+# literal has a catalog key and vice versa. Without them here, adding a literal to a view leaves
+# this record valid and `make test` reports cached-green over a real failure. The cost is small for
+# the same reason — app targets are not compiled by the suite, so an app-only edit re-runs the
+# tests without rebuilding anything.
+TEST_INPUTS := Package.swift $(shell find Sources/PensieveKit Tests/PensieveKitTests \
+	Sources/PensieveApp Sources/PensieveWidget ! -name '.*')
 UITEST_SOURCES := $(shell find Tests/PensieveUITests -type f -name '*.swift')
 # The entitlements files live at the repo root, outside every find root above, so an edit to one
 # used to be invisible to this cache: `make build` reported success while the product on disk still
