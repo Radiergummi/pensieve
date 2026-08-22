@@ -5,8 +5,8 @@ import PensieveKit
 struct WhatsNextView: View {
   @Environment(\.widgetFamily) private var family
   let presentation: WidgetPresentation
-  /// What the digest was filtered by ("work"/"personal"/nil) — user-chosen Focus-context data, so
-  /// it renders verbatim like a project name, never through a localized lookup.
+  /// What the digest was filtered by ("work"/"personal"/nil). Chrome, not captured content — the app
+  /// writes these values through a localized picker, so they are named, not echoed.
   let context: String?
 
   /// `containerBackground(for: .widget)` is MANDATORY since macOS 14 — a widget that does not adopt
@@ -49,11 +49,17 @@ struct WhatsNextView: View {
   /// only way a stale WORK-only digest, listed under an unlabelled "What's Next" while Personal is
   /// active on the (closed) app, becomes visible rather than silent.
   private var header: Text {
-    // `context` is user Focus-context data, not chrome — interpolated verbatim, never localized.
     if let context {
-      return Text("What's Next · \(context)")
+      return Text("What's Next · \(localizedContext(context))")
     }
     return Text("What's Next")
+  }
+
+  /// Localized out of THIS bundle: an appex cannot reach the app's catalog, which is why the shared
+  /// rule in `NodeContext.displayKey` hands back a key rather than a translation.
+  private func localizedContext(_ context: String) -> String {
+    guard let key = NodeContext.displayKey(context) else { return context }
+    return String(localized: String.LocalizationValue(key))
   }
 
   @ViewBuilder

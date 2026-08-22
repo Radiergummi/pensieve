@@ -6,6 +6,23 @@ public enum NodeContext {
   public static let work = "work"
   public static let personal = "personal"
   // Unset is the empty string ("") — inherit from the nearest ancestor.
+
+  /// The localization KEY naming a context as chrome — `nil` for a value that has no name to show.
+  ///
+  /// A context is NOT captured content: unlike a node name or a quote, these are values the app
+  /// itself writes through a localized picker, so rendering the raw string puts a bare "work" in
+  /// German chrome. Returning the key rather than the translation is what lets the app and the widget
+  /// share this rule while each localizes out of its OWN catalog — an appex cannot read the app's.
+  ///
+  /// `nil` rather than the raw value so the caller decides the fallback, and so adding a context
+  /// means editing this one switch instead of finding every surface that spells it out.
+  public static func displayKey(_ context: String) -> String? {
+    switch context {
+    case work: return "Work"
+    case personal: return "Personal"
+    default: return nil
+    }
+  }
 }
 
 /// Pure context resolution + the Focus-filter visibility predicate. Operates on an in-memory `[Node]`

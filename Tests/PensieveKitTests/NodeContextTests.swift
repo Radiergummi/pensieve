@@ -71,3 +71,14 @@ private func fixture() -> NodeContextFixture {
   nodeB.parentID = nodeA.id
   #expect(NodeContextResolver.resolve(nodeA.id, in: [nodeA, nodeB]) == "")
 }
+
+/// The rule the Focus banner and the widget header both render through. Asserting the KEYS (not
+/// translations) is the point: each target localizes them out of its own catalog, and the keys are
+/// what must agree with the entries in both.
+@Test func displayKeyNamesTheKnownContextsAndNothingElse() {
+  #expect(NodeContext.displayKey(NodeContext.work) == "Work")
+  #expect(NodeContext.displayKey(NodeContext.personal) == "Personal")
+  // Unset and unknown have no name to show — the caller falls back, rather than this inventing one.
+  #expect(NodeContext.displayKey("") == nil)
+  #expect(NodeContext.displayKey("sabbatical") == nil)
+}

@@ -12,6 +12,11 @@
         "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld offen" } }
       }
     },
+    "Personal" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönlich" } }
+      }
+    },
     "Nothing open" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts offen" } }
@@ -30,6 +35,11 @@
     "Which projects to pick up." : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Welche Projekte als Nächstes." } }
+      }
+    },
+    "Work" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeit" } }
       }
     },
     "What's Next" : {

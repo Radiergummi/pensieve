@@ -44,13 +44,10 @@ struct FocusFilterBanner: View {
   /// hands an app the active Focus's own display name.
   ///
   /// So only "work" and "personal" can arrive here: that parameter is a two-case `AppEnum`, and
-  /// `PensieveFocusFilter.perform()` is the only writer of the default this reads. The fallback is
-  /// what Swift asks of a `String` switch, not a case that occurs.
+  /// `PensieveFocusFilter.perform()` is the only writer of the default this reads — the raw fallback
+  /// is for a value that cannot occur on this path.
   private var localizedContext: String {
-    switch context {
-    case NodeContext.work: return String(localized: "Work")
-    case NodeContext.personal: return String(localized: "Personal")
-    default: return context
-    }
+    guard let key = NodeContext.displayKey(context) else { return context }
+    return String(localized: String.LocalizationValue(key))
   }
 }
