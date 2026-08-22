@@ -109,6 +109,11 @@ order — query order is not a documented rendering order.
 
 Measured while writing the suite, and each one cost a failing test first:
 
+- **A SwiftUI `Text` carries its string in `AXValue`; `label` and `identifier` are EMPTY.**
+  The `staticTexts["…"]` subscript this suite uses everywhere matches against value, which is why
+  it works — but `matching(NSPredicate(format: "label BEGINSWITH …"))` matches **nothing at all**,
+  silently. An absence assertion built on a `label` predicate is therefore vacuous and passes
+  against any app at all; predicate on `value`. Cost a mutation run that stayed green to find.
 - **A loose end is an `AXButton`, and its text is the accessibility `Description`** — it is
   a disclosure control, not a label. `staticTexts[…]` never matches one.
 - **A cited quote is not in the tree until its row is expanded.** Click the loose-end
@@ -128,6 +133,11 @@ Measured while writing the suite, and each one cost a failing test first:
   `Error Domain=com.apple.LocalAuthentication Code=-4 "System authentication is running."`
   and nothing runs until the dialog is dismissed. Recognize this immediately rather than
   debugging the test target — it means a dialog is sitting on screen, not that tests broke.
+- **`xcodebuild test` fails under the agent's sandbox.** It dies with `The test runner hung before
+  establishing connection.` — a *System Failure* in the result bundle, with zero tests run, which
+  reads like a broken test target rather than a permissions problem. The runner cannot establish its
+  XPC connection from a sandboxed shell. Re-run the same command with the sandbox disabled; nothing
+  about the invocation itself needs to change.
 - **Missing TCC grants.** `uiprobe windows` printing `<no title — Screen Recording not
   granted>` means Screen Recording is missing. `dump` failing with "no accessible windows"
   means Accessibility is missing. Both are granted **per host process**, so a different

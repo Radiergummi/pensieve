@@ -1086,6 +1086,17 @@
         }
       }
     },
+    "Filtered by Focus · %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach Fokus gefiltert · %@"
+          }
+        }
+      }
+    },
     "Find" : {
       "extractionState" : "manual",
       "localizations" : {

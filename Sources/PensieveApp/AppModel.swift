@@ -63,9 +63,9 @@ final class AppModel {
   // NOT private: AppModel+Search.swift and AppModel+Organizing.swift also read it.
   var allNodes: [Node] = []
   /// The active Focus context ("" = no Focus / unfiltered), mirrored from UserDefaults by the
-  /// SetFocusFilterIntent. Drives the visible-node filter applied in refresh()/refreshGlance().
-  /// NOT private: AppModel+Search.swift's runSearch() also reads it.
-  @ObservationIgnored var activeFocusContext = ""
+  /// SetFocusFilterIntent. Drives the visible-node filter in refresh()/refreshGlance(). Tracked, NOT
+  /// @ObservationIgnored: FocusFilterBanner renders it. NOT private: runSearch() also reads it.
+  var activeFocusContext = ""
   /// Last context the forest was built for — so a context change rebuilds it even when the node set
   /// is unchanged (the `fetched != allNodes` guard alone would skip it).
   @ObservationIgnored private var lastForestContext: String?

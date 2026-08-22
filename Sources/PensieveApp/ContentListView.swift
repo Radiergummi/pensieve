@@ -23,6 +23,11 @@ struct ContentListView: View {
         normalContent
       }
     }
+    // Above every list this column shows, search results included: `runSearch()` scopes on the same
+    // `visibleNodeIDs()` the lists do, so a Focus-shortened result set needs the notice most of all.
+    .safeAreaInset(edge: .top, spacing: 0) {
+      FocusFilterBanner(context: model.activeFocusContext)
+    }
   }
 
   @ViewBuilder private var normalContent: some View {

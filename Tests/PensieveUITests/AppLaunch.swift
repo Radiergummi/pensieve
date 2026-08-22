@@ -18,7 +18,8 @@ extension XCTestCase {
   /// An `XCTestCase` extension method rather than a free function so it can register its own teardown:
   /// each call makes a fresh temp directory that nothing else ever removes, and every test in this
   /// suite calls it at least once.
-  func launchPensieve(seededAt now: Date = Date(), locale: String? = nil) throws -> XCUIApplication {
+  func launchPensieve(seededAt now: Date = Date(), locale: String? = nil,
+                      focusContext: String = "") throws -> XCUIApplication {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("pensieve-uitest-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -38,7 +39,9 @@ extension XCTestCase {
     // argument-domain key fails SILENTLY, leaving the app on the developer's real value, so these
     // must be checked against the source rather than retyped from memory.
     application.launchArguments += [
-      "-pensieve.activeFocusContext", "",   // no Focus filtering, whatever the developer's Mac is doing
+      // Defaults to "" — no Focus filtering, whatever the developer's Mac is doing. A test that passes
+      // a context is asking for the filter to be ACTIVE, which is what FocusBannerTests renders.
+      "-pensieve.activeFocusContext", focusContext,
       "-app.narrationEnabled", "NO",        // narration is an LLM call; never in a test
       "-app.hideDockIcon", "NO",
       // `AppModel.init` reads this as `UserDefaults.standard.object(forKey:) as? Date`. Confirmed
