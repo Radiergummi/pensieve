@@ -32,7 +32,7 @@ Pensieve logs to the macOS unified log with subsystem `me.mazetti.pensieve`. Mes
 | `llm` | `CloudLLMProvider`, `FoundationModelsProvider`, `ClaudeCLIProvider` | Prompt dispatched (length, provider kind), completion received, HTTP errors, timeouts |
 | `discovery` | `SourceScanner`, `TranscriptDiscovery` | Candidates found, sessions spooled |
 | `app` | `AppModel` lifecycle | App start (store paths), drain/refresh triggers, watcher fires, focus context changes, provider rebuilds |
-| `widget` | `WidgetDigestPublisher.publishQuietly` | The ONLY signal a widget-digest publish failed. `publishQuietly` swallows every error by contract, so it can never surface as a failed sync or a UI error — if the widget looks stale, this category is where the reason is |
+| `widget` | `WidgetDigestPublisher.publishQuietly` (write), `WhatsNextProvider.getTimeline` (read) | Both halves of the digest hand-off, and the only signal either failed. `publishQuietly` swallows every error by contract, so a bad publish can never surface as a failed sync or a UI error. On the read side the appex logs `timeline: <state> items=<n> age=<s>s` per render — `state` distinguishes a genuinely empty queue from a failed read, which both render as "Open Pensieve to get started". A widget that looks stale is diagnosed here: compare the render's `age` against the digest's own mtime |
 
 ### Log levels
 

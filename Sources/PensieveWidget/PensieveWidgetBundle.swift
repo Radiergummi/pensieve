@@ -37,7 +37,28 @@ struct WhatsNextProvider: TimelineProvider {
       let becomesStale = generatedAt.addingTimeInterval(WidgetDigest.stalenessThreshold + 1)
       if becomesStale > now { entries.append(entry(digest, at: becomesStale)) }
     }
+    logTimeline(digest, presentation: entries[0].presentation, now: now)
     completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(15 * 60))))
+  }
+
+  /// A failed read renders "Open Pensieve to get started", which is indistinguishable from a widget
+  /// that is merely empty — and an appex is invisible from the outside, so the two states cost real
+  /// debugging time once already. Counts and timestamps only: node names are captured content and
+  /// never go to the log.
+  private func logTimeline(_ digest: WidgetDigest?, presentation: WidgetPresentation, now: Date) {
+    let state: String
+    var itemCount = 0
+    switch presentation {
+    case .noData: state = "noData"
+    case .unsupportedSchema: state = "unsupportedSchema"
+    case .fresh(let items): state = "fresh"; itemCount = items.count
+    case .stale(let items, _): state = "stale"; itemCount = items.count
+    }
+    let ageInSeconds = digest.map { Int(now.timeIntervalSince($0.generatedAt)) } ?? -1
+    WidgetLog.widget.info("""
+      timeline: \(state, privacy: .public) items=\(itemCount, privacy: .public) \
+      age=\(ageInSeconds, privacy: .public)s
+      """)
   }
 
   /// All the judgement lives in PensieveKit, where tests can reach it. This is a lookup. `date` is
