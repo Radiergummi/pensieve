@@ -9,7 +9,23 @@ struct WhatsNextView: View {
   /// it renders verbatim like a project name, never through a localized lookup.
   let context: String?
 
+  /// `containerBackground(for: .widget)` is MANDATORY since macOS 14 — a widget that does not adopt
+  /// it renders WidgetKit's "Please adopt containerBackground API" placeholder INSTEAD of its view,
+  /// in the gallery and on the desktop, with no build warning to say so. It also takes over the
+  /// insets, which is why nothing below pads itself.
+  ///
+  /// The tap target belongs to EVERY state, not just the populated queue: "Open Pensieve to get
+  /// started" that does nothing when clicked is worse than no instruction at all, and a widget with
+  /// no `widgetURL` and no `Link` in the tapped area is inert on macOS with nothing to say so.
   var body: some View {
+    content
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      .containerBackground(.fill.tertiary, for: .widget)
+      .widgetURL(DeepLink.smartList(.whatsNext).url)
+  }
+
+  @ViewBuilder
+  private var content: some View {
     switch presentation {
     case .noData:
       // NOT an empty list: an empty What's Next reads as "nothing to do", which is the one thing
@@ -25,7 +41,7 @@ struct WhatsNextView: View {
   }
 
   private func message(_ key: LocalizedStringKey) -> some View {
-    Text(key).font(.caption).foregroundStyle(.secondary).padding()
+    Text(key).font(.caption).foregroundStyle(.secondary)
   }
 
   /// Names the active Focus context in the header on the populated render too, not just the empty
@@ -47,8 +63,9 @@ struct WhatsNextView: View {
       if items.isEmpty {
         // A valid digest with no items (e.g. an active Focus context matching no projects) is NOT
         // an empty list: that reads as a broken widget, one step from telling the user they have
-        // nothing to do — the one false statement this widget must never make.
-        emptyState
+        // nothing to do — the one false statement this widget must never make. The header above
+        // already names the context this is empty *within*, so this line does not repeat it.
+        Text("Nothing open").font(.footnote).foregroundStyle(.secondary)
       } else {
         // Project names are captured content — never localized.
         ForEach(items.prefix(family == .systemSmall ? 1 : 3), id: \.nodeID) { item in
@@ -65,18 +82,6 @@ struct WhatsNextView: View {
         Text("as of \(asOf.formatted(date: .omitted, time: .shortened))")
           .font(.caption2).foregroundStyle(.tertiary)
       }
-    }
-    .padding()
-    .widgetURL(DeepLink.smartList(.whatsNext).url)
-  }
-
-  @ViewBuilder
-  private var emptyState: some View {
-    // `context` is user Focus-context data, not chrome — interpolated verbatim, never localized.
-    if let context {
-      Text("Nothing open in \(context)").font(.footnote).foregroundStyle(.secondary)
-    } else {
-      Text("Nothing open").font(.footnote).foregroundStyle(.secondary)
     }
   }
 }

@@ -21,22 +21,32 @@ struct WhatsNextProvider: TimelineProvider {
   }
 
   func getSnapshot(in context: Context, completion: @escaping (WhatsNextEntry) -> Void) {
-    completion(entry())
+    completion(entry(WidgetDigest.read(from: PensievePaths.widgetDigestURL()), at: Date()))
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<WhatsNextEntry>) -> Void) {
     // WidgetKit budgets reloads regardless; the app calls reloadAllTimelines() for the moments
     // that actually matter (a Focus switch, a store refresh).
-    completion(Timeline(entries: [entry()], policy: .after(Date().addingTimeInterval(15 * 60))))
-  }
-
-  /// All the judgement lives in PensieveKit, where tests can reach it. This is a lookup.
-  private func entry() -> WhatsNextEntry {
     let now = Date()
     let digest = WidgetDigest.read(from: PensievePaths.widgetDigestURL())
-    return WhatsNextEntry(date: now,
-                          presentation: WidgetDigest.presentation(for: digest, now: now),
-                          context: digest?.context)
+    var entries = [entry(digest, at: now)]
+    // Cross into "as of HH:MM" ON the staleness threshold rather than at whatever reload happens to
+    // come next: with only a `now` entry, a 15-minute reload cadence would present a 35-minute-old
+    // digest as current, which is half the honesty the 20-minute threshold was chosen for.
+    if let generatedAt = digest?.generatedAt {
+      let becomesStale = generatedAt.addingTimeInterval(WidgetDigest.stalenessThreshold + 1)
+      if becomesStale > now { entries.append(entry(digest, at: becomesStale)) }
+    }
+    completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(15 * 60))))
+  }
+
+  /// All the judgement lives in PensieveKit, where tests can reach it. This is a lookup. `date` is
+  /// also the `now` the presentation is judged against — that is what lets a FUTURE entry be built
+  /// for the moment this same digest turns stale.
+  private func entry(_ digest: WidgetDigest?, at date: Date) -> WhatsNextEntry {
+    WhatsNextEntry(date: date,
+                   presentation: WidgetDigest.presentation(for: digest, now: date),
+                   context: digest?.context)
   }
 }
 
@@ -45,8 +55,21 @@ struct WhatsNextWidget: Widget {
     StaticConfiguration(kind: "WhatsNext", provider: WhatsNextProvider()) { entry in
       WhatsNextView(presentation: entry.presentation, context: entry.context)
     }
-    .configurationDisplayName("What's Next")
-    .description("Which projects to pick up.")
+    // These two are gallery METADATA, resolved outside this process — so unlike every `Text` in
+    // `WhatsNextView` they do NOT default to this bundle, and an unpinned lookup lands in
+    // Pensieve.app's catalog. That failed silently and asymmetrically: the app happens to carry
+    // "What's Next" (its smart-list name), so the title came out German while the description — which
+    // exists ONLY here — fell back to English. `bundle:` is what pins both to this appex.
+    .configurationDisplayName(LocalizedStringResource("What's Next", bundle: .widget))
+    .description(LocalizedStringResource("Which projects to pick up.", bundle: .widget))
     .supportedFamilies([.systemSmall, .systemMedium])
   }
+}
+
+/// Anchors a `LocalizedStringResource` to the widget extension's own bundle. `.forClass` needs a
+/// class to point at and the widget target has none, so this empty one exists purely as the anchor.
+private final class WidgetBundleAnchor {}
+
+extension LocalizedStringResource.BundleDescription {
+  static let widget = LocalizedStringResource.BundleDescription.forClass(WidgetBundleAnchor.self)
 }

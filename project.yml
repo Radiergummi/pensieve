@@ -206,8 +206,6 @@ targets:
     dependencies:
       - package: PensieveKit
         product: PensieveKit
-      - sdk: WidgetKit.framework
-      - sdk: SwiftUI.framework
     info:
       path: Sources/PensieveWidget/Info.plist
       properties:
@@ -239,4 +237,3 @@ targets:
         # Same reason as the app target: XcodeGen's presets turn this on, and generated symbols
         # cannot coexist with a hand-authored catalog whose keys differ only by case/punctuation.
         STRING_CATALOG_GENERATE_SYMBOLS: "NO"
-        SWIFT_VERSION: "6.0"

@@ -17,11 +17,6 @@
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts offen" } }
       }
     },
-    "Nothing open in %@" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts offen in %@" } }
-      }
-    },
     "Open Pensieve to get started" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve öffnen, um zu beginnen" } }

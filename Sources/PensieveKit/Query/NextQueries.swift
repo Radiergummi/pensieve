@@ -39,10 +39,12 @@ extension NextItem {
   ///
   /// Not actionable is therefore the narrow, earned case: it HAD open ends and they are all closed.
   ///
-  /// The single definition, applied by the three surfaces that answer "what should I pick up next" —
-  /// `SmartLists.whatsNext`, `SessionContextQueries.rankedContext` (MCP `whats_next`) and the CLI's
-  /// `pensieve next`. Deliberately NOT applied inside `ranked`, which also feeds Dormant and Recently
-  /// Active: those answer "what is quiet" and "what moved", and a finished project belongs in both.
+  /// The single definition. Applied by `NextQueries.whatsNext`, which every surface answering "what
+  /// should I pick up next" goes through — so a new surface gets the rule by construction rather than
+  /// by remembering. `SmartLists` is the one direct caller, because it already holds `ranked` for
+  /// Dormant / Recently Active and re-querying to reuse `whatsNext` would cost a second full scan.
+  /// Deliberately NOT applied inside `ranked`, which also feeds Dormant and Recently Active: those
+  /// answer "what is quiet" and "what moved", and a finished project belongs in both.
   public var isActionable: Bool { openLooseEnds > 0 || closedLooseEnds == 0 }
 }
 
@@ -74,5 +76,24 @@ public enum NextQueries {
       }
       return items.sorted { $0.score > $1.score }
     }
+  }
+}
+
+extension NextQueries {
+  /// The ranked queue narrowed to "what should I pick up next": actionable only, and — when a Focus
+  /// context is active — only the nodes visible under it. An empty `context` means no Focus, which
+  /// `NodeContextResolver` also treats as "everything"; the guard here only skips the node fetch.
+  ///
+  /// One function because four surfaces answer this same question — `SmartLists.whatsNext`, MCP
+  /// `whats_next`, `pensieve next` and the widget digest — and each restated it. The widget shipped
+  /// answering a *different* question by forgetting `isActionable`, which is what a rule kept alive
+  /// by a hand-maintained list of remembering callers eventually costs.
+  public static func whatsNext(_ database: any DatabaseReader, now: Date,
+                               context: String = "") throws -> [NextItem] {
+    let actionable = try ranked(database, now: now).filter(\.isActionable)
+    guard !context.isEmpty else { return actionable }
+    let visible = NodeContextResolver.visibleNodeIDs(for: context,
+                                                     in: try ProjectQueries.all(database))
+    return actionable.filter { visible.contains($0.project.id) }
   }
 }

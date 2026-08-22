@@ -281,6 +281,7 @@ final class AppModel {
     refreshToken += 1
     await SpotlightIndexer.reindex(activeContext: activeFocusContext)   // launch + ⌘R
     syncSearchIndexes()   // see AppModel+Search.swift
+    republishWidgetDigest()
   }
 
   /// Watch-triggered drain: ingest new spool rows on our own connection. The resulting canonical
@@ -302,11 +303,19 @@ final class AppModel {
     refresh()
     syncSearchIndexes()   // work just drained must become findable without waiting for ⌘R
     await reindexSpotlight()
-    if let database { WidgetDigestPublisher.publishQuietly(database: database) }
-    WidgetCenter.shared.reloadAllTimelines()
+    republishWidgetDigest()
   }
 
   private func reindexSpotlight() async { await SpotlightIndexer.reindex(activeContext: activeFocusContext) }
+
+  /// Digest + reload, always together, after each of the three refreshes that own a whole store pass. Fed from the
+  /// `lists.whatsNext` that `refresh()` just computed: re-deriving it would put the whole ranking scan back on the main
+  /// actor for an answer in hand. The reload stays app-side — one an agent requests is not dependable.
+  private func republishWidgetDigest() {
+    guard database != nil else { return }   // no store ⇒ `lists` is empty, and an empty digest renders as "Nothing open"
+    WidgetDigestPublisher.publishQuietly(items: lists.whatsNext, activeContext: activeFocusContext)
+    WidgetCenter.shared.reloadAllTimelines()
+  }
 
   /// UserDefaults changed — if the active Focus context flipped, re-filter the window + reindex.
   private func focusContextDidChange() {
@@ -314,10 +323,8 @@ final class AppModel {
     guard new != activeFocusContext else { return }
     AppLog.app.info("Focus context changed: '\(self.activeFocusContext, privacy: .public)' -> '\(new, privacy: .public)'")
     activeFocusContext = new
-    // The digest is pre-filtered by context, so a Focus switch invalidates it.
-    if let database { WidgetDigestPublisher.publishQuietly(database: database) }
-    WidgetCenter.shared.reloadAllTimelines()
     refresh()
+    republishWidgetDigest()   // AFTER refresh(): that is what re-filters the list to the new context
     Task { await SpotlightIndexer.reindex(activeContext: new) }
   }
 

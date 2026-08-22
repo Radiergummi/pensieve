@@ -97,7 +97,6 @@ import Foundation
 /// rather than leaving two resolutions to drift.
 @Test func groupContainerAndDigestPathsAreStable() {
   let home = PensievePaths.homeDirectory().path
-  #expect(PensievePaths.appGroupIdentifier == "TH593VRB6W.me.mazetti.pensieve")
   #expect(PensievePaths.groupContainerDirectory().path
           == home + "/Library/Group Containers/TH593VRB6W.me.mazetti.pensieve")
   #expect(PensievePaths.widgetDigestURL().path

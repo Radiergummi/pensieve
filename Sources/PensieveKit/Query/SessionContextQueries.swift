@@ -147,13 +147,7 @@ public enum SessionContextQueries {
   /// `limit`, each carrying its oldest open loose end's verbatim quote.
   public static func rankedContext(limit: Int, context: String?,
                                    _ database: any DatabaseReader, now: Date) throws -> [WhatsNextItem] {
-    let items = try NextQueries.ranked(database, now: now).filter(\.isActionable)
-    var filtered = items
-    if let context, !context.isEmpty {
-      let all = try ProjectQueries.all(database)
-      let visible = NodeContextResolver.visibleNodeIDs(for: context, in: all)
-      filtered = items.filter { visible.contains($0.project.id) }
-    }
+    let filtered = try NextQueries.whatsNext(database, now: now, context: context ?? "")
     return try database.read { database in
       try filtered.prefix(limit).map { item in
         let top = try LooseEnd.where { $0.nodeID.eq(item.project.id) && LooseEnd.isOpen($0) }

@@ -3,8 +3,7 @@ import Foundation
 @testable import PensieveKit
 
 private func makeItem(_ name: String, open: Int = 1) -> WidgetDigest.Item {
-  WidgetDigest.Item(nodeID: UUID(), name: name, openLooseEnds: open,
-                    lastActivityAt: Date(timeIntervalSince1970: 1_000_000), daysDormant: 3)
+  WidgetDigest.Item(nodeID: UUID(), name: name, openLooseEnds: open)
 }
 
 /// The digest crosses a process boundary, so a round-trip is the contract.

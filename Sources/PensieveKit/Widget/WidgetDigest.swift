@@ -25,18 +25,18 @@ public struct WidgetDigest: Codable, Equatable, Sendable {
   public let context: String?
   public let items: [Item]
 
+  /// Exactly what the widget renders, and nothing else. `NextItem`'s other signals (dormancy, score,
+  /// last activity) are deliberately absent: an unread field in a cross-process wire format reads to
+  /// the next person as something they must keep working, and `daysDormant` in particular would be
+  /// derivable from `generatedAt` anyway.
   public struct Item: Codable, Equatable, Sendable {
     public let nodeID: UUID
     /// Captured content — rendered verbatim, NEVER localized.
     public let name: String
     public let openLooseEnds: Int
-    public let lastActivityAt: Date
-    public let daysDormant: Int
 
-    public init(nodeID: UUID, name: String, openLooseEnds: Int,
-                lastActivityAt: Date, daysDormant: Int) {
+    public init(nodeID: UUID, name: String, openLooseEnds: Int) {
       self.nodeID = nodeID; self.name = name; self.openLooseEnds = openLooseEnds
-      self.lastActivityAt = lastActivityAt; self.daysDormant = daysDormant
     }
   }
 
