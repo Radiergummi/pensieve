@@ -23,6 +23,17 @@ XCODEBUILD_FLAGS = -project Pensieve.xcodeproj \
 	-skipMacroValidation -skipPackagePluginValidation \
 	-allowProvisioningUpdates
 
+# App Store Connect API key, if one is configured. Without it xcodebuild can only reach Apple
+# through a logged-in Xcode GUI session, which lapses silently and then fails every build with
+# "No Accounts: Add a new account in Accounts settings". .authkey.mk is gitignored and absent on a
+# fresh clone, so -include keeps that clone building exactly as before.
+-include .authkey.mk
+ifdef ASC_KEY_ID
+XCODEBUILD_FLAGS += -authenticationKeyPath $(ASC_KEY_PATH) \
+	-authenticationKeyID $(ASC_KEY_ID) \
+	-authenticationKeyIssuerID $(ASC_ISSUER_ID)
+endif
+
 PRODUCTS = ./.build-xcode/Build/Products/Debug
 APP = $(PRODUCTS)/Pensieve.app
 PBXPROJ = Pensieve.xcodeproj/project.pbxproj
@@ -58,7 +69,10 @@ SWIFT_SOURCES := $(shell find Sources Tests Tools -type f -name '*.swift')
 # globbing all of Tests/ would re-run the whole suite on every UI-test edit.
 TEST_INPUTS := Package.swift $(shell find Sources/PensieveKit Tests/PensieveKitTests ! -name '.*')
 UITEST_SOURCES := $(shell find Tests/PensieveUITests -type f -name '*.swift')
-BUILD_SOURCES := $(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
+# The entitlements files live at the repo root, outside every find root above, so an edit to one
+# used to be invisible to this cache: `make build` reported success while the product on disk still
+# carried the previous App Group id. They are signing inputs, so they belong here.
+BUILD_SOURCES := Pensieve.entitlements PensieveWidget.entitlements $(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
 
 .PHONY: help all test lint generate build cli uiprobe smoke uitest install run clean
 

@@ -21,3 +21,6 @@ Sources/PensieveWidget/Info.plist
 # git cannot re-include a path whose parent directory is excluded.
 .claude/*
 !.claude/skills/
+
+# App Store Connect API key config (credentials; see ci_scripts and the build docs)
+.authkey.mk

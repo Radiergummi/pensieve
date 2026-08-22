@@ -88,8 +88,20 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      # Signing is ad-hoc (CODE_SIGN_IDENTITY "-", CODE_SIGNING_REQUIRED NO), so this
-      # needs no keychain or certificate. Also builds and embeds the CLI.
+      # Signing is DISABLED here, on the command line, because project.yml signs with a real team
+      # (DEVELOPMENT_TEAM TH593VRB6W, CODE_SIGN_STYLE Automatic) so the App Group entitlement
+      # provisions on a developer machine. A runner has no certificate and no profile, so
+      # inheriting that fails with "No signing certificate Mac Development found".
+      #
+      # Ad-hoc signing is NOT enough and was tried first: CODE_SIGN_IDENTITY="-" still fails with
+      # '"Pensieve" requires a provisioning profile', because the `group.`-prefixed App Group is a
+      # PROVISIONED entitlement — Xcode demands a profile for it whatever identity you name. Hence
+      # CODE_SIGNING_ALLOWED=NO plus an emptied CODE_SIGN_ENTITLEMENTS, which drops the
+      # requirement instead of trying to satisfy it.
+      #
+      # What that costs: CI proves "does it compile and embed the CLI", not that signing or the
+      # entitlement is correct. Those are verified on a real machine (see docs/observability.md,
+      # `widget` category). Also builds and embeds the CLI.
       #
       # The -skip*Validation flags are the scoped form of the "Trust & Enable" prompt
       # Xcode shows for the SQLiteData macro plugins, preferred over `defaults write`
@@ -105,6 +117,9 @@ jobs:
             -destination "platform=macOS,arch=arm64" \
             -resultBundlePath "${RUNNER_TEMP}/Pensieve.xcresult" \
             -skipMacroValidation -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" CODE_SIGN_ENTITLEMENTS="" \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
             build \
             | xcbeautify --renderer github-actions
 
