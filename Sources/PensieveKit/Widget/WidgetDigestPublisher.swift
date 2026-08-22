@@ -13,7 +13,11 @@ public enum WidgetDigestPublisher {
                              now: Date = Date(),
                              activeContext: String,
                              to url: URL = PensievePaths.widgetDigestURL()) throws {
-    var ranked = try NextQueries.ranked(database, now: now)
+    // `isActionable` is the single membership rule for "what should I pick up next" — applied here
+    // too so the widget agrees with SmartLists.whatsNext, SessionContextQueries and `pensieve next`
+    // rather than silently answering a different question (a finished project has no open ends and
+    // would otherwise rank ABOVE actively-worked ones on dormancy alone).
+    var ranked = try NextQueries.ranked(database, now: now).filter(\.isActionable)
 
     // Reuse the Focus predicate rather than restating it. Empty context = no Focus active.
     if !activeContext.isEmpty {
@@ -39,11 +43,16 @@ public enum WidgetDigestPublisher {
 
   /// The form both callers use. A publish failure is logged and swallowed — it must never be able to
   /// break a sync pass or a UI refresh, on the same principle that keeps the capture path sacred.
-  public static func publishQuietly(database: any DatabaseReader, now: Date = Date()) {
+  ///
+  /// `to:` defaults to the real App Group container but exists as a seam so tests never touch it —
+  /// this project has previously had a smoke test wipe a live search index by writing where a real
+  /// caller writes; a destination parameter is how that mistake is made impossible here.
+  public static func publishQuietly(database: any DatabaseReader, now: Date = Date(),
+                                    to url: URL = PensievePaths.widgetDigestURL()) {
     let activeContext = PensieveDefaults.shared()
       .string(forKey: PensieveDefaults.activeFocusContextKey) ?? ""
     do {
-      try publish(database: database, now: now, activeContext: activeContext)
+      try publish(database: database, now: now, activeContext: activeContext, to: url)
     } catch {
       Log.widget.error("Widget digest publish failed: \(error, privacy: .public)")
     }

@@ -28,10 +28,22 @@ struct WhatsNextView: View {
     Text(key).font(.caption).foregroundStyle(.secondary).padding()
   }
 
+  /// Names the active Focus context in the header on the populated render too, not just the empty
+  /// state — the widget is sandboxed and cannot read the app's Focus defaults, so this label is the
+  /// only way a stale WORK-only digest, listed under an unlabelled "What's Next" while Personal is
+  /// active on the (closed) app, becomes visible rather than silent.
+  private var header: Text {
+    // `context` is user Focus-context data, not chrome — interpolated verbatim, never localized.
+    if let context {
+      return Text("What's Next · \(context)")
+    }
+    return Text("What's Next")
+  }
+
   @ViewBuilder
   private func queue(_ items: [WidgetDigest.Item], asOf: Date?) -> some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text("What's Next").font(.caption2).foregroundStyle(.secondary)
+      header.font(.caption2).foregroundStyle(.secondary)
       if items.isEmpty {
         // A valid digest with no items (e.g. an active Focus context matching no projects) is NOT
         // an empty list: that reads as a broken widget, one step from telling the user they have

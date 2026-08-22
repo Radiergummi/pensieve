@@ -5,7 +5,12 @@ import Foundation
 /// `Node` the widget has no use for, and pinning the wire format to a live model would turn every
 /// model change into a widget-compatibility question.
 public struct WidgetDigest: Codable, Equatable, Sendable {
-  /// Bump when the shape changes. An older widget refuses a newer file rather than mis-rendering it.
+  /// Bump when the shape changes. Catches only a NON-breaking widening (an older widget seeing a
+  /// higher version number than its own) and refuses that file rather than mis-rendering it. A
+  /// genuinely breaking change — a renamed or added-required field on `Item`, whose fields are all
+  /// non-optional — fails to DECODE first, landing on `.noData` before this guard is ever reached;
+  /// both outcomes are safe. In practice the appex ships inside the app bundle, so real version skew
+  /// between publisher and reader is near-impossible.
   public static let currentSchemaVersion = 1
   /// Published regardless of family, so each family slices what it can show without a second
   /// publish path.

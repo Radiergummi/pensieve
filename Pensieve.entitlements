@@ -6,10 +6,13 @@
 	     and hardened runtime. Pensieve reads ~/Library/Application Support directly and shells out
 	     to `claude -p`; sandboxing it would break both.
 
-	     Because the app is NOT sandboxed, the group id MUST carry the Team-ID prefix
-	     (TH593VRB6W.…). A sandboxed member of the same group — the widget, later — uses the plain
-	     `group.` form instead. Get the form wrong and
-	     containerURL(forSecurityApplicationGroupIdentifier:) returns nil with no diagnostic. -->
+	     The group id carries the Team-ID prefix (TH593VRB6W.…). A shared App Group requires the
+	     identical identifier on every member, sandboxed or not — PensieveWidget.entitlements uses
+	     this same TH593VRB6W-prefixed string, not the plain `group.` form. Whether a sandboxed
+	     macOS app extension actually accepts the Team-ID-prefixed form is not yet runtime-verified:
+	     no provisioning profile has been minted for the widget. Get the group id wrong (or
+	     mismatched between the two files) and containerURL(forSecurityApplicationGroupIdentifier:)
+	     returns nil with no diagnostic. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>TH593VRB6W.me.mazetti.pensieve</string>

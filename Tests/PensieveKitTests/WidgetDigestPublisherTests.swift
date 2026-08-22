@@ -25,10 +25,13 @@ private func seedProject(_ database: any DatabaseWriter, path: String, context: 
   return node
 }
 
+/// Fixture names are chosen so alphabetical order OPPOSES score order (`aaa-quiet` sorts before
+/// `zzz-busy`, but `zzz-busy`'s 5 open ends score higher) — otherwise this test cannot tell rank
+/// order apart from name order.
 @Test func publishWritesADecodableDigestOrderedByRank() throws {
   let database = try openCanonicalDatabase(at: tempURL("widget-publish"))
-  _ = try seedProject(database, path: "/p/quiet", context: nil, openLooseEnds: 0)
-  let busy = try seedProject(database, path: "/p/busy", context: nil, openLooseEnds: 5)
+  let quiet = try seedProject(database, path: "/p/aaa-quiet", context: nil, openLooseEnds: 0)
+  let busy = try seedProject(database, path: "/p/zzz-busy", context: nil, openLooseEnds: 5)
   let destination = tempURL("digest", ext: "json")
 
   try WidgetDigestPublisher.publish(database: database, now: Date(),
@@ -36,8 +39,33 @@ private func seedProject(_ database: any DatabaseWriter, path: String, context: 
 
   let digest = try #require(WidgetDigest.read(from: destination))
   #expect(digest.schemaVersion == WidgetDigest.currentSchemaVersion)
-  #expect(digest.items.first?.nodeID == busy.id)   // ranking is NextQueries', not ours
+  #expect(digest.items.count == 2)
+  #expect(digest.items.map(\.nodeID) == [busy.id, quiet.id])   // ranking is NextQueries', not ours
   #expect(digest.items.first?.openLooseEnds == 5)
+}
+
+/// The widget must apply `isActionable` like the other three "what's next" surfaces
+/// (`SmartLists.whatsNext`, `SessionContextQueries.rankedContext`, `pensieve next`) — not raw
+/// `NextQueries.ranked`. A project whose loose ends are all resolved to `done` has `openLooseEnds
+/// == 0` and `closedLooseEnds > 0` (the earned "finished" case, not "never measured"), so long
+/// dormancy alone could otherwise rank it above an actively-worked project and the widget would show
+/// it first, labelled "0 open" — a different answer than every other What's Next surface gives.
+@Test func publishExcludesAFinishedProjectButKeepsAnActionableOne() throws {
+  let database = try openCanonicalDatabase(at: tempURL("widget-actionable"))
+  let finished = try seedProject(database, path: "/p/finished", context: nil, openLooseEnds: 2)
+  try database.write { database in
+    try LooseEnd.where { $0.nodeID.eq(finished.id) }
+      .update { $0.status = #bind(LooseEndStatus.done) }.execute(database)
+  }
+  let actionable = try seedProject(database, path: "/p/actionable", context: nil, openLooseEnds: 1)
+  let destination = tempURL("digest-actionable", ext: "json")
+
+  try WidgetDigestPublisher.publish(database: database, now: Date(),
+                                    activeContext: "", to: destination)
+
+  let digest = try #require(WidgetDigest.read(from: destination))
+  #expect(!digest.items.contains { $0.nodeID == finished.id })
+  #expect(digest.items.contains { $0.nodeID == actionable.id })
 }
 
 /// The widget must agree with the window, the menu bar and Spotlight. It cannot read the app's
@@ -72,14 +100,20 @@ private func seedProject(_ database: any DatabaseWriter, path: String, context: 
 }
 
 /// A publish failure must never propagate: this runs inside a sync pass and inside a UI refresh.
+/// Pointed at an unwritable path via `publishQuietly`'s `to:` seam — never the real App Group
+/// container, which `make test` would otherwise overwrite with a fabricated digest.
 @Test func publishQuietlySwallowsAnUnwritableDestination() throws {
   let database = try openCanonicalDatabase(at: tempURL("widget-quiet"))
   _ = try seedProject(database, path: "/p/x", context: nil, openLooseEnds: 1)
-  // Directly exercising the throwing form proves the error is real...
+  let destination = URL(fileURLWithPath: "/dev/null/nope/digest.json")
+
+  // Directly exercising the throwing form proves the destination really is unwritable...
   #expect(throws: (any Error).self) {
     try WidgetDigestPublisher.publish(database: database, now: Date(), activeContext: "",
-                                      to: URL(fileURLWithPath: "/dev/null/nope/digest.json"))
+                                      to: destination)
   }
-  // ...and the quiet form must not rethrow it.
-  WidgetDigestPublisher.publishQuietly(database: database)
+  // ...and the quiet form must swallow that same failure rather than rethrow it, and must leave
+  // nothing behind at the destination it failed to reach.
+  WidgetDigestPublisher.publishQuietly(database: database, to: destination)
+  #expect(!FileManager.default.fileExists(atPath: destination.path))
 }

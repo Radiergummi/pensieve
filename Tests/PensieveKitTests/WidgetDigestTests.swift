@@ -53,3 +53,10 @@ private func makeItem(_ name: String, open: Int = 1) -> WidgetDigest.Item {
   try Data("not json".utf8).write(to: url)
   #expect(WidgetDigest.read(from: url) == nil)
 }
+
+/// An absent file is the widget's common case — the app just hasn't published yet, or ever. Its
+/// only crash guard is "never throws into a timeline provider," so this is the case that matters most.
+@Test func absentFileReadsAsNil() {
+  let url = tempURL("widget-digest-absent", ext: "json")
+  #expect(WidgetDigest.read(from: url) == nil)
+}

@@ -32,9 +32,19 @@
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Pensieve aktualisieren" } }
       }
     },
+    "Which projects to pick up." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Welche Projekte als Nächstes." } }
+      }
+    },
     "What's Next" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Als Nächstes" } }
+      }
+    },
+    "What's Next · %@" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Als Nächstes · %@" } }
       }
     }
   }
