@@ -32,6 +32,7 @@ Pensieve logs to the macOS unified log with subsystem `me.mazetti.pensieve`. Mes
 | `llm` | `CloudLLMProvider`, `FoundationModelsProvider`, `ClaudeCLIProvider` | Prompt dispatched (length, provider kind), completion received, HTTP errors, timeouts |
 | `discovery` | `SourceScanner`, `TranscriptDiscovery` | Candidates found, sessions spooled |
 | `app` | `AppModel` lifecycle | App start (store paths), drain/refresh triggers, watcher fires, focus context changes, provider rebuilds |
+| `widget` | `WidgetDigestPublisher.publishQuietly` | The ONLY signal a widget-digest publish failed. `publishQuietly` swallows every error by contract, so it can never surface as a failed sync or a UI error — if the widget looks stale, this category is where the reason is |
 
 ### Log levels
 
@@ -154,10 +155,43 @@ tail -50 ~/Library/Logs/Pensieve/sync.log
 log show --predicate 'subsystem == "me.mazetti.pensieve" AND process == "PensieveSyncAgent"' --last 1h --info
 ```
 
+### "The widget shows nothing, or stale data"
+
+The digest is a file, so start there rather than in the log:
+
+```bash
+# Does it exist, how old is it, and does it hold REAL project names?
+D=~/Library/Group\ Containers/TH593VRB6W.me.mazetti.pensieve/widget-digest.json
+stat -f "%Sm  %z bytes" "$D" && plutil -p "$D"
+```
+
+- **File missing** → nobody has published. The widget renders "Open Pensieve to get started", which is
+  correct behaviour, not a bug. Launch the app, or wait for a sync-agent pass.
+- **File present but old** → the widget labels it "as of HH:MM" by design. Check whether the agent is
+  alive (`launchctl print gui/$UID/me.mazetti.pensieve.sync`) — a dead agent means the 300 s floor is
+  gone and only the app republishes.
+- **File present and fresh, widget still wrong** → check the publish actually succeeded. `publishQuietly`
+  swallows every error by contract, so a failure appears NOWHERE except this category:
+
+```bash
+log show --predicate 'subsystem == "me.mazetti.pensieve" AND category == "widget"' --last 2h --info
+```
+
+- **Widget shows "Open Pensieve to get started" while the file plainly exists** → the sandbox cannot see
+  it. That is the App Group entitlement, not the digest: `secd`/`trustd` log
+  `Entitlement com.apple.security.application-groups=(…) is ignored because of invalid application
+  signature or incorrect provisioning profile` when no provisioning profile has been minted. The app is
+  unaffected because it is not sandboxed and writes the path directly — which is exactly why this failure
+  looks like "the widget is broken" rather than "signing is incomplete".
+
+```bash
+log show --predicate 'eventMessage CONTAINS "application-groups"' --last 10m --style syslog
+```
+
 ## Source code
 
 | File | Role |
 |------|------|
-| `Sources/PensieveKit/Support/Log.swift` | `enum Log` — 5 category loggers (internal to PensieveKit) |
+| `Sources/PensieveKit/Support/Log.swift` | `enum Log` — 8 category loggers (internal to PensieveKit): sync, extraction, llm, ingest, discovery, semantic, search, widget |
 | `Sources/PensieveApp/AppLog.swift` | `enum AppLog` — app-target `app` category logger |
 | `Sources/PensieveApp/DiagnosticsCollector.swift` | MetricKit subscriber, JSON writer, retention pruner |

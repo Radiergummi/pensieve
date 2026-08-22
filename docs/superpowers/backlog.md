@@ -57,7 +57,12 @@ is same-device, CloudKit is cross-device. Both detailed under "Widgets" below.
 
 **Tier 3 — Parked, trigger-gated**
 - Transcript rendering siblings — rich code blocks (syntax + DOT/Mermaid), Writing Tools on loose ends.
-- Widgets — **half-unblocked 2026-08-21**: the App Group entitlement signs but `secd` ignores it for want of a provisioning profile, so the sandboxed half is unproven. Container shape is decided (publish a digest, do not move the store). Needs the profile resolved, then a brainstorm.
+- Widgets — **BUILT 2026-08-22** on `widget-whats-next` (spec + plan under `docs/superpowers/`). A What's
+  Next widget: app and sync agent both publish a versioned JSON digest into the App Group container; a
+  sandboxed extension renders it. The canonical store deliberately does NOT move. **Two things remain
+  unverified and neither is code:** the App Group entitlement still has no provisioning profile (only an
+  interactive Xcode build can mint one), so the widget has never been *seen* rendering; and the sync
+  agent's publish call, though reviewed, was never observed completing.
 - Spike: statistical theme discovery across strands (`NLEmbedding`).
 - Talk to the system, **stage 2** — the conversational agent (stage 1 shipped 2026-08-13).
 - Forks as first-class — the capture backend; the long pole gating app slice 6.
@@ -1207,6 +1212,47 @@ readability — role bubbles, XML-tag callouts, heading type scale) SHIPPED 2026
 ---
 
 ## Widgets — DEFERRED (2026-07-08), UNBLOCKED (2026-08-21): App Groups provisions
+
+**BUILT 2026-08-22 on branch `widget-whats-next`.** Spec:
+`specs/2026-08-22-widgets-design.md`. Plan: `plans/2026-08-22-widgets.md`. Six tasks, each
+subagent-implemented and reviewed, plus a whole-branch review and one fix wave.
+
+What shipped: `WidgetDigest` (versioned Codable DTO) + a tested `presentation(for:now:)` with four states;
+`WidgetDigestPublisher` publishing a Focus-filtered digest atomically, called from BOTH the sync agent
+(so the widget is right with the app closed) and the app (for immediacy, plus
+`WidgetCenter.reloadAllTimelines()`); `PensievePaths.groupContainerDirectory()` as the single container
+resolution; a sandboxed `PensieveWidget` app-extension rendering small + medium families with
+`pensieve://` deep links and German chrome. `MARKETING_VERSION` and the Focus defaults key were each
+hoisted to one definition on the way.
+
+**Two things the final review caught that six clean per-task reviews could not**, both cross-commit and
+both worth remembering:
+1. *A unit test wrote to the LIVE App Group container* — `publishQuietly` had no destination seam, so
+   `make test` replaced the real digest (8 real projects) with a fabricated one. Exactly the class of the
+   `PENSIEVE_DB` index-scoping lesson. It was ALSO vacuous: the write succeeded, so the swallow branch
+   never ran and the test would have passed with `try!`. Fixed by adding `to:` and pointing the test at
+   an unwritable path; mutation-verified.
+2. *The widget answered a different question than every other "what's next" surface.* The publisher
+   called `NextQueries.ranked` raw, while `SmartLists`, `SessionContextQueries` and the CLI all apply
+   `.filter(\.isActionable)`. A finished-but-dormant project could therefore rank FIRST in the widget,
+   labelled "0 open", and on `systemSmall` be the only row — while the app's own list excluded it. This
+   is the `SearchHitResolver`/`FindMatcher` drift pattern, caught one commit old. Fixed, with a
+   regression test that seeds the *earned-finished* state (`openLooseEnds == 0` AND
+   `closedLooseEnds > 0`) rather than the "never measured" state, which would have been vacuous.
+
+**Still unverified, and neither is a code defect:**
+- **No provisioning profile exists**, so `secd` still ignores the App Group entitlement and the widget has
+  never been observed rendering. Only an interactive Xcode build can mint one (no App Store Connect key,
+  no Xcode session token ⇒ no headless path). Until then the sandboxed half — including whether a
+  sandboxed macOS extension accepts the Team-ID-prefixed group id at all — is untested. If it rejects it,
+  the fix is one constant plus two entitlements files, but the registered portal identifier may not be
+  deletable.
+- **The sync agent's publish was never observed completing.** Reviewed at `PensieveSyncAgent.swift:32-34`
+  and identical to the proven app path, but each `make run` re-registers the agent and killed the
+  kickstarted pass. Re-baseline the digest mtime and wait for one `sync.log` line to confirm.
+
+Deferred by design: `systemLarge`, a configurable widget with a node picker (needs an `AppIntent` plus a
+published node list), Lock Screen / Control Center surfaces.
 
 Attempted to pick up Widgets (the first *second process*). Hit a hard prerequisite during brainstorming and
 deferred with the user's agreement.
