@@ -98,7 +98,7 @@ import Foundation
 @Test func groupContainerAndDigestPathsAreStable() {
   let home = PensievePaths.homeDirectory().path
   #expect(PensievePaths.groupContainerDirectory().path
-          == home + "/Library/Group Containers/TH593VRB6W.me.mazetti.pensieve")
+          == home + "/Library/Group Containers/group.me.mazetti.pensieve")
   #expect(PensievePaths.widgetDigestURL().path
           == PensievePaths.groupContainerDirectory().path + "/widget-digest.json")
 }

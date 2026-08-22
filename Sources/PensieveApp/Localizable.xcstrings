@@ -512,17 +512,6 @@
         }
       }
     },
-    "Change Type" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Typ ändern"
-          }
-        }
-      }
-    },
     "Claude" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -530,16 +519,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Claude"
-          }
-        }
-      }
-    },
-    "claude -p" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "claude -p"
           }
         }
       }
@@ -1031,17 +1010,6 @@
         }
       }
     },
-    "Emoji" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Emoji"
-          }
-        }
-      }
-    },
     "Enabled" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1137,16 +1105,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rückwärts suchen"
-          }
-        }
-      }
-    },
-    "Foundation Models" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Foundation Models"
           }
         }
       }
@@ -1361,17 +1319,6 @@
         }
       }
     },
-    "Inspector" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inspektor"
-          }
-        }
-      }
-    },
     "Install command-line tool" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1576,6 +1523,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dropped"
+          }
+        }
+      }
+    },
+    "List" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liste"
+          }
+        }
+      }
+    },
+    "Loose End" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loses Ende"
           }
         }
       }
@@ -1846,17 +1815,6 @@
         }
       }
     },
-    "New Child" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neues Unterelement"
-          }
-        }
-      }
-    },
     "New Child…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1981,6 +1939,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "None open"
+          }
+        }
+      }
+    },
+    "Node" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knoten"
           }
         }
       }
@@ -2151,6 +2120,28 @@
         }
       }
     },
+    "Open Loose End" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loses Ende öffnen"
+          }
+        }
+      }
+    },
+    "Open Node" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knoten öffnen"
+          }
+        }
+      }
+    },
     "Open Login Items Settings" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2239,17 +2230,6 @@
         }
       }
     },
-    "Pick a loose end to see its source." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ein loses Ende auswählen, um die Quelle zu sehen."
-          }
-        }
-      }
-    },
     "Picks the best on-device option — Foundation Models when available, otherwise the Claude CLI." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2268,17 +2248,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verweist woanders hin"
-          }
-        }
-      }
-    },
-    "Prepare translation" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung vorbereiten"
           }
         }
       }
@@ -2323,17 +2292,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Projekte"
-          }
-        }
-      }
-    },
-    "Provenance" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Herkunft"
           }
         }
       }
@@ -2450,17 +2408,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "rename"
-          }
-        }
-      }
-    },
-    "Rename" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Umbenennen"
           }
         }
       }
@@ -2631,17 +2578,6 @@
         }
       }
     },
-    "Select a loose end" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loses Ende auswählen"
-          }
-        }
-      }
-    },
     "Select a project" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2783,6 +2719,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Arbeit anzeigen"
+          }
+        }
+      }
+    },
+    "Show Pensieve List" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve-Liste anzeigen"
           }
         }
       }
@@ -2945,23 +2892,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Symbol"
-          }
-        }
-      }
-    },
-    "Sync daemon" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sync-Dienst"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sync daemon"
           }
         }
       }

@@ -7,10 +7,13 @@
 	     this target opts in. Do not "reconcile" the two files; the difference is deliberate. -->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
-	<!-- The only way this sandbox can see the digest the app publishes. -->
+	<!-- The only way this sandbox can see the digest the app publishes, and the one place the
+	     entitlement actually has to be honoured — which needs a provisioning profile carrying this
+	     `group.`-prefixed identifier. Must match Pensieve.entitlements and
+	     PensievePaths.appGroupIdentifier character-for-character. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>TH593VRB6W.me.mazetti.pensieve</string>
+		<string>group.me.mazetti.pensieve</string>
 	</array>
 </dict>
 </plist>

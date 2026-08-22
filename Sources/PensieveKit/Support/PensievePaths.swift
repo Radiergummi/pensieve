@@ -121,9 +121,12 @@ public enum PensievePaths {
     homeDirectory().appendingPathComponent(".local/bin/pensieve")
   }
 
-  /// The App Group. Team-ID-prefixed on purpose: an App Group is same-device, so a future iOS
-  /// companion gets its own container regardless and a `group.`-prefixed name buys nothing here.
-  public static let appGroupIdentifier = "TH593VRB6W.me.mazetti.pensieve"
+  /// The App Group. The `group.` prefix is not cosmetic: it is the only form Apple's Developer
+  /// portal accepts when registering an App Group, and that registration is what lets Xcode mint the
+  /// Mac Development provisioning profile. Without a profile `secd` ignores the entitlement outright,
+  /// which costs nothing here (unsandboxed, writes the path directly) but leaves the sandboxed widget
+  /// with no container at all. Team-ID-prefixed forms work only for signing that needs no profile.
+  public static let appGroupIdentifier = "group.me.mazetti.pensieve"
 
   /// ONE resolution for every process. The sandboxed widget must ask the system; the sync agent and
   /// the CLI carry no entitlement and fall back to construction. Measured: for an unsandboxed
