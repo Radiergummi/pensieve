@@ -173,6 +173,10 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_ALLOWED: "YES"
         CODE_SIGNING_REQUIRED: "YES"
+        # The agent writes the widget digest into the App Group container. Without the entitlement
+        # `tccd` treats that as another app's data and blocks the write on a consent prompt no
+        # background agent can answer — see PensieveSyncAgent.entitlements.
+        CODE_SIGN_ENTITLEMENTS: PensieveSyncAgent.entitlements
         SWIFT_VERSION: "6.0"
   PensieveCLI:
     type: tool

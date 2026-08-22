@@ -6,6 +6,12 @@
 	     and hardened runtime. Pensieve reads ~/Library/Application Support directly and shells out
 	     to `claude -p`; sandboxing it would break both.
 
+	     This file once claimed the CLI and the sync agent need no entitlement of their own because
+	     they are unsandboxed and reach the container by path. That was WRONG for a real App Group
+	     container, and cost a hung agent: see PensieveSyncAgent.entitlements. Any process that
+	     WRITES the group container needs the group in its own signature. The CLI still carries none
+	     because it only reads the canonical store, never the container.
+
 	     The group id uses the `group.` prefix, NOT the Team-ID-prefixed form: only `group.…` can be
 	     registered as an App Group in Apple's Developer portal, and that registration is the
 	     prerequisite for the Mac Development provisioning profile. Until a profile is embedded,
@@ -13,8 +19,8 @@
 	     widget gets no container — this app does not notice, because unsandboxed processes get no
 	     entitlement check and write the path directly.
 
-	     PensieveWidget.entitlements MUST carry this identical string. A shared App Group requires the
-	     same identifier on every member; mismatch them and
+	     PensieveWidget.entitlements and PensieveSyncAgent.entitlements MUST carry this identical
+	     string. A shared App Group requires the same identifier on every member; mismatch them and
 	     containerURL(forSecurityApplicationGroupIdentifier:) returns nil in the sandboxed member with
 	     no diagnostic. Keep both files and PensievePaths.appGroupIdentifier in lockstep. -->
 	<key>com.apple.security.application-groups</key>

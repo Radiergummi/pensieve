@@ -1266,9 +1266,33 @@ proves nothing here — only decoding `Contents/embedded.provisionprofile` does:
 `security cms -D -i … | PlistBuddy -c 'Print :Entitlements'`.
 
 **Still unverified, and not a code defect:**
-- **The sync agent's publish was never observed completing.** Reviewed at `PensieveSyncAgent.swift:32-34`
-  and identical to the proven app path, but each `make run` re-registers the agent and killed the
-  kickstarted pass. Re-baseline the digest mtime and wait for one `sync.log` line to confirm.
+- **✅ RESOLVED 2026-08-22 — the sync agent's publish was not merely unobserved, it HUNG.** It was never
+  a "we didn't get around to watching it" item. Diagnosed by quitting the app (making the agent the
+  only possible writer), deleting the digest, and kickstarting: the cycle completed
+  (`Sync complete: ingested=0 …`) and then blocked forever. `sample` on the stuck process:
+  `PensieveSyncAgent.swift:34` → `WidgetDigestPublisher.publish` → `Data.write(to:)` →
+  `createProtectedTemporaryFile` → `open` — 0% CPU, indefinitely. And `tccd` said why:
+  `Handling access request to kTCCServiceSystemPolicyAppData, Resp:{identifier=me.mazetti.pensieve.sync}`
+  … `AUTHREQ_PROMPTING` … `display_prompt: called`.
+
+  **Cause: the agent carried no App Group entitlement.** `Pensieve.entitlements` asserted the CLI and
+  agent needed none because they are unsandboxed and reach the container by path. True of a
+  Team-ID-style directory; **false of a real provisioned App Group container**, which is TCC-protected.
+  Without the group in its own signature the agent's write is "reaching into another app's data", TCC
+  raises a consent prompt, and a launchd background agent can never answer one — so the write blocks
+  and the digest is never published *exactly when the app is closed*, the one case the widget exists
+  for. Note this is a consequence of moving to the `group.` form: the failure did not exist in this
+  shape before the container became genuinely OS-managed.
+
+  **Fix:** `PensieveSyncAgent.entitlements` (App Group only — no sandbox key; the agent must stay
+  unsandboxed to read the support dir and shell out to git/`claude`), wired via
+  `CODE_SIGN_ENTITLEMENTS` on the target. No provisioning profile is needed and none can be embedded
+  — it is a bare Mach-O with an `__info_plist` section, not a bundle — and the build does not ask for
+  one. **Verified with the app down:** cycle start 13:28:18 → complete 13:29:19 → digest written
+  13:29:20 (805 bytes) → `last exit code = 0`, a new `sync.log` line (so the append after the publish
+  is reached), and zero TCC activity. The CLI still carries no entitlement, correctly: it reads the
+  canonical store and never touches the container. **Any future process that WRITES the group
+  container needs the group in its own signature.**
 
 Deferred by design: `systemLarge`, a configurable widget with a node picker (needs an `AppIntent` plus a
 published node list), Lock Screen / Control Center surfaces.

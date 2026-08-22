@@ -80,7 +80,8 @@ UITEST_SOURCES := $(shell find Tests/PensieveUITests -type f -name '*.swift')
 # The entitlements files live at the repo root, outside every find root above, so an edit to one
 # used to be invisible to this cache: `make build` reported success while the product on disk still
 # carried the previous App Group id. They are signing inputs, so they belong here.
-BUILD_SOURCES := Pensieve.entitlements PensieveWidget.entitlements $(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
+BUILD_SOURCES := Pensieve.entitlements PensieveWidget.entitlements PensieveSyncAgent.entitlements \
+	$(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
 
 .PHONY: help all test lint generate build cli uiprobe smoke uitest install run clean
 

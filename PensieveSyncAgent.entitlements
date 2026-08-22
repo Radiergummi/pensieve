@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The agent is NOT sandboxed (it reads ~/Library/Application Support and shells out to git and
+	     `claude`), so unlike PensieveWidget.entitlements this file carries no app-sandbox key.
+
+	     It still needs the App Group, which the earlier "unsandboxed processes reach the directory by
+	     path, so they need no entitlement" reasoning got wrong. That held for a Team-ID-style
+	     directory. A real provisioned App Group container is TCC-protected: without this entitlement
+	     `tccd` classifies the write as reaching into another app's data
+	     (kTCCServiceSystemPolicyAppData), tries to raise a consent prompt, and a launchd background
+	     agent can never answer one — so `Data.write` blocks in `open()` forever, the digest is never
+	     published, and the widget silently stops updating whenever the app is closed. That is the
+	     one case the widget exists for.
+
+	     Must match Pensieve.entitlements and PensievePaths.appGroupIdentifier
+	     character-for-character. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.me.mazetti.pensieve</string>
+	</array>
+</dict>
+</plist>
