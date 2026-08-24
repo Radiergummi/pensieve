@@ -65,7 +65,7 @@ cd /Users/moritz/Projects/pensieve/.claude/worktrees/transcript-reading
 grep -n 'FontSize(' Sources/PensieveApp/TranscriptSegmentView.swift
 ```
 
-Expected: `FontSize(14)` on line 172 (the body, **leave it alone**), then `FontSize(22)`, `FontSize(18)`, `FontSize(16)`, `FontSize(15)`, `FontSize(14)`, `FontSize(14)` for h1–h6.
+Expected: `FontSize(14)` on line 176 (the body, **leave it alone**), then `FontSize(22)`, `FontSize(18)`, `FontSize(16)`, `FontSize(15)`, `FontSize(14)`, `FontSize(14)` for h1–h6.
 
 - [ ] **Step 2: Change h1 to 15 and h2–h4 to 14**
 
@@ -510,10 +510,10 @@ Remove the whole `"captured"` object from `Sources/PensieveApp/Localizable.xcstr
 - [ ] **Step 5: Confirm the JSON is still valid and the test goes green**
 
 ```bash
-plutil -lint Sources/PensieveApp/Localizable.xcstrings
+jq . Sources/PensieveApp/Localizable.xcstrings > /dev/null && echo "valid JSON"
 make test FILTER=everyCatalogKeyIsRenderedBySomeLiteral
 ```
-Expected: `OK` from `plutil`, then PASS.
+Expected: `valid JSON`, then PASS. (`plutil -lint` does NOT work on `.xcstrings` — it rejects the file outright, even renamed to `.json`. `jq` is installed at `/opt/homebrew/bin/jq`.)
 
 - [ ] **Step 6: Full suite, lint, build**
 
