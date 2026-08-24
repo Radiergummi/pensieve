@@ -7,11 +7,24 @@ import SQLiteData
 private let compactionMarker = "\"isCompactSummary\":true"
 
 public enum CorpusBuilder {
-  /// The task folders the corpus is pooled, written and reloaded under. One list, because
-  /// `TaskRegistry.consistency` checks the registry against it — a registered task with no pool here
-  /// scores on zero items and reads as if it passed. `decodeFrozenItem` must carry a case for every
-  /// entry: a folder listed here with no decoder loads nothing, just as silently.
-  public static let taskFolders = ["extraction", "narration", "description"]
+  /// The task folders the corpus is pooled, written and reloaded under.
+  ///
+  /// An enum rather than a `[String]` because the comment this replaced named a hazard it could not
+  /// enforce: *"`decodeFrozenItem` must carry a case for every entry: a folder listed here with no
+  /// decoder loads nothing, just as silently."* The folder names were spelled three times — this
+  /// list, `decodeFrozenItem`'s switch, and `taskFolder(for:)`'s switch — with a `default: return nil`
+  /// absorbing any disagreement. Adding a fourth task therefore compiled, wrote its items to disk,
+  /// and loaded **zero** of them back, while `TaskRegistry.consistency` reported the registry as
+  /// consistent because the folder *was* listed.
+  ///
+  /// Switching over this enum exhaustively (no `default:`) turns that into a compile error.
+  public enum Task: String, CaseIterable, Sendable {
+    case extraction, narration, description
+  }
+
+  /// The folder names, for the callers that genuinely want strings (`TaskRegistry.consistency`
+  /// compares them against task ids, which are strings on the `EvalTask` protocol).
+  public static let taskFolders = Task.allCases.map(\.rawValue)
 
   /// Reads the canonical store (+ transcripts/git) and produces a frozen, stratified corpus for
   /// all tasks. Read-only against the DB; never crashes on an empty store (0 nodes/sources ⇒
@@ -42,13 +55,13 @@ public enum CorpusBuilder {
   /// first) and the manifest to `<directory>/manifest.json`.
   public static func write(_ items: [CorpusItem], manifest: CorpusManifest, to directory: URL) throws {
     let fileManager = FileManager.default
-    for task in taskFolders {
-      let taskDir = directory.appendingPathComponent(task)
+    for task in Task.allCases {
+      let taskDir = directory.appendingPathComponent(task.rawValue)
       try? fileManager.removeItem(at: taskDir)
       try fileManager.createDirectory(at: taskDir, withIntermediateDirectories: true)
     }
     for item in items {
-      let taskDir = directory.appendingPathComponent(taskFolder(for: item))
+      let taskDir = directory.appendingPathComponent(taskFolder(for: item).rawValue)
       let data = try serialize(item)
       try data.write(to: taskDir.appendingPathComponent("\(item.id).json"))
     }
@@ -62,8 +75,8 @@ public enum CorpusBuilder {
   public static func loadFrozen(from directory: URL) -> [CorpusItem] {
     let fileManager = FileManager.default
     var items: [CorpusItem] = []
-    for task in taskFolders {
-      let taskDir = directory.appendingPathComponent(task)
+    for task in Task.allCases {
+      let taskDir = directory.appendingPathComponent(task.rawValue)
       guard let files = try? fileManager.contentsOfDirectory(at: taskDir, includingPropertiesForKeys: nil) else { continue }
       for file in files where file.pathExtension == "json" {
         guard let data = try? Data(contentsOf: file) else { continue }
@@ -73,19 +86,19 @@ public enum CorpusBuilder {
     return items
   }
 
-  private static func decodeFrozenItem(task: String, data: Data) -> CorpusItem? {
+  /// Exhaustive over `Task` on purpose — no `default:`. A new corpus task is now a compile error
+  /// here rather than a folder whose items silently fail to load.
+  private static func decodeFrozenItem(task: Task, data: Data) -> CorpusItem? {
     switch task {
-    case "extraction":
+    case .extraction:
       guard let extractionItem = try? JSONDecoder().decode(ExtractionCorpusItem.self, from: data) else { return nil }
       return .extraction(extractionItem)
-    case "narration":
+    case .narration:
       guard let narrationItem = try? JSONDecoder().decode(NarrationCorpusItem.self, from: data) else { return nil }
       return .narration(narrationItem)
-    case "description":
+    case .description:
       guard let descriptionItem = try? JSONDecoder().decode(DescriptionCorpusItem.self, from: data) else { return nil }
       return .description(descriptionItem)
-    default:
-      return nil
     }
   }
 
@@ -177,11 +190,13 @@ public enum CorpusBuilder {
 
   // MARK: - Serialization
 
-  private static func taskFolder(for item: CorpusItem) -> String {
+  /// The third site that used to spell the folder names. Returns the `Task` so the name itself is
+  /// stated once, on the enum.
+  private static func taskFolder(for item: CorpusItem) -> Task {
     switch item {
-    case .extraction: return "extraction"
-    case .narration: return "narration"
-    case .description: return "description"
+    case .extraction: return .extraction
+    case .narration: return .narration
+    case .description: return .description
     }
   }
 

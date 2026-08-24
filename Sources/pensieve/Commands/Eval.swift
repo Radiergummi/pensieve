@@ -205,8 +205,12 @@ struct Eval: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "gold", abstract: "Label recall + grounding for judge calibration.")
     @Argument var task: String
     func run() async throws {
-      guard task == "extraction" else {
-        print("Gold labeling is only implemented for the 'extraction' task.")
+      // Compared against the enum case, not the bare literal `"extraction"`. It is only a
+      // user-supplied argument check rather than a trust gate, so nothing breaks today — but it is
+      // the same string that `Scorecard`'s fabrication gate used to key off (finding 1.17), and a
+      // renamed task id would leave this silently refusing the task it is meant to accept.
+      guard task == CorpusBuilder.Task.extraction.rawValue else {
+        print("Gold labeling is only implemented for the '\(CorpusBuilder.Task.extraction.rawValue)' task.")
         return
       }
       let extractionItems: [ExtractionCorpusItem] = CorpusBuilder.loadFrozen(from: EvalPaths.corpusDirectory()).compactMap {

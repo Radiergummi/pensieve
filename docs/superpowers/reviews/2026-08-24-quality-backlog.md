@@ -24,6 +24,7 @@ zeroing real terms typed alongside it. But it does not make emoji *findable*.
 FTS5 tables — which needs a schema-version bump and a **full reindex**, and would change ranking.
 Out of scope for a fix sweep; flagged rather than chosen.
 
+-> what would be the effect of either, long term?
 
 ### Q2. What should an unparseable spool timestamp do? (finding 2.36)
 `CaptureSpool.pending()` substitutes `Date()` when `ts` will not parse. The substitution is now
@@ -35,13 +36,7 @@ row. But "now" does make a corrupt row look like it just happened.
 `append` time so a malformed timestamp can never enter the spool. Rejecting at append touches the
 sacred path, which is why the fix sweep did not choose.
 
-### Q3. Re-sign the commit range before pushing — RESOLVED 2026-08-24
-`git commit` failed twice with `error: Couldn't get agent socket?` — the Secretive SecretAgent socket
-exists at `$SSH_AUTH_SOCK` but would not authorize non-interactively. **The fix-sweep commits on
-`quality-fix-sweep` are therefore UNSIGNED**, and `main` requires verified signatures.
-Re-signed once the agent was unlocked, by rebasing onto `638bfe5` (NOT `main`) so the in-flight fix
-agents' base commit was not rewritten. All sweep commits now verify `G`. Original note:
-`git rebase --exec 'git commit --amend --no-edit -S' main`, with the agent unlocked.
+-> rejecting at append time sounds like the correct thing to do here, if it doesn't introduce overhead.
 
 ### Q4. Merge the 9 phantom project nodes (finding 2.1)
 The code path that minted them is fixed, but the existing rows are still in the live store: 9 phantom
@@ -208,7 +203,7 @@ invoked, so the judge every rubric score depends on is unvalidated. Deliberately
 product decision. **Decision:** should a sweep spend a judge pass per gold-labelled extraction item to
 compute judge↔human agreement, and what agreement floor should invalidate the sweep?
 
-### D6. `Query/SearchHitResolver.swift:26-27`, `:40-43` still describe a live vector engine
+### D6. SearchHitResolver doc comment — DONE 2026-08-24
 Doc comment only; the engine was removed. One-line fix, left because the file belonged to another
 agent's scope at the time.
 
@@ -218,12 +213,12 @@ agent's scope at the time.
 lines — the file cap — and needed comment trimming to absorb its changes. **The next change to either
 forces a split.** Worth choosing the seam deliberately rather than under lint pressure.
 
-### D8. `decodeFrozenItem` restates the corpus task folders
+### D8. decodeFrozenItem restates the corpus task folders — DONE 2026-08-24
 `CorpusBuilder.taskFolders` is now the single list, but `decodeFrozenItem`'s `switch` still spells the
 three names with `default: return nil`, so a folder added without a decode case loads nothing
 silently. Not statically checkable as written; noted in a comment.
 
-### D9. `Eval.Gold` keys off the literal `"extraction"` (`Commands/Eval.swift:208`)
+### D9. Eval.Gold keys off the literal "extraction" — DONE 2026-08-24
 Harmless today — it validates a user-supplied subcommand argument, not a trust gate — but it is the
 same literal finding 1.17 was about, and would silently stop matching a renamed task id.
 
@@ -301,3 +296,22 @@ unrelated edit and teach people to bump the token meaninglessly. The real guard 
 `"Briefing"` is not merely missing a catalog key — it is an explicit `allowedMissingKeys: ["Briefing"]`
 entry in `CatalogCoverageTests`, which is why the suite passes today. Adding the key therefore has a
 second half: removing the allowlist entry, or the allowlist keeps hiding the next regression.
+
+## Closed while waiting on the last two waves (2026-08-24)
+
+- **D6 done.** `SearchHitResolver`'s header no longer claims a live vector engine. Rewritten to say
+  why the type still earns its place: text search, the file-path probe and passage search each pick
+  and highlight candidates differently and must still agree on what may surface.
+- **D8 done, and upgraded from a comment to a compile error.** `CorpusBuilder.Task` is now a
+  `String`-raw-valued `CaseIterable` enum; `decodeFrozenItem` switches over it exhaustively with no
+  `default:`. Verified by adding a fourth case and building: `error: switch must be exhaustive`.
+  Previously a new task compiled, wrote its items to disk, loaded **zero** of them back, and
+  `TaskRegistry.consistency` still called the registry consistent because the folder *was* listed.
+- **D9 done.** `Eval.Gold` compares against `CorpusBuilder.Task.extraction.rawValue`.
+- **App Group identifier (finding 1.35) done.** The id lives in Swift once and in three
+  `.entitlements` plists that cannot reference it, so the enforcement point is a test:
+  `everyEntitlementsFileDeclaresTheAppGroupSwiftUses`. Mutation-verified — changing the Swift constant
+  fails against all three files. This failure mode was worth pinning because it is silent and
+  one-sided: every unsandboxed process constructs the container path directly and keeps working,
+  while only the sandboxed widget asks the system using the *entitlement's* string, so the app
+  publishes to one path and the widget reads another with nothing logged as an error.
