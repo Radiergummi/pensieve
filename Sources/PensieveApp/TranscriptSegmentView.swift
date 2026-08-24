@@ -167,9 +167,12 @@ extension View {
       .lineSpacing(4)
   }
 
-  /// The transcript type scale: h1 22 · h2 18 · h3 16 · h4-h6 15/14/14 semibold · body 14/ls 4.
-  /// MarkdownUI's defaults put h1 near 28pt against 14pt body, which reads as shouting in a
-  /// chat transcript. Each heading override keeps `Theme.basic`'s margin (`BlockSequence` derives
+  /// The transcript type scale: h1 15 · h2-h6 14 semibold · body 14 / line-spacing 4. Two heading
+  /// sizes, not six, and deliberately close to body size: a heading inside a QUOTED transcript is
+  /// emphasis within the quote, not document structure. At MarkdownUI's defaults (h1 near 28 against
+  /// 14pt body) it outranked the detail pane's own 13pt section headers, so captured content was the
+  /// second-largest text on screen after the node name.
+  /// Each heading override keeps `Theme.basic`'s margin (`BlockSequence` derives
   /// all inter-block spacing from it — dropping it collapses the space after a heading to zero).
   func transcriptProse() -> some View {
     self
@@ -177,19 +180,19 @@ extension View {
       .lineSpacing(4)
       .markdownBlockStyle(\.heading1) {
         $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
-          .markdownTextStyle { FontSize(22); FontWeight(.semibold) }
+          .markdownTextStyle { FontSize(15); FontWeight(.semibold) }
       }
       .markdownBlockStyle(\.heading2) {
         $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
-          .markdownTextStyle { FontSize(18); FontWeight(.semibold) }
+          .markdownTextStyle { FontSize(14); FontWeight(.semibold) }
       }
       .markdownBlockStyle(\.heading3) {
         $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
-          .markdownTextStyle { FontSize(16); FontWeight(.semibold) }
+          .markdownTextStyle { FontSize(14); FontWeight(.semibold) }
       }
       .markdownBlockStyle(\.heading4) {
         $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
-          .markdownTextStyle { FontSize(15); FontWeight(.semibold) }
+          .markdownTextStyle { FontSize(14); FontWeight(.semibold) }
       }
       .markdownBlockStyle(\.heading5) {
         $0.label.markdownMargin(top: .rem(1), bottom: .rem(0.5))
