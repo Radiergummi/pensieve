@@ -12,7 +12,9 @@ import Testing
 ///
 /// Lives in PensieveKitTests rather than a script so `make test` enforces it with no new build target
 /// — and in Swift, because this repo does not do Python.
-private let repositoryRoot = URL(fileURLWithPath: #filePath)
+/// Internal, not private: `CatalogIntegrityTests` walks the same tree from the same anchor, and a
+/// second copy of this expression is a second thing to get wrong when the suite moves.
+let repositoryRoot = URL(fileURLWithPath: #filePath)
   .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
 /// A localizable literal and a catalog key are compared as SHAPES: every interpolation on one side
@@ -202,7 +204,9 @@ struct CatalogTarget: Sendable {
   let allowedMissingKeys: Set<String>
 }
 
-private let targets = [
+/// Internal, not private: `CatalogIntegrityTests` checks a different set of invariants over exactly
+/// these targets, and two lists of catalogs would drift the moment a third target appears.
+let catalogTargets = [
   CatalogTarget(name: "PensieveApp", sources: "Sources/PensieveApp",
          catalog: "Sources/PensieveApp/Localizable.xcstrings",
          // "Briefing" was allowlisted here rather than keyed, on the reasoning that it is an
@@ -217,7 +221,7 @@ private let targets = [
          allowedDeadKeys: [], allowedMissingKeys: []),
 ]
 
-@Test(arguments: targets)
+@Test(arguments: catalogTargets)
 func everyCatalogKeyIsRenderedBySomeLiteral(target: CatalogTarget) throws {
   let keys = try catalogKeys(at: repositoryRoot.appendingPathComponent(target.catalog))
   // PensieveKit counts too: it is linked by both targets and supplies keys they render through a
@@ -237,7 +241,7 @@ func everyCatalogKeyIsRenderedBySomeLiteral(target: CatalogTarget) throws {
     """)
 }
 
-@Test(arguments: targets)
+@Test(arguments: catalogTargets)
 func everyRenderedLiteralHasACatalogKey(target: CatalogTarget) throws {
   let keys = try catalogKeys(at: repositoryRoot.appendingPathComponent(target.catalog))
   let rendered = localizedShapes(inSourcesUnder: repositoryRoot.appendingPathComponent(target.sources))

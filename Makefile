@@ -49,6 +49,13 @@ CLI = $(PRODUCTS)/pensieve
 UIPROBE = ./.build/uiprobe
 UIPROBE_SOURCES := $(shell find Tools/uiprobe -type f -name '*.swift')
 
+# The String Catalog editor. LOCALIZATION_RULES lives under Tests/ and is compiled into BOTH this
+# tool and the test target: reading project.yml's language lists and counting a catalog's keys as the
+# file spells them are rules the two must agree on, and one file is cheaper than the drift.
+XCSTRINGS = ./.build/xcstrings
+LOCALIZATION_RULES = Tests/PensieveKitTests/LocalizationRules.swift
+XCSTRINGS_SOURCES := $(shell find Tools/xcstrings -type f -name '*.swift') $(LOCALIZATION_RULES)
+
 # SMAppService pins the sync agent's registration to path + cdhash, so the app
 # only works as a background-sync host from here — not from DerivedData.
 INSTALLED_APP = /Applications/Pensieve.app
@@ -83,7 +90,7 @@ UITEST_SOURCES := $(shell find Tests/PensieveUITests -type f -name '*.swift')
 BUILD_SOURCES := Pensieve.entitlements PensieveWidget.entitlements PensieveSyncAgent.entitlements \
 	$(shell find Sources SyncAgent icons/Pensieve.icon ! -name '.*')
 
-.PHONY: help all test lint generate build cli uiprobe smoke uitest install run clean
+.PHONY: help all test lint generate build cli uiprobe xcstrings smoke uitest install run clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) \
@@ -110,6 +117,13 @@ generate: $(PBXPROJ) ## Regenerate Pensieve.xcodeproj from project.yml
 build: $(APP_CLI) ## Build Pensieve.app (also builds and embeds the CLI)
 
 cli: $(CLI) ## Build only the embedded pensieve CLI
+
+xcstrings: $(XCSTRINGS) ## Build the String Catalog editor (add/set/remove/rename/audit/fmt)
+
+$(XCSTRINGS): $(XCSTRINGS_SOURCES)
+	@mkdir -p $(dir $@)
+	@swiftc -O $(XCSTRINGS_SOURCES) -o $@
+	@echo "ok: $@"
 
 uiprobe: $(UIPROBE) ## Build the accessibility probe for driving the running app
 

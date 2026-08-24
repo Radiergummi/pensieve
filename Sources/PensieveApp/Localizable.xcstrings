@@ -1,40 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Translate automatically when idle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Automatisch bei Inaktivität übersetzen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Translate automatically when idle"
-          }
-        }
-      }
-    },
-    "Runs after the Mac has been unused for a few minutes, and pauses in Low Power Mode or under heavy load." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Läuft, wenn der Mac einige Minuten unbenutzt war, und pausiert im Stromsparmodus oder bei hoher Auslastung."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Runs after the Mac has been unused for a few minutes, and pauses in Low Power Mode or under heavy load."
-          }
-        }
-      }
-    },
     " · captured %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -52,13 +18,43 @@
         }
       }
     },
-    "·" : {
-      "extractionState" : "manual",
-      "shouldTranslate" : false
-    },
     "%@" : {
       "extractionState" : "manual",
       "shouldTranslate" : false
+    },
+    "%@ will be copied. The old folder is moved to the Bin after verification, and Pensieve relaunches." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ werden kopiert. Der alte Ordner wird nach der Überprüfung in den Papierkorb bewegt, und Pensieve startet neu."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ will be copied. The old folder is moved to the Bin after verification, and Pensieve relaunches."
+          }
+        }
+      }
+    },
+    "%lld Projects" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld Projekte"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$(count)lld Projects"
+          }
+        }
+      }
     },
     "%lld closed" : {
       "extractionState" : "manual",
@@ -101,6 +97,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld Treffer · Transkripte werden durchsucht %2$lld/%3$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld matches · searching transcripts %lld/%lld"
           }
         }
       }
@@ -147,6 +149,12 @@
             "state" : "translated",
             "value" : "%1$lld von %2$lld"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld of %lld"
+          }
         }
       }
     },
@@ -157,6 +165,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld von %2$lld übersetzt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld of %lld translated"
           }
         }
       }
@@ -174,23 +188,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld open"
-          }
-        }
-      }
-    },
-    "%lld Projects" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(count)lld Projekte"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$(count)lld Projects"
           }
         }
       }
@@ -237,6 +234,12 @@
             "state" : "translated",
             "value" : "Eine Datei blockiert den Pfad"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A file is in the way"
+          }
         }
       }
     },
@@ -253,6 +256,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "A personal tool for reloading context across parallel projects. Not a product."
+          }
+        }
+      }
+    },
+    "A sync is running. Try again in a moment." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Synchronisierung läuft. Bitte gleich erneut versuchen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A sync is running. Try again in a moment."
+          }
+        }
+      }
+    },
+    "API Key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schlüssel"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Key"
           }
         }
       }
@@ -282,6 +319,12 @@
             "state" : "translated",
             "value" : "Aktiv"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
         }
       }
     },
@@ -292,6 +335,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktivität"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activity"
           }
         }
       }
@@ -313,6 +362,23 @@
         }
       }
     },
+    "An empty folder already exists there. Remove it first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dort existiert bereits ein leerer Ordner. Bitte zuerst entfernen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An empty folder already exists there. Remove it first."
+          }
+        }
+      }
+    },
     "Anthropic" : {
       "localizations" : {
         "de" : {
@@ -320,33 +386,11 @@
             "state" : "translated",
             "value" : "Anthropic"
           }
-        }
-      }
-    },
-    "API Key" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "API-Schlüssel"
-          }
-        }
-      }
-    },
-    "archive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "archiviert"
-          }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "archive"
+            "value" : "Anthropic"
           }
         }
       }
@@ -359,6 +403,12 @@
             "state" : "translated",
             "value" : "Archivieren"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archive"
+          }
         }
       }
     },
@@ -369,6 +419,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Archiviert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archived"
           }
         }
       }
@@ -381,6 +437,12 @@
             "state" : "translated",
             "value" : "Automatisch"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatic"
+          }
         }
       }
     },
@@ -391,6 +453,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hintergrund-Synchronisierung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Background sync"
           }
         }
       }
@@ -403,6 +471,30 @@
             "state" : "translated",
             "value" : "Basis-URL"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL"
+          }
+        }
+      }
+    },
+    "Briefing" : {
+      "comment" : "The topmost sidebar row. German keeps the English word: 'Briefing' is an established German loanword and reads naturally. Recorded here as a translated value rather than as a test allowlist entry, so the decision lives with the string and the key exists for the next translator.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Briefing"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Briefing"
+          }
         }
       }
     },
@@ -414,22 +506,11 @@
             "state" : "translated",
             "value" : "Suchindex wird erstellt…"
           }
-        }
-      }
-    },
-    "Can’t delete “%@”" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ kann nicht gelöscht werden"
-          }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Can’t delete “%@”"
+            "value" : "Building the search index…"
           }
         }
       }
@@ -441,6 +522,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abbrechen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
           }
         }
       }
@@ -462,6 +549,23 @@
         }
       }
     },
+    "Can’t delete “%@”" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ kann nicht gelöscht werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can’t delete “%@”"
+          }
+        }
+      }
+    },
     "Capture spool" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -479,17 +583,6 @@
         }
       }
     },
-    "capturing" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erfassung läuft"
-          }
-        }
-      }
-    },
     "Caution" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -498,6 +591,46 @@
             "state" : "translated",
             "value" : "Achtung"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caution"
+          }
+        }
+      }
+    },
+    "Choose" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auswählen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose"
+          }
+        }
+      }
+    },
+    "Choose a folder outside Pensieve’s current one." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einen Ordner außerhalb des aktuellen Pensieve-Ordners auswählen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a folder outside Pensieve’s current one."
+          }
         }
       }
     },
@@ -505,6 +638,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude"
+          }
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Claude"
@@ -520,6 +659,12 @@
             "state" : "translated",
             "value" : "Claude CLI (Abonnement)"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude CLI (subscription)"
+          }
         }
       }
     },
@@ -530,6 +675,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Claude-Code-Sitzung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Code Session"
           }
         }
       }
@@ -600,6 +751,12 @@
             "state" : "translated",
             "value" : "Alle losen Enden abschließen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close All Loose Ends"
+          }
         }
       }
     },
@@ -611,6 +768,12 @@
             "state" : "translated",
             "value" : "Alle offenen losen Enden abschließen…"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close all open loose ends…"
+          }
         }
       }
     },
@@ -618,6 +781,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud (API)"
+          }
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cloud (API)"
@@ -650,6 +819,12 @@
             "state" : "translated",
             "value" : "Farbe"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color"
+          }
         }
       }
     },
@@ -660,6 +835,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Befehl"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Command"
           }
         }
       }
@@ -672,17 +853,11 @@
             "state" : "translated",
             "value" : "Befehlszeilenprogramm"
           }
-        }
-      }
-    },
-    "Briefing" : {
-      "comment" : "The topmost sidebar row. German keeps the English word: 'Briefing' is an established German loanword and reads naturally. Recorded here as a translated value rather than as a test allowlist entry, so the decision lives with the string and the key exists for the next translator.",
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Briefing"
+            "value" : "Command-line tool"
           }
         }
       }
@@ -695,6 +870,12 @@
             "state" : "translated",
             "value" : "Abgeschlossen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed"
+          }
         }
       }
     },
@@ -705,6 +886,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Konzept"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Concept"
           }
         }
       }
@@ -717,6 +904,12 @@
             "state" : "translated",
             "value" : "Kontext"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Context"
+          }
         }
       }
     },
@@ -727,6 +920,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Weiter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
           }
         }
       }
@@ -773,22 +972,11 @@
             "state" : "translated",
             "value" : "Anbieter nicht erreichbar. Schlüssel und Basis-URL prüfen."
           }
-        }
-      }
-    },
-    "create" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "erstellt"
-          }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "create"
+            "value" : "Couldn’t reach the provider. Check the key and base URL."
           }
         }
       }
@@ -827,23 +1015,6 @@
         }
       }
     },
-    "delete" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "gelöscht"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "delete"
-          }
-        }
-      }
-    },
     "Delete" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -851,6 +1022,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Löschen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
           }
         }
       }
@@ -897,6 +1074,12 @@
             "state" : "translated",
             "value" : "Löschen…"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete…"
+          }
         }
       }
     },
@@ -925,6 +1108,12 @@
             "state" : "translated",
             "value" : "Bereich"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Domain"
+          }
         }
       }
     },
@@ -935,6 +1124,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fertig"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
           }
         }
       }
@@ -964,6 +1159,12 @@
             "state" : "translated",
             "value" : "Ruhend"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dormant"
+          }
         }
       }
     },
@@ -974,6 +1175,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Herunterladen…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download…"
           }
         }
       }
@@ -986,6 +1193,12 @@
             "state" : "translated",
             "value" : "Verwerfen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop"
+          }
         }
       }
     },
@@ -996,6 +1209,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Knoten bearbeiten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Node"
           }
         }
       }
@@ -1008,6 +1227,12 @@
             "state" : "translated",
             "value" : "Bearbeiten…"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit…"
+          }
         }
       }
     },
@@ -1018,6 +1243,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktiviert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enabled"
           }
         }
       }
@@ -1030,6 +1261,12 @@
             "state" : "translated",
             "value" : "Modelle abrufen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetch models"
+          }
         }
       }
     },
@@ -1040,6 +1277,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wird abgerufen…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetching…"
           }
         }
       }
@@ -1052,6 +1295,12 @@
             "state" : "translated",
             "value" : "Pensieve nach Kontext filtern"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filter Pensieve by Context"
+          }
         }
       }
     },
@@ -1062,6 +1311,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nach Fokus gefiltert · %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtered by Focus · %@"
           }
         }
       }
@@ -1074,16 +1329,11 @@
             "state" : "translated",
             "value" : "Suchen"
           }
-        }
-      }
-    },
-    "Find in this project" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In diesem Projekt suchen"
+            "value" : "Find"
           }
         }
       }
@@ -1096,6 +1346,12 @@
             "state" : "translated",
             "value" : "Weitersuchen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find Next"
+          }
         }
       }
     },
@@ -1107,6 +1363,29 @@
             "state" : "translated",
             "value" : "Rückwärts suchen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find Previous"
+          }
+        }
+      }
+    },
+    "Find in this project" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In diesem Projekt suchen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find in this project"
+          }
         }
       }
     },
@@ -1117,6 +1396,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Foundation Models ist auf diesem Mac nicht verfügbar—stattdessen wird claude -p verwendet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foundation Models isn’t available on this Mac — using claude -p instead."
           }
         }
       }
@@ -1146,6 +1431,12 @@
             "state" : "translated",
             "value" : "Aus deinen Gesprächen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From your conversations"
+          }
         }
       }
     },
@@ -1156,6 +1447,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Allgemein"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "General"
           }
         }
       }
@@ -1168,6 +1465,12 @@
             "state" : "translated",
             "value" : "Beschreibung erstellen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate description"
+          }
         }
       }
     },
@@ -1178,6 +1481,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Generierte Zusammenfassungen werden auf diesem Gerät übersetzt. Erfasste Texte, zitierte Passagen und Transkripte werden nie übersetzt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generated summaries are translated on this device. Captured text, cited quotes and transcripts are never translated."
           }
         }
       }
@@ -1207,6 +1516,12 @@
             "state" : "translated",
             "value" : "Git-Checkout"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git Checkout"
+          }
         }
       }
     },
@@ -1217,6 +1532,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Git-Commit"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git Commit"
           }
         }
       }
@@ -1229,6 +1550,12 @@
             "state" : "translated",
             "value" : "Gehe zu"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go"
+          }
         }
       }
     },
@@ -1236,6 +1563,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Harness"
+          }
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Harness"
@@ -1251,6 +1584,12 @@
             "state" : "translated",
             "value" : "Dock-Symbol ausblenden (nur Menüleiste)"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide Dock icon (menu bar only)"
+          }
         }
       }
     },
@@ -1262,16 +1601,11 @@
             "state" : "translated",
             "value" : "Höchste Qualität. Sendet Auszüge der jüngsten Aktivität an die API des gewählten Anbieters."
           }
-        }
-      }
-    },
-    "idle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "inaktiv"
+            "value" : "Highest quality. Sends recent activity excerpts to the chosen vendor's API."
           }
         }
       }
@@ -1284,6 +1618,12 @@
             "state" : "translated",
             "value" : "Inaktiv"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idle"
+          }
         }
       }
     },
@@ -1294,6 +1634,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wichtig"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Important"
           }
         }
       }
@@ -1306,6 +1652,12 @@
             "state" : "translated",
             "value" : "Archivierte und Abgeschlossene einschließen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include Archived & Closed"
+          }
         }
       }
     },
@@ -1313,6 +1665,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Initiative"
+          }
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Initiative"
@@ -1327,6 +1685,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Befehlszeilenprogramm installieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install command-line tool"
           }
         }
       }
@@ -1356,6 +1720,12 @@
             "state" : "translated",
             "value" : "Intelligenz"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intelligence"
+          }
         }
       }
     },
@@ -1366,6 +1736,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unterbrochen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interrupted"
           }
         }
       }
@@ -1412,6 +1788,46 @@
             "state" : "translated",
             "value" : "Pensieve im Hintergrund synchronisieren"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Pensieve synced in the background"
+          }
+        }
+      }
+    },
+    "LLM Provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM-Anbieter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM Provider"
+          }
+        }
+      }
+    },
+    "LLM provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM-Anbieter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM provider"
+          }
         }
       }
     },
@@ -1449,30 +1865,36 @@
         }
       }
     },
-    "LLM provider" : {
+    "List" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM-Anbieter"
+            "value" : "Liste"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM provider"
+            "value" : "List"
           }
         }
       }
     },
-    "LLM Provider" : {
+    "Location" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM-Anbieter"
+            "value" : "Ort"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Location"
           }
         }
       }
@@ -1490,6 +1912,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Logs"
+          }
+        }
+      }
+    },
+    "Loose End" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loses Ende"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loose End"
+          }
+        }
+      }
+    },
+    "Loose Ends" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lose Enden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loose Ends"
           }
         }
       }
@@ -1528,39 +1984,6 @@
         }
       }
     },
-    "List" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Liste"
-          }
-        }
-      }
-    },
-    "Loose End" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loses Ende"
-          }
-        }
-      }
-    },
-    "Loose Ends" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lose Enden"
-          }
-        }
-      }
-    },
     "Manage installed languages in System Settings…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1569,27 +1992,11 @@
             "state" : "translated",
             "value" : "Installierte Sprachen in den Systemeinstellungen verwalten…"
           }
-        }
-      }
-    },
-    "Mark as a real loose end" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Als echtes loses Ende markieren"
-          }
-        }
-      }
-    },
-    "Mark as done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Als erledigt markieren"
+            "value" : "Manage installed languages in System Settings…"
           }
         }
       }
@@ -1602,6 +2009,46 @@
             "state" : "translated",
             "value" : "Als erledigt markieren"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark as Done"
+          }
+        }
+      }
+    },
+    "Mark as a real loose end" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als echtes loses Ende markieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark as a real loose end"
+          }
+        }
+      }
+    },
+    "Mark as done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als erledigt markieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark as done"
+          }
         }
       }
     },
@@ -1612,6 +2059,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als verworfen markieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark as dropped"
           }
         }
       }
@@ -1624,22 +2077,11 @@
             "state" : "translated",
             "value" : "Als kein loses Ende markieren"
           }
-        }
-      }
-    },
-    "merge" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "zusammengeführt"
-          }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "merge"
+            "value" : "Mark as not a loose end"
           }
         }
       }
@@ -1651,6 +2093,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zusammenführen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merge"
+          }
+        }
+      }
+    },
+    "Merge into…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zusammenführen mit…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merge into…"
           }
         }
       }
@@ -1672,17 +2137,6 @@
         }
       }
     },
-    "Merge into…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zusammenführen mit…"
-          }
-        }
-      }
-    },
     "Model" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1690,6 +2144,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modell"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model"
           }
         }
       }
@@ -1702,22 +2162,45 @@
             "state" : "translated",
             "value" : "Weitere Aktionen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More actions"
+          }
         }
       }
     },
-    "move" : {
+    "Move Pensieve’s data to %@?" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "verschoben"
+            "value" : "Pensieves Daten nach %@ bewegen?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "move"
+            "value" : "Move Pensieve’s data to %@?"
+          }
+        }
+      }
+    },
+    "Move and Relaunch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewegen und neu starten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move and Relaunch"
           }
         }
       }
@@ -1730,6 +2213,12 @@
             "state" : "translated",
             "value" : "Verschieben nach…"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move to…"
+          }
         }
       }
     },
@@ -1740,6 +2229,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bewegt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moved"
           }
         }
       }
@@ -1752,6 +2247,12 @@
             "state" : "translated",
             "value" : "Verschieben der Daten von Pensieve fehlgeschlagen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moving Pensieve’s data failed"
+          }
         }
       }
     },
@@ -1762,6 +2263,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Daten von Pensieve werden verschoben…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moving Pensieve’s data…"
           }
         }
       }
@@ -1774,6 +2281,12 @@
             "state" : "translated",
             "value" : "Stummgeschaltet"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muted"
+          }
         }
       }
     },
@@ -1781,6 +2294,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Name"
@@ -1795,6 +2314,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Genehmigung erforderlich"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs approval"
           }
         }
       }
@@ -1824,6 +2349,12 @@
             "state" : "translated",
             "value" : "Neues Unterelement…"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Child…"
+          }
         }
       }
     },
@@ -1835,22 +2366,11 @@
             "state" : "translated",
             "value" : "Neuer Knoten"
           }
-        }
-      }
-    },
-    "no activity captured" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "noch nichts erfasst"
-          }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "no activity captured"
+            "value" : "New Node"
           }
         }
       }
@@ -1863,6 +2383,12 @@
             "state" : "translated",
             "value" : "Noch keine erfasste Aktivität."
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No captured activity yet."
+          }
         }
       }
     },
@@ -1873,6 +2399,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine erfasste Aktivität."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No captured activity."
           }
         }
       }
@@ -1885,6 +2417,12 @@
             "state" : "translated",
             "value" : "Keine Treffer"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matches"
+          }
         }
       }
     },
@@ -1896,6 +2434,12 @@
             "state" : "translated",
             "value" : "Keine losen Enden offen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No open loose ends"
+          }
         }
       }
     },
@@ -1906,6 +2450,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kein Projekt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No project"
           }
         }
       }
@@ -1927,6 +2477,23 @@
         }
       }
     },
+    "Node" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knoten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node"
+          }
+        }
+      }
+    },
     "None open" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1944,17 +2511,6 @@
         }
       }
     },
-    "Node" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Knoten"
-          }
-        }
-      }
-    },
     "None open." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1962,6 +2518,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine offen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "None open."
           }
         }
       }
@@ -1973,6 +2535,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht gefunden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not found"
           }
         }
       }
@@ -1994,17 +2562,6 @@
         }
       }
     },
-    "not set up" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "nicht eingerichtet"
-          }
-        }
-      }
-    },
     "Not set up" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2012,6 +2569,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht eingerichtet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not set up"
           }
         }
       }
@@ -2024,6 +2587,12 @@
             "state" : "translated",
             "value" : "Hinweis"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Note"
+          }
         }
       }
     },
@@ -2034,6 +2603,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch nichts abgeschlossen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing completed yet"
           }
         }
       }
@@ -2046,6 +2621,12 @@
             "state" : "translated",
             "value" : "Hier ist noch nichts"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing here"
+          }
         }
       }
     },
@@ -2056,6 +2637,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nichts in der Warteschlange"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing queued"
           }
         }
       }
@@ -2068,16 +2655,11 @@
             "state" : "translated",
             "value" : "Nichts zusammenzufassen"
           }
-        }
-      }
-    },
-    "Off" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aus"
+            "value" : "Nothing to summarize"
           }
         }
       }
@@ -2099,6 +2681,23 @@
         }
       }
     },
+    "Off" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        }
+      }
+    },
     "On-device (Foundation Models)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2107,38 +2706,11 @@
             "state" : "translated",
             "value" : "Auf dem Gerät (Foundation Models)"
           }
-        }
-      }
-    },
-    "Open in New Window" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In neuem Fenster öffnen"
-          }
-        }
-      }
-    },
-    "Open Loose End" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loses Ende öffnen"
-          }
-        }
-      }
-    },
-    "Open Node" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Knoten öffnen"
+            "value" : "On-device (Foundation Models)"
           }
         }
       }
@@ -2151,6 +2723,46 @@
             "state" : "translated",
             "value" : "Anmeldeobjekte-Einstellungen öffnen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Login Items Settings"
+          }
+        }
+      }
+    },
+    "Open Loose End" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loses Ende öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Loose End"
+          }
+        }
+      }
+    },
+    "Open Node" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Knoten öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Node"
+          }
         }
       }
     },
@@ -2161,6 +2773,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pensieve öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Pensieve"
+          }
+        }
+      }
+    },
+    "Open in New Window" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In neuem Fenster öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in New Window"
           }
         }
       }
@@ -2173,6 +2808,12 @@
             "state" : "translated",
             "value" : "OpenAI-kompatibel"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI-compatible"
+          }
         }
       }
     },
@@ -2183,6 +2824,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ausgabe"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Output"
           }
         }
       }
@@ -2195,6 +2842,46 @@
             "state" : "translated",
             "value" : "Pensieve-Kontext"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve Context"
+          }
+        }
+      }
+    },
+    "Pensieve already uses that folder." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve verwendet diesen Ordner bereits."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve already uses that folder."
+          }
+        }
+      }
+    },
+    "Pensieve can’t write to that folder." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve kann nicht in diesen Ordner schreiben."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve can’t write to that folder."
+          }
         }
       }
     },
@@ -2205,6 +2892,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pensieve verwendet weiterhin den vorherigen Speicherort. Es ist nichts verloren gegangen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve is still using its previous location. Nothing was lost."
           }
         }
       }
@@ -2217,6 +2910,12 @@
             "state" : "translated",
             "value" : "Die Daten von Pensieve wurden verschoben"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve’s data was moved"
+          }
         }
       }
     },
@@ -2227,6 +2926,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Persönlich"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personal"
           }
         }
       }
@@ -2239,6 +2944,12 @@
             "state" : "translated",
             "value" : "Wählt die beste Option auf dem Gerät – Foundation Models, falls verfügbar, sonst die Claude CLI."
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Picks the best on-device option — Foundation Models when available, otherwise the Claude CLI."
+          }
         }
       }
     },
@@ -2249,6 +2960,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verweist woanders hin"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Points elsewhere"
           }
         }
       }
@@ -2261,6 +2978,12 @@
             "state" : "translated",
             "value" : "Sprache wird vorbereitet…"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing the language…"
+          }
         }
       }
     },
@@ -2271,6 +2994,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Projekt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project"
           }
         }
       }
@@ -2283,6 +3012,12 @@
             "state" : "translated",
             "value" : "Projekt nicht verfügbar"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project unavailable"
+          }
         }
       }
     },
@@ -2293,6 +3028,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Projekte"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Projects"
           }
         }
       }
@@ -2305,6 +3046,12 @@
             "state" : "translated",
             "value" : "Anbietertyp"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Provider Type"
+          }
         }
       }
     },
@@ -2315,6 +3062,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ruhig"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quiet"
           }
         }
       }
@@ -2327,6 +3080,12 @@
             "state" : "translated",
             "value" : "Beenden"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quit"
+          }
         }
       }
     },
@@ -2337,6 +3096,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzung auf diesem Mac vorbereitet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready to translate on this Mac."
           }
         }
       }
@@ -2349,6 +3114,12 @@
             "state" : "translated",
             "value" : "Rückblick"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recall"
+          }
         }
       }
     },
@@ -2359,6 +3130,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Letzte Aktivität"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent Activity"
           }
         }
       }
@@ -2371,6 +3148,12 @@
             "state" : "translated",
             "value" : "Kürzlich aktiv"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recently Active"
+          }
         }
       }
     },
@@ -2381,6 +3164,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktualisieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh"
           }
         }
       }
@@ -2393,22 +3182,11 @@
             "state" : "translated",
             "value" : "Beschreibung neu erstellen"
           }
-        }
-      }
-    },
-    "rename" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "umbenannt"
-          }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "rename"
+            "value" : "Regenerate description"
           }
         }
       }
@@ -2421,6 +3199,12 @@
             "state" : "translated",
             "value" : "Wieder öffnen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reopen"
+          }
         }
       }
     },
@@ -2431,6 +3215,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reparieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repair"
           }
         }
       }
@@ -2443,6 +3233,12 @@
             "state" : "translated",
             "value" : "Ersetzen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace"
+          }
         }
       }
     },
@@ -2453,6 +3249,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vorhandene Datei ersetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace existing binary"
           }
         }
       }
@@ -2465,6 +3267,12 @@
             "state" : "translated",
             "value" : "Die pensieve-Datei in ~/.local/bin durch einen Verweis auf die Kopie der App ersetzen?"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace the pensieve binary in ~/.local/bin with a link to the app’s copy?"
+          }
         }
       }
     },
@@ -2476,6 +3284,12 @@
             "state" : "translated",
             "value" : "Loses Ende abschließen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resolve Loose End"
+          }
         }
       }
     },
@@ -2486,6 +3300,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ergebnisse"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Results"
           }
         }
       }
@@ -2524,6 +3344,23 @@
         }
       }
     },
+    "Runs after the Mac has been unused for a few minutes, and pauses in Low Power Mode or under heavy load." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft, wenn der Mac einige Minuten unbenutzt war, und pausiert im Stromsparmodus oder bei hoher Auslastung."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runs after the Mac has been unused for a few minutes, and pauses in Low Power Mode or under heavy load."
+          }
+        }
+      }
+    },
     "Runs entirely on-device. Private and free, but noticeably lower quality than a frontier cloud model." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2531,6 +3368,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Läuft vollständig auf dem Gerät. Privat und kostenlos, aber deutlich geringere Qualität als ein modernes Cloud-Modell."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runs entirely on-device. Private and free, but noticeably lower quality than a frontier cloud model."
           }
         }
       }
@@ -2543,6 +3386,12 @@
             "state" : "translated",
             "value" : "Sichern"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
         }
       }
     },
@@ -2553,6 +3402,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Suchen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search"
           }
         }
       }
@@ -2565,6 +3420,12 @@
             "state" : "translated",
             "value" : "Alles durchsuchen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search Everything"
+          }
         }
       }
     },
@@ -2575,6 +3436,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Symbole suchen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search symbols"
           }
         }
       }
@@ -2587,6 +3454,12 @@
             "state" : "translated",
             "value" : "Projekt auswählen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a project"
+          }
         }
       }
     },
@@ -2597,6 +3470,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einstellungen…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings…"
           }
         }
       }
@@ -2626,16 +3505,11 @@
             "state" : "translated",
             "value" : "Shell"
           }
-        }
-      }
-    },
-    "Show “Last Work Done” narration" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„Zuletzt erledigt“-Zusammenfassung anzeigen"
+            "value" : "Shell"
           }
         }
       }
@@ -2647,6 +3521,63 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle anzeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show All"
+          }
+        }
+      }
+    },
+    "Show Pensieve List" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pensieve-Liste anzeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Pensieve List"
+          }
+        }
+      }
+    },
+    "Show Personal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Persönliches anzeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Personal"
+          }
+        }
+      }
+    },
+    "Show Work" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arbeit anzeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Work"
           }
         }
       }
@@ -2702,35 +3633,19 @@
         }
       }
     },
-    "Show Personal" : {
+    "Show “Last Work Done” narration" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Persönliches anzeigen"
+            "value" : "„Zuletzt erledigt“-Zusammenfassung anzeigen"
           }
-        }
-      }
-    },
-    "Show Work" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Arbeit anzeigen"
-          }
-        }
-      }
-    },
-    "Show Pensieve List" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pensieve-Liste anzeigen"
+            "value" : "Show “Last Work Done” narration"
           }
         }
       }
@@ -2760,6 +3675,12 @@
             "state" : "translated",
             "value" : "Skill"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill"
+          }
         }
       }
     },
@@ -2771,6 +3692,12 @@
             "state" : "translated",
             "value" : "Intelligente Listen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Smart Lists"
+          }
         }
       }
     },
@@ -2781,6 +3708,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einige erfasste Daten waren noch ausstehend, daher wurde der vorherige Speicherort beibehalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some captured work was still pending, so the previous location was kept."
           }
         }
       }
@@ -2810,6 +3743,12 @@
             "state" : "translated",
             "value" : "Stoppen"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop"
+          }
         }
       }
     },
@@ -2837,6 +3776,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Strang"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strand"
           }
         }
       }
@@ -2883,6 +3828,12 @@
             "state" : "translated",
             "value" : "Umgebender Kontext nicht verfügbar (Transkript geändert oder entfernt)."
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Surrounding context unavailable (transcript changed or removed)."
+          }
         }
       }
     },
@@ -2890,6 +3841,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Symbol"
+          }
+        },
+        "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Symbol"
@@ -2905,6 +3862,12 @@
             "state" : "translated",
             "value" : "System"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
         }
       }
     },
@@ -2915,6 +3878,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Systemhinweis"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Note"
           }
         }
       }
@@ -2927,6 +3896,12 @@
             "state" : "translated",
             "value" : "Aufgabe"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Task"
+          }
         }
       }
     },
@@ -2938,6 +3913,63 @@
             "state" : "translated",
             "value" : "Aufgaben-Update"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Task Update"
+          }
+        }
+      }
+    },
+    "That folder already contains a Pensieve folder with files in it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Ordner enthält bereits einen Pensieve-Ordner mit Dateien."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That folder already contains a Pensieve folder with files in it."
+          }
+        }
+      }
+    },
+    "That’s a file, not a folder." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das ist eine Datei, kein Ordner."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That’s a file, not a folder."
+          }
+        }
+      }
+    },
+    "The copied data didn’t verify. Nothing was changed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die kopierten Daten konnten nicht überprüft werden. Es wurde nichts geändert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The copied data didn’t verify. Nothing was changed."
+          }
         }
       }
     },
@@ -2948,6 +3980,590 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Suchindex wurde noch nicht erstellt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The search index has not been built yet."
+          }
+        }
+      }
+    },
+    "There isn’t enough free space on that disk." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Volume ist nicht genügend freier Speicherplatz."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There isn’t enough free space on that disk."
+          }
+        }
+      }
+    },
+    "They can be reopened individually or with ⌘Z." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie lassen sich einzeln oder mit ⌘Z wieder öffnen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "They can be reopened individually or with ⌘Z."
+          }
+        }
+      }
+    },
+    "This language isn’t downloaded yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Sprache ist noch nicht heruntergeladen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This language isn’t downloaded yet."
+          }
+        }
+      }
+    },
+    "Tool Error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkzeugfehler"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tool Error"
+          }
+        }
+      }
+    },
+    "Tool Use" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkzeugaufruf"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tool Use"
+          }
+        }
+      }
+    },
+    "Top Hit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bester Treffer"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Top Hit"
+          }
+        }
+      }
+    },
+    "Top level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oberste Ebene"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Top level"
+          }
+        }
+      }
+    },
+    "Topic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thema"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Topic"
+          }
+        }
+      }
+    },
+    "Translate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translate"
+          }
+        }
+      }
+    },
+    "Translate automatically when idle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch bei Inaktivität übersetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translate automatically when idle"
+          }
+        }
+      }
+    },
+    "Translate generated text to" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generierte Texte übersetzen nach"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translate generated text to"
+          }
+        }
+      }
+    },
+    "Translate remaining" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbleibende Inhalte übersetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translate remaining"
+          }
+        }
+      }
+    },
+    "Translating %lld of %lld…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld von %2$lld werden übersetzt…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translating %lld of %lld…"
+          }
+        }
+      }
+    },
+    "Translation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translation"
+          }
+        }
+      }
+    },
+    "Translation requires macOS 26 or later." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung erfordert macOS 26 oder neuer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translation requires macOS 26 or later."
+          }
+        }
+      }
+    },
+    "Type" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type"
+          }
+        }
+      }
+    },
+    "Unarchive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unarchive"
+          }
+        }
+      }
+    },
+    "Unset" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht festgelegt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unset"
+          }
+        }
+      }
+    },
+    "Uses your Claude subscription via the claude command. Good quality, stays on your account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutzt das Claude-Abonnement über den Befehl „claude“. Gute Qualität, bleibt im eigenen Konto."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uses your Claude subscription via the claude command. Good quality, stays on your account."
+          }
+        }
+      }
+    },
+    "Vendor" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anbieter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vendor"
+          }
+        }
+      }
+    },
+    "What is this about?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Worum geht es?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What is this about?"
+          }
+        }
+      }
+    },
+    "What's Next" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Nächstes"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's Next"
+          }
+        }
+      }
+    },
+    "Work" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arbeit"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Work"
+          }
+        }
+      }
+    },
+    "You" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You"
+          }
+        }
+      }
+    },
+    "archive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archiviert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "archive"
+          }
+        }
+      }
+    },
+    "capturing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erfassung läuft"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "capturing"
+          }
+        }
+      }
+    },
+    "create" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "erstellt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "create"
+          }
+        }
+      }
+    },
+    "delete" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "gelöscht"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "delete"
+          }
+        }
+      }
+    },
+    "idle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "inaktiv"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "idle"
+          }
+        }
+      }
+    },
+    "merge" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "zusammengeführt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "merge"
+          }
+        }
+      }
+    },
+    "move" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "verschoben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "move"
+          }
+        }
+      }
+    },
+    "no activity captured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "noch nichts erfasst"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "no activity captured"
+          }
+        }
+      }
+    },
+    "not set up" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nicht eingerichtet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not set up"
+          }
+        }
+      }
+    },
+    "rename" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "umbenannt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rename"
           }
         }
       }
@@ -2969,17 +4585,6 @@
         }
       }
     },
-    "They can be reopened individually or with ⌘Z." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sie lassen sich einzeln oder mit ⌘Z wieder öffnen."
-          }
-        }
-      }
-    },
     "this item" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2993,17 +4598,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "this item"
-          }
-        }
-      }
-    },
-    "This language isn’t downloaded yet." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Sprache ist noch nicht heruntergeladen."
           }
         }
       }
@@ -3042,138 +4636,6 @@
         }
       }
     },
-    "Tool Error" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Werkzeugfehler"
-          }
-        }
-      }
-    },
-    "Tool Use" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Werkzeugaufruf"
-          }
-        }
-      }
-    },
-    "Top Hit" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bester Treffer"
-          }
-        }
-      }
-    },
-    "Top level" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Oberste Ebene"
-          }
-        }
-      }
-    },
-    "Topic" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Thema"
-          }
-        }
-      }
-    },
-    "Translate" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzen"
-          }
-        }
-      }
-    },
-    "Translate generated text to" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generierte Texte übersetzen nach"
-          }
-        }
-      }
-    },
-    "Translate remaining" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbleibende Inhalte übersetzen"
-          }
-        }
-      }
-    },
-    "Translating %lld of %lld…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld von %2$lld werden übersetzt…"
-          }
-        }
-      }
-    },
-    "Translation" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung"
-          }
-        }
-      }
-    },
-    "Translation requires macOS 26 or later." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung erfordert macOS 26 oder neuer."
-          }
-        }
-      }
-    },
-    "Type" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Typ"
-          }
-        }
-      }
-    },
     "unarchive" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3187,28 +4649,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "unarchive"
-          }
-        }
-      }
-    },
-    "Unarchive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wiederherstellen"
-          }
-        }
-      }
-    },
-    "Unset" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht festgelegt"
           }
         }
       }
@@ -3230,243 +4670,9 @@
         }
       }
     },
-    "Uses your Claude subscription via the claude command. Good quality, stays on your account." : {
+    "·" : {
       "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nutzt das Claude-Abonnement über den Befehl „claude“. Gute Qualität, bleibt im eigenen Konto."
-          }
-        }
-      }
-    },
-    "Vendor" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anbieter"
-          }
-        }
-      }
-    },
-    "What is this about?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Worum geht es?"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What is this about?"
-          }
-        }
-      }
-    },
-    "What's Next" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Als Nächstes"
-          }
-        }
-      }
-    },
-    "Work" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Arbeit"
-          }
-        }
-      }
-    },
-    "You" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Du"
-          }
-        }
-      }
-    },
-    "Location" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ort"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Location"
-          }
-        }
-      }
-    },
-    "Choose" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auswählen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose"
-          }
-        }
-      }
-    },
-    "Move and Relaunch" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bewegen und neu starten"
-          }
-        }
-      }
-    },
-    "Move Pensieve’s data to %@?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pensieves Daten nach %@ bewegen?"
-          }
-        }
-      }
-    },
-    "%@ will be copied. The old folder is moved to the Bin after verification, and Pensieve relaunches." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ werden kopiert. Der alte Ordner wird nach der Überprüfung in den Papierkorb bewegt, und Pensieve startet neu."
-          }
-        }
-      }
-    },
-    "Pensieve already uses that folder." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pensieve verwendet diesen Ordner bereits."
-          }
-        }
-      }
-    },
-    "Choose a folder outside Pensieve’s current one." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Einen Ordner außerhalb des aktuellen Pensieve-Ordners auswählen."
-          }
-        }
-      }
-    },
-    "That folder already contains a Pensieve folder with files in it." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Ordner enthält bereits einen Pensieve-Ordner mit Dateien."
-          }
-        }
-      }
-    },
-    "An empty folder already exists there. Remove it first." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dort existiert bereits ein leerer Ordner. Bitte zuerst entfernen."
-          }
-        }
-      }
-    },
-    "That’s a file, not a folder." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das ist eine Datei, kein Ordner."
-          }
-        }
-      }
-    },
-    "Pensieve can’t write to that folder." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pensieve kann nicht in diesen Ordner schreiben."
-          }
-        }
-      }
-    },
-    "There isn’t enough free space on that disk." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auf diesem Volume ist nicht genügend freier Speicherplatz."
-          }
-        }
-      }
-    },
-    "A sync is running. Try again in a moment." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eine Synchronisierung läuft. Bitte gleich erneut versuchen."
-          }
-        }
-      }
-    },
-    "The copied data didn’t verify. Nothing was changed." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die kopierten Daten konnten nicht überprüft werden. Es wurde nichts geändert."
-          }
-        }
-      }
+      "shouldTranslate" : false
     }
   },
   "version" : "1.0"
