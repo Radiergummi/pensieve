@@ -311,8 +311,14 @@ struct LooseEndRow: View {
   }
 
   /// Collapsed preview: the cited message's first renderable segment, capped to a few lines.
-  @ViewBuilder private func previewRow(_ msg: ProvenanceMessage) -> some View {
-    TranscriptMessageView(message: msg, segments: previewSegments(for: msg), compact: true)
+  ///
+  /// `compact` is the ROW's, not hardcoded `true`. It was hardcoded until C1, which meant the detail
+  /// pane previewed a message in the compact layout and then re-rendered it railed on "Show more" —
+  /// one disclosure, two layout modes, for the message that is collapsed by default whenever the
+  /// window holds more than one.
+  @ViewBuilder private func previewRow(_ message: ProvenanceMessage) -> some View {
+    TranscriptMessageView(message: message, segments: previewSegments(for: message),
+                          compact: compact)
       .lineLimit(3)
   }
 
