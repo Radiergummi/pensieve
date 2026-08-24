@@ -12,6 +12,7 @@ import PensieveKit
 /// own relocation forever. The relaunch was already required, so this reorders it rather than
 /// adding one.
 enum RelocationLauncher {
+  @MainActor
   static func requestRelocation(to destination: URL) {
     UserDefaults.standard.set(destination.path, forKey: AppDefaults.pendingRelocationDestinationKey)
     relaunch()
@@ -29,6 +30,11 @@ enum RelocationLauncher {
 
   /// Waits for THIS process to exit before reopening the bundle — two instances of the same app
   /// racing over the same store is the one thing worse than the race we are removing.
+  ///
+  /// Main-actor isolated because it ends with `NSApp.terminate`, and both `NSApp` and `terminate`
+  /// are main-actor isolated. Every caller is already on the main actor (a SwiftUI button action),
+  /// so this states the isolation the code always had rather than adding a hop.
+  @MainActor
   static func relaunch() {
     let bundlePath = Bundle.main.bundlePath
     let processIdentifier = ProcessInfo.processInfo.processIdentifier
