@@ -40,7 +40,7 @@ now an ordinary unbuilt feature wanting its own brainstorm, and was never actual
 is same-device, CloudKit is cross-device. Both detailed under "Widgets" below.
 
 **Tier 2 — Quality, measurement & known defects**
-- Claude Design review — slice C (transcript reading, **live now**) and slice D (six items, each its own brainstorm).
+- Claude Design review — slice C (transcript reading) is **specced 2026-08-24** (`specs/2026-08-24-transcript-reading-slice-c-design.md`, branch `worktree-transcript-reading`); slice D has five items left, each its own brainstorm (`Du` vs `user` is closed by slice C).
 - Contextify scan — open items: honest staleness on the retrieval path, `pensieve doctor`, Live Recall, skill + researcher subagent.
 - P3 retrieval harness — **blocked on the user** writing 30–50 paraphrase queries.
 - Follow-ups from the popover + harness session — the dropped node-scoped Loose Ends surface, plus three verification-practice findings.
@@ -63,6 +63,7 @@ is same-device, CloudKit is cross-device. Both detailed under "Widgets" below.
   unverified and neither is code:** the App Group entitlement still has no provisioning profile (only an
   interactive Xcode build can mint one), so the widget has never been *seen* rendering; and the sync
   agent's publish call, though reviewed, was never observed completing.
+- The transcript's own venue — its own window · an `.inspector` retrial · chipping the skill body. All three deferred out of slice C, 2026-08-24.
 - Spike: statistical theme discovery across strands (`NLEmbedding`).
 - Talk to the system, **stage 2** — the conversational agent (stage 1 shipped 2026-08-13).
 - Forks as first-class — the capture backend; the long pole gating app slice 6.
@@ -591,7 +592,7 @@ an ellipsis `Menu` holding Refresh and Quit, at a 320pt popover, so German canno
 *Trigger for the two carries: the scroll-edge hoist wants the next GUI session; the `NextItem` field
 wants the next pass that touches `NextQueries`.*
 
-**C — Transcript reading: one rail, no nested cards.** The provenance transcript currently nests
+**C — Transcript reading: one rail, no nested cards.** **SPECCED 2026-08-24** — `specs/2026-08-24-transcript-reading-slice-c-design.md`, branch `worktree-transcript-reading`. The proposal below is preserved as the input; the spec supersedes it where they differ (notably: the skill chip is smaller than this text assumes, and the venue question was reopened and settled — see Tier 3 ▸ "The transcript's own venue"). The provenance transcript currently nests
 three near-identical gray surfaces (message card inside system card inside HINWEIS/BEFEHL card) with
 the speaker as an 11pt label *outside* the outermost one — it reads as a log, not a conversation.
 Proposal: a **speaker column** carries the structure; only user messages get a filled bubble (they
@@ -1518,6 +1519,47 @@ on its own before that slice.
 *Trigger: once strand auto-birth is proven in dogfooding and the app has a visualization surface
 worth walking a tree in (the three-pane app). Branch-switch forks first; transcript-choice
 detection as a later spike.*
+
+---
+
+## The transcript's own venue — three ways, all deferred out of slice C (2026-08-24)
+
+Split out of `specs/2026-08-24-transcript-reading-slice-c-design.md` during brainstorming. Slice C
+chose the **full-width inline breakout** and deferred the other two. The shared intuition behind all
+three is sound and worth restating: the provenance transcript should have *its own surface* rather
+than being a guest inside the loose-end card.
+
+- **The transcript in its own window.** `RecallWindowView` + ⌘⌥N already open secondary recall
+  windows, so "open this transcript in its own window" is a small verb on shipped machinery — no
+  tiling risk, and a wide window can be devoted entirely to reading. Deferred only because it is a
+  **navigation** feature, and folding it into a readability slice would have made slice C an IA
+  change. *Revisit trigger:* the next pass that touches recall windows or detail-pane navigation —
+  and note the standing related ask, previous/next node navigation (Tier 2 ▸ Claude Design ▸ D).
+
+- **Retry the trailing `.inspector`, properly researched.** Retired 2026-07-08 after three failed
+  patches and an AppKit crash (`_updateSidebarPositionIfNeeded` → `_tileTitlebarAndRedisplay`, from
+  toggling the sidebar with it open), root-caused then as *four resizable regions is more than macOS
+  reliably fits/tiles*. **That verdict deserves a retrial, and this entry exists to say so.** The
+  session that produced it was bug-fix-driven, not design-driven — no spec, no plan, an architecture
+  pivot taken under crash pressure — which is not the same as researched-and-found-unworkable. Three
+  things have changed or were never isolated: the app now has a **macOS 26.0 floor** (the crash
+  predates it); the inspector was attached at **window level over the 3-column split** rather than
+  scoped to the detail column; and the crash trigger was **one specific interaction**, not the panel
+  as such. `.inspector` remains the platform-suggested answer to exactly this layout problem, which
+  by "platform primitives first" makes it the path we should be able to justify *not* taking.
+  *Revisit trigger:* a session that can afford real research plus a GUI verification pass — not a
+  slice with other goals.
+
+- **Chipping the skill-document body — unreachable at the render layer.** The Claude Design item
+  reads "attached skill documents become a chip, not an embedded article". Only the preamble half is
+  reachable: `HarnessKind.skillPreamble(path:)` captures the *"Base directory for this skill: …"*
+  line and its `displayBody` returns the path alone, so slice C's chip collapses a bare path, not an
+  article. The actual embedded article is skill **content arriving as ordinary markdown**, inside no
+  harness tag at all. Reaching it needs a parser change whose detection would be **heuristic on
+  content** rather than allowlisted on tags — which is what `TranscriptVocabulary` is deliberately
+  structured to avoid, and it sits adjacent to the trust gate. *Revisit trigger:* a decision that
+  content-shaped detection is acceptable in the parser — which should be its own brainstorm, because
+  the answer has so far always been no.
 
 ---
 
