@@ -32,15 +32,15 @@ public enum SnippetMaker {
     // so this path and in-node find can never disagree about what "matches".
     guard let matchRange = FindMatcher.firstRange(in: source, query: query) else {
       let head = String(source.prefix(window * 2))
-      let lead = head.count < source.count ? head + "…" : head
-      return Snippet(leading: lead, match: "", trailing: "")
+      let leading = head.count < source.count ? head + "…" : head
+      return Snippet(leading: leading, match: "", trailing: "")
     }
     let matched = String(source[matchRange])
-    var lead = String(source[source.startIndex..<matchRange.lowerBound])
-    if lead.count > window { lead = "…" + String(lead.suffix(window)) }
-    var trail = String(source[matchRange.upperBound...])
-    if trail.count > window { trail = String(trail.prefix(window)) + "…" }
-    return Snippet(leading: lead, match: matched, trailing: trail)
+    var leading = String(source[source.startIndex..<matchRange.lowerBound])
+    if leading.count > window { leading = "…" + String(leading.suffix(window)) }
+    var trailing = String(source[matchRange.upperBound...])
+    if trailing.count > window { trailing = String(trailing.prefix(window)) + "…" }
+    return Snippet(leading: leading, match: matched, trailing: trailing)
   }
 
   /// Highlights the first of `terms` that occurs in `source`, scanning terms in order. BM25 is

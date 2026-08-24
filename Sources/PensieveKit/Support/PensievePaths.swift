@@ -23,10 +23,43 @@ public enum PensievePaths {
   /// would resolve against the process's cwd — `/` under launchd — which is how a store ends up at
   /// the filesystem root.
   public static func supportDirectory(customRoot: String?) -> URL {
-    guard let customRoot else { return defaultSupportDirectory() }
-    let trimmed = customRoot.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty, trimmed.hasPrefix("/") else { return defaultSupportDirectory() }
-    return URL(fileURLWithPath: trimmed, isDirectory: true)
+    guard let normalized = normalizedStoreOverride(customRoot) else { return defaultSupportDirectory() }
+    return URL(fileURLWithPath: normalized, isDirectory: true)
+  }
+
+  /// **The one rule for reading a store-path override**: a blank or relative value is treated as
+  /// ABSENT, never honoured.
+  ///
+  /// It was enforced on exactly one of the four paths that read such an override — this file's
+  /// support root — while `resolvedCanonicalURL()`, `resolvedSpoolURL()`, `indexURL(named:)` and
+  /// `StoreRelocationLock.anchorURL()` each honoured `""` and relative values. Verified
+  /// experimentally: `URL(fileURLWithPath: "")` is the process's cwd, and a relative value stays
+  /// cwd-relative — which under launchd is `/`. So a blank `PENSIEVE_DB` pointed the canonical store
+  /// at the filesystem root rather than falling back to the real one.
+  ///
+  /// Applied inside the pure resolvers rather than at each environment read, so the rule holds for
+  /// every caller including tests, and there is nowhere left to forget it.
+  static func normalizedStoreOverride(_ raw: String?) -> String? {
+    guard let raw else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, trimmed.hasPrefix("/") else { return nil }
+    return trimmed
+  }
+
+  /// A store path from an override that may be absent, blank or relative, under the rule above.
+  public static func resolvedStoreURL(override raw: String?, fallback: URL) -> URL {
+    guard let normalized = normalizedStoreOverride(raw) else { return fallback }
+    return URL(fileURLWithPath: normalized)
+  }
+
+  /// The "sibling of the overridden store, prefixed by its base name" rule, shared by every sidecar
+  /// that follows an override. `indexURL` and `StoreRelocationLock.anchorURL` each spelled this out
+  /// verbatim; one of them changing its layout would have silently stopped the other from finding
+  /// the file it was pairing with.
+  static func sidecarBesideStore(_ storeOverride: String, named name: String) -> URL {
+    let store = URL(fileURLWithPath: storeOverride)
+    let prefix = store.deletingPathExtension().lastPathComponent
+    return store.deletingLastPathComponent().appendingPathComponent("\(prefix)-\(name)")
   }
 
   /// The one call site that reads the world. Never throws; a failed read yields the default.
@@ -34,22 +67,43 @@ public enum PensievePaths {
     supportDirectory(customRoot: sharedDefaults.string(forKey: PensieveDefaults.customSupportRootKey))
   }
 
+  /// The canonical store's file name. Named here because `StoreRelocator` restated it in its
+  /// `canonicalStoreFileNames` list — so renaming the store file would have left relocation
+  /// silently failing to carry (and clean up) the very files it exists to move.
+  public static let canonicalStoreFileName = "pensieve.sqlite"
+  /// The spool's file name, for symmetry with the above.
+  public static let captureStoreFileName = "capture.sqlite"
+
   public static func canonicalURL(in support: URL) -> URL {
-    support.appendingPathComponent("pensieve.sqlite")
+    support.appendingPathComponent(canonicalStoreFileName)
   }
   public static func canonicalURL() -> URL { canonicalURL(in: supportDirectory()) }
 
   public static func captureURL(in support: URL) -> URL {
-    support.appendingPathComponent("capture.sqlite")
+    support.appendingPathComponent(captureStoreFileName)
   }
   public static func captureURL() -> URL { captureURL(in: supportDirectory()) }
 
   /// The disposable narration cache (shared across app / CLI / MCP). Not the canonical store,
   /// not the spool — losing it costs only a re-narrate.
-  public static func narrationCacheURL(in support: URL) -> URL {
-    support.appendingPathComponent("narration-cache.sqlite")
+  ///
+  /// Follows `PENSIEVE_DB` for the same reason `searchIndexURL()` and `translationCacheURL()` do —
+  /// it was the one sidecar that did not, and it is the one whose `init` DELETES the file it cannot
+  /// open (`NarrationCache`). So `PENSIEVE_DB=/tmp/fixture pensieve prime` read, wrote, and could
+  /// destroy the developer's live narration cache. It produced no wrong answers only because
+  /// `NarrationCacheKey` is built from random event UUIDs that cannot collide across stores — an
+  /// accident, not a design.
+  public static func narrationCacheURL() -> URL {
+    narrationCacheURL(storeOverride: ProcessInfo.processInfo.environment["PENSIEVE_DB"],
+                      support: supportDirectory())
   }
-  public static func narrationCacheURL() -> URL { narrationCacheURL(in: supportDirectory()) }
+  /// The rule, separated from reading the environment for the same reason
+  /// `indexURL(named:storeOverride:support:)` is — and so that "the narration cache follows the
+  /// override" is assertable at all. Asserting it against `indexURL` under the ambient environment
+  /// cannot fail on a machine with no `PENSIEVE_DB` set, which is every developer machine.
+  static func narrationCacheURL(storeOverride: String?, support: URL) -> URL {
+    indexURL(named: "narration-cache.sqlite", storeOverride: storeOverride, support: support)
+  }
   /// The disposable, device-local, never-synced FTS5 search index (shared across app / CLI /
   /// daemon / MCP). Losing it costs only a re-index.
   public static func searchIndexURL() -> URL {
@@ -81,10 +135,9 @@ public enum PensievePaths {
   /// process-global and Swift Testing runs suites in parallel, so a test that mutated `PENSIEVE_DB`
   /// to cover this could perturb every other test reading it.
   static func indexURL(named name: String, storeOverride: String?, support: URL) -> URL {
-    guard let storeOverride else { return support.appendingPathComponent(name) }
-    let store = URL(fileURLWithPath: storeOverride)
-    let prefix = store.deletingPathExtension().lastPathComponent
-    return store.deletingLastPathComponent().appendingPathComponent("\(prefix)-\(name)")
+    guard let normalized = normalizedStoreOverride(storeOverride)
+    else { return support.appendingPathComponent(name) }
+    return sidecarBesideStore(normalized, named: name)
   }
   /// Working directory pinned onto Pensieve's own `claude -p` subprocesses. Inert and empty by
   /// design: the child would otherwise inherit our cwd (`/` under launchd), producing a captured

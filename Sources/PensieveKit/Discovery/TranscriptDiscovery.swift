@@ -37,10 +37,16 @@ public enum TranscriptDiscovery {
   /// given transcript is read at most until it becomes an event.
   static func isSidechainTranscript(_ url: URL) -> Bool {
     guard let content = try? String(contentsOf: url, encoding: .utf8) else { return false }
+    // Cheap exact pre-check before the per-line JSON parse. `isSidechain` is a JSON *key*, so if the
+    // substring is absent from the whole file no record can carry it — and that is the case for
+    // every real transcript today (Claude Code stores subagent transcripts outside
+    // `~/.claude/projects`). This turns the common case from "deserialize every line of every new
+    // transcript" into one substring scan, on a path that runs for each new session every drain.
+    guard content.contains("isSidechain") else { return false }
     for line in content.split(separator: "\n", omittingEmptySubsequences: true) {
-      guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+      guard let record = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
       else { continue }
-      if (obj["isSidechain"] as? Bool) == true { return true }
+      if (record["isSidechain"] as? Bool) == true { return true }
     }
     return false
   }

@@ -2,6 +2,14 @@
 import SwiftUI
 import PensieveKit
 
+/// What makes the Briefing's cards stale: arriving on it, ⌘R, a resolve, or a Focus switch.
+private struct BriefingLoadKey: Hashable {
+  let isBriefing: Bool
+  let token: Int
+  let looseEndRevision: Int
+  let context: String
+}
+
 struct RootView: View {
   @Bindable var model: AppModel
   @Environment(\.openWindow) private var openWindow
@@ -51,6 +59,16 @@ struct RootView: View {
           // Refresh lives on ⌘R and Go ▸ Refresh — kept off the toolbar so the native sidebar toggle
           // isn't pushed into an overflow menu.
         }
+    }
+    // Briefing's cards are a whole-store pass (one query per active node) for a pane that is usually
+    // off screen, so `refresh()` computes them only while Briefing IS the selection — this is what
+    // loads them on arrival. It lives here rather than in `BriefingView` because the middle column
+    // renders the same cards, and `BriefingView` is not mounted when a node is also selected.
+    .task(id: BriefingLoadKey(isBriefing: model.sidebarSelection == .briefing,
+                              token: model.refreshToken,
+                              looseEndRevision: model.looseEndRevision,
+                              context: model.activeFocusContext)) {
+      if model.sidebarSelection == .briefing { model.loadBriefingCards() }
     }
     .onChange(of: model.openNodeRequest) { _, id in
       guard let id else { return }

@@ -8,17 +8,18 @@ struct Status: ParsableCommand {
   func run() throws {
     let database = try openCanonical()
     guard let status = try ProjectQueries.status(database, name: project, limit: 20) else {
-      print("no project named '\(project)'"); return
+      throw CommandFailure("no project named '\(project)'")
     }
     print("# \(status.project.name)")
-    for event in status.recentEvents { print("  \(event.occurredAt) \(event.kind)  \(event.summary)") }
-    let ends = try LooseEndQueries.open(database, nodeID: status.project.id, now: Date())
-    guard !ends.isEmpty else { return }
-    print("\n## Open loose ends (\(ends.count))")
-    for looseEndView in ends {
-      print("  \u{201C}\(looseEndView.looseEnd.quote)\u{201D}")                        // quote-first: the authoritative line
-      // paraphrase is secondary
-      print("    \u{21B3} \(looseEndView.looseEnd.text)  [\(looseEndView.looseEnd.role), \(looseEndView.ageDays)d]")
+    // ISO-8601, not the raw `Date` description: `print(someDate)` renders a locale-independent but
+    // unlabelled "2026-08-24 09:15:00 +0000", which is neither what a human reads nor what a script
+    // parses. `sync` already timestamps its output this way.
+    for event in status.recentEvents {
+      print("  \(event.occurredAt.ISO8601Format()) \(event.kind)  \(event.summary)")
     }
+    let openLooseEnds = try LooseEndQueries.open(database, nodeID: status.project.id, now: Date())
+    guard !openLooseEnds.isEmpty else { return }
+    print("\n## Open loose ends (\(openLooseEnds.count))")
+    for view in openLooseEnds { printLooseEnd(view, indent: "  ") }
   }
 }

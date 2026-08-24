@@ -1,4 +1,20 @@
 import ServiceManagement
+import SwiftUI
+
+/// The registration state in human words. One mapping: Settings ▸ General shows it on its toggle row
+/// and Settings ▸ Advanced shows it as a diagnostics row, and the two were identical switches — so a
+/// new case, or a reworded one, would have landed in only one of them.
+extension SMAppService.Status {
+  var displayLabel: LocalizedStringKey {
+    switch self {
+    case .enabled: return "Enabled"
+    case .requiresApproval: return "Needs approval"
+    case .notRegistered: return "Off"
+    case .notFound: return "Not found"
+    @unknown default: return "Off"
+    }
+  }
+}
 
 /// Thin wrapper over the bundled SMAppService LaunchAgent. Smoke-verified by hand (SMAppService
 /// mutates live system state); the scheduled logic (SyncRunner) is tested in PensieveKit. Uses the

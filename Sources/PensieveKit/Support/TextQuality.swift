@@ -16,18 +16,44 @@ enum TextQuality {
     return trimmedText.count >= 8 && trimmedText.contains { $0.isLetter }
   }
 
+  /// Trims, then removes a surrounding code fence **with its language tag**, so `"```json\n[1,2]"`
+  /// is judged (and stored) as `"[1,2]"` rather than as the word "json" followed by an array. One
+  /// definition, because dropping the tag is what separates "a JSON array in a fence" from "prose":
+  /// the version that stripped only the backticks left "json…" behind, which reads as prose and
+  /// sailed through the structured reject.
+  private static func strippingCodeFence(_ text: String) -> String {
+    var stripped = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard stripped.hasPrefix("```") else { return stripped }
+    stripped = stripped.replacingOccurrences(of: #"^```[a-zA-Z]*"#, with: "", options: .regularExpression)
+    stripped = stripped.replacingOccurrences(of: "```", with: "")
+    return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   /// `isProse`, plus a reject for structured output wearing a prose costume: a JSON array/object,
   /// either bare or inside a code fence. Use for text a model was asked to write as prose.
   static func isProseNotStructured(_ text: String) -> Bool {
-    var trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmedText.hasPrefix("```") {
-      // Strip the fence (and any language tag) so `["```json\n[1,2]\n```"]` is judged on its body.
-      trimmedText = trimmedText.replacingOccurrences(of: #"^```[a-zA-Z]*"#, with: "", options: .regularExpression)
-      trimmedText = trimmedText.replacingOccurrences(of: "```", with: "")
-      trimmedText = trimmedText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    let trimmedText = strippingCodeFence(text)
     guard !trimmedText.hasPrefix("["), !trimmedText.hasPrefix("{") else { return false }
     return isProse(trimmedText)
+  }
+
+  /// Cleans a model-written *description* — prose, not a terse label, so there is no length or
+  /// sentence-count gate. Strips a surrounding code fence, a leading list/heading marker and
+  /// wrapping quotes/backticks; nil when nothing usable survives, so the caller leaves the
+  /// description empty and retries on a later pass.
+  ///
+  /// Ends on `isProseNotStructured` — the reject this cleaning was missing while it lived on
+  /// `NodeDescriber`. The sibling path (session recaps) already had it because a model answering
+  /// the wrong question with a JSON index array wrote 139 of them into the store; descriptions come
+  /// from the same providers through the same seam and had no such gate.
+  static func sanitizeDescription(_ raw: String) -> String? {
+    var sanitized = strippingCodeFence(raw)
+    if let marker = sanitized.range(of: #"^(\d+[.)]|[-*•#]+)\s+"#, options: .regularExpression) {
+      sanitized.removeSubrange(marker)
+    }
+    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+    sanitized = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+    return isProseNotStructured(sanitized) ? sanitized : nil
   }
 
   /// A terse organizational label — a sidebar name, not a sentence or a paragraph. Rejects

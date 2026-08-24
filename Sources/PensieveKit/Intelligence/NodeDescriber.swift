@@ -19,20 +19,12 @@ public enum NodeDescriber {
     return git.count == 1 ? git.first?.key : nil
   }
 
-  /// Normalizes a model's free-text description: trims; strips surrounding code fences; strips a
-  /// leading list/heading marker; strips surrounding quotes. Returns nil when nothing is left.
+  /// Normalizes a model's free-text description. One implementation, in `TextQuality` beside the
+  /// label and recap gates — this used to be a second copy of that cleaning, and the copy lacked
+  /// the structured-output reject, so a reject added for recaps never applied to descriptions.
   /// Brevity is left to the prompt (no sentence truncation — YAGNI, matching `narrate`).
   public static func sanitize(_ raw: String) -> String? {
-    var sanitized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    if sanitized.hasPrefix("```") {
-      sanitized = sanitized.replacingOccurrences(of: "```", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    if let marker = sanitized.range(of: #"^(\d+[.)]|[-*•#]+)\s+"#, options: .regularExpression) {
-      sanitized.removeSubrange(marker)
-    }
-    sanitized = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-    sanitized = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
-    return sanitized.isEmpty ? nil : sanitized
+    TextQuality.sanitizeDescription(raw)
   }
 
   /// Derive and write `nodeID`'s description. Eligible only for a `project` node with exactly one
@@ -50,14 +42,21 @@ public enum NodeDescriber {
     guard let resolved else { return .ineligible }
     if !force, !resolved.node.description.isEmpty { return .ineligible }
 
-    let ctx = ProjectContext.gather(commonDir: resolved.key)
-    guard ProjectContext.hasMeaningfulSignal(ctx) else { return .noSignal }
+    let context = ProjectContext.gather(commonDir: resolved.key)
+    guard ProjectContext.hasMeaningfulSignal(context) else { return .noSignal }
 
-    guard let raw = try? await provider.complete(prompt: ProjectContext.describePrompt(ctx)),
-          let desc = sanitize(raw) else { return .attemptedEmpty }
+    guard let raw = try? await provider.complete(prompt: ProjectContext.describePrompt(context)),
+          let descriptionText = sanitize(raw) else { return .attemptedEmpty }
 
-    try? await database.write { database in
-      try Node.where { $0.id.eq(nodeID) }.update { $0.description = desc }.execute(database)
+    // A failed write means the node still has no description, so say so: `.wrote` is terminal and
+    // the caller logs it as a success, which is how a swallowed write error read as a described node.
+    do {
+      try await database.write { database in
+        try Node.where { $0.id.eq(nodeID) }.update { $0.description = descriptionText }.execute(database)
+      }
+    } catch {
+      Log.ingest.error("NodeDescriber write failed for \(nodeID, privacy: .public): \(error, privacy: .public)")
+      return .attemptedEmpty
     }
     return .wrote
   }

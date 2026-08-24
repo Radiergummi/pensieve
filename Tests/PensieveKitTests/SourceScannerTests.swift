@@ -53,7 +53,10 @@ private func repo(in parent: URL, _ name: String) throws -> URL {
 @Test func worktreeDedupesToOneCandidate() throws {
   let root = try makePlainDir("root")
   let main = try repo(in: root, "main")
-  guard (try? addWorktree(to: main, branch: "wt")) != nil else { return }
+  // A hard requirement, not a silent skip: the dedup-to-one-candidate property is the subject, and
+  // `guard … else { return }` made a failed `git worktree add` look like a passing test.
+  _ = try #require(try? addWorktree(to: main, branch: "wt"),
+                   "git worktree add failed; this test cannot verify anything without it")
   // NOTE: `git worktree add <path>` places the worktree OUTSIDE root by default (tempURL), so also
   // make one inside root to exercise the walk:
   let wtInside = root.appendingPathComponent("main-wt")

@@ -68,8 +68,8 @@ public struct ProjectContext: Sendable {
     guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
     defer { try? handle.close() }
     let data = (try? handle.read(upToCount: 65_536)) ?? Data()   // bound memory; a >64KB manifest is pathological
-    guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
-    return joinNameDesc(obj["name"] as? String, obj["description"] as? String)
+    guard let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+    return joinNameDesc(payload["name"] as? String, payload["description"] as? String)
   }
 
   private static func tomlNameDesc(_ url: URL) -> String? {
@@ -113,17 +113,17 @@ public struct ProjectContext: Sendable {
   }
 
   /// The signal lines shared by `namePrompt` and `describePrompt` — present fields only.
-  private static func signalLines(_ ctx: ProjectContext) -> [String] {
-    var lines = ["Directory name: \(ctx.dirName)"]
-    if let remote = ctx.gitRemote { lines.append("Git remote: \(remote)") }
-    if let manifest = ctx.manifest { lines.append("Package manifest: \(manifest)") }
-    if let readme = ctx.readmeHead { lines.append("README excerpt:\n\(readme)") }
-    if let claudeMd = ctx.claudeMdHead { lines.append("CLAUDE.md excerpt:\n\(claudeMd)") }
+  private static func signalLines(_ context: ProjectContext) -> [String] {
+    var lines = ["Directory name: \(context.dirName)"]
+    if let remote = context.gitRemote { lines.append("Git remote: \(remote)") }
+    if let manifest = context.manifest { lines.append("Package manifest: \(manifest)") }
+    if let readme = context.readmeHead { lines.append("README excerpt:\n\(readme)") }
+    if let claudeMd = context.claudeMdHead { lines.append("CLAUDE.md excerpt:\n\(claudeMd)") }
     return lines
   }
 
   /// Builds the naming prompt from the present signals only.
-  static func namePrompt(_ ctx: ProjectContext) -> String {
+  static func namePrompt(_ context: ProjectContext) -> String {
     """
     Infer a concise, human-readable display name for this software project from the signals below. \
     Output only the name on a single line: 2-6 words, Title Case, a plain label — no numbering, \
@@ -131,13 +131,13 @@ public struct ProjectContext: Sendable {
     expanding an abbreviation the signals support is fine, but do not invent a category (like \
     "App", "CLI", or "Package") the signals do not support.
 
-    \(signalLines(ctx).joined(separator: "\n"))
+    \(signalLines(context).joined(separator: "\n"))
     """
   }
 
   /// Builds the "what is this project" prompt from the present signals only. Sibling to
   /// `namePrompt`; best-effort narration outside the trust gate.
-  public static func describePrompt(_ ctx: ProjectContext) -> String {
+  public static func describePrompt(_ context: ProjectContext) -> String {
     """
     Summarize what this software project IS in 1-2 sentences, from the signals below. Describe its \
     purpose or domain — not its recent activity or history. Output only the description as plain \
@@ -145,7 +145,7 @@ public struct ProjectContext: Sendable {
     invent a purpose the signals do not support. If the signals are too thin to say anything, \
     output nothing.
 
-    \(signalLines(ctx).joined(separator: "\n"))
+    \(signalLines(context).joined(separator: "\n"))
     """
   }
 
@@ -154,10 +154,10 @@ public struct ProjectContext: Sendable {
   /// title line) exceeds a small threshold. A bare dir name, a bare remote, a name-only manifest,
   /// or a one-line `# foo` README is NOT enough → the describe pass skips it (cheaply, no LLM) and
   /// retries once real content appears.
-  public static func hasMeaningfulSignal(_ ctx: ProjectContext) -> Bool {
-    if let manifest = ctx.manifest, manifest.contains(" — ") { return true }
-    if descriptiveBodyLength(ctx.readmeHead) >= 20 { return true }
-    if descriptiveBodyLength(ctx.claudeMdHead) >= 20 { return true }
+  public static func hasMeaningfulSignal(_ context: ProjectContext) -> Bool {
+    if let manifest = context.manifest, manifest.contains(" — ") { return true }
+    if descriptiveBodyLength(context.readmeHead) >= 20 { return true }
+    if descriptiveBodyLength(context.claudeMdHead) >= 20 { return true }
     return false
   }
 

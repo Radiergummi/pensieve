@@ -6,7 +6,8 @@ import PensieveKit
 /// Settings ▸ General. Intentionally short — standard macOS General tabs often are.
 struct GeneralSettingsTab: View {
   @AppStorage(AppDefaults.hideDockIconKey) private var hideDockIcon = false
-  @AppStorage(AppDefaults.backgroundSyncEnabledKey) private var backgroundSyncEnabled = true
+  @AppStorage(AppDefaults.backgroundSyncEnabledKey)
+  private var backgroundSyncEnabled = AppDefaults.backgroundSyncEnabledDefault
   @State private var syncStatus: SMAppService.Status = .notRegistered
   @State private var cliPlan: CLIToolInstaller.Plan = .create
   @State private var showReplaceConfirm = false
@@ -33,7 +34,7 @@ struct GeneralSettingsTab: View {
               syncStatus = BackgroundSyncService.status
             }
           }
-        LabeledContent("Status") { Text(statusText) }
+        LabeledContent("Status") { Text(syncStatus.displayLabel) }
         if syncStatus == .requiresApproval {
           Button("Open Login Items Settings") { SMAppService.openSystemSettingsLoginItems() }
         }
@@ -64,16 +65,6 @@ struct GeneralSettingsTab: View {
     .onAppear {
       syncStatus = BackgroundSyncService.status
       cliPlan = currentCLIPlan()
-    }
-  }
-
-  private var statusText: LocalizedStringKey {
-    switch syncStatus {
-    case .enabled: return "Enabled"
-    case .requiresApproval: return "Needs approval"
-    case .notRegistered: return "Off"
-    case .notFound: return "Not found"
-    @unknown default: return "Off"
     }
   }
 

@@ -32,22 +32,20 @@ public struct MonitorSnapshot: Equatable, Sendable {
                             now: Date = Date(),
                             activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
     // Spool: the real-time capture heartbeat. Only touch it if it already exists.
-    var totals = Totals()
-    if FileManager.default.fileExists(atPath: spoolURL.path),
-       let stats = try? CaptureSpool.readOnlyStats(at: spoolURL) {
-      totals.lastCapture = stats.lastCaptureAt
-      totals.pending = stats.pending
-    }
+    let stats = FileManager.default.fileExists(atPath: spoolURL.path)
+      ? try? CaptureSpool.readOnlyStats(at: spoolURL)
+      : nil
 
     // Canonical store: ingested state. Only open an existing store (read-only, no migrator run).
-    if FileManager.default.fileExists(atPath: canonicalURL.path),
-       let database = try? openCanonicalDatabaseReadOnly(at: canonicalURL) {
-      totals.events = (try? database.read { database in try Event.fetchCount(database) }) ?? 0
-      totals.loose = (try? database.read { database in
-        try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
-      }) ?? 0
+    // A store that exists but will not OPEN is not the same thing as no store — see `Totals.canonicalUnreadable`.
+    let canonicalExists = FileManager.default.fileExists(atPath: canonicalURL.path)
+    let database = canonicalExists ? try? openCanonicalDatabaseReadOnly(at: canonicalURL) : nil
+    if canonicalExists && database == nil {
+      Log.sync.error("MonitorSnapshot: canonical store exists but would not open at \(canonicalURL.path, privacy: .public)")
     }
 
+    let totals = collect(canonical: database, canonicalUnreadable: canonicalExists && database == nil,
+                         lastCapture: stats?.lastCaptureAt, pending: stats?.pending ?? 0)
     return classify(totals, now: now, activeWithin: activeWithin)
   }
 
@@ -59,18 +57,35 @@ public struct MonitorSnapshot: Equatable, Sendable {
   public static func gather(canonical: (any DatabaseReader)?, spool: CaptureSpool?,
                             now: Date = Date(),
                             activeWithin: TimeInterval = 15 * 60) -> MonitorSnapshot {
-    var totals = Totals()
-    if let spool {
-      totals.lastCapture = try? spool.lastCaptureAt()
-      totals.pending = (try? spool.pendingCount()) ?? 0
-    }
-    if let canonical {
-      totals.events = (try? canonical.read { database in try Event.fetchCount(database) }) ?? 0
-      totals.loose = (try? canonical.read { database in
-        try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
-      }) ?? 0
-    }
+    let totals = collect(canonical: canonical, canonicalUnreadable: false,
+                         lastCapture: try? spool?.lastCaptureAt(),
+                         pending: (try? spool?.pendingCount()) ?? 0)
     return classify(totals, now: now, activeWithin: activeWithin)
+  }
+
+  /// The canonical-store half of the heartbeat, in ONE place. Both `gather` overloads read the same
+  /// two counts off a reader they resolved differently (one opens it from a URL, one is handed a
+  /// live connection), and each used to spell the reads out itself.
+  private static func collect(canonical: (any DatabaseReader)?, canonicalUnreadable: Bool,
+                              lastCapture: Date?, pending: Int) -> Totals {
+    var totals = Totals()
+    totals.lastCapture = lastCapture
+    totals.pending = pending
+    totals.canonicalUnreadable = canonicalUnreadable
+    guard let canonical else { return totals }
+    do {
+      totals.events = try canonical.read { database in try Event.fetchCount(database) }
+      totals.openLooseEnds = try canonical.read { database in
+        try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
+      }
+    } catch {
+      // A store that is present but will not answer is the third state: not absent, not empty. The
+      // counts stay at zero (there is no honest number) but the state is recorded, so `classify`
+      // cannot call it "not set up".
+      totals.canonicalUnreadable = true
+      Log.sync.error("MonitorSnapshot: canonical read failed: \(error, privacy: .public)")
+    }
+    return totals
   }
 
   /// The raw measurements both `gather` overloads collect, before they are classified into a
@@ -79,20 +94,29 @@ public struct MonitorSnapshot: Equatable, Sendable {
     var lastCapture: Date?
     var pending = 0
     var events = 0
-    var loose = 0
+    var openLooseEnds = 0
+    /// A canonical store is present but its counts could not be obtained — it would not open, or a
+    /// read threw. Distinct from absent: the connection overload's nil reader means "not open yet",
+    /// which its doc equates to no store, and leaves this false.
+    var canonicalUnreadable = false
   }
 
   private static func classify(_ totals: Totals, now: Date, activeWithin: TimeInterval) -> MonitorSnapshot {
     let status: Status
-    if totals.lastCapture == nil && totals.pending == 0 && totals.events == 0 {
-      status = .notSetUp
-    } else if let lastCapture = totals.lastCapture, now.timeIntervalSince(lastCapture) <= activeWithin {
+    if let lastCapture = totals.lastCapture, now.timeIntervalSince(lastCapture) <= activeWithin {
       status = .active
+    } else if totals.lastCapture == nil && totals.pending == 0 && totals.events == 0
+                && !totals.canonicalUnreadable {
+      // "Not set up" is a claim about the machine, so it must not be reachable by a store that IS
+      // set up and merely unreadable — a corrupt or permission-denied store rendered as a fresh
+      // install, which is the one reading that tells the user to do nothing. An unreadable store
+      // falls through to `.idle`: something is here, it just isn't moving.
+      status = .notSetUp
     } else {
       status = .idle
     }
     return MonitorSnapshot(status: status, lastCaptureAt: totals.lastCapture,
                            spoolPending: totals.pending, eventCount: totals.events,
-                           looseEndCount: totals.loose)
+                           looseEndCount: totals.openLooseEnds)
   }
 }

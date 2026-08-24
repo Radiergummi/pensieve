@@ -250,7 +250,13 @@ public struct StoreRelocator {
   }
 
   /// The only files the exclusive lock genuinely quiesces (see `verifyCopy`'s doc comment).
-  private static let canonicalStoreFileNames = ["pensieve.sqlite", "pensieve.sqlite-wal", "pensieve.sqlite-shm"]
+  /// Derived from `PensievePaths.canonicalStoreFileName` rather than spelled out, so renaming the
+  /// store file cannot leave relocation copying and verifying a name that no longer exists.
+  private static let canonicalStoreFileNames = [
+    PensievePaths.canonicalStoreFileName,
+    "\(PensievePaths.canonicalStoreFileName)-wal",
+    "\(PensievePaths.canonicalStoreFileName)-shm",
+  ]
 
   /// Scoped, not whole-tree: only `canonicalStoreFileNames`. A name absent from BOTH sides (a
   /// fresh install may have no `-wal`/`-shm` yet) is fine; present on one side only, or differing
@@ -335,8 +341,12 @@ public struct StoreRelocator {
       probe = probe.deletingLastPathComponent()
     }
     let values = try? probe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-    let available = values?.volumeAvailableCapacityForImportantUsage ?? 0
-    guard available == 0 || available >= needed else {
+    // A nil reading means "could not determine" and must not block a relocation; a reading of ZERO
+    // means the volume is genuinely full. `?? 0` collapsed the two, so the `available == 0` clause —
+    // written as the undeterminable escape hatch — also whitelisted a completely full destination,
+    // which is the one case this check exists to catch.
+    guard let available = values?.volumeAvailableCapacityForImportantUsage else { return }
+    guard available >= needed else {
       throw RelocationError.insufficientSpace(needed: needed, available: available)
     }
   }

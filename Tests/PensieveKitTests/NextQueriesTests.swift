@@ -83,3 +83,61 @@ import SQLiteData
   // would disagree about how stale the same project is.
   #expect(item.daysDormant == 1)
 }
+
+/// A 👎'd resolved loose end is not closed WORK, so it must not make a node non-actionable.
+///
+/// `ranked`'s closed count spelled `status.neq(.open)` with no label filter, while `isOpen` — and
+/// both Completed feeds — exclude `label = noise`. So on a node whose only resolved ends are 👎'd,
+/// `openLooseEnds == 0` and `closedLooseEnds > 0`, and `isActionable`
+/// (`openLooseEnds > 0 || closedLooseEnds == 0`) went false: the node vanished from What's Next, the
+/// sidebar smart list, the widget digest, MCP `whats_next` and `pensieve next` at once, while
+/// appearing on no Completed feed either. Permanently, with no user action able to undo it.
+///
+/// The fixture is exactly that shape — every resolved end 👎'd — which is the ONLY shape that
+/// separates the two predicates. A node with one plain resolved end is non-actionable under both.
+@Test func rankedTreatsThumbsDownEndsAsNeverHavingBeenWork() throws {
+  let database = try openCanonicalDatabase(at: tempURL("next-closed-noise"))
+  let resolver = ProjectResolver(database: database)
+  let (node, source) = try resolver.resolve(path: "/p/thumbed-down", kind: SourceKind.claudeCode)
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                    kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}", fingerprint: "cn1")
+  try database.write { database in
+    try Event.insert { event }.execute(database)
+    // Two resolved ends, BOTH 👎: the user said neither was ever a loose end.
+    for status in [LooseEndStatus.done, .dropped] {
+      try LooseEnd.insert {
+        LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t", quote: "q",
+                 status: status, label: LooseEndLabel.noise)
+      }.execute(database)
+    }
+  }
+  let item = try #require(try NextQueries.ranked(database, now: Date()).first { $0.project.id == node.id })
+  #expect(item.openLooseEnds == 0)
+  #expect(item.closedLooseEnds == 0)   // 👎'd ends are not closed work
+  #expect(item.isActionable)           // so the node is still pickup-able
+  // And the surface every consumer actually goes through must still list it.
+  #expect(try NextQueries.whatsNext(database, now: Date()).contains { $0.project.id == node.id })
+}
+
+/// The counterpart, so the fix cannot be "closed is always 0": a genuinely finished node — resolved
+/// ends that were never 👎'd — must still drop out of What's Next. That is the narrow earned case
+/// `isActionable` documents, and a closed-count stuck at zero would silently resurrect every
+/// finished project.
+@Test func rankedStillRetiresANodeWhoseRealEndsAreAllClosed() throws {
+  let database = try openCanonicalDatabase(at: tempURL("next-closed-real"))
+  let resolver = ProjectResolver(database: database)
+  let (node, source) = try resolver.resolve(path: "/p/finished", kind: SourceKind.claudeCode)
+  let event = Event(nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+                    kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}", fingerprint: "cr1")
+  try database.write { database in
+    try Event.insert { event }.execute(database)
+    try LooseEnd.insert {
+      LooseEnd(nodeID: node.id, sourceEventID: event.id, text: "t", quote: "q", status: .done)
+    }.execute(database)
+  }
+  let item = try #require(try NextQueries.ranked(database, now: Date()).first { $0.project.id == node.id })
+  #expect(item.openLooseEnds == 0)
+  #expect(item.closedLooseEnds == 1)
+  #expect(!item.isActionable)
+  #expect(!(try NextQueries.whatsNext(database, now: Date()).contains { $0.project.id == node.id }))
+}

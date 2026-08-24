@@ -46,7 +46,7 @@ private struct PassageResultRow: View {
           .font(.system(size: 12, weight: .medium))
         Text(hit.nodeName).metaText()
         Spacer(minLength: 0)
-        Text(hit.occurredAt, format: .relative(presentation: .named)).metaText()
+        Text(hit.occurredAt, format: NodeMeta.relativeStyle).metaText()
         if hit.isArchived { ArchivedBadge() }
       }
       SnippetText(snippet: hit.snippet)

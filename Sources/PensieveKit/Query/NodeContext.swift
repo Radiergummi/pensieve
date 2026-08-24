@@ -51,8 +51,8 @@ public enum NodeContextResolver {
     let allIDs = Set(byID.keys)
     guard !active.isEmpty else { return allIDs }
     return allIDs.filter { id in
-      let ctx = resolve(id, byID: byID)
-      return ctx == active || ctx.isEmpty
+      let resolvedContext = resolve(id, byID: byID)
+      return resolvedContext == active || resolvedContext.isEmpty
     }
   }
 }

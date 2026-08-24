@@ -13,7 +13,9 @@ public struct SmartLists: Sendable {
     self.whatsNext = whatsNext; self.dormant = dormant; self.recentlyActive = recentlyActive
   }
 
-  public static func compute(_ database: any DatabaseWriter, now: Date,
+  /// Takes a `DatabaseReader`: this is the only read in the directory that demanded a writer, and it
+  /// writes nothing — `NextQueries.ranked` is read-only. A writer still satisfies it.
+  public static func compute(_ database: any DatabaseReader, now: Date,
                              dormantAfterDays: Int = 14,
                              activeWithinDays: Int = 3) throws -> SmartLists {
     let ranked = try NextQueries.ranked(database, now: now)

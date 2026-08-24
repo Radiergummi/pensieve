@@ -40,16 +40,31 @@ public struct TranslationStore: Sendable {
       }
       return pool
     } catch {
-      Log.search.error("TranslationStore: failed to open at \(url.path, privacy: .public): \(error, privacy: .public)")
+      Log.translation.error("TranslationStore: failed to open at \(url.path, privacy: .public): \(error, privacy: .public)")
       return nil
     }
   }
+
+  /// Identifies the rule a cached translation was produced under. Bump it whenever what gets sent
+  /// to the translator changes — which fields, how the text is normalized or trimmed.
+  ///
+  /// `NarrationCacheKey` carries exactly such a token (`factSheetRule`) and documents why: without
+  /// one, entries produced under the old rule keep being served for every source string that has not
+  /// itself changed, so a rule change is invisible precisely where it was supposed to apply. This
+  /// cache had no equivalent.
+  ///
+  /// Folded into the hashed key rather than added as a column: this is a disposable, never-synced
+  /// cache, so stranding old rows (which `pruneKeeping` reclaims) is cheaper and safer than a
+  /// migration. A *producer* token is deliberately NOT included — on-device translation is the only
+  /// producer, so it is constant; see the quality backlog if a second one is ever added.
+  static let translationRule = "r1"
 
   /// Stable across processes and runs — `String.hashValue` is per-process salted and must never be
   /// used here. Same `StableHash` primitive `EmbeddableItem.contentHash` uses.
   static func sourceHash(_ text: String) -> String {
     var hash = StableHash()
     hash.absorb(text)
+    hash.absorb(translationRule)
     return hash.hexValue
   }
 
@@ -71,7 +86,7 @@ public struct TranslationStore: Sendable {
           """, arguments: [field.rawValue, Self.sourceHash(sourceText), language, text])
       }
     } catch {
-      Log.search.error("TranslationStore: put failed: \(error, privacy: .public)")
+      Log.translation.error("TranslationStore: put failed: \(error, privacy: .public)")
     }
   }
 
@@ -91,7 +106,7 @@ public struct TranslationStore: Sendable {
                              arguments: StatementArguments(liveHashes))
       }
     } catch {
-      Log.search.error("TranslationStore: prune failed: \(error, privacy: .public)")
+      Log.translation.error("TranslationStore: prune failed: \(error, privacy: .public)")
     }
   }
 }

@@ -23,8 +23,14 @@ extension NodeState {
 
 /// Turns one index row into a grounded `SearchHit` by re-reading the item from the canonical store —
 /// the last line of grounding defense, so a between-sync stale index row can never surface a dead
-/// hit. Shared by both retrieval engines: BM25 and the vector index differ only in how they pick
-/// candidates and how they highlight them, never in what a hit is allowed to be.
+/// hit.
+///
+/// This type exists because two retrieval paths once restated "what a hit is allowed to be"
+/// separately and drifted. The vector engine has since been measured worse and removed, leaving BM25
+/// over FTS5 as the only retrieval path — but the split this enforces is still real and still load
+/// bearing: text search, the file-path probe and passage search each pick and highlight candidates
+/// differently, and every one of them must agree on what may surface. Keep new retrieval work going
+/// through here rather than re-deriving the rule.
 ///
 /// Takes an open `Database` rather than a `DatabaseReader` so the caller can resolve a whole
 /// candidate page inside ONE read transaction instead of one per hit.
@@ -37,9 +43,9 @@ struct SearchHitResolver {
   /// the two dimensions are orthogonal — a hit can be an archived node's open end or an active
   /// node's closed one — even though the app's scope bar happens to drive both from one control.
   var includeClosed: Bool = false
-  /// Receives the body text this hit displays and returns its snippet — the one place the two
-  /// engines diverge (BM25 highlights the query's unstemmed terms, the vector index the raw query
-  /// string).
+  /// Receives the body text this hit displays and returns its snippet — the one place callers
+  /// legitimately diverge, since a text hit highlights the query's unstemmed terms while a passage
+  /// hit highlights against the raw query string.
   let highlight: (String) -> Snippet
   /// A stored translation of one generated field, or nil. Present so a match found ONLY in a
   /// translated document still highlights: this resolver re-reads canonical, which holds English, and

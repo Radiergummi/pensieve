@@ -675,6 +675,18 @@
         }
       }
     },
+    "Briefing" : {
+      "comment" : "The topmost sidebar row. German keeps the English word: 'Briefing' is an established German loanword and reads naturally. Recorded here as a translated value rather than as a test allowlist entry, so the decision lives with the string and the key exists for the next translator.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Briefing"
+          }
+        }
+      }
+    },
     "Completed" : {
       "extractionState" : "manual",
       "localizations" : {

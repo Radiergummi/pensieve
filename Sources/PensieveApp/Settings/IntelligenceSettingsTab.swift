@@ -7,7 +7,8 @@ import PensieveKit
 struct IntelligenceSettingsTab: View {
   var model: AppModel
   @AppStorage(PensieveDefaults.llmProviderKey) private var providerRaw = ProviderPreference.auto.rawValue
-  @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
+  @AppStorage(AppDefaults.narrationEnabledKey)
+  private var narrationEnabled = AppDefaults.narrationEnabledDefault
 
   @AppStorage(PensieveDefaults.cloudFlavorKey) private var cloudFlavorRaw = CloudFlavor.anthropic.rawValue
   @AppStorage(PensieveDefaults.cloudBaseURLKey) private var cloudBaseURL = ""
@@ -39,15 +40,6 @@ struct IntelligenceSettingsTab: View {
             set: { providerRaw = $0.rawValue })
   }
 
-  private func label(for preference: ProviderPreference) -> LocalizedStringKey {
-    switch preference {
-    case .auto: return "Automatic"
-    case .foundationModels: return "On-device (Foundation Models)"
-    case .claudeCLI: return "Claude CLI (subscription)"
-    case .cloud: return "Cloud (API)"
-    }
-  }
-
   private func help(for preference: ProviderPreference) -> LocalizedStringKey {
     switch preference {
     case .auto: return "Picks the best on-device option — Foundation Models when available, otherwise the Claude CLI."
@@ -64,7 +56,7 @@ struct IntelligenceSettingsTab: View {
 
         Picker("LLM Provider", selection: provider) {
           ForEach([ProviderPreference.auto, .foundationModels, .claudeCLI, .cloud], id: \.self) { preference in
-            Text(label(for: preference)).tag(preference)
+            Text(preference.displayLabel).tag(preference)
           }
         }
         .onChange(of: providerRaw) { _, _ in

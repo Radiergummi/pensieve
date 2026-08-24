@@ -20,8 +20,12 @@ import Testing
 
 @Test func gitSourceIgnoresWorktreeWhoseGitIsAFile() throws {
   let (repo, _) = try makeCommittedRepo()
-  guard let worktree = try? addWorktree(to: repo, branch: "feature"),
-        FileManager.default.fileExists(atPath: worktree.path) else { return }  // worktree unsupported here
+  // A hard requirement, not a silent skip. This was `guard … else { return }`, which turned "git
+  // worktree add failed" into a PASSING test that asserted nothing — and linked worktrees are the
+  // whole subject here, so there is no degraded version of this test worth running.
+  let worktree = try #require(try? addWorktree(to: repo, branch: "feature"),
+                              "git worktree add failed; this test cannot verify anything without it")
+  #expect(FileManager.default.fileExists(atPath: worktree.path))
   // A linked worktree's .git is a FILE — detect must skip it (no candidate, no hook-crash).
   var isDir: ObjCBool = true
   _ = FileManager.default.fileExists(atPath: worktree.appendingPathComponent(".git").path, isDirectory: &isDir)

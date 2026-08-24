@@ -36,6 +36,20 @@ import Foundation
                                  storeOverride: "/tmp/throwaway.sqlite", support: supportURL).path
           == "/tmp/throwaway-translation-cache.sqlite")
 
+  // The narration cache is a sidecar too, and it was the one that did NOT follow the override —
+  // the only one whose `init` DELETES the file it cannot open, so `PENSIEVE_DB=/tmp/fixture
+  // pensieve prime` read, wrote, and could destroy the developer's live cache.
+  //
+  // Asserted through `narrationCacheURL`'s own injectable overload, not through `indexURL` with its
+  // name: the latter passes whether or not the accessor actually routes here, so it would not have
+  // caught the bug. With no override the path must be byte-identical to the historical one, or
+  // every existing install silently orphans its cache.
+  #expect(PensievePaths.narrationCacheURL(storeOverride: nil, support: supportURL).path
+          == support + "/narration-cache.sqlite")
+  #expect(PensievePaths.narrationCacheURL(storeOverride: "/tmp/throwaway.sqlite",
+                                          support: supportURL).path
+          == "/tmp/throwaway-narration-cache.sqlite")
+
   // Two throwaway stores in one directory do not share an index.
   #expect(PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: "/tmp/a.sqlite", support: supportURL)
           != PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: "/tmp/b.sqlite", support: supportURL))
@@ -72,7 +86,8 @@ import Foundation
 
   #expect(PensievePaths.canonicalURL(in: support).path == root + "/pensieve.sqlite")
   #expect(PensievePaths.captureURL(in: support).path == root + "/capture.sqlite")
-  #expect(PensievePaths.narrationCacheURL(in: support).path == root + "/narration-cache.sqlite")
+  #expect(PensievePaths.narrationCacheURL(storeOverride: nil, support: support).path
+          == root + "/narration-cache.sqlite")
 
   // The disposable indexes follow the root too. This is the regression this feature is most
   // likely to reintroduce: an index left behind in the OLD directory is a silent, total
@@ -108,4 +123,42 @@ import Foundation
 /// context is active.
 @Test func activeFocusContextKeyIsTheStringTheAppAlreadyWrote() {
   #expect(PensieveDefaults.activeFocusContextKey == "pensieve.activeFocusContext")
+}
+
+/// A blank or relative store override is treated as absent on EVERY path that reads one.
+///
+/// It was enforced on exactly one of four: the support root. `resolvedCanonicalURL()`,
+/// `resolvedSpoolURL()`, `indexURL(named:)` and `StoreRelocationLock.anchorURL()` all honoured `""`
+/// and relative values. That matters because `URL(fileURLWithPath: "")` is the process's cwd and a
+/// relative value stays cwd-relative — and under launchd the cwd is `/`, so a blank `PENSIEVE_DB`
+/// put the canonical store at the filesystem root instead of falling back to the real one.
+///
+/// Asserted through the pure resolvers, where the rule now lives, so no environment is mutated
+/// (`setenv` is process-global and Swift Testing runs suites in parallel).
+@Test func blankOrRelativeStoreOverrideIsTreatedAsAbsentEverywhere() {
+  let fallback = URL(fileURLWithPath: "/Volumes/Work/pensieve.sqlite")
+  let supportURL = URL(fileURLWithPath: "/Volumes/Work")
+  let cachesAnchorSuffix = "Library/Caches/me.mazetti.pensieve/relocation.lock"
+
+  for bad in ["", "   ", "\n", "relative/dir", "pensieve.sqlite", "./x.sqlite", "../up.sqlite"] {
+    #expect(PensievePaths.resolvedStoreURL(override: bad, fallback: fallback) == fallback,
+            "resolvedStoreURL honoured \(bad.debugDescription)")
+    #expect(PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: bad,
+                                   support: supportURL).path == "/Volumes/Work/search-index.sqlite",
+            "indexURL honoured \(bad.debugDescription)")
+    #expect(StoreRelocationLock.anchorURL(storeOverride: bad).path.hasSuffix(cachesAnchorSuffix),
+            "anchorURL honoured \(bad.debugDescription)")
+  }
+
+  // An absolute override is still honoured — the guard must not have swallowed the feature.
+  #expect(PensievePaths.resolvedStoreURL(override: "/tmp/x.sqlite", fallback: fallback).path
+          == "/tmp/x.sqlite")
+  #expect(PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: "/tmp/x.sqlite",
+                                 support: supportURL).path == "/tmp/x-search-index.sqlite")
+  #expect(StoreRelocationLock.anchorURL(storeOverride: "/tmp/x.sqlite").path
+          == "/tmp/x-relocation.lock")
+
+  // Surrounding whitespace on a real path is trimmed rather than making the value "relative".
+  #expect(PensievePaths.resolvedStoreURL(override: "  /tmp/x.sqlite  ", fallback: fallback).path
+          == "/tmp/x.sqlite")
 }

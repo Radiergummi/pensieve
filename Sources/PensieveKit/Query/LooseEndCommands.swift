@@ -109,10 +109,16 @@ public enum LooseEndCommands {
       return map
     }
     var matched = 0, skipped = 0
-    for entry in entries {
-      guard let ids = index[normalizeWhitespace(entry.quote)], !ids.isEmpty else { skipped += 1; continue }
-      for id in ids { _ = try setLabel(database, id: id, label: entry.label) }
-      matched += 1
+    // ONE write transaction for the batch, not one per entry: this is the bootstrap path over the
+    // whole backlog. `setLabel`'s existence check is not needed here — every id came out of the
+    // index built from the rows themselves — so the update goes straight out, one statement per
+    // entry rather than one per matched row.
+    try database.write { database in
+      for entry in entries {
+        guard let ids = index[normalizeWhitespace(entry.quote)], !ids.isEmpty else { skipped += 1; continue }
+        try LooseEnd.where { $0.id.in(ids) }.update { $0.label = entry.label }.execute(database)
+        matched += 1
+      }
     }
     return (matched, skipped)
   }

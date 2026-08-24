@@ -51,10 +51,10 @@ public struct SourceScanner {
     return result
   }
 
-  private func walk(_ dir: URL, depth: Int, recursive: Bool, into found: inout [DiscoveredSource]) {
+  private func walk(_ directory: URL, depth: Int, recursive: Bool, into found: inout [DiscoveredSource]) {
     var pruned = false
     for type in types {
-      if let detection = type.detect(directory: dir) {
+      if let detection = type.detect(directory: directory) {
         let normalized = DiscoveredSource(
           kind: detection.kind, directory: Self.normalizedDirectory(detection.directory),
           identityKey: detection.identityKey, displayName: detection.displayName)
@@ -67,7 +67,7 @@ public struct SourceScanner {
 
     let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
     guard let children = try? FileManager.default.contentsOfDirectory(
-      at: dir, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])
+      at: directory, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])
     else { return }                                      // unreadable dir → skip, don't abort
 
     for child in children {
@@ -78,12 +78,16 @@ public struct SourceScanner {
     }
   }
 
-  /// Resolves symlinks and strips a trailing slash so directory URLs compare equal regardless of
-  /// spelling. On macOS `resolvingSymlinksInPath` maps `/private/var…` → `/var…` (and leaves
-  /// `/var…` unchanged) — this is what makes discovered paths match the already-resolved `root`.
+  /// Normalizes a directory URL so two spellings of one directory compare equal — which is what
+  /// makes discovered paths match the already-resolved `root`.
+  ///
+  /// Expressed THROUGH `ProjectResolver.canonical` rather than beside it. This used to be a third
+  /// hand-rolled canonicalization (resolve symlinks, then strip a trailing slash by hand) sitting
+  /// next to `ProjectResolver.canonical` and `Git.commonDir`'s copy, all three feeding the same
+  /// source keys — and a source key that disagrees with itself is two `Source` rows, two `Node`s and
+  /// a split project. `URL.path` already drops the trailing slash the hand-rolled version removed,
+  /// including for the root, so this is the same rule with one definition.
   private static func normalizedDirectory(_ url: URL) -> URL {
-    var path = url.resolvingSymlinksInPath().path
-    if path.hasSuffix("/") && path != "/" { path.removeLast() }
-    return URL(fileURLWithPath: path, isDirectory: false)
+    URL(fileURLWithPath: ProjectResolver.canonical(url.path), isDirectory: false)
   }
 }

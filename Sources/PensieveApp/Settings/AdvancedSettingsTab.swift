@@ -28,7 +28,7 @@ struct AdvancedSettingsTab: View {
           Label("Foundation Models isn’t available on this Mac.", systemImage: "info.circle")
             .font(.caption).foregroundStyle(.secondary)
         }
-        LabeledContent("Background sync") { Text(syncStatusText) }
+        LabeledContent("Background sync") { Text(syncStatus.displayLabel) }
         LabeledContent("Last sync") { Text(relative(status?.lastSyncAt)) }
         LabeledContent("Last captured activity") { Text(relative(status?.lastEventAt)) }
       }
@@ -56,17 +56,6 @@ struct AdvancedSettingsTab: View {
     }
   }
 
-  /// The live SMAppService registration state, in human words (mirrors the General status line).
-  private var syncStatusText: LocalizedStringKey {
-    switch syncStatus {
-    case .enabled: return "Enabled"
-    case .requiresApproval: return "Needs approval"
-    case .notRegistered: return "Off"
-    case .notFound: return "Not found"
-    @unknown default: return "Off"
-    }
-  }
-
   private func load() {
     syncStatus = BackgroundSyncService.status
     let (config, key) = model.cloudInputs()
@@ -77,19 +66,18 @@ struct AdvancedSettingsTab: View {
       syncLogURL: PensievePaths.syncLogURL())
   }
 
-  /// The RESOLVED kind, in human words. The raw kind strings are never shown and never localized.
+  /// The RESOLVED kind, in human words. The raw kind strings are never shown and never localized —
+  /// and the words come from `ProviderPreference.displayLabel`, the same mapping the Intelligence
+  /// tab's picker renders, rather than a second switch over string literals.
   private var providerDisplayName: LocalizedStringKey {
-    switch status?.providerKind {
-    case "foundationModels": return "On-device (Foundation Models)"
-    case "claudeCLI": return "Claude CLI (subscription)"
-    case "cloud": return "Cloud (API)"
-    default: return "—"
-    }
+    guard let kind = status?.providerKind, let preference = ProviderPreference(rawValue: kind)
+    else { return "—" }
+    return preference.displayLabel
   }
 
   /// An honest em-dash-free absent value: "Never" reads as a fact, not a formatting failure.
   private func relative(_ date: Date?) -> String {
     guard let date else { return String(localized: "Never") }
-    return date.formatted(.relative(presentation: .named))
+    return NodeMeta.relative(date)   // the app's one relative-date vocabulary
   }
 }

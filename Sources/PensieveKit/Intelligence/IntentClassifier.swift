@@ -32,6 +32,13 @@ public struct IntentClassifier {
       if let indices = try? await provider.classifyGenuineIndices(prompt: Self.buildPrompt(batch)) {
         // Trust the structured answer — an empty set legitimately drops the whole batch.
         // (With guided generation this is a real classification, not an unparseable no-op.)
+        //
+        // That parenthetical was only true of the protocol's intent, not of its implementations:
+        // `FoundationModelsProvider` used to return [] when guided generation produced a
+        // structure it could not read, so a mismatch reached here as "drop everything" and every
+        // prompt in the batch was discarded silently. All three of its guided decoders now throw on
+        // a mismatch, which lands in the fail-open branch below. Any future provider MUST do the
+        // same: reaching this line with [] is a promise that the model really answered "none".
         keep = Set(indices)
       } else {
         keep = Set(batch.map { $0.index })   // fail open only on a hard provider error

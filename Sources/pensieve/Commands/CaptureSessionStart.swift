@@ -19,13 +19,13 @@ struct CaptureSessionStart: ParsableCommand {
   static let configuration = CommandConfiguration(commandName: "capture-session-start",
     abstract: "Record the branch a Claude Code session launched on (reads hook JSON from stdin).")
 
-  func run() throws {
+  func run() {
     let data = FileHandle.standardInput.readDataToEndOfFile()
     guard let input = try? JSONDecoder().decode(HookInput.self, from: data) else { return }  // dumb: never fail a session
     let branch = Git.run(["rev-parse", "--abbrev-ref", "HEAD"], in: input.cwd) ?? ""
-    let commonDir = Git.commonDir(in: input.cwd) ?? ""
+    let commonDir = ProjectResolver.identityKey(forRepoPath: input.cwd) ?? ""
     let payload = SessionStartPayload(sessionID: input.sessionID, cwd: input.cwd,
       branch: branch, commonDir: commonDir, transcriptPath: input.transcriptPath ?? "")
-    try? openSpool().append(kind: CaptureKind.ccSessionStart, payload: try encodeJSON(payload))
+    appendCapture(kind: CaptureKind.ccSessionStart, encoding: payload)
   }
 }

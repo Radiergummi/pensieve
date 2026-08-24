@@ -27,8 +27,9 @@ public struct SalienceClassifier {
     var kept: [VerifiedLooseEnd] = []
     for batch in Self.batches(ends, messages: messages, budget: batchCharBudget) {
       let drop: Set<Int>
-      if let idx = try? await provider.classifyNonSalientIndices(prompt: Self.buildPrompt(batch, messages: messages)) {
-        drop = Set(idx)                       // structured answer: trust the drop set (empty = keep all)
+      if let nonSalientIndices = try? await provider.classifyNonSalientIndices(
+        prompt: Self.buildPrompt(batch, messages: messages)) {
+        drop = Set(nonSalientIndices)         // structured answer: trust the drop set (empty = keep all)
       } else {
         drop = []                             // hard error: fail open, keep all
       }
@@ -51,9 +52,9 @@ public struct SalienceClassifier {
 
   /// The cited message ± `contextNeighbors`, each capped, joined — the framing signal.
   static func contextWindow(for end: VerifiedLooseEnd, messages: [TranscriptMessage]) -> String {
-    guard let pos = messages.firstIndex(where: { $0.index == end.sourceMessageIndex }) else { return "" }
-    let lowerBound = max(0, pos - contextNeighbors)
-    let upperBound = min(messages.count - 1, pos + contextNeighbors)
+    guard let messagePosition = messages.firstIndex(where: { $0.index == end.sourceMessageIndex }) else { return "" }
+    let lowerBound = max(0, messagePosition - contextNeighbors)
+    let upperBound = min(messages.count - 1, messagePosition + contextNeighbors)
     return messages[lowerBound...upperBound].map { message in
       let head = message.text.count > messageHeadLimit ? String(message.text.prefix(messageHeadLimit)) + " …" : message.text
       return "\(message.role): \(head)"
@@ -72,10 +73,8 @@ public struct SalienceClassifier {
     }.joined(separator: "\n\n")
     return """
     Each item below is a candidate LOOSE END quoted from a developer's message, with surrounding \
-    context. A LOOSE END is deferred, parked, or decision work the developer left open for later — \
-    e.g. "we should also migrate the auth tables", "let's do X later", "TODO: wire up the webhook", \
-    "let's go with A instead of B". It is NOT an in-the-moment request the assistant simply carried \
-    out now — e.g. "read the spec", "can you fix this?", "run the tests", "subagent-driven, let's go".
+    context. A LOOSE END is \(LooseEndDefinition.isDeferredWork). It is \
+    \(LooseEndDefinition.isNotInTheMoment).
 
     Return ONLY a JSON array of the [n] numbers that are clearly in-the-moment requests / NOT loose \
     ends (these will be dropped). When you are unsure about an item, do NOT include it (keep it). If \

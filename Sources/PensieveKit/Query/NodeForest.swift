@@ -17,8 +17,8 @@ public enum NodeForest {
     var childrenByParent: [UUID: [Node]] = [:]
     var roots: [Node] = []
     for node in nodes {
-      if let pid = node.parentID, ids.contains(pid) {
-        childrenByParent[pid, default: []].append(node)
+      if let parentID = node.parentID, ids.contains(parentID) {
+        childrenByParent[parentID, default: []].append(node)
       } else {
         roots.append(node)   // nil parent, or parent absent from the set → promote to root
       }
@@ -26,11 +26,11 @@ public enum NodeForest {
     func make(_ node: Node, _ visited: Set<UUID>) -> NodeForestNode {
       var visited = visited
       visited.insert(node.id)
-      let kids = (childrenByParent[node.id] ?? [])
+      let children = (childrenByParent[node.id] ?? [])
         .filter { !visited.contains($0.id) }        // cycle guard: can never recurse forever
         .sorted { $0.name < $1.name }
         .map { make($0, visited) }
-      return NodeForestNode(node: node, children: kids)
+      return NodeForestNode(node: node, children: children)
     }
     return roots.sorted { $0.name < $1.name }.map { make($0, []) }
   }

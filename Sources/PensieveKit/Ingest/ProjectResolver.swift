@@ -21,6 +21,23 @@ public struct ProjectResolver: Sendable {
     return path == "/" || path == canonical(NSHomeDirectory())
   }
 
+  /// The one definition of "the identity key for a git repository".
+  ///
+  /// A repo's identity is its git COMMON dir (`…/repo/.git`), never its worktree root: every linked
+  /// worktree of one repo shares the common dir, and that is precisely what makes a worktree's
+  /// commits land in the repo's node instead of minting a node per worktree. Three sites derived
+  /// this and a fourth did not — `pensieve track` keyed by the worktree root, so `…/pensieve` and
+  /// `…/pensieve/.git` became two `Source` rows (the table is `UNIQUE(key, kind)`), two `Node`s, and
+  /// two entries in every list, for one repo. Everything that needs this key calls here.
+  ///
+  /// Returns nil when git cannot answer. Callers MUST distinguish that from "not a repo": for a
+  /// payload that came from a git hook, the path WAS a repo when it was captured, so nil can only
+  /// mean the directory is gone — and falling back to the raw path there invents a phantom project
+  /// keyed on a dead path. See `Ingester.identityKey(forHookPath:)`.
+  public static func identityKey(forRepoPath path: String) -> String? {
+    Git.commonDir(in: path)
+  }
+
   /// Human-readable node name from an identity key. A git common-dir ends in `.git`;
   /// name the node after the repo directory, not ".git".
   static func displayName(forKey key: String) -> String {

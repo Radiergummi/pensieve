@@ -12,8 +12,11 @@ public enum TranscriptParser {
     }
     let sessionID = fileURL.deletingPathExtension().lastPathComponent
     guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
+      // `wasReadable: false` is load-bearing, not decoration: it is the only signal that separates
+      // "this file could not be read" from "this file had nothing to say", and the ingester retires
+      // a session permanently on the second but not the first.
       return ParsedSession(sessionID: sessionID, cwd: nil, startedAt: nil, endedAt: nil,
-                           userPromptCount: 0, messages: [])
+                           userPromptCount: 0, messages: [], wasReadable: false)
     }
 
     var cwd: String?
@@ -22,17 +25,17 @@ public enum TranscriptParser {
     var userPrompts = 0
     var nextIndex = 0
 
-    for line in content.split(separator: "\n", omittingEmptySubsequences: true) {
-      guard let data = line.data(using: .utf8),
-            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    for rawLine in content.split(separator: "\n", omittingEmptySubsequences: true) {
+      guard let data = rawLine.data(using: .utf8),
+            let line = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
       else { continue }   // defensive: skip garbage lines
 
-      if cwd == nil, let cwdValue = obj["cwd"] as? String { cwd = cwdValue }
-      let timestamp = (obj["timestamp"] as? String).flatMap(parseTimestamp)
+      if cwd == nil, let cwdValue = line["cwd"] as? String { cwd = cwdValue }
+      let timestamp = (line["timestamp"] as? String).flatMap(parseTimestamp)
       if let timestamp { timestamps.append(timestamp) }
 
-      let type = obj["type"] as? String
-      let message = obj["message"] as? [String: Any]
+      let type = line["type"] as? String
+      let message = line["message"] as? [String: Any]
       let role = (message?["role"] as? String) ?? (type ?? "unknown")
       let content = message?["content"]
       let text = extractText(content)
@@ -40,10 +43,15 @@ public enum TranscriptParser {
       // bodies, caveats) that it records as `type:"user"` but isn't a human turn. This is
       // the robust primary gate; the marker list below is a backstop for inline-tagged
       // injections it doesn't flag (`<command-name>`, `<task-notification>`, …).
-      let isMeta = (obj["isMeta"] as? Bool) ?? false
-      if type == "user" { userPrompts += 1 }
+      let isMeta = (line["isMeta"] as? Bool) ?? false
       let isUserPrompt = (type == "user") && !isMeta && !isToolResult(content)
         && !isInjectedOrCommand(text) && !text.isEmpty
+      // Count the SAME predicate the messages carry, not every `type:"user"` record. Claude Code
+      // records each tool result as `type:"user"` too: measured on a real transcript, 331 of 362
+      // such records were `tool_result`, so the old count rendered "session (207 prompts)" for
+      // roughly 20 human turns. One definition of "a human turn", used for both the flag and the
+      // count, is also what stops the two from drifting apart again.
+      if isUserPrompt { userPrompts += 1 }
       if !text.isEmpty {
         messages.append(TranscriptMessage(index: nextIndex, role: role, text: text,
                                           timestamp: timestamp, isUserPrompt: isUserPrompt))

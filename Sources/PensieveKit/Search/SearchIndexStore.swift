@@ -23,6 +23,12 @@ public struct SearchIndexStore: Sendable {
   /// surfaces rows the text index could not find at all, ranked by their own path relevance in a
   /// separate list appended BELOW the text hits.
   private static let ranking = "bm25(documents)"
+  /// The FTS5 tokenizer every table here is built with. One definition: three tables spelling it out
+  /// separately was three chances to change one and leave the others behind. **Coupled to
+  /// `FindMatcher.options`**, which must keep folding diacritics for as long as this says
+  /// `remove_diacritics 2` — retrieval matches `losung` against `Lösung`, and a case-only in-node
+  /// find would hand back a real hit it then highlights nothing in. Change both together.
+  private static let tokenizer = "tokenize = 'unicode61 remove_diacritics 2'"
 
   private let database: (any DatabaseWriter)?
   public var isAvailable: Bool { database != nil }
@@ -34,11 +40,26 @@ public struct SearchIndexStore: Sendable {
     if let opened = Self.open(url) {
       self.database = opened
     } else {
-      try? FileManager.default.removeItem(at: url)
+      Self.removeIndexFiles(at: url)
       self.database = Self.open(url)
       if self.database == nil {
         Log.search.error("SearchIndexStore: failed to open index after delete-and-retry at \(url.path, privacy: .public)")
       }
+    }
+  }
+
+  /// The whole index, sidecars included — a WAL-mode SQLite database is THREE files, and deleting
+  /// only the main one orphaned the `-wal`/`-shm` pair beside the recreated database.
+  /// `StoreRelocator.canonicalStoreFileNames` enumerates the same three names for the canonical
+  /// store; this is that rule for the index. Absent sidecars are normal, hence best-effort `try?`.
+  /// Measured: SQLite does NOT resurrect the orphans — it validates the WAL header against the
+  /// freshly created database and discards a mismatched one, so delete-and-retry produced a working
+  /// index either way. Hygiene with a matching precedent, then, not a fix for a reachable failure,
+  /// which is why this is internal: the enumeration can be pinned, the behaviour cannot.
+  static func removeIndexFiles(at url: URL) {
+    let manager = FileManager.default
+    for path in [url.path, url.path + "-wal", url.path + "-shm"] {
+      try? manager.removeItem(atPath: path)
     }
   }
 
@@ -66,13 +87,13 @@ public struct SearchIndexStore: Sendable {
             text,
             item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
             language UNINDEXED, item_status UNINDEXED,
-            tokenize = 'unicode61 remove_diacritics 2')
+            \(tokenizer))
           """)
         try database.execute(sql: """
           CREATE VIRTUAL TABLE IF NOT EXISTS document_files USING fts5(
             files,
             item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
-            tokenize = 'unicode61 remove_diacritics 2')
+            \(tokenizer))
           """)
         // A THIRD table, for the same measured reason `document_files` is separate: FTS5 normalises
         // bm25() by a row's TOTAL token count, so putting 1,500-character passages beside 40-character
@@ -87,7 +108,7 @@ public struct SearchIndexStore: Sendable {
           CREATE VIRTUAL TABLE IF NOT EXISTS document_passages USING fts5(
             text,
             item_id UNINDEXED, kind UNINDEXED, node_id UNINDEXED, state UNINDEXED,
-            tokenize = 'unicode61 remove_diacritics 2')
+            \(tokenizer))
           """)
         try database.execute(sql: """
           CREATE TABLE IF NOT EXISTS meta(
@@ -154,9 +175,15 @@ public struct SearchIndexStore: Sendable {
           INSERT INTO document_files(files, item_id, kind, node_id, state) VALUES (?, ?, ?, ?, ?)
           """)
         for item in items {
-          try documentInsert.execute(
-            arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state, item.language,
-                        item.status])
+          // Symmetric with the `files` guard below, same reason: an empty row is dead weight that
+          // also drags the table's average document length, which bm25 normalises by. The producer
+          // relies on it — a repeated event text is emitted as a paths-only item so its files stay
+          // searchable (see `EmbeddableCorpus.appendEventDocuments`).
+          if !item.text.isEmpty {
+            try documentInsert.execute(
+              arguments: [item.text, item.itemID, item.kind, item.nodeID, item.state, item.language,
+                          item.status])
+          }
           // Only rows that actually carry paths — an empty row would be dead weight in the path
           // index and would skew its own average document length.
           guard !item.files.isEmpty else { continue }

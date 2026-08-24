@@ -30,6 +30,17 @@ import SQLiteData
   #expect(NodeDescriber.sanitize("```\n\n```") == nil)
 }
 
+@Test func sanitizeRejectsStructuredOutputWearingAProseCostume() {
+  // The reject `TextQuality` already had and this path was missing while it kept its own copy of the
+  // cleaning: a model that answers the wrong question with another prompt's JSON index array wrote
+  // 139 such "recaps" into the store. A description comes from the same providers via the same seam.
+  #expect(NodeDescriber.sanitize("[0, 3, 7]") == nil)
+  #expect(NodeDescriber.sanitize("```json\n[0, 3, 7]\n```") == nil)
+  #expect(NodeDescriber.sanitize(#"{"indices": [1, 2]}"#) == nil)
+  // Real prose in a fence still survives — the reject is a shape check, not a taste check.
+  #expect(NodeDescriber.sanitize("```\nA row-level-security package.\n```") == "A row-level-security package.")
+}
+
 // MARK: describe (IO)
 
 private struct StubLLM: LLMProvider {

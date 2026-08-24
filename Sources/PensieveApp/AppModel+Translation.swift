@@ -53,11 +53,27 @@ extension AppModel {
   }
 
   /// The stored translation of `sourceText`, or `sourceText` itself. Never generates.
+  ///
+  /// Memoized, because this is a per-row, per-`body`-evaluation call: seven view sites reach it,
+  /// including three list builders and the detail pane's find/share document, which alone asked it
+  /// five times over the whole loose-end set per load. Each miss costs a SQLite read plus a
+  /// `StableHash` of the source text. The memo is dropped whenever `translationRevision` moves —
+  /// the one signal meaning "a translation was written", raised by `translate` below and by a
+  /// backfill that wrote — so a stale answer cannot survive the write that changes it. The language
+  /// is part of the key rather than a second invalidation rule, so a target switch simply misses.
   func displayed(field: TranslationField, sourceText: String) -> String {
     let language = TranslationTarget.resolved()
     guard !language.isEmpty else { return sourceText }
-    return translationStore.translation(field: field, sourceText: sourceText,
-                                        language: language) ?? sourceText
+    if displayedTranslationsRevision != translationRevision {
+      displayedTranslationsRevision = translationRevision
+      displayedTranslations.removeAll(keepingCapacity: true)
+    }
+    let key = DisplayedTranslationKey(field: field, language: language, sourceText: sourceText)
+    if let memoized = displayedTranslations[key] { return memoized }
+    let text = translationStore.translation(field: field, sourceText: sourceText,
+                                            language: language) ?? sourceText
+    displayedTranslations[key] = text
+    return text
   }
 
   /// Measure coverage off the main actor. Pre-Task locals are read here (on the main actor) rather

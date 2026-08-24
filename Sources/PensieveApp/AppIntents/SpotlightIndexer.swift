@@ -1,13 +1,18 @@
 import Foundation
 import CoreSpotlight
+import SQLiteData
 import PensieveKit
 
 /// Clear-then-index the active node set into Spotlight, restricted to the active Focus context's
 /// visible nodes. Full re-index (nodes are few) keeps the index in exact sync. Read-only;
 /// best-effort; never fatal.
 enum SpotlightIndexer {
-  static func reindex(activeContext: String = "") async {
-    guard let database = try? openCanonicalDatabaseReadOnly(at: resolvedCanonicalURL()) else { return }
+  /// The connection is INJECTED, never opened here. Every caller reaches this from a refresh that
+  /// the support-directory FSEvents watch triggered, and opening a fresh connection touches the
+  /// `-shm`/`-wal` sidecars in that same directory — which re-fires the watch, which refreshes
+  /// again. `MonitorSnapshot.gather(canonical:spool:)` is the precedent and states the rule; this
+  /// call chain was undoing it downstream, observed in the field as a CPU-pegged busy-loop.
+  static func reindex(database: any DatabaseReader, activeContext: String = "") async {
     let facts = (try? NodeFactsQueries.all(database, now: Date())) ?? []
     let allNodes = (try? ProjectQueries.all(database)) ?? []
     let visible = NodeContextResolver.visibleNodeIDs(for: activeContext, in: allNodes)

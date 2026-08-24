@@ -1,11 +1,44 @@
 import Foundation
 import PensieveKit
 
-/// A unique temp URL for a test database or directory.
+/// Removes the per-process temp root. A free function with no captures so it converts to the C
+/// function pointer `atexit` requires.
+private func removeTestTemporaryRoot() {
+  guard let path = testTemporaryRootPath else { return }
+  try? FileManager.default.removeItem(atPath: path)
+}
+
+/// Set once, from `testTemporaryRoot`'s initializer, and read only by `atexit`.
+private nonisolated(unsafe) var testTemporaryRootPath: String?
+
+/// One directory per test process, removed when the process exits.
+///
+/// `tempURL` used to place its file directly in `NSTemporaryDirectory()` and nothing ever removed it,
+/// so a suite run left roughly one artifact per test behind — and with 403 call sites, most creating a
+/// SQLite database plus its `-wal`/`-shm`, that accumulates fast. Tens of thousands had piled up by
+/// the 2026-08-24 sweep and were a material part of a disk exhaustion that broke the build mid-run.
+///
+/// Rooting them makes cleanup a single `removeItem`, and `atexit` runs it whether the suite passed,
+/// failed, or threw. It deliberately does NOT run per test: several tests hand a path to a subprocess
+/// or assert on a sibling file, so lifetime is the process, not the test.
+///
+/// 35 sites still build paths straight from `FileManager.default.temporaryDirectory` and are NOT
+/// covered by this — see the quality backlog.
+private let testTemporaryRoot: URL = {
+  let root = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("pensieve-tests-\(ProcessInfo.processInfo.processIdentifier)",
+                            isDirectory: true)
+  try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  testTemporaryRootPath = root.path
+  atexit(removeTestTemporaryRoot)
+  return root
+}()
+
+/// A unique temp URL for a test database or directory, under the per-process root above.
 /// Pass `ext: nil` for a directory (no extension).
 func tempURL(_ prefix: String, ext: String? = "sqlite") -> URL {
   let name = ext.map { "\(prefix)-\(UUID().uuidString).\($0)" } ?? "\(prefix)-\(UUID().uuidString)"
-  return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(name)
+  return testTemporaryRoot.appendingPathComponent(name)
 }
 
 /// A fresh, empty FTS5 search index in a unique temp file.

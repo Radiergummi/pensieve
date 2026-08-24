@@ -14,8 +14,15 @@ public protocol LLMProvider: Sendable {
   func complete(prompt: String) async throws -> String
 
   /// Loose-end candidates for the given extraction prompt. The default decodes JSON from
-  /// `complete`; the on-device provider overrides it with guided generation so the ~3B
-  /// model emits valid structure instead of answering conversationally.
+  /// `complete` and **throws** when the response is not a parseable JSON array; the on-device
+  /// provider overrides it with guided generation so the ~3B model emits valid structure
+  /// instead of answering conversationally.
+  ///
+  /// Returning an empty array means the model *answered* and found nothing. A reply that could
+  /// not be parsed must throw instead: `ExtractionRunner` advances its extraction watermark on
+  /// every non-throwing call, so an unparseable reply reported as `[]` marks the slice mined and
+  /// the size gate then never looks at it again — silent, permanent loss of real loose ends from
+  /// a pipeline whose contract is that extraction stays lossless.
   func extractCandidates(prompt: String) async throws -> [LooseEndCandidate]
 
   /// The `[n]` indices judged genuine developer intent for the given classification prompt.
@@ -34,7 +41,10 @@ public protocol LLMProvider: Sendable {
 
 public extension LLMProvider {
   func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] {
-    LooseEndExtractor.decodeCandidates(try await complete(prompt: prompt))
+    guard let candidates = LooseEndExtractor.decodeCandidatesIfParseable(try await complete(prompt: prompt)) else {
+      throw LLMError.providerFailed("extraction response was not a parseable JSON array")
+    }
+    return candidates
   }
 
   func classifyGenuineIndices(prompt: String) async throws -> [Int] {

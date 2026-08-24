@@ -8,8 +8,11 @@ struct BriefingView: View {
   var model: AppModel
   @AppStorage("briefing.quiet.expanded") private var quietExpanded = false
 
-  private var moved: [BriefingCard] { model.briefingCards.filter { $0.movedSince > 0 } }
-  private var quiet: [BriefingCard] { model.briefingCards.filter { $0.movedSince == 0 } }
+  // The two buckets are partitioned once, where the cards are loaded (`AppModel.loadBriefingCards`),
+  // not here: these were computed properties, so every observation change re-filtered the whole card
+  // set twice inside `body`.
+  private var moved: [BriefingCard] { model.briefingMoved }
+  private var quiet: [BriefingCard] { model.briefingQuiet }
 
   var body: some View {
     ScrollView {

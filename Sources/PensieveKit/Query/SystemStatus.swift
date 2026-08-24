@@ -68,7 +68,7 @@ public enum SystemStatusGatherer {
     return SystemStatus(providerKind: kind,
                         foundationModelsAvailable: FoundationModelsProbe.isAvailable(),
                         backgroundSyncEnabled: backgroundSyncEnabled,
-                        lastSyncAt: lastSyncAt ?? nil,
-                        lastEventAt: lastEventAt ?? nil)
+                        lastSyncAt: lastSyncAt,
+                        lastEventAt: lastEventAt)
   }
 }

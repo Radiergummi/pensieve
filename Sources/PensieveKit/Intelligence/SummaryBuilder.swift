@@ -17,6 +17,21 @@ public struct SummaryBuilder: Sendable {
   /// budget is hit.
   public static let factSheetBudget = 1800
 
+  /// How many of a node's most recent events any narration path may look at. **One number, because
+  /// the narration cache key is derived from exactly these events.**
+  ///
+  /// It was three numbers. `SummaryBuilder.build` asked `ProjectQueries.status` for 15 and
+  /// `factLines` took `prefix(15)`; `SessionContextQueries.bundle` defaulted `recentLimit` to 8. The
+  /// key is `NarrationCacheKey.make(events: status.recentEvents, …)`, so the app wrote entries keyed
+  /// on 15 events and `pensieve prime` / `pensieve mcp` looked up keys built from 8 — a lookup that
+  /// could never hit. The hook that exists to hand a session warm context was therefore permanently
+  /// cold, and on a miss it also narrated a different, shorter window than the app had.
+  ///
+  /// 15 rather than 8 because 15 is the number with a measurement behind it: `factLines`' own
+  /// comment records that all 36 nodes whose recent 15 events are entirely generated labels have no
+  /// narratable event anywhere in their history. The 8 was an unexamined default.
+  public static let narratableEventWindow = 15
+
   /// The single definition of what an event contributes to a fact sheet — or `nil` when it
   /// contributes nothing a recap could honestly be built from.
   ///
@@ -60,7 +75,7 @@ public struct SummaryBuilder: Sendable {
   private static func factLines(events: [Event]) -> [String] {
     var lines: [String] = []
     var used = 0
-    for event in events.prefix(15) {
+    for event in events.prefix(Self.narratableEventWindow) {
       guard let content = narratableContent(for: event) else { continue }
       let line = "- \(event.kind): \(content)"
       if used + line.count > factSheetBudget, !lines.isEmpty { break }
@@ -89,7 +104,7 @@ public struct SummaryBuilder: Sendable {
     // Key off the node the caller holds — NOT its name. Node names aren't unique (two distinct
     // repos can share a basename), so a name lookup would resolve an arbitrary same-named node
     // and, e.g., narrate an empty one while the real one's activity stays invisible.
-    let status = try ProjectQueries.status(database, node: node, limit: 15)
+    let status = try ProjectQueries.status(database, node: node, limit: Self.narratableEventWindow)
     // Nothing captured for this node (e.g. a scanned-but-untouched git repo): skip it rather
     // than hand the model an empty fact sheet, which it "narrates" by hallucinating or echoing
     // the prompt. A loose end can't exist without a source event, so no events ⇒ nothing grounded.

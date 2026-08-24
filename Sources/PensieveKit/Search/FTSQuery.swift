@@ -58,7 +58,7 @@ public enum FTSQueryBuilder {
       if token.isFileDirected { fileClauses.append(literal) } else { textClauses.append(literal) }
       terms.append(token.text)
     }
-    if let file, !file.trimmingCharacters(in: .whitespaces).isEmpty {
+    if let file, yieldsToken(file) {
       fileClauses.append(quoted(file))
       terms.append(file)
     }
@@ -96,12 +96,12 @@ public enum FTSQueryBuilder {
         let afterOpen = raw.index(after: index)
         if let close = raw[afterOpen...].firstIndex(of: "\"") {
           let phrase = String(raw[afterOpen..<close])
-          if !phrase.isEmpty { tokens.append(Token(text: phrase, isFileDirected: false)) }
+          if yieldsToken(phrase) { tokens.append(Token(text: phrase, isFileDirected: false)) }
           index = raw.index(after: close)
           endedOnClosedPhraseOrSpace = true
         } else {
           let phrase = String(raw[afterOpen...]).trimmingCharacters(in: .whitespaces)
-          if !phrase.isEmpty { tokens.append(Token(text: phrase, isFileDirected: false)) }
+          if yieldsToken(phrase) { tokens.append(Token(text: phrase, isFileDirected: false)) }
           index = raw.endIndex
         }
         continue
@@ -111,8 +111,8 @@ public enum FTSQueryBuilder {
       let word = String(raw[index..<wordEnd])
       if word.lowercased().hasPrefix(filesPrefix) {
         let value = String(word.dropFirst(filesPrefix.count))
-        if !value.isEmpty { tokens.append(Token(text: value, isFileDirected: true)) }
-      } else if !word.isEmpty {
+        if yieldsToken(value) { tokens.append(Token(text: value, isFileDirected: true)) }
+      } else if yieldsToken(word) {
         tokens.append(Token(text: word, isFileDirected: false))
       }
       index = wordEnd
@@ -126,5 +126,25 @@ public enum FTSQueryBuilder {
   /// An FTS5 string literal: wrap in double quotes, doubling any internal double quote.
   private static func quoted(_ text: String) -> String {
     "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+  }
+
+  /// Whether FTS5's `unicode61` tokenizer would produce at least one token for `text` — i.e. whether
+  /// it contains anything from Unicode L* or N*, the only categories that tokenizer treats as token
+  /// characters rather than separators.
+  ///
+  /// A word made only of separators (`—`, `-`, `->`, `|`, `/`, `+`, `...`) quotes into a legal but
+  /// EMPTY phrase, and an empty phrase ANDed with real terms makes the WHOLE conjunction match
+  /// nothing — so one punctuation word silently zeroes the result set while the index still reports
+  /// `.ready`. That is not exotic input: `EmbeddableCorpus` joins a node as `name — description` and
+  /// a loose end as `text — quote`, and the app renders those same strings, so copying a title out
+  /// of the UI and pasting it into search returned zero hits for a document whose indexed text was
+  /// character-for-character what was pasted. Ordinary typing hits it too (`client -> server`).
+  ///
+  /// Applied to quoted phrases as well, but that only ever drops a phrase that is ENTIRELY
+  /// punctuation — which can never match any row, so ANDing it is guaranteed loss and never intent.
+  /// `"Pensieve — search"` still yields tokens and is still searched as a phrase, which is why
+  /// phrases could not simply be exempted wholesale.
+  private static func yieldsToken(_ text: String) -> Bool {
+    text.contains { $0.isLetter || $0.isNumber }
   }
 }

@@ -74,12 +74,57 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   #expect(bundle == nil)
 }
 
+/// `pensieve prime` must be able to HIT an entry the app wrote — i.e. the app's narration cache key
+/// for a node and `bundle`'s key for the same node must be the same string.
+///
+/// This agreement was broken for the entire life of the feature and nothing pinned it. The key is
+/// `NarrationCacheKey.make(events: status.recentEvents, …)`, so it depends on how many recent events
+/// the caller asked for: the app asked `ProjectQueries.status` for 15 while `bundle` defaulted
+/// `recentLimit` to 8, and a lookup built from 8 events can never match an entry keyed on 15. The
+/// SessionStart hook that exists to hand a session warm context was therefore permanently cold.
+///
+/// **The fixture seeds MORE events than the window** on purpose. The sibling tests in this file use
+/// `limit: 8` literals and pass only because their fixture has one event, so 8 and 15 select the
+/// same set — exactly the vacuity that let the bug live. With 20 events the window size is load-
+/// bearing, and this test reproduces the APP's spelling of the key
+/// (`SummaryBuilder.narratableEventWindow`, which is what `AppModel+Recall`/`DetailView` pass) rather
+/// than restating a number.
+@Test func primeCanHitTheNarrationEntryTheAppWrote() async throws {
+  let database = try openCanonicalDatabase(at: tempURL("sc-narration-key"))
+  let (node, source) = try ProjectResolver(database: database)
+    .resolve(path: "/p/window", kind: SourceKind.claudeCode)
+  try await database.write { database in
+    for index in 0..<20 {
+      let occurredAt = Calendar.current.date(byAdding: .hour, value: -index, to: Date())!
+      try Event.insert {
+        Event(nodeID: node.id, sourceID: source.id, occurredAt: occurredAt,
+              kind: CaptureKind.ccSession, summary: "work \(index)", detailJSON: "{}",
+              fingerprint: "win-\(index)", workSummary: "work \(index)")
+      }.execute(database)
+    }
+  }
+
+  // THE APP's path, verbatim: `ProjectQueries.status(node:limit:)` at the shared window, then
+  // `NarrationCacheKey.make`. This is what `AppModel.narration(for:events:)` stores under.
+  let appEvents = try ProjectQueries.status(database, node: node,
+                                            limit: SummaryBuilder.narratableEventWindow).recentEvents
+  #expect(appEvents.count == SummaryBuilder.narratableEventWindow)   // the window really is clamping
+  let cache = NarrationCache(url: tempURL("narr-window"))
+  cache.put(NarrationCacheKey.make(events: appEvents, provider: "fm"), prose: "the app wrote this")
+
+  // MCP / `pensieve prime`: no builder, so a MISS yields nil prose and cannot be mistaken for a hit.
+  let bundle = try #require(try await SessionContextQueries.bundle(
+    forPath: "/p/window", nodeID: nil, database, now: Date(),
+    narration: NarrationOptions(summaryBuilder: nil, providerKind: "fm", cache: cache)))
+  #expect(bundle.prose == "the app wrote this")
+}
+
 @Test func bundleServesCachedProseWithoutABuilder() async throws {
   let database = try openCanonicalDatabase(at: tempURL("sc"))
   let (node, _) = try seedOneNode(database)
   let cache = NarrationCache(url: tempURL("narr"))
   // Pre-warm the cache with the exact key bundle() will compute (top recentLimit events, same provider).
-  let events = try ProjectQueries.status(database, node: node, limit: 8).recentEvents
+  let events = try ProjectQueries.status(database, node: node, limit: SummaryBuilder.narratableEventWindow).recentEvents
   cache.put(NarrationCacheKey.make(events: events, provider: "fm"), prose: "cached recap")
   let bundle = try #require(try await SessionContextQueries.bundle(
     forPath: "/p/one", nodeID: nil, database, now: Date(),
@@ -97,7 +142,7 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
     narration: NarrationOptions(summaryBuilder: builder, providerKind: "fm", cache: cache)))
   #expect(bundle.prose == "fresh recap")
   // Write-through: the key is now populated.
-  let events = try ProjectQueries.status(database, node: node, limit: 8).recentEvents
+  let events = try ProjectQueries.status(database, node: node, limit: SummaryBuilder.narratableEventWindow).recentEvents
   #expect(cache.get(NarrationCacheKey.make(events: events, provider: "fm")) == "fresh recap")
 }
 
@@ -220,4 +265,69 @@ private func seedRecallLooseEnd(_ database: any DatabaseWriter, transcriptURL: U
   #expect(bundle.transcriptAvailable == false)
   #expect(bundle.messages.isEmpty)
   #expect(bundle.quote == "anything")   // stored quote preserved for honest fallback
+}
+
+/// A provider that ignores cancellation, the way a blocking system call does.
+///
+/// This is not a strawman: `ClaudeCLIProvider` became cancellation-aware only when `ChildProcessSlot`
+/// was added, and the DEFAULT provider on macOS 26 is Foundation Models, whose
+/// `LanguageModelSession.respond` is Apple's code and promises nothing about cancellation.
+private struct UncancellableProvider: LLMProvider {
+  let delay: TimeInterval
+  let reply: String
+  func complete(prompt: String) async throws -> String {
+    // Suspends on a continuation that cancellation cannot resume — NOT `Task.sleep` (which would
+    // observe cancellation and test the opposite of the point), and NOT a blocking `usleep` (which
+    // occupies a cooperative-pool thread and made this test flaky under the full parallel suite:
+    // 0.44 s alone, 2.39 s contended).
+    //
+    // This is also the more faithful model. The real hazard is not a thread that will not yield, it
+    // is a suspension nothing can wake — exactly what `Server.listRoots` does, and what Apple's
+    // `LanguageModelSession.respond` gives no guarantee against.
+    await withCheckedContinuation { continuation in
+      DispatchQueue.global().asyncAfter(deadline: .now() + delay) { continuation.resume() }
+    }
+    return reply
+  }
+}
+
+/// The narration budget must be a real wall-clock bound, not a best-effort one.
+///
+/// `narrateWithin` used to be a `withTaskGroup` race, which silently does not bound anything: a task
+/// group awaits ALL its children before returning, so `cancelAll()` only helps when the losing child
+/// observes cancellation. Measured with that shape, a child ignoring cancellation turned a 0.5 s
+/// budget into a 3.01 s return; a cancellation-aware one returned in 0.50 s. With Foundation Models
+/// as the default provider — behind its own 120 s cap — that let a 3 s budget block MCP's
+/// `project_context` for up to two minutes after it had already decided to answer without prose.
+///
+/// **The margins are wide on purpose.** A first attempt asserted `< 2 s` against a 4 s provider and
+/// was flaky in roughly half of full-suite runs (2.09 s, 2.33 s, 2.39 s observed) while passing in
+/// 0.41 s alone. The budget was being enforced correctly every time; what varies is *scheduling* —
+/// with 879 tests running in parallel the cooperative pool is saturated, so the timeout's own
+/// `Task.sleep` is delivered late and the measured wall-clock absorbs that delay.
+///
+/// So the provider is given a 20 s delay against a 0.3 s budget and the assertion allows 8 s: over
+/// 3x the worst scheduling noise observed, and still 2.5x below the 20 s a regression would take.
+/// It pins "the budget is enforced at all", never a latency figure. A tighter bound here would be a
+/// test of the machine's load, not of this code.
+@Test func narrationBudgetIsEnforcedEvenWhenTheProviderIgnoresCancellation() async throws {
+  let database = try openCanonicalDatabase(at: tempURL("sc-timeout"))
+  _ = try seedOneNode(database)
+  let providerDelay: TimeInterval = 20
+  let builder = SummaryBuilder(provider: UncancellableProvider(delay: providerDelay, reply: "too late"))
+
+  let start = Date()
+  let bundle = try #require(try await SessionContextQueries.bundle(
+    forPath: "/p/one", nodeID: nil, database, now: Date(),
+    narration: NarrationOptions(summaryBuilder: builder, providerKind: "fm",
+                                cache: nil, timeout: 0.3)))
+  let waited = Date().timeIntervalSince(start)
+
+  // Costs nothing while passing: the abandoned narration is never awaited, so the 20 s elapses in
+  // the background of a test that has already returned.
+  #expect(waited < 8, "narration budget not enforced — waited \(waited)s on a 0.3s budget against a \(providerDelay)s provider")
+  // And it degrades honestly: no prose rather than a fabricated one. The bundle's grounded parts
+  // (name, loose ends) must still be there — giving up on prose is not giving up on the answer.
+  #expect(bundle.prose == nil)
+  #expect(!bundle.looseEnds.isEmpty)
 }

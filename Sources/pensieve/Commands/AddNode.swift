@@ -10,11 +10,13 @@ struct AddNode: ParsableCommand {
   @Option var description: String = ""
   func run() throws {
     guard let nodeKind = NodeKind(rawValue: kind) else {
-      print("unknown kind '\(kind)' (expected one of: \(NodeKind.all.map(\.rawValue).joined(separator: ", ")))")
-      return
+      throw ValidationError("unknown kind '\(kind)' "
+        + "(expected one of: \(NodeKind.all.map(\.rawValue).joined(separator: ", ")))")
     }
-    let created = try NodeCommands.add(try openCanonical(), name: name, kind: nodeKind,
-                                       parent: parent, description: description)
-    print(created != nil ? "added \(kind) '\(name)'" : "unknown parent '\(parent ?? "")'")
+    guard try NodeCommands.add(try openCanonical(), name: name, kind: nodeKind,
+                               parent: parent, description: description) != nil else {
+      throw CommandFailure("unknown parent '\(parent ?? "")'")
+    }
+    print("added \(kind) '\(name)'")
   }
 }

@@ -31,6 +31,12 @@ final class AppModel {
   var snapshot = MonitorSnapshot(status: .notSetUp, lastCaptureAt: nil,
                                             spoolPending: 0, eventCount: 0, looseEndCount: 0)
   var briefingCards: [BriefingCard] = []
+  /// The Briefing's two buckets. Partitioned once, where the cards are loaded, rather than in
+  /// `BriefingView.body` — a `body` re-runs on every observation change, while the partition can only
+  /// change when the cards do. (The rule itself belongs in PensieveKit beside `BriefingQueries`; it is
+  /// here because the app cannot edit Kit in this pass.)
+  var briefingMoved: [BriefingCard] = []
+  var briefingQuiet: [BriefingCard] = []
   /// Recency + open-count per node, for list rows and the detail header. Refreshed with everything
   /// else in `refresh()` rather than per view, so one batched query serves every surface. Tracked by
   /// `@Observable` on purpose — view bodies read it.
@@ -56,12 +62,17 @@ final class AppModel {
   /// Persistent spool connection, reused for BOTH drains and the heartbeat. Opening a fresh
   /// connection per refresh/drain touches the store dir's `-shm`/`-wal` sidecars, which re-fires
   /// the FSEvents watch below into a busy-loop; a long-lived connection reads without that churn.
-  @ObservationIgnored private var spool: CaptureSpool?
+  /// NOT private: `AppModel+Lifecycle.swift` opens it and both drains read it.
+  @ObservationIgnored var spool: CaptureSpool?
   // Tracked (NOT @ObservationIgnored): read by view bodies via node(_:) — e.g. RecallWindowView,
   // whose body reads only node(nodeID). Silencing it would leave that body with no observation
   // dependency, so a cold-restored recall window could never recover from its transient nil.
   // NOT private: AppModel+Search.swift and AppModel+Organizing.swift also read it.
-  var allNodes: [Node] = []
+  // `private(set)`: `setAllNodes` is the only writer, so `nodesByID` cannot fall out of step.
+  private(set) var allNodes: [Node] = []
+  /// `allNodes` keyed by id, maintained beside it — see `setAllNodes`. Tracked for the same reason
+  /// `allNodes` is: view bodies reach it through `node(_:)` and need the observation dependency.
+  private(set) var nodesByID: [UUID: Node] = [:]
   /// The active Focus context ("" = no Focus / unfiltered), mirrored from UserDefaults by the
   /// SetFocusFilterIntent. Drives the visible-node filter in refresh()/refreshGlance(). Tracked, NOT
   /// @ObservationIgnored: FocusFilterBanner renders it. NOT private: runSearch() also reads it.
@@ -69,14 +80,16 @@ final class AppModel {
   /// Last context the forest was built for — so a context change rebuilds it even when the node set
   /// is unchanged (the `fetched != allNodes` guard alone would skip it).
   @ObservationIgnored private var lastForestContext: String?
-  @ObservationIgnored private var observationTask: Task<Void, Never>?
-  @ObservationIgnored private var spoolWatcher: DirectoryWatcher?
-  @ObservationIgnored private var canonicalWatcher: DirectoryWatcher?
-  @ObservationIgnored private var translationActivityScheduler: TranslationActivityScheduler?
-  @ObservationIgnored private lazy var refreshDebouncer = Debouncer(interval: 0.15) { [weak self] in
+  // The five below are written only by `start()`, which lives in `AppModel+Lifecycle.swift` — hence
+  // internal rather than private. Nothing outside this type touches them.
+  @ObservationIgnored var observationTask: Task<Void, Never>?
+  @ObservationIgnored var spoolWatcher: DirectoryWatcher?
+  @ObservationIgnored var canonicalWatcher: DirectoryWatcher?
+  @ObservationIgnored var translationActivityScheduler: TranslationActivityScheduler?
+  @ObservationIgnored lazy var refreshDebouncer = Debouncer(interval: 0.15) { [weak self] in
     await self?.refreshFromWatch()
   }
-  @ObservationIgnored private lazy var drainDebouncer = Debouncer(interval: 0.15) { [weak self] in
+  @ObservationIgnored lazy var drainDebouncer = Debouncer(interval: 0.15) { [weak self] in
     await self?.drainThenRefreshFromWatch()
   }
   /// Coalesces rapid typing in the .searchable field into one DB read (runSearch), instead of a
@@ -85,7 +98,7 @@ final class AppModel {
   @ObservationIgnored lazy var searchDebouncer = Debouncer(interval: 0.2) { [weak self] in
     await self?.runSearch()
   }
-  @ObservationIgnored private var started = false
+  @ObservationIgnored var started = false   // set by start(), in AppModel+Lifecycle.swift
   // NOT lazy: rebuilt when the provider preference/config changes (SettingsView), so an in-session
   // switch takes effect on the next narration instead of requiring a relaunch. Bootstrapped cheaply
   // here; `init()` calls rebuildSummaryBuilder() to fold in any configured cloud provider.
@@ -110,18 +123,30 @@ final class AppModel {
   /// Bumped on launch + ⌘R (drainThenRefresh). Views key their reload `.task` on it so the OPEN
   /// detail re-narrates after a refresh. The watch-driven refreshDebouncer calls `refresh()` (not
   /// drainThenRefresh), so this never bumps on background liveness updates.
-  private(set) var refreshToken = 0
+  /// NOT `private(set)`: bumped by `drainThenRefresh()`, which lives in `AppModel+Lifecycle.swift`.
+  var refreshToken = 0
 
   /// A user-triggered drain+refresh is in flight. Tracked (not `@ObservationIgnored`) — the menu-bar
   /// popover's heartbeat orb reads it to show a spinner. Set only by `refreshNow()`, so the
   /// background liveness watches never spin it.
-  private(set) var isRefreshing = false
+  /// NOT `private(set)`: set only by `refreshNow()`, which lives in `AppModel+Lifecycle.swift`.
+  var isRefreshing = false
 
   /// Bumped when an on-demand translation lands. Its own signal rather than `refreshToken`, because
   /// a `refreshToken` bump means ⌘R: `DetailView` reads it as `isRefresh` and force-regenerates the
   /// narration through the LLM. Translating a loose end must repaint the pane, not re-narrate it.
   /// NOT `private(set)`: bumped from `AppModel+Translation.swift`, a different file in the same module.
   var translationRevision = 0
+
+  /// Memo behind `displayed(field:sourceText:)`. Without it every row that renders a translatable
+  /// field pays one SQLite read plus a `StableHash` of the source text — per row, per body
+  /// evaluation, and five times over the loose-end set on every detail load. Self-invalidating on
+  /// `translationRevision`, which is the one signal meaning "a translation landed" (bumped by
+  /// `translate` and by a backfill that wrote), so an entry can never outlive a write that changes
+  /// its answer. Keyed by language too, so a target switch simply misses rather than needing a
+  /// second invalidation rule.
+  @ObservationIgnored var displayedTranslations: [DisplayedTranslationKey: String] = [:]
+  @ObservationIgnored var displayedTranslationsRevision = 0
 
   /// Coverage as last measured, or nil when the target is off / not yet measured. Measured on demand
   /// from Settings, not on launch: it is 1,294 store reads today and nothing outside Settings shows it.
@@ -200,132 +225,12 @@ final class AppModel {
     rebuildSummaryBuilder()
   }
 
-  func start() {
-    guard !started else { return }
-    // `start()` is reachable from three places — the main window's RootView, the always-mounted
-    // menu-bar label (so What's Next isn't empty even if the main window never opened), and a
-    // recall window — and only the FIRST of those is gated on a launch-time relocation finishing.
-    // Without this guard the menu-bar label would open the OLD store while the relocation is still
-    // copying it. `started` is deliberately left false so whichever call happens once the pending
-    // key clears still runs normally.
-    guard RelocationLauncher.pendingDestination() == nil else { return }
-    started = true
-    AppLog.app.info("App started, canonical=\(resolvedCanonicalURL().path, privacy: .public) spool=\(resolvedSpoolURL().path, privacy: .public)")
-    // Open the canonical store read/write (needed for the launch drain). Missing store degrades to empty.
-    database = try? openCanonicalDatabase(at: resolvedCanonicalURL())
-    loadNarrationCache()
-    spool = try? CaptureSpool(at: resolvedSpoolURL())   // persistent — see the property note above
-    activeFocusContext = UserDefaults.standard.string(forKey: PensieveDefaults.activeFocusContextKey) ?? ""
-    Task { await drainThenRefresh() }
-
-    // Liveness (retires the 3 s Timer). Watches are app-lifetime (this AppModel never deinits),
-    // so the menu-bar glyph stays live even when the main window is closed.
-    if let database {
-      observationTask = Task { [weak self] in
-        let observation = ValueObservation.tracking { database in try Event.fetchCount(database) }
-        do {
-          for try await _ in observation.values(in: database) {
-            await self?.refreshDebouncer.schedule()   // in-process writes (own drains, future edits)
-          }
-        } catch { /* observation ended; watches still cover changes */ }
-      }
-    }
-    let canonicalDir = resolvedCanonicalURL().deletingLastPathComponent().path
-    let spoolDir = resolvedSpoolURL().deletingLastPathComponent().path
-    canonicalWatcher = DirectoryWatcher(paths: [canonicalDir]) { [weak self] in
-      Task { await self?.refreshDebouncer.schedule() }   // catches the EXTERNAL daemon's writes
-    }
-    spoolWatcher = DirectoryWatcher(paths: [spoolDir]) { [weak self] in
-      Task { await self?.drainDebouncer.schedule() }      // new git/session activity → self-drain
-    }
-
-    AppLog.app.info("Liveness watchers registered")
-
-    // The SetFocusFilterIntent runs in-process and writes UserDefaults → observe on the main queue.
-    NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,
-                                           object: nil, queue: .main) { [weak self] _ in
-      Task { @MainActor in self?.focusContextDidChange() }
-    }
-
-    // Idle translation. App-lifetime like the watchers above: the corpus grows with every sync, so
-    // this is a standing job, not a launch-time one.
-    let translationScheduler = TranslationActivityScheduler(model: self)
-    translationScheduler.start()
-    translationActivityScheduler = translationScheduler
-    AppLog.app.info("Idle translation scheduled")
-  }
-
-  /// On-demand equivalent of the launch drain+refresh, for the ⌘R Refresh menu command.
-  ///
-  /// The flag exists for the menu-bar popover, where this command is otherwise indistinguishable from
-  /// a no-op: a drain that finds nothing new changes nothing on screen, correctly, and the user has no
-  /// way to tell that apart from a dead button. Deliberately NOT a guard against re-entry — ⌘R while
-  /// a refresh runs should still queue a second drain; this only reports. Two overlapping calls (⌘R
-  /// plus the popover button) will therefore clear the flag when the FIRST finishes, stopping the
-  /// spinner early. A counter would fix that, and is not worth it for a spinner.
-  func refreshNow() async {
-    isRefreshing = true
-    defer { isRefreshing = false }
-    await drainThenRefresh()
-  }
-
-  private func drainThenRefresh() async {
-    AppLog.app.info("Drain+refresh triggered")
-    if let database, let spool {
-      _ = try? await Ingester(spool: spool, database: database).drain()   // no LLM: spool → events only
-    }
-    refresh()
-    // launch/⌘R: do NOT blanket-clear — cachedNarration/narration are key-aware, so unchanged
-    // nodes reuse persisted prose and only changed nodes regenerate. ⌘R force-refresh of the
-    // selected node happens in DetailView (force: on same-node token bump).
-    refreshToken += 1
-    await SpotlightIndexer.reindex(activeContext: activeFocusContext)   // launch + ⌘R
-    syncSearchIndexes()   // see AppModel+Search.swift
-    republishWidgetDigest()
-  }
-
-  /// Watch-triggered drain: ingest new spool rows on our own connection. The resulting canonical
-  /// change trips ValueObservation + the canonical watch → refreshDebouncer. Does NOT clear the
-  /// narration cache or bump refreshToken (those are launch/⌘R semantics).
-  private func drainThenRefreshFromWatch() async {
-    AppLog.app.debug("Spool watcher fired -> drain")
-    if let database, let spool {
-      _ = try? await Ingester(spool: spool, database: database).drain()
-    }
-  }
-
-  /// Watch-triggered refresh: recompute state on the main actor, then reindex Spotlight. Kept as one
-  /// @MainActor method so the debouncer's `await self?.refreshFromWatch()` needs no `MainActor.run`
-  /// wrapper nor a nested `Task` — the nested Task captured the weak-`self` var in concurrently
-  /// executing code, which is an error under the Swift 6 language mode.
-  private func refreshFromWatch() async {
-    AppLog.app.debug("Canonical watcher fired -> refresh")
-    refresh()
-    syncSearchIndexes()   // work just drained must become findable without waiting for ⌘R
-    await reindexSpotlight()
-    republishWidgetDigest()
-  }
-
-  private func reindexSpotlight() async { await SpotlightIndexer.reindex(activeContext: activeFocusContext) }
-
-  /// Digest + reload, always together, after each of the three refreshes that own a whole store pass. Fed from the
-  /// `lists.whatsNext` that `refresh()` just computed: re-deriving it would put the whole ranking scan back on the main
-  /// actor for an answer in hand. The reload stays app-side — one an agent requests is not dependable.
-  private func republishWidgetDigest() {
-    guard database != nil else { return }   // no store ⇒ `lists` is empty, and an empty digest renders as "Nothing open"
-    WidgetDigestPublisher.publishQuietly(items: lists.whatsNext, activeContext: activeFocusContext)
-    WidgetCenter.shared.reloadAllTimelines()
-  }
-
-  /// UserDefaults changed — if the active Focus context flipped, re-filter the window + reindex.
-  private func focusContextDidChange() {
-    let new = UserDefaults.standard.string(forKey: PensieveDefaults.activeFocusContextKey) ?? ""
-    guard new != activeFocusContext else { return }
-    AppLog.app.info("Focus context changed: '\(self.activeFocusContext, privacy: .public)' -> '\(new, privacy: .public)'")
-    activeFocusContext = new
-    refresh()
-    republishWidgetDigest()   // AFTER refresh(): that is what re-filters the list to the new context
-    Task { await SpotlightIndexer.reindex(activeContext: new) }
+  /// The ONE writer of `allNodes` and its `nodesByID` index, so the two cannot disagree — the drift
+  /// hazard this project keeps paying for. The index exists because `node(_:)` was a linear scan of
+  /// 306 nodes called once per row by three list surfaces and by every search result.
+  private func setAllNodes(_ nodes: [Node]) {
+    allNodes = nodes
+    nodesByID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
   }
 
   /// Filter a freshly-computed SmartLists to the ids visible under the active context.
@@ -347,6 +252,18 @@ final class AppModel {
     if let facts = try? NodeFactsQueries.rowFacts(database) { nodeRowFacts = facts }
   }
 
+  /// The Briefing's cards, Focus-scoped and partitioned into its two buckets in one place. Called by
+  /// `refresh()` while Briefing is the selection, and by RootView when the user arrives on it.
+  func loadBriefingCards() {
+    guard let database,
+          let raw = try? BriefingQueries.cards(database, since: briefingSince, now: Date())
+    else { return }
+    let visible = visibleNodeIDs()
+    briefingCards = activeFocusContext.isEmpty ? raw : raw.filter { visible.contains($0.node.id) }
+    briefingMoved = briefingCards.filter { $0.movedSince > 0 }
+    briefingQuiet = briefingCards.filter { $0.movedSince == 0 }
+  }
+
   /// Narrow refresh for the menu-bar glance: only what the popover shows (heartbeat + What's Next),
   /// skipping the briefing cards / forest that only the main window needs.
   func refreshGlance() {
@@ -365,7 +282,7 @@ final class AppModel {
     let fetched = (try? ProjectQueries.all(database)) ?? allNodes
     let nodesChanged = fetched != allNodes
     if nodesChanged {
-      allNodes = fetched
+      setAllNodes(fetched)
       pruneNarrationCache()
     }
     let visible = visibleNodeIDs()
@@ -373,9 +290,10 @@ final class AppModel {
     if let raw = try? SmartLists.compute(database, now: now) {
       lists = activeFocusContext.isEmpty ? raw : filtered(raw, visible)
     }
-    if let raw = try? BriefingQueries.cards(database, since: briefingSince, now: now) {
-      briefingCards = activeFocusContext.isEmpty ? raw : raw.filter { visible.contains($0.node.id) }
-    }
+    // Briefing costs a query per active node and its pane is usually off screen, so it is refreshed
+    // only while it IS the selection. Arriving on Briefing loads it through `loadBriefingCards()`,
+    // which RootView calls — the same off-`body` shape the middle column's feeds already use.
+    if sidebarSelection == .briefing { loadBriefingCards() }
     loadNodeRowFacts(database)
     if nodesChanged || activeFocusContext != lastForestContext {
       let source = activeFocusContext.isEmpty ? allNodes : allNodes.filter { visible.contains($0.id) }
@@ -397,4 +315,15 @@ final class AppModel {
   // - AppModel+Organizing.swift — every organizing write, including the two modal commits, plus the
   //   shared refuse/fail/displayName/defaultKind/presentNewNode/presentEditNode helpers.
   // - AppModel+Search.swift — `isSearching` and the search machinery.
+  // - AppModel+Lifecycle.swift — `start()`, the liveness wiring, and the three refresh entry points
+  //   that own a whole store pass (`refreshNow`, the two watch-driven ones, the widget republish).
+}
+
+/// The key `displayed(field:sourceText:)`'s memo is stored under. A file-scope type rather than a
+/// nested one: `AppModel` already nests `CachedNarration` and `SearchScope`, and SwiftLint caps
+/// nesting at one level.
+struct DisplayedTranslationKey: Hashable {
+  let field: TranslationField
+  let language: String
+  let sourceText: String
 }

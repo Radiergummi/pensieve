@@ -159,8 +159,11 @@ import SQLiteData
 
 @Test func worktreesOfOneRepoShareCommonDir() throws {
   let (repo, _) = try makeCommittedRepo()
-  guard let worktree = try? addWorktree(to: repo, branch: "feature"),
-        FileManager.default.fileExists(atPath: worktree.path) else { return }  // worktree unsupported here
+  // A hard requirement, not a silent skip — see `gitSourceIgnoresWorktreeWhoseGitIsAFile`. The
+  // shared-common-dir property IS the subject, so skipping it silently is the same as deleting it.
+  let worktree = try #require(try? addWorktree(to: repo, branch: "feature"),
+                              "git worktree add failed; this test cannot verify anything without it")
+  #expect(FileManager.default.fileExists(atPath: worktree.path))
   #expect(Git.commonDir(in: repo.path) == Git.commonDir(in: worktree.path))
   #expect(Git.commonDir(in: repo.path) != nil)
 }

@@ -74,19 +74,8 @@ public struct SessionSummarizer: Sendable {
   }
 
   /// Splits text into ≤-budget windows on whitespace boundaries (never mid-word unless a
-  /// single token exceeds the budget).
+  /// single token exceeds the budget) — the shared rule, also used to cut extraction prompts.
   static func chunk(_ text: String, budget: Int) -> [String] {
-    guard budget > 0, text.count > budget else { return text.isEmpty ? [] : [text] }
-    var out: [String] = []
-    var start = text.startIndex
-    while start < text.endIndex {
-      var end = text.index(start, offsetBy: budget, limitedBy: text.endIndex) ?? text.endIndex
-      if end < text.endIndex, let whitespaceIndex = text[start..<end].lastIndex(where: { $0.isWhitespace }) {
-        end = text.index(after: whitespaceIndex)
-      }
-      out.append(String(text[start..<end]))
-      start = end
-    }
-    return out
+    whitespaceBoundedWindows(text, budget: budget)
   }
 }

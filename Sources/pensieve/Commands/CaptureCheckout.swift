@@ -9,8 +9,10 @@ struct CaptureCheckout: ParsableCommand {
   @Option(name: .customLong("to")) var toRef: String
   @Option var branch: String
 
-  func run() throws {
-    let payload = GitCheckoutPayload(repoPath: repo, from: from, to: toRef, branch: branch)
-    try openSpool().append(kind: CaptureKind.gitCheckout, payload: try encodeJSON(payload))
+  func run() {
+    // Capture-time identity resolution, for the reason spelled out in `CaptureCommit`.
+    let payload = GitCheckoutPayload(repoPath: repo, from: from, to: toRef, branch: branch,
+                                     commonDir: ProjectResolver.identityKey(forRepoPath: repo))
+    appendCapture(kind: CaptureKind.gitCheckout, encoding: payload)
   }
 }

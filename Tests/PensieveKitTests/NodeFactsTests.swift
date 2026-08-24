@@ -179,3 +179,91 @@ import SQLiteData
   #expect(typedCount == 3)   // open+unlabeled, open+salient, open+suggestion-only-noise
   #expect(batched[testNode.id]?.openLooseEnds == typedCount)   // the two spellings must never diverge
 }
+
+/// `LooseEnd.closedAndRealSQLPredicate` must stay logically identical to `isClosedAndReal` — the
+/// sibling of `looseEndOpenPredicatesAgree`, and for the same reason: the batched aggregate that
+/// feeds `NextQueries.ranked` can only be expressed in raw SQL, so the rule is now spelled twice and
+/// only a test can hold the two spellings together.
+///
+/// Goes through the production batched path (`activity`) rather than re-issuing the SQL here, which
+/// is what `looseEndOpenPredicatesAgree` does and why it tests the code that ships. The fixture is
+/// the one from `looseEndClosedPredicateExcludesConfirmedNoise`: `.done + noise` is the single row
+/// that separates a correct closed-count (4) from one that forgot the 👎 exclusion (5).
+@Test func looseEndClosedPredicatesAgree() throws {
+  let database = try openCanonicalDatabase(at: tempURL("closed-predicate-agreement"))
+  let resolver = ProjectResolver(database: database)
+  let (testNode, testNodeSource) = try resolver.resolve(path: "/p/closed-agree", kind: SourceKind.claudeCode)
+  let testEvent = Event(nodeID: testNode.id, sourceID: testNodeSource.id, occurredAt: Date(),
+                        kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}", fingerprint: "ca1")
+  try database.write { database in
+    try Event.insert { testEvent }.execute(database)
+    for (status, label) in [
+      (LooseEndStatus.open, ""), (.open, LooseEndLabel.salient), (.open, LooseEndLabel.noise),
+      (.done, ""), (.done, LooseEndLabel.salient), (.done, LooseEndLabel.noise),
+      (.dropped, ""), (.dropped, LooseEndLabel.salient), (.dropped, LooseEndLabel.noise),
+    ] {
+      try LooseEnd.insert {
+        LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t", quote: "q",
+                 status: status, label: label)
+      }.execute(database)
+    }
+  }
+  let typedCount = try database.read { database in
+    try LooseEnd.where { LooseEnd.isClosedAndReal($0) }.fetchCount(database)
+  }
+  let activity = try #require(try NodeFactsQueries.activity(database)[testNode.id])
+  #expect(typedCount == 4)   // done+unlabeled, done+salient, dropped+unlabeled, dropped+salient
+  #expect(activity.closedLooseEnds == typedCount)   // the two spellings must never diverge
+  // And the open half of the same aggregate, so a mutation that swapped the two predicates cannot
+  // pass by making both counts wrong in the same direction.
+  #expect(activity.openLooseEnds == 2)
+}
+
+/// The 👎 exclusion is the half that was missing from "closed", and `isActionable` reads it.
+///
+/// `label` and `status` are orthogonal, so a 👎'd end is excluded from `isOpen`. A closed-count that
+/// does NOT also exclude it therefore reports work the user explicitly said was never work — and
+/// because `isActionable` is `openLooseEnds > 0 || closedLooseEnds == 0`, a node whose only resolved
+/// ends are 👎'd looked like "it HAD open ends and they are all closed" and vanished from What's
+/// Next, the sidebar, the widget, MCP and the CLI at once, while showing on no Completed feed.
+///
+/// The fixture is built so the two spellings give DIFFERENT numbers: `.done + noise` is the one row
+/// that separates them. Excluding noise ⇒ 4 (done+unlabeled, done+salient, dropped+unlabeled,
+/// dropped+salient); the old predicate ⇒ 5. A fixture without a resolved noise row would pass under
+/// both, which is exactly how this shipped.
+@Test func looseEndClosedPredicateExcludesConfirmedNoise() throws {
+  let database = try openCanonicalDatabase(at: tempURL("closed-predicate"))
+  let resolver = ProjectResolver(database: database)
+  let (testNode, testNodeSource) = try resolver.resolve(path: "/p/closed", kind: SourceKind.claudeCode)
+  let testEvent = Event(nodeID: testNode.id, sourceID: testNodeSource.id, occurredAt: Date(),
+                        kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}", fingerprint: "cp1")
+  try database.write { database in
+    try Event.insert { testEvent }.execute(database)
+    for (status, label) in [
+      (LooseEndStatus.open, ""), (.open, LooseEndLabel.salient), (.open, LooseEndLabel.noise),
+      (.done, ""), (.done, LooseEndLabel.salient), (.done, LooseEndLabel.noise),
+      (.dropped, ""), (.dropped, LooseEndLabel.salient),
+    ] {
+      try LooseEnd.insert {
+        LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t", quote: "q",
+                 status: status, label: label)
+      }.execute(database)
+    }
+  }
+  let closed = try database.read { database in
+    try LooseEnd.where { LooseEnd.isClosedAndReal($0) }.fetchCount(database)
+  }
+  #expect(closed == 4)
+
+  // And the two halves must partition the real ends: open + closed == every non-noise row, with no
+  // row counted twice and none lost. A predicate pair that overlapped or left a gap would still hit
+  // 4 above.
+  let open = try database.read { database in
+    try LooseEnd.where { LooseEnd.isOpen($0) }.fetchCount(database)
+  }
+  let real = try database.read { database in
+    try LooseEnd.where { $0.label.neq(LooseEndLabel.noise) }.fetchCount(database)
+  }
+  #expect(open == 2)
+  #expect(open + closed == real)
+}

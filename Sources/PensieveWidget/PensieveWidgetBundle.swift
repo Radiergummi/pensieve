@@ -45,6 +45,12 @@ struct WhatsNextProvider: TimelineProvider {
   /// that is merely empty — and an appex is invisible from the outside, so the two states cost real
   /// debugging time once already. Counts and timestamps only: node names are captured content and
   /// never go to the log.
+  ///
+  /// `digest=` is what the log line was still missing. `WidgetDigest.read` collapses "no file yet"
+  /// and "a file that would not decode" into the same nil, and both render `.noData`, so the log
+  /// could not tell the honest pre-first-publish state from a real bug. A torn write is not a third
+  /// possibility — `WidgetDigestPublisher.publish` writes `.atomic` — so a file that exists and
+  /// still decodes to nil means the format disagrees, which is worth seeing.
   private func logTimeline(_ digest: WidgetDigest?, presentation: WidgetPresentation, now: Date) {
     let state: String
     var itemCount = 0
@@ -54,10 +60,17 @@ struct WhatsNextProvider: TimelineProvider {
     case .fresh(let items): state = "fresh"; itemCount = items.count
     case .stale(let items, _): state = "stale"; itemCount = items.count
     }
+    let digestURL = PensievePaths.widgetDigestURL()
+    let digestState: String
+    if digest != nil {
+      digestState = "decoded"
+    } else {
+      digestState = FileManager.default.fileExists(atPath: digestURL.path) ? "undecodable" : "absent"
+    }
     let ageInSeconds = digest.map { Int(now.timeIntervalSince($0.generatedAt)) } ?? -1
     WidgetLog.widget.info("""
-      timeline: \(state, privacy: .public) items=\(itemCount, privacy: .public) \
-      age=\(ageInSeconds, privacy: .public)s
+      timeline: \(state, privacy: .public) digest=\(digestState, privacy: .public) \
+      items=\(itemCount, privacy: .public) age=\(ageInSeconds, privacy: .public)s
       """)
   }
 

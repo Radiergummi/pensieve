@@ -19,6 +19,28 @@ private struct CommitFields {
   let files: String
 }
 
+/// A strand materialized while ingesting one spool row, still carrying its branch name. `drain`
+/// collects these and names them itself, so the LLM round-trips are capped per PASS rather than
+/// being one-per-row — see `Ingester.strandNameCap`.
+struct BornStrand {
+  let id: UUID
+  let branchKey: String
+}
+
+/// What ingesting one spool row produced.
+struct RowIngestOutcome {
+  let eventCount: Int
+  let bornStrand: BornStrand?
+
+  init(eventCount: Int, bornStrand: BornStrand? = nil) {
+    self.eventCount = eventCount
+    self.bornStrand = bornStrand
+  }
+
+  /// A row that produced nothing — a dropped unknown kind, or a deliberately retired capture.
+  static let nothing = RowIngestOutcome(eventCount: 0)
+}
+
 public struct Ingester: Sendable {
   let spool: CaptureSpool
   let database: any DatabaseWriter
@@ -29,35 +51,70 @@ public struct Ingester: Sendable {
     self.spool = spool; self.database = database; self.resolver = ProjectResolver(database: database); self.llm = llm
   }
 
-  enum IngestError: Error { case unattributableSession }
-
   /// Retry window for a `cc.session` row whose transcript is absent (it may not be written yet).
   static let absentTranscriptGracePeriod: TimeInterval = 24 * 60 * 60
+
+  /// Per-drain cap on strand-naming LLM round-trips — sibling of `nameRefineCap` /
+  /// `descriptionRefineCap`, for their reason: `nameStrand` runs inside `drain()`, so uncapped it
+  /// lets one pass (a flush-and-reingest, or a backlog after the agent was down) stall the sync
+  /// cycle on N sequential model calls.
+  ///
+  /// Unlike its siblings this cap is NOT monotonic across passes: a strand past it keeps its branch
+  /// name, and no marker makes a later pass retry it. Accepted cost — a branch name is a serviceable
+  /// label and the alternative is an unbounded pass — but a real limitation, not a free one.
+  static let strandNameCap = 20
 
   /// Non-async wrappers so `database.write`/`database.read` resolve to GRDB's synchronous overload even
   /// when called from an `async` context (`ingest`/`nameStrand`) — a bare trailing closure
   /// there is ambiguous with GRDB's `async` `write`/`read` overloads and triggers spurious
   /// Sendable diagnostics.
-  private func writeSync<T>(_ updates: (Database) throws -> T) throws -> T { try database.write(updates) }
-  private func readSync<T>(_ value: (Database) throws -> T) throws -> T { try database.read(value) }
+  /// Internal rather than private: the LLM-assist passes in `Ingester+Naming.swift` use them too.
+  func writeSync<T>(_ updates: (Database) throws -> T) throws -> T { try database.write(updates) }
+  func readSync<T>(_ value: (Database) throws -> T) throws -> T { try database.read(value) }
 
   /// Drains all pending spool rows. Returns the number of canonical events CREATED
-  /// (not rows processed — a dropped unknown-kind row counts 0). A row that throws is
-  /// left unmarked so it retries next drain; successful and dropped rows are marked
-  /// ingested per-row so progress is durable even if a later row fails.
+  /// (not rows processed — a dropped unknown-kind row counts 0).
+  ///
+  /// A row that fails is now CLASSIFIED rather than logged identically whatever went wrong: a
+  /// permanently-unusable row (an undecodable payload) says so explicitly and names itself, while a
+  /// transient one says it will retry. Both stay pending — see the catch block for why a permanent
+  /// failure is still not consumed. Successful and dropped rows are marked per-row so progress is
+  /// durable even if a later row fails.
   @discardableResult
   public func drain() async throws -> Int {
     let rows = try spool.pending()
     Log.ingest.info("Drain start: \(rows.count, privacy: .public) pending rows")
     var created = 0
+    var strandNamings = 0
     for row in rows {
       do {
-        let eventCount = try await ingest(row)
+        let outcome = try ingest(row)
         try spool.markIngested([row.id])
-        created += eventCount
-        Log.ingest.debug("Ingested row \(row.id, privacy: .public) kind=\(row.kind, privacy: .public) events=\(eventCount, privacy: .public)")
+        created += outcome.eventCount
+        Log.ingest.debug("""
+          Ingested row \(row.id, privacy: .public) kind=\(row.kind, privacy: .public) \
+          events=\(outcome.eventCount, privacy: .public)
+          """)
+        if let born = outcome.bornStrand {
+          guard strandNamings < Self.strandNameCap else { continue }
+          strandNamings += 1
+          await nameStrand(born.id, branchKey: born.branchKey)
+        }
+      } catch let error as IngestError where error.isPermanent {
+        // Named as permanent, but deliberately still left PENDING, for a non-local reason:
+        // `StoreRelocator.recoverPendingRows` infers "rows may still be stranded in the old spool"
+        // from `pendingCount() != 0` and refuses to recycle the old folder on that basis. Marking
+        // this row ingested would make a relocation report a clean migration and then delete the
+        // folder still holding the only copy of it. "Stop re-attempting" and "nothing is stranded"
+        // are two different facts, and the spool can currently store only one of them.
+        Log.ingest.error("""
+          Spool row \(row.id, privacy: .public) kind=\(row.kind, privacy: .public) is PERMANENTLY \
+          unusable and cannot succeed on retry — remove it from the spool: \
+          \(error, privacy: .public) payload=\(row.payload, privacy: .private)
+          """)
+        continue
       } catch {
-        Log.ingest.error("Spool row \(row.id, privacy: .public) failed: \(error, privacy: .public)")
+        Log.ingest.error("Spool row \(row.id, privacy: .public) failed, will retry: \(error, privacy: .public)")
         continue   // leave unmarked; retry next drain
       }
     }
@@ -65,32 +122,43 @@ public struct Ingester: Sendable {
     return created
   }
 
-  /// Returns the number of events created (0 for a dropped unknown kind).
-  private func ingest(_ row: SpoolRow) async throws -> Int {
+  private func ingest(_ row: SpoolRow) throws -> RowIngestOutcome {
     let data = Data(row.payload.utf8)
     switch row.kind {
     case CaptureKind.gitCommit:
-      return try await ingestGitCommit(data: data, row: row)
+      return try ingestGitCommit(data: data, row: row)
 
     case CaptureKind.gitCheckout:
       return try ingestGitCheckout(data: data, row: row)
 
     case CaptureKind.ccSession:
-      return try await ingestSession(data: data, row: row)
+      return try ingestSession(data: data, row: row)
 
     case CaptureKind.ccSessionStart:
-      return try ingestSessionStart(data: data)
+      return try ingestSessionStart(data: data, row: row)
 
     default:
-      return 0   // unknown kind: dropped (still marked ingested by drain), 0 events
+      return .nothing   // unknown kind: dropped (still marked ingested by drain), 0 events
+    }
+  }
+
+  /// Decodes a spool payload, turning any decoding failure into a PERMANENT `IngestError`. The
+  /// spooled text never changes, so a payload that does not decode now cannot decode later; without
+  /// this, one malformed row was re-attempted on every drain, forever, logging the same line.
+  private func decodePayload<Payload: Decodable>(_ type: Payload.Type, from data: Data,
+                                                 kind: String) throws -> Payload {
+    do {
+      return try JSONDecoder().decode(type, from: data)
+    } catch {
+      throw IngestError.undecodablePayload(kind: kind, reason: String(describing: error))
     }
   }
 }
 
 extension Ingester {
-  private func ingestGitCommit(data: Data, row: SpoolRow) async throws -> Int {
-    let payload = try JSONDecoder().decode(GitCommitPayload.self, from: data)
-    let key = Git.commonDir(in: payload.repoPath) ?? ProjectResolver.canonical(payload.repoPath)
+  private func ingestGitCommit(data: Data, row: SpoolRow) throws -> RowIngestOutcome {
+    let payload = try decodePayload(GitCommitPayload.self, from: data, kind: row.kind)
+    let key = try Self.identityKey(forHookPath: payload.repoPath, capturedCommonDir: payload.commonDir)
     let branchKey = Git.strandBranchKey(branch: payload.branch, defaultBranch: Git.defaultBranch(in: payload.repoPath))
     let fields = gitCommitFields(hash: payload.hash, repo: payload.repoPath, fallbackTime: row.timestamp)
     let detail = try encodeJSON(["hash": payload.hash, "branch": payload.branch, "files": fields.files])
@@ -107,69 +175,69 @@ extension Ingester {
       try resurfaceIfArchived(database, nodeID: attr.nodeID)
       return (true, attr.bornStrand)
     }
-    if let born = outcome.born { await nameStrand(born, branchKey: branchKey ?? "") }
-    return outcome.inserted ? 1 : 0
+    let born = outcome.born.map { BornStrand(id: $0, branchKey: branchKey ?? "") }
+    return RowIngestOutcome(eventCount: outcome.inserted ? 1 : 0, bornStrand: born)
   }
 
-  private func ingestGitCheckout(data: Data, row: SpoolRow) throws -> Int {
-    let payload = try JSONDecoder().decode(GitCheckoutPayload.self, from: data)
-    let key = Git.commonDir(in: payload.repoPath) ?? ProjectResolver.canonical(payload.repoPath)
+  private func ingestGitCheckout(data: Data, row: SpoolRow) throws -> RowIngestOutcome {
+    let payload = try decodePayload(GitCheckoutPayload.self, from: data, kind: row.kind)
+    let key = try Self.identityKey(forHookPath: payload.repoPath, capturedCommonDir: payload.commonDir)
     let detail = try encodeJSON(["from": payload.fromRef, "to": payload.toRef, "branch": payload.branch])
     let inserted = try writeSync { database -> Bool in
       let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.gitRepo)
+      // Fingerprint off the same canonical `key` the source is keyed on, not the raw `repoPath`:
+      // with the raw path, one checkout captured from two spellings of one directory (a symlinked
+      // worktree, `/tmp` vs `/private/tmp`) produced two fingerprints and dedup missed.
       return try insertIfNew(database, Event(nodeID: project.id, sourceID: source.id, occurredAt: row.timestamp,
             kind: CaptureKind.gitCheckout, summary: "checkout \(payload.branch)", detailJSON: detail,
-            fingerprint: Fingerprint.checkout(repo: payload.repoPath, from: payload.fromRef, to: payload.toRef, branch: payload.branch)))
+            fingerprint: Fingerprint.checkout(repo: key, from: payload.fromRef, to: payload.toRef, branch: payload.branch)))
     }
-    return inserted ? 1 : 0
+    return RowIngestOutcome(eventCount: inserted ? 1 : 0)
   }
 
-  private func ingestSession(data: Data, row: SpoolRow) async throws -> Int {
-    let payload = try JSONDecoder().decode(SessionRefPayload.self, from: data)
+  private func ingestSession(data: Data, row: SpoolRow) throws -> RowIngestOutcome {
+    let payload = try decodePayload(SessionRefPayload.self, from: data, kind: row.kind)
     let transcriptURL = URL(fileURLWithPath: payload.transcriptPath)
     let session = TranscriptParser.parse(fileURL: transcriptURL)
-    // No cwd → can't attribute. Distinguish transient from permanent so discovery's per-cycle
-    // re-spool can't loop forever: an empty/absent transcript may still fill (throw → stays
-    // pending) but only inside the grace period, past which it is gone for good and re-parsing
-    // it every drain is waste; a non-empty one with no cwd never will (drop → 0 events).
+    // No cwd → can't attribute. Transient vs permanent, because retiring is permanent and
+    // discovery's per-cycle re-spool must not loop forever. Retried inside the grace period when the
+    // transcript is absent/0-byte (it may still fill) or could not be READ at all (a permissions
+    // blip, or bytes that are not UTF-8). One that read fine and simply carries no cwd never will → drop.
     guard let cwd = session.cwd else {
       let size = (try? transcriptURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-      if size == 0 {
-        guard row.timestamp > Date().addingTimeInterval(-Self.absentTranscriptGracePeriod) else { return 0 }
-        throw IngestError.unattributableSession
-      }
-      return 0
+      guard size == 0 || !session.wasReadable else { return .nothing }
+      guard row.timestamp > Date().addingTimeInterval(-Self.absentTranscriptGracePeriod) else { return .nothing }
+      throw IngestError.unattributableSession
     }
     // Attribute to the git repo ROOT (matching how commits are keyed), not the raw cwd,
     // so a session launched from a subdirectory lands in the same project as its commits.
-    let key = Git.commonDir(in: cwd) ?? ProjectResolver.canonical(cwd)
-    // A degenerate root is not an area of work. Dropping it here is permanent (return 0 → the
-    // drain marks the row ingested) exactly like the non-empty-transcript-without-cwd case
-    // above: such a session will never become attributable, so retrying it forever is worse.
+    // A non-git cwd is legitimate here — unlike the git kinds — so the raw-path fallback stays.
+    let key = ProjectResolver.identityKey(forRepoPath: cwd) ?? ProjectResolver.canonical(cwd)
+    // A degenerate root is not an area of work, and never becomes one — so dropping is permanent
+    // (return → the drain marks the row ingested) rather than retrying forever.
     guard !ProjectResolver.isDegenerateRoot(key) else {
       Log.ingest.info("Dropped session with degenerate cwd \(key, privacy: .public) — not an area of work")
-      return 0
+      return .nothing
     }
     let detail = try encodeJSON(["sessionID": session.sessionID,
                                  "prompts": String(session.userPromptCount),
                                  "transcriptPath": payload.transcriptPath])
+    // Resolved BEFORE the write transaction: `Git.defaultBranch` shells out to up to four `git`
+    // subprocesses, and holding the canonical write lock across process spawns blocks every other
+    // writer for as long as git takes to answer.
+    let branchKey = sessionBranchKey(forSessionID: session.sessionID)
     let outcome = try writeSync { database -> SessionIngestOutcome in
       let (project, source) = try resolver.resolve(database, path: key, kind: SourceKind.claudeCode)
       let fingerprint = Fingerprint.session(sessionID: session.sessionID)
-      // A duplicate event is NOT a no-op: the `SessionEnd` capture hook re-spools the same session
-      // as it grows, so the same sessionID arrives repeatedly with more messages each time (`TranscriptDiscovery.discover`
-      // skips any session that already has an event, so it is not the re-spool trigger). The event
-      // dedupes; the passages must be rewritten from the now-longer transcript.
+      // A duplicate event is NOT a no-op: the `SessionEnd` hook re-spools the same session as it
+      // grows, so one sessionID arrives repeatedly with more messages each time (`discover` skips
+      // sessions that already have an event, so it is not the trigger). The event dedupes; the
+      // passages must be rewritten from the now-longer transcript.
       if let existing = try existingEvent(database, sourceID: source.id, fingerprint: fingerprint) {
         try writePassages(database, session: session, nodeID: existing.nodeID,
                           eventID: existing.id, fallbackDate: row.timestamp)
         return SessionIngestOutcome(inserted: false, born: nil, branch: nil)
       }
-      let branchKey: String? = {
-        guard let sessionBranch = try? SessionBranch.where({ $0.sessionID.eq(session.sessionID) }).fetchOne(database),
-              let raw = sessionBranch.branch else { return nil }
-        return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sessionBranch.commonDir))
-      }()
       let attr = try attributeToNode(database, projectNodeID: project.id, branchKey: branchKey, kind: CaptureKind.ccSession)
       let event = Event(nodeID: attr.nodeID, sourceID: source.id,
                         occurredAt: session.endedAt ?? row.timestamp,
@@ -182,12 +250,22 @@ extension Ingester {
       try resurfaceIfArchived(database, nodeID: attr.nodeID)
       return SessionIngestOutcome(inserted: true, born: attr.bornStrand, branch: branchKey)
     }
-    if let born = outcome.born { await nameStrand(born, branchKey: outcome.branch ?? "") }
-    return outcome.inserted ? 1 : 0
+    let born = outcome.born.map { BornStrand(id: $0, branchKey: outcome.branch ?? "") }
+    return RowIngestOutcome(eventCount: outcome.inserted ? 1 : 0, bornStrand: born)
   }
 
-  private func ingestSessionStart(data: Data) throws -> Int {
-    let payload = try JSONDecoder().decode(SessionStartPayload.self, from: data)
+  /// The branch a session launched on, from the `cc.session.start` sidecar, as a strand key.
+  /// Reads and resolves entirely outside any write transaction — see the call site.
+  private func sessionBranchKey(forSessionID sessionID: String) -> String? {
+    let sidecar: SessionBranch? = (try? readSync { database in
+      try SessionBranch.where { $0.sessionID.eq(sessionID) }.fetchOne(database)
+    }) ?? nil
+    guard let sidecar, let raw = sidecar.branch else { return nil }
+    return Git.strandBranchKey(branch: raw, defaultBranch: Git.defaultBranch(in: sidecar.commonDir))
+  }
+
+  private func ingestSessionStart(data: Data, row: SpoolRow) throws -> RowIngestOutcome {
+    let payload = try decodePayload(SessionStartPayload.self, from: data, kind: row.kind)
     try writeSync { database in
       let exists = try SessionBranch.where { $0.sessionID.eq(payload.sessionID) }.fetchOne(database) != nil
       if !exists {
@@ -198,7 +276,7 @@ extension Ingester {
         }.execute(database)
       }
     }
-    return 0
+    return .nothing
   }
 
   /// Whether an event with this (sourceID, fingerprint) already exists — the dedup predicate,
@@ -262,125 +340,6 @@ extension Ingester {
   private func resurfaceIfArchived(_ database: Database, nodeID: UUID) throws {
     let chain = try [nodeID] + NodeCommands.ancestorIDs(database, of: nodeID)
     try NodeCommands.resurface(database, ids: chain)
-  }
-
-  /// Per-pass cap so a big first run (or a flush-and-reingest) can't stall the sync cycle on N
-  /// sequential model calls. The `nameInferred` marker makes the remainder monotonic across passes.
-  static let nameRefineCap = 20
-
-  /// Per-pass cap on actual LLM description calls (a `.noSignal` candidate is free and does NOT
-  /// consume a slot), so a batch of signal-less repos can't stall the sync cycle.
-  static let descriptionRefineCap = 20
-
-  /// True when `metadataJSON` already carries the "naming attempted" marker.
-  static func nameInferred(inMetadata json: String) -> Bool {
-    let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
-    return (obj?["nameInferred"] as? Bool) ?? false
-  }
-
-  /// Returns `metadataJSON` with the "naming attempted" marker set, preserving other keys.
-  static func settingNameInferred(in json: String) -> String {
-    var obj = ((try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]) ?? [:]
-    obj["nameInferred"] = true
-    guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])
-    else { return json }
-    return String(bytes: data, encoding: .utf8) ?? json
-  }
-
-  /// Best-effort, once-per-node display-name inference for git project nodes. Selects untouched,
-  /// single-`gitRepo` project nodes (name still == verbatim default, not already marked), infers
-  /// a name on-device from local repo signals, and writes it — always stamping the marker so each
-  /// node is attempted exactly once. Non-fatal and outside the trust gate (organizational label),
-  /// exactly like `nameStrand`. A no-op when no provider is configured (e.g. the app's drain).
-  func refineProjectNames() async {
-    guard let llm else { return }
-
-    struct Candidate { let id: UUID; let commonDir: String; let metadataJSON: String }
-    let candidates: [Candidate] = (try? readSync { database -> [Candidate] in
-      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(database)
-      var out: [Candidate] = []
-      for node in projects {
-        if Self.nameInferred(inMetadata: node.metadataJSON) { continue }
-        guard let key = try NodeDescriber.soleGitRepoKey(database, nodeID: node.id) else { continue }
-        guard node.name == ProjectResolver.displayName(forKey: key) else { continue }
-        out.append(Candidate(id: node.id, commonDir: key, metadataJSON: node.metadataJSON))
-      }
-      return out
-    }) ?? []
-
-    Log.ingest.info("Refining project names: \(candidates.count, privacy: .public) candidates")
-    for candidate in candidates.prefix(Self.nameRefineCap) {
-      let ctx = ProjectContext.gather(commonDir: candidate.commonDir)
-      let raw = try? await llm.complete(prompt: ProjectContext.namePrompt(ctx))
-      let firstLine = raw?.split(separator: "\n", omittingEmptySubsequences: true)
-        .first.map(String.init) ?? ""
-      let name = TextQuality.sanitizeLabel(firstLine)
-      let newMeta = Self.settingNameInferred(in: candidate.metadataJSON)
-      try? writeSync { database in
-        if let name {
-          try Node.where { $0.id.eq(candidate.id) }
-            .update { $0.name = name; $0.metadataJSON = newMeta }.execute(database)
-        } else {
-          try Node.where { $0.id.eq(candidate.id) }
-            .update { $0.metadataJSON = newMeta }.execute(database)
-        }
-      }
-    }
-  }
-
-  /// Best-effort description pass for git project nodes. Selects `project` nodes with exactly one
-  /// `gitRepo` source and an EMPTY description (the empty field is the retry condition — no marker),
-  /// and fills them via `NodeDescriber`. The cap bounds real LLM calls, not candidates: a
-  /// `.noSignal` result (thin/absent README) is free and leaves the node to retry once real content
-  /// appears. No-op when no provider is configured (e.g. the app's LLM-less drain). Runs from
-  /// `SyncRunner`, outside the trust gate — like `refineProjectNames`.
-  func describeProjectNodes() async {
-    guard let llm else { return }
-
-    let candidates: [UUID] = (try? readSync { database -> [UUID] in
-      let projects = try Node.where { $0.kind.eq(NodeKind.project) }.fetchAll(database)
-      var out: [UUID] = []
-      for node in projects where node.description.isEmpty {
-        if try NodeDescriber.soleGitRepoKey(database, nodeID: node.id) != nil { out.append(node.id) }
-      }
-      return out
-    }) ?? []
-
-    Log.ingest.info("Describing project nodes: \(candidates.count, privacy: .public) candidates")
-    var invocations = 0
-    for id in candidates {
-      if invocations >= Self.descriptionRefineCap { break }
-      let outcome = await NodeDescriber.describe(database, nodeID: id, provider: llm, force: false)
-      if outcome == .wrote || outcome == .attemptedEmpty { invocations += 1 }
-    }
-  }
-
-  /// Names/describes a freshly materialized strand from its accumulated activity. Non-fatal:
-  /// any failure leaves the branch-name + empty description. Organizational label, not a
-  /// surfaced claim — outside the verbatim gate by design.
-  private func nameStrand(_ strandID: UUID, branchKey: String) async {
-    guard let llm else { return }
-    let summaries: [String] = (try? readSync { database in
-      try Event.where { $0.nodeID.eq(strandID) }
-        .order { $0.occurredAt.desc() }.limit(20).fetchAll(database).map(\.summary)
-    }) ?? []
-    guard !summaries.isEmpty else { return }
-    let prompt = """
-    Below is recent activity on a branch of work called "\(branchKey)". In 3-6 words on line 1, \
-    give it a human-readable name — a plain label, not numbered or bulleted, no trailing period. \
-    On line 2, one sentence describing it. Do not invent facts beyond the activity shown.
-
-    \(summaries.joined(separator: "\n"))
-    """
-    guard let out = try? await llm.complete(prompt: prompt) else { return }
-    let lines = out.split(separator: "\n", omittingEmptySubsequences: true)
-      .map { $0.trimmingCharacters(in: .whitespaces) }
-    guard let first = lines.first, let name = TextQuality.sanitizeLabel(first) else { return }
-    let desc = lines.count > 1 ? lines[1] : ""
-    try? writeSync { database in
-      try Node.where { $0.id.eq(strandID) }.update { $0.name = name; $0.description = desc }.execute(database)
-    }
-    Log.ingest.info("Strand named: \(name, privacy: .public) (id=\(strandID, privacy: .public))")
   }
 
   /// One `git show` yields subject, ISO-8601 commit date, and the changed-file list.

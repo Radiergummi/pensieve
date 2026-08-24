@@ -61,7 +61,8 @@ enum TranslationLanguageCatalog {
 struct TranslationSettingsTab: View {
   var model: AppModel
   @AppStorage(PensieveDefaults.translationTargetKey) private var translationTarget = TranslationTarget.off
-  @AppStorage(AppDefaults.idleTranslationEnabledKey) private var idleTranslationEnabled = true
+  @AppStorage(AppDefaults.idleTranslationEnabledKey)
+  private var idleTranslationEnabled = AppDefaults.idleTranslationEnabledDefault
 
   /// The single source of truth for "is this pack installed" — the picker's `⤓` marker, the status
   /// line and the backfill button's enablement all read it. It previously ALSO lived in a separate

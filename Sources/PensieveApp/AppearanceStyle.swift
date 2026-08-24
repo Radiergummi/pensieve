@@ -50,6 +50,55 @@ enum AppearanceStyle {
 
 }
 
+/// App-side UI mapping for the heartbeat status (kept out of PensieveKit — SF Symbol names and
+/// display words are UI concerns, like `SmartListKind`'s title/symbol). Lives here, beside the other
+/// shared appearance mappings, because TWO surfaces render it: the menu-bar popover and the
+/// sidebar's status footer, which had its own copy of `tint` under a different name.
+extension MonitorSnapshot.Status {
+  var glyph: String {
+    switch self {
+    case .active: return "circle.fill"
+    case .idle: return "circle"
+    case .notSetUp: return "circle.slash"
+    }
+  }
+  /// The popover's wording. The sidebar footer deliberately says something else ("capturing" /
+  /// "idle" / "not set up"): it is a lowercase ambient line, not a labelled status row.
+  var label: String {
+    switch self {
+    case .active: return String(localized: "Active")
+    case .idle: return String(localized: "Idle")
+    case .notSetUp: return String(localized: "Not set up")
+    }
+  }
+  /// Colour for the popover orb AND the sidebar footer dot — one state must not be two colours.
+  /// The menu-bar glyph deliberately keeps no tint: it is a template image, which is what lets macOS
+  /// invert it for the wallpaper behind it and for Reduce Transparency. Semantic system roles, like
+  /// `SmartListKind.color` already uses.
+  var tint: Color {
+    switch self {
+    case .active: return .green
+    case .idle: return .secondary
+    case .notSetUp: return .orange
+    }
+  }
+}
+
+/// The resolved LLM provider in human words. One mapping, keyed off `ProviderPreference` rather than
+/// its raw strings: Settings ▸ Intelligence names the four choices and Settings ▸ Advanced names the
+/// resolved one, and the second switched on string literals — so adding a case would have left one
+/// tab silently showing a stale label.
+extension ProviderPreference {
+  var displayLabel: LocalizedStringKey {
+    switch self {
+    case .auto: return "Automatic"
+    case .foundationModels: return "On-device (Foundation Models)"
+    case .claudeCLI: return "Claude CLI (subscription)"
+    case .cloud: return "Cloud (API)"
+    }
+  }
+}
+
 /// A node's effective icon in a colored rounded-rect badge. Reused in the sidebar tree, the middle
 /// list, and the detail header.
 struct NodeBadge: View {

@@ -36,14 +36,25 @@ extension AppModel {
     guard !isSyncingIndexes else { pendingIndexSync = true; return }
     isSyncingIndexes = true
     let searchStore = self.searchStore
+    // `.production()` is deliberately NOT used here, even though it is what the daemon and the CLI
+    // call: it CONSTRUCTS a `SearchIndexStore` (and, with a language set, a `TranslationStore`), and
+    // `SearchIndexStore.init` runs a `pool.write` schema check. This method runs on every
+    // watch-driven refresh, so that was a write into the very directory `canonicalWatcher` watches
+    // — re-firing the watch into the busy-loop `MonitorSnapshot.gather(canonical:spool:)` documents
+    // and `AppModel` holds `spool`/`database` open to avoid. The model's own long-lived stores do
+    // the same work with no file churn.
+    //
+    // `.production()`'s language rule is reproduced EXACTLY rather than defaulted away: the
+    // defaulted initializer resolves to `translations: nil, language: .off`, so this rebuild would
+    // carry no German rows while the daemon's own `.production()` rebuild carries them — each
+    // side's rebuild would then look like a corpus change to the other and undo it, forever.
+    // Resolved here, on the main actor, and re-read on every call so a Settings change lands
+    // without a relaunch. Off means off: `translationStore` is `lazy`, so with no target it is
+    // never touched and no file is created.
+    let language = TranslationTarget.resolved()
+    let translations = language.isEmpty ? nil : translationStore
     Task.detached { [weak self] in
-      // `.production()`, NOT `SearchIndexer(store: searchStore)`: the defaulted initializer resolves
-      // to `translations: nil, language: .off`, so this rebuild would carry no German rows while the
-      // daemon's own `.production()` rebuild (Sync.swift / PensieveSyncAgent.swift) carries them —
-      // each side's rebuild would then look like a corpus change to the other and undo it, forever.
-      // `.production()` re-reads the target on every call (a Settings change lands without relaunch)
-      // and already skips opening the translation store when the target is off.
-      let indexer = SearchIndexer.production()
+      let indexer = SearchIndexer(store: searchStore, translations: translations, language: language)
       indexer.sync(database)
       indexer.syncPassages(database)
       // Read the state HERE, off the main actor: it is a SQL read against the pool whose 5 s busy
@@ -80,13 +91,7 @@ extension AppModel {
   func runSearch() {
     searchTask?.cancel()
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard query.count >= SearchQueries.minQueryLength, let database else {
-      searchHits = []
-      passageHits = []
-      pinnedTopHit = nil
-      expandedLooseEndID = nil   // emptying the field (any way) exits search coherently, incl. the leaf one-home override
-      return
-    }
+    guard query.count >= SearchQueries.minQueryLength, let database else { clearResults(); return }
     let visible = visibleNodeIDs()
     // Pre-Task locals: reading self off-main is an isolation violation.
     // One control, two dimensions. The kernel keeps `includeArchived` and `includeClosed` separate
@@ -101,7 +106,6 @@ extension AppModel {
     // The pin is pure and instant — no DB, no index. Assign it before the async read so navigation
     // never waits on ranking.
     pinnedTopHit = SearchQueries.topHit(query: query, in: scopedNodes)
-    searchIndexState = searchStore.state()
 
     searchToken += 1
     let token = searchToken
@@ -118,26 +122,46 @@ extension AppModel {
     let translations = language.isEmpty ? nil : translationStore
     let translator = language.isEmpty ? nil : self.translator
     searchTask = Task { [weak self] in
-      let rankedHandle = Task.detached {
-        await SearchQueries.searchTranslatingOnEmpty(
+      let rankedHandle = Task.detached { () -> ([SearchHit], SearchIndexState)? in
+        // Both detached bodies check cancellation on entry, and the outer task forwards its own
+        // cancellation to them below. Neither happened before: `Task.detached` inherits nothing, so
+        // `searchTask?.cancel()` cancelled the awaiting shell while up to four whole-corpus reads
+        // stayed in flight against a serialized pool — the exact hazard `AppModel+Translation`
+        // documents for its own detached backfill.
+        guard !Task.isCancelled else { return nil }
+        let hits = await SearchQueries.searchTranslatingOnEmpty(
           query: rawQuery, scope: scope, store: store, translations: translations,
           language: language, translator: translator, database)
+        // The index state is read HERE, off the main actor, for the same reason the rebuild is
+        // detached: it is a SQL read against a pool with a 5 s busy timeout that the daemon also
+        // writes. On the main actor it was one such read per search — this file's own policy note
+        // above says not to do that.
+        return (hits, store.state())
       }
       // Same scope, same query, separate list — passage BM25 scores are not comparable to the
       // ranked list's, so they are appended as their own section rather than merged. A second
       // detached task, so both run concurrently rather than the passage read blocking behind the
       // ranked one — and it takes the SAME English-retry wrapper, because transcripts are
       // overwhelmingly English even when what you typed is not.
-      let passagesHandle = Task.detached {
-        await PassageQueries.searchTranslatingOnEmpty(
+      let passagesHandle = Task.detached { () -> [PassageHit]? in
+        guard !Task.isCancelled else { return nil }
+        return await PassageQueries.searchTranslatingOnEmpty(
           query: rawQuery, scope: scope, store: store, language: language, translator: translator,
           database)
       }
-      let hits = await rankedHandle.value
-      let passages = await passagesHandle.value
-      guard let self, self.searchToken == token, !Task.isCancelled else { return }
+      let results = await withTaskCancellationHandler {
+        let rankedResult = await rankedHandle.value
+        let passagesResult = await passagesHandle.value
+        return (rankedResult, passagesResult)
+      } onCancel: {
+        rankedHandle.cancel()
+        passagesHandle.cancel()
+      }
+      guard let self, self.searchToken == token, !Task.isCancelled,
+            let (hits, state) = results.0, let passages = results.1 else { return }
       self.searchHits = hits
       self.passageHits = passages
+      self.searchIndexState = state
     }
   }
 
@@ -183,13 +207,20 @@ extension AppModel {
     expandedLooseEndID = firstFact.looseEndID
   }
 
-  /// Exit search mode (e.g. on sidebar navigation): clear the field, results, and pending expand.
-  func clearSearch() {
-    searchText = ""
+  /// Everything a search produced, cleared together. One definition, shared by the too-short-query
+  /// guard in `runSearch` and by `clearSearch` — they had the same four assignments written twice.
+  private func clearResults() {
     searchHits = []
     passageHits = []
     pinnedTopHit = nil
+    // Emptying the field (any way) exits search coherently, including the leaf one-home override.
     expandedLooseEndID = nil
+  }
+
+  /// Exit search mode (e.g. on sidebar navigation): clear the field, results, and pending expand.
+  func clearSearch() {
+    searchText = ""
+    clearResults()
     searchTask?.cancel()
   }
 }

@@ -49,13 +49,18 @@ public enum DecisionEngine {
     return EffectiveBar(precision: bar?.precision, recall: bar?.recall, quality: bar?.quality)
   }
 
-  public static func recommend(task: String, scores: [CellScore], bar: EffectiveBar,
+  /// Takes the task itself, not its id: the fabrication hard-gate below is a property of the
+  /// SCORER, and keying it off the literal `"extraction"` meant renaming the task id would silently
+  /// switch the trust gate off while every test kept passing.
+  public static func recommend(task: any EvalTask, scores: [CellScore], bar: EffectiveBar,
                                incumbentLabel: String, noiseMargin: Double) -> Recommendation {
     // A model clears the bar only ROBUSTLY (by ≥ noiseMargin on soft axes). The precision
     // hard-gate (reproduced fabrication) excludes a model regardless of every other score —
     // and it applies to EVERYONE, including the on-device incumbent.
     func clears(_ score: CellScore) -> Bool {
-      if task == "extraction" && score.reproducedFabrication { return false }
+      // `reproducedFabrication` is only ever populated by the gold-scored extraction path
+      // (`CellScoring`'s `.extraction` branch), so the scorer is the honest key for the gate.
+      if case .extraction = task.scorer, score.reproducedFabrication { return false }
       if let precisionBar = bar.precision, (score.precision ?? -1) + 1e-9 < precisionBar { return false }
       if let recallBar = bar.recall, (score.recall ?? -1) + 1e-9 < recallBar + noiseMargin { return false }
       if let qualityBar = bar.quality, (score.quality ?? -1) + 1e-9 < qualityBar + noiseMargin { return false }
@@ -75,12 +80,12 @@ public enum DecisionEngine {
       return (lhs.quality ?? 0) > (rhs.quality ?? 0)
     }
     guard let winner = ranked.first else {
-      return Recommendation(task: task, winner: incumbentLabel, clearedBar: clearedLabels,
+      return Recommendation(task: task.id, winner: incumbentLabel, clearedBar: clearedLabels,
                             reason: "no model cleared the bar; fell back to incumbent")
     }
     let reason = winner.modelLabel == incumbentLabel
       ? "incumbent clears the bar (local-first)"
       : "incumbent excluded; cheapest-local bar-clearing model by locality→cost→latency→quality"
-    return Recommendation(task: task, winner: winner.modelLabel, clearedBar: clearedLabels, reason: reason)
+    return Recommendation(task: task.id, winner: winner.modelLabel, clearedBar: clearedLabels, reason: reason)
   }
 }

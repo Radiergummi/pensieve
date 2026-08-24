@@ -33,12 +33,33 @@ extension LooseEnd {
   /// The shared "open, not user-confirmed-noise" predicate. Single source of truth so the
   /// detail view, menu-bar count, App-Intents facts, and What's-Next ranking never diverge.
   public static func isOpen(_ columns: TableColumns) -> some QueryExpression<Bool> {
-    columns.status.eq(LooseEndStatus.open) && columns.label.neq("noise")
+    columns.status.eq(LooseEndStatus.open) && columns.label.neq(LooseEndLabel.noise)
+  }
+
+  /// The mirror of `isOpen`: resolved, and not user-confirmed-noise.
+  ///
+  /// It exists because the 👎 exclusion was the half everyone forgot. `label` and `status` are
+  /// orthogonal by design (`LooseEndCommands`), so a 👎'd end is excluded from `isOpen` — and a
+  /// closed-count that does NOT also exclude it reports work that the user has explicitly said was
+  /// never work. `NextItem.isActionable` is `openLooseEnds > 0 || closedLooseEnds == 0`, so a node
+  /// whose only resolved ends are 👎'd counted as "it HAD open ends and they are all closed" and was
+  /// dropped permanently from What's Next, the sidebar smart list, the widget digest, MCP
+  /// `whats_next` and `pensieve next` — while appearing on no Completed feed either, because those
+  /// DO exclude noise. `resolveAllOpen`'s comment records this same 👎-vs-status asymmetry biting
+  /// once before. Every "closed" count must go through here.
+  public static func isClosedAndReal(_ columns: TableColumns) -> some QueryExpression<Bool> {
+    columns.status.neq(LooseEndStatus.open) && columns.label.neq(LooseEndLabel.noise)
   }
 
   /// The raw-SQL spelling of `isOpen`, for the batched aggregates the typed builder can't express.
   /// MUST stay logically identical to `isOpen` above; `looseEndOpenPredicatesAgree` in
   /// `NodeFactsTests` fails the suite if they ever diverge. Interpolated into a SQL literal, so it
   /// contains no user input and needs no binding.
-  public static let openSQLPredicate = #"("status" = 'open' AND "label" <> 'noise')"#
+  public static let openSQLPredicate =
+    #"("status" = 'open' AND "label" <> '\#(LooseEndLabel.noise)')"#
+
+  /// The raw-SQL spelling of `isClosedAndReal`, for the same batched aggregates.
+  /// `looseEndClosedPredicatesAgree` pins it to the typed form.
+  public static let closedAndRealSQLPredicate =
+    #"("status" <> 'open' AND "label" <> '\#(LooseEndLabel.noise)')"#
 }

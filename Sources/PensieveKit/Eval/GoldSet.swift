@@ -12,7 +12,7 @@ public struct GoldSet: Codable, Sendable {
     return goldSet
   }
   public func save(to url: URL) throws {
-    try EvalPaths.ensureDir(url.deletingLastPathComponent())
+    try EvalPaths.ensureDirectory(url.deletingLastPathComponent())
     let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
     try enc.encode(self).write(to: url)
   }

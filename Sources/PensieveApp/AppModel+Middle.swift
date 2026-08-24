@@ -11,7 +11,9 @@ extension AppModel {
   // MARK: - Node-tree accessors
   // In-memory reads over `allNodes`, which `refresh()` keeps current. No DB access.
 
-  func node(_ id: UUID) -> Node? { allNodes.first { $0.id == id } }
+  /// O(1) through the index `setAllNodes` maintains — this is called once per row by the middle
+  /// column's three list builders and by every search result, over a 306-node set.
+  func node(_ id: UUID) -> Node? { nodesByID[id] }
 
   /// Direct children of `id`, name-sorted (thin wrapper over the pure Kit helper).
   func children(of id: UUID) -> [Node] { NodeForest.children(of: id, in: allNodes) }
