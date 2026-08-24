@@ -228,8 +228,13 @@ struct LooseEndRow: View {
       let cited = ctx.messages.first(where: \.isCited) ?? ctx.messages.first
       if ctx.messages.count > 1 {
         if provenanceExpanded {
-          ForEach(Array(ctx.messages.enumerated()), id: \.element.index) { idx, msg in
-            messageRow(msg, showsRole: idx == 0 || speakerClass(for: ctx.messages[idx - 1]) != speakerClass(for: msg))
+          // 18 clears MarkdownUI's 14pt paragraph margin (`Theme.basic`), restoring within-paragraph <
+          // between-paragraphs (14) < between-messages (18) — the spec's pre-committed Risk #3
+          // fallback ("reinstate a hairline rule between messages"), taken as spacing, not a rule.
+          VStack(alignment: .leading, spacing: 18) {
+            ForEach(Array(ctx.messages.enumerated()), id: \.element.index) { idx, msg in
+              messageRow(msg, showsRole: idx == 0 || speakerClass(for: ctx.messages[idx - 1]) != speakerClass(for: msg))
+            }
           }
         } else if let cited {
           previewRow(cited)

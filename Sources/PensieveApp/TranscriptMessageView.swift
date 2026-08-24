@@ -64,7 +64,9 @@ struct TranscriptMessageView: View {
       // shifting its content column. Deliberately NOT `Text("")`: an empty literal at a Text site is
       // a localizing site to CatalogCoverageTests and would demand a catalog key for "".
       .frame(width: Self.railWidth, alignment: .trailing)
-      .padding(.top, 3)                           // optical alignment with the body's first line
+      // Optical alignment with the body's first line. A bubbled message's `content` carries its own
+      // 10pt top padding (below), so the caption needs 3 + 10 = 13pt to still land level with it.
+      .padding(.top, bubbled ? 13 : 3)
       content
     }
   }

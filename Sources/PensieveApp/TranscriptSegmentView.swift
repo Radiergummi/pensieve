@@ -20,8 +20,8 @@ struct TranscriptSegmentView: View {
   /// highlight the phrase in place. The cost is visible raw syntax until the find bar closes.
   ///
   /// Only the body is flattened — a callout keeps its severity chrome and tag name, a harness block
-  /// keeps its kind label and card. Those are what tell the reader WHAT the block is; swapping the
-  /// whole view for bare text would turn a matched `<system-reminder>` into anonymous prose.
+  /// keeps its kind label. Those are what tell the reader WHAT the block is; swapping the whole view
+  /// for bare text would turn a matched `<system-reminder>` into anonymous prose.
   var highlight: SegmentHighlight?
 
   var body: some View {
