@@ -32,6 +32,7 @@ Pensieve logs to the macOS unified log with subsystem `me.mazetti.pensieve`. Mes
 | `llm` | `CloudLLMProvider`, `FoundationModelsProvider`, `ClaudeCLIProvider` | Prompt dispatched (length, provider kind), completion received, HTTP errors, timeouts |
 | `discovery` | `SourceScanner`, `TranscriptDiscovery` | Candidates found, sessions spooled |
 | `app` | `AppModel` lifecycle | App start (store paths), drain/refresh triggers, watcher fires, focus context changes, provider rebuilds |
+| `translation` | `TranslationStore` (open / put / prune) | Cache open failures, write failures, prune failures. Its own category since 2026-08-24: these logged under `search`, so a translation-cache outage read as a retrieval problem |
 | `widget` | `WidgetDigestPublisher.publishQuietly` (write), `WhatsNextProvider.getTimeline` (read) | Both halves of the digest hand-off, and the only signal either failed. `publishQuietly` swallows every error by contract, so a bad publish can never surface as a failed sync or a UI error. On the read side the appex logs `timeline: <state> items=<n> age=<s>s` per render — `state` distinguishes a genuinely empty queue from a failed read, which both render as "Open Pensieve to get started". A widget that looks stale is diagnosed here: compare the render's `age` against the digest's own mtime |
 
 ### Log levels
@@ -101,7 +102,8 @@ Each `.json` file is a serialized `MXDiagnosticPayload` or `MXMetricPayload`. Ke
 
 ```bash
 # Pretty-print the most recent diagnostic
-cat ~/Library/Logs/Pensieve/diagnostics/diagnostic-*.json | python3 -m json.tool | head -100
+# `plutil` is built in and needs no toolchain; this repo's rule is Swift only, no Python.
+plutil -p "$(ls -t ~/Library/Logs/Pensieve/diagnostics/diagnostic-*.json | head -1)" | head -100
 ```
 
 ## macOS crash reports
@@ -192,6 +194,6 @@ log show --predicate 'eventMessage CONTAINS "application-groups"' --last 10m --s
 
 | File | Role |
 |------|------|
-| `Sources/PensieveKit/Support/Log.swift` | `enum Log` — 8 category loggers (internal to PensieveKit): sync, extraction, llm, ingest, discovery, semantic, search, widget |
+| `Sources/PensieveKit/Support/Log.swift` | `enum Log` — 9 category loggers (internal to PensieveKit): sync, extraction, llm, ingest, discovery, semantic, search, widget, translation |
 | `Sources/PensieveApp/AppLog.swift` | `enum AppLog` — app-target `app` category logger |
 | `Sources/PensieveApp/DiagnosticsCollector.swift` | MetricKit subscriber, JSON writer, retention pruner |

@@ -24,6 +24,32 @@ zeroing real terms typed alongside it. But it does not make emoji *findable*.
 FTS5 tables — which needs a schema-version bump and a **full reindex**, and would change ranking.
 Out of scope for a fix sweep; flagged rather than chosen.
 
+
+### Q2. What should an unparseable spool timestamp do? (finding 2.36)
+`CaptureSpool.pending()` substitutes `Date()` when `ts` will not parse. The substitution is now
+logged rather than silent, and it was left in place deliberately — that value becomes the event's
+`occurredAt` (`Ingester.swift:120`, `:175`) and is compared against the absent-transcript grace
+period (`:138`), so a sentinel like `.distantPast` would both misdate the work and silently drop the
+row. But "now" does make a corrupt row look like it just happened.
+**Decision:** leave it (logged), quarantine such rows into a dead-letter state, or reject them at
+`append` time so a malformed timestamp can never enter the spool. Rejecting at append touches the
+sacred path, which is why the fix sweep did not choose.
+
+### Q3. Re-sign the commit range before pushing
+`git commit` failed twice with `error: Couldn't get agent socket?` — the Secretive SecretAgent socket
+exists at `$SSH_AUTH_SOCK` but would not authorize non-interactively. **The fix-sweep commits on
+`quality-fix-sweep` are therefore UNSIGNED**, and `main` requires verified signatures.
+Re-sign the range before merging or pushing, e.g.
+`git rebase --exec 'git commit --amend --no-edit -S' main`, with the agent unlocked.
+
+### Q4. Merge the 9 phantom project nodes (finding 2.1)
+The code path that minted them is fixed, but the existing rows are still in the live store: 9 phantom
+nodes holding ~42 events that belong to `Pensieve`, plus ~30 more splitting `laravel-openapi`, and
+one node literally named `/`. `pensieve group` merges nodes and exists for exactly this, but choosing
+the primaries and the mapping is a judgement call over your own data.
+**Decision:** which nodes merge into which. A `pensieve scan`-style report of sources whose key is
+not a `.git` common-dir would make the list; that report does not exist yet.
+
 ## CONTRACT CHANGES landed
 
 - **`pensieve track` now refuses a non-git path** with a `ValidationError` instead of creating a node
@@ -74,3 +100,19 @@ Carried over from the sweep verbatim; the fix sweep deliberately did not delete 
 - `Log.semantic`
 - a `semantic-index.sqlite` expectation still in the tests
 - the legacy `DaemonInstaller` path
+
+## Notes carried from the fix sweep
+
+- **`TranslationStore.pruneKeeping` is field-agnostic while its only live text producer excludes
+  narration** (finding 1.38's sibling). It is currently dead code, so nothing is broken — but if it
+  is ever wired up, it will delete rows for any field the producer does not enumerate. Left in place
+  (dead code is not deleted by this sweep); noted so wiring it is not done blindly.
+- **The translation cache key deliberately has no producer token.** `NarrationCacheKey` includes one
+  because cloud and on-device narration differ sharply. On-device translation is the only translator,
+  so the producer is constant; a `translationRule` version token was added instead, which is the half
+  that was genuinely missing. If a second translator is ever added, the key needs the producer too.
+- **Adding `translationRule` to the cache key invalidates every existing cached translation** on this
+  machine. Disposable by design — they re-translate on demand — but the first render after this lands
+  will do real work. `pruneKeeping` reclaims the stranded rows.
+- **`docs/observability.md` gains a `translation` log category.** Translation failures previously
+  logged under `search`, so a translation outage looked like a retrieval problem.
