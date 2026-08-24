@@ -46,10 +46,24 @@ public enum PensievePaths {
 
   /// The disposable narration cache (shared across app / CLI / MCP). Not the canonical store,
   /// not the spool — losing it costs only a re-narrate.
-  public static func narrationCacheURL(in support: URL) -> URL {
-    support.appendingPathComponent("narration-cache.sqlite")
+  ///
+  /// Follows `PENSIEVE_DB` for the same reason `searchIndexURL()` and `translationCacheURL()` do —
+  /// it was the one sidecar that did not, and it is the one whose `init` DELETES the file it cannot
+  /// open (`NarrationCache`). So `PENSIEVE_DB=/tmp/fixture pensieve prime` read, wrote, and could
+  /// destroy the developer's live narration cache. It produced no wrong answers only because
+  /// `NarrationCacheKey` is built from random event UUIDs that cannot collide across stores — an
+  /// accident, not a design.
+  public static func narrationCacheURL() -> URL {
+    narrationCacheURL(storeOverride: ProcessInfo.processInfo.environment["PENSIEVE_DB"],
+                      support: supportDirectory())
   }
-  public static func narrationCacheURL() -> URL { narrationCacheURL(in: supportDirectory()) }
+  /// The rule, separated from reading the environment for the same reason
+  /// `indexURL(named:storeOverride:support:)` is — and so that "the narration cache follows the
+  /// override" is assertable at all. Asserting it against `indexURL` under the ambient environment
+  /// cannot fail on a machine with no `PENSIEVE_DB` set, which is every developer machine.
+  static func narrationCacheURL(storeOverride: String?, support: URL) -> URL {
+    indexURL(named: "narration-cache.sqlite", storeOverride: storeOverride, support: support)
+  }
   /// The disposable, device-local, never-synced FTS5 search index (shared across app / CLI /
   /// daemon / MCP). Losing it costs only a re-index.
   public static func searchIndexURL() -> URL {

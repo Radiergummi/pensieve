@@ -43,8 +43,14 @@ public enum TranscriptWindow {
     // window the size the caller asked for even if `index` ever stops being contiguous — a value
     // filter would then silently return fewer neighbours, by an amount that depends on how much
     // tool traffic the session happened to contain.
-    let lower = max(0, citedPosition - radius)
-    let upper = min(session.messages.count - 1, citedPosition + radius)
+    // Clamp first: a negative radius puts `lower` above `upper` for EVERY citation, and the range
+    // expression below then traps rather than yielding an empty window. `whats_next` and `search`
+    // each clamp at their own MCP argument boundary and say why; `recall` did not, so one malformed
+    // argument aborted the long-lived server process. The guard belongs here — this is where the
+    // trap lives, and every present and future caller gets it.
+    let span = max(0, radius)
+    let lower = max(0, citedPosition - span)
+    let upper = min(session.messages.count - 1, citedPosition + span)
     return session.messages[lower...upper].map {
       ProvenanceMessage(index: $0.index, role: $0.role, text: $0.text,
                         isCited: $0.index == messageIndex, isUserPrompt: $0.isUserPrompt)

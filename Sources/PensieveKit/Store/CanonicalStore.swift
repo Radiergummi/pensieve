@@ -210,4 +210,18 @@ private func registerRecentMigrations(on migrator: inout DatabaseMigrator) {
     try #sql(#"CREATE INDEX "idx_passages_event" ON "passages"("eventID")"#).execute(database)
     try #sql(#"CREATE INDEX "idx_passages_node" ON "passages"("nodeID", "occurredAt")"#).execute(database)
   }
+
+  migrator.registerMigration("v14-looseend-node-index") { database in
+    // The index v13's comment above already pointed at. Every `LooseEnd.where { $0.nodeID.eq(…) }`
+    // was a full table scan — `EXPLAIN QUERY PLAN` on the live store answered `SCAN looseEnds`,
+    // where the sibling events query answered `SEARCH events USING INDEX idx_events_project`.
+    //
+    // That mattered because three per-node loops run inside one `AppModel.refresh()`
+    // (`NextQueries.ranked` twice per node, `BriefingQueries.cards` once), and `refresh()` runs on
+    // every debounced store-watch tick and after every resolve: ~917 scans over 1,076 rows,
+    // ~987k row visits, per refresh. `(nodeID, status)` rather than `nodeID` alone because every
+    // one of those call sites also constrains status; the `label <> 'noise'` half stays a filter.
+    try #sql(#"CREATE INDEX "idx_looseends_node" ON "looseEnds"("nodeID", "status")"#)
+      .execute(database)
+  }
 }

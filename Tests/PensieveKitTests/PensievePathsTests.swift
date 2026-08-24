@@ -36,6 +36,20 @@ import Foundation
                                  storeOverride: "/tmp/throwaway.sqlite", support: supportURL).path
           == "/tmp/throwaway-translation-cache.sqlite")
 
+  // The narration cache is a sidecar too, and it was the one that did NOT follow the override —
+  // the only one whose `init` DELETES the file it cannot open, so `PENSIEVE_DB=/tmp/fixture
+  // pensieve prime` read, wrote, and could destroy the developer's live cache.
+  //
+  // Asserted through `narrationCacheURL`'s own injectable overload, not through `indexURL` with its
+  // name: the latter passes whether or not the accessor actually routes here, so it would not have
+  // caught the bug. With no override the path must be byte-identical to the historical one, or
+  // every existing install silently orphans its cache.
+  #expect(PensievePaths.narrationCacheURL(storeOverride: nil, support: supportURL).path
+          == support + "/narration-cache.sqlite")
+  #expect(PensievePaths.narrationCacheURL(storeOverride: "/tmp/throwaway.sqlite",
+                                          support: supportURL).path
+          == "/tmp/throwaway-narration-cache.sqlite")
+
   // Two throwaway stores in one directory do not share an index.
   #expect(PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: "/tmp/a.sqlite", support: supportURL)
           != PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: "/tmp/b.sqlite", support: supportURL))
@@ -72,7 +86,8 @@ import Foundation
 
   #expect(PensievePaths.canonicalURL(in: support).path == root + "/pensieve.sqlite")
   #expect(PensievePaths.captureURL(in: support).path == root + "/capture.sqlite")
-  #expect(PensievePaths.narrationCacheURL(in: support).path == root + "/narration-cache.sqlite")
+  #expect(PensievePaths.narrationCacheURL(storeOverride: nil, support: support).path
+          == root + "/narration-cache.sqlite")
 
   // The disposable indexes follow the root too. This is the regression this feature is most
   // likely to reintroduce: an index left behind in the OLD directory is a silent, total
