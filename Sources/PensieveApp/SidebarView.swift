@@ -24,7 +24,7 @@ struct SidebarView: View {
           Text("Review Suggestions")
           Spacer()
           if model.reviewCount > 0 {
-            Text("\(model.reviewCount)").foregroundStyle(.secondary).monospacedDigit()
+            countText(model.reviewCount)
           }
         }
       } icon: {
@@ -36,7 +36,7 @@ struct SidebarView: View {
           Text("Loose Ends")
           Spacer()
           if model.triageCount > 0 {
-            Text("\(model.triageCount)").foregroundStyle(.secondary).monospacedDigit()
+            countText(model.triageCount)
           }
         }
       } icon: {
@@ -73,6 +73,14 @@ struct SidebarView: View {
     .safeAreaInset(edge: .bottom) { StatusFooter(snapshot: model.snapshot) }
   }
 
+  /// A trailing count badge. `Text(_:format:)`, NOT `Text("\(count)")`: the interpolating form takes
+  /// a `LocalizedStringKey`, so each of these three call sites minted an unkeyed `"%lld"` lookup that
+  /// no catalog answers — and `%lld` prints a bare integer, so a German window would render "1076"
+  /// where the locale wants "1.076". The format style is locale-aware and mints no key at all.
+  private func countText(_ count: Int) -> some View {
+    Text(count, format: .number).foregroundStyle(.secondary).monospacedDigit()
+  }
+
   /// One tree row. Extracted with an explicit result type so the compiler doesn't have to
   /// type-check the nested Group/if + `.tag` + `.contextMenu` chain inside the OutlineGroup
   /// closure all at once ("unable to type-check this expression in reasonable time").
@@ -87,7 +95,7 @@ struct SidebarView: View {
       HStack {
         Text(kind.title)
         Spacer()
-        Text("\(count)").foregroundStyle(.secondary).monospacedDigit()
+        countText(count)
       }
     } icon: {
       Image(systemName: kind.symbol)
@@ -120,13 +128,9 @@ private struct StatusFooter: View {
     // read as a strip taped under the sidebar.
     .background(.bar)
   }
-  private var color: Color {
-    switch snapshot.status {
-    case .active: return .green
-    case .idle: return .secondary
-    case .notSetUp: return .orange
-    }
-  }
+  /// `MonitorSnapshot.Status.tint`, the same value the popover orb paints — one state cannot be two
+  /// colours. Only the WORDING below is this surface's own.
+  private var color: Color { snapshot.status.tint }
   private var label: String {
     switch snapshot.status {
     case .active: return String(localized: "capturing")

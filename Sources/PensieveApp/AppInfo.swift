@@ -14,9 +14,9 @@ enum AppInfo {
       ])
 
     // Version/build come from the bundle and are NEVER localized.
-    let info = Bundle.main.infoDictionary
-    let version = info?["CFBundleShortVersionString"] as? String ?? ""
-    let build = info?["CFBundleVersion"] as? String ?? ""
+    let bundleInfo = Bundle.main.infoDictionary
+    let version = bundleInfo?["CFBundleShortVersionString"] as? String ?? ""
+    let build = bundleInfo?["CFBundleVersion"] as? String ?? ""
 
     NSApplication.shared.orderFrontStandardAboutPanel(options: [
       .applicationName: "Pensieve",

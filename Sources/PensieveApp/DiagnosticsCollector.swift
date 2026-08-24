@@ -41,11 +41,22 @@ final class DiagnosticsCollector: NSObject, MXMetricManagerSubscriber {
     prune()
   }
 
+  /// The ISO8601 stamp `write` puts in a filename, without the `metrics-`/`diagnostic-` prefix.
+  /// Sorting on the WHOLE filename put every `diagnostic-` file ahead of every `metrics-` one
+  /// whatever its date, so the eviction below deleted all the crash and hang payloads — the ones you
+  /// actually go looking for — before touching a single metrics file. The stamp sorts
+  /// lexicographically, which is why it is written in that format.
+  private static func timestamp(of url: URL) -> String {
+    let name = url.deletingPathExtension().lastPathComponent
+    guard let separator = name.firstIndex(of: "-") else { return name }
+    return String(name[name.index(after: separator)...])
+  }
+
   private func prune() {
     guard let files = try? FileManager.default.contentsOfDirectory(
       at: outputDir, includingPropertiesForKeys: nil)
       .filter({ $0.pathExtension == "json" })
-      .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+      .sorted(by: { Self.timestamp(of: $0) < Self.timestamp(of: $1) })
     else { return }
     if files.count > maxFiles {
       for file in files.prefix(files.count - maxFiles) {

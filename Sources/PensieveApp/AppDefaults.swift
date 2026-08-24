@@ -15,27 +15,36 @@ enum AppDefaults {
   /// failure would retry the move on every launch forever.
   static let pendingRelocationDestinationKey = "pendingRelocationDestination"
 
-  /// Narration is ON by default (matching the `@AppStorage(...) = true` in the views). Non-View
-  /// readers (AppModel) must honor the same default — `UserDefaults.bool` alone reads false when
-  /// unset, which would disagree with the views before Settings is ever opened.
+  // MARK: - Defaults for the unset case
+  //
+  // Each `@AppStorage` binding in a View MUST be declared with the constant below, and the non-View
+  // accessor for the same key reads it too. `UserDefaults.bool` alone reads false when the key is
+  // unset, which would disagree with a View defaulting to true before Settings is ever opened. This
+  // used to be a comment — "matching the `@AppStorage(...) = true` in the views" — which named the
+  // convention without enforcing it, so the KEYS were single-sourced and the VALUES were not.
+
+  /// Narration is ON by default.
+  static let narrationEnabledDefault = true
+  /// Background sync is ON by default (preserving the always-syncing daemon behavior).
+  static let backgroundSyncEnabledDefault = true
+  /// Idle translation is ON by default — silently off would hit exactly the users who never went
+  /// looking for it.
+  static let idleTranslationEnabledDefault = true
+
   static var narrationEnabled: Bool {
-    UserDefaults.standard.object(forKey: narrationEnabledKey) == nil
-      ? true : UserDefaults.standard.bool(forKey: narrationEnabledKey)
+    boolean(narrationEnabledKey, default: narrationEnabledDefault)
   }
 
-  /// Background sync is ON by default (preserving the always-syncing daemon behavior). Non-View
-  /// readers (AppDelegate) must honor the same default as the Settings toggle.
   static var backgroundSyncEnabled: Bool {
-    UserDefaults.standard.object(forKey: backgroundSyncEnabledKey) == nil
-      ? true : UserDefaults.standard.bool(forKey: backgroundSyncEnabledKey)
+    boolean(backgroundSyncEnabledKey, default: backgroundSyncEnabledDefault)
   }
 
-  /// Idle translation is ON by default (matching the `@AppStorage(...) = true` in the view). The
-  /// policy reads this accessor, not `UserDefaults.bool` directly — which alone reads false when
-  /// unset and would disagree with the toggle before Settings has ever been opened, leaving the
-  /// feature silently off for exactly the users who never went looking for it.
   static var idleTranslationEnabled: Bool {
-    UserDefaults.standard.object(forKey: idleTranslationEnabledKey) == nil
-      ? true : UserDefaults.standard.bool(forKey: idleTranslationEnabledKey)
+    boolean(idleTranslationEnabledKey, default: idleTranslationEnabledDefault)
+  }
+
+  private static func boolean(_ key: String, default fallback: Bool) -> Bool {
+    UserDefaults.standard.object(forKey: key) == nil
+      ? fallback : UserDefaults.standard.bool(forKey: key)
   }
 }

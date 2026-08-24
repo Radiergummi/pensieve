@@ -8,15 +8,15 @@ enum EmojiCatalog {
   struct Category: Identifiable { let id: String; let symbol: String; let emoji: [String] }
 
   private static func build(_ ranges: [ClosedRange<UInt32>]) -> [String] {
-    var out: [String] = []
+    var names: [String] = []
     for range in ranges {
       for scalarValue in range {
         guard let scalar = Unicode.Scalar(scalarValue) else { continue }
-        let props = scalar.properties
-        if props.isEmoji && props.isEmojiPresentation { out.append(String(scalar)) }
+        let properties = scalar.properties
+        if properties.isEmoji && properties.isEmojiPresentation { names.append(String(scalar)) }
       }
     }
-    return out
+    return names
   }
 
   static let categories: [Category] = [
@@ -30,11 +30,17 @@ enum EmojiCatalog {
     Category(id: "symbols", symbol: "heart", emoji: build([0x2600...0x26FF, 0x1F532...0x1F53D])),
   ]
 
-  /// A lowercase Unicode name for search, emojiValue.g. "😀" → "grinning face". Uses the system transform.
+  /// A lowercase Unicode name for search, e.g. "😀" → "grinning face". Uses the system transform.
   static func name(of emoji: String) -> String {
     let unicodeName = emoji.applyingTransform(.toUnicodeName, reverse: false) ?? ""
     return unicodeName.replacingOccurrences(of: "\\N{", with: "").replacingOccurrences(of: "}", with: "").lowercased()
   }
+
+  /// Every emoji in the catalog paired with its searchable name, built once on first search.
+  /// Search used to call `name(of:)` — a whole ICU transform plus two string replacements — for
+  /// each of the ~1,100 catalog emoji on every keystroke.
+  static let searchIndex: [(emoji: String, name: String)] =
+    categories.flatMap(\.emoji).map { (emoji: $0, name: name(of: $0)) }
 }
 
 /// The "Symbol:" two-button row: an emoji toggle + a symbol toggle, each opening an anchored picker
@@ -64,7 +70,9 @@ struct IconToggleRow: View {
       }
       .buttonStyle(.plain)
       .popover(isPresented: $showEmoji, arrowEdge: .bottom) {
-        EmojiPickerPopover { icon = "emoji:\($0)"; showEmoji = false }
+        // `storedString`, not a hand-written `"emoji:…"`: `AppearanceIcon` owns both halves of the
+        // stored form, and the picker was writing a spelling only `parse` would ever check.
+        EmojiPickerPopover { icon = AppearanceIcon.emoji($0).storedString; showEmoji = false }
       }
       // Symbol toggle
       Button { showSymbol = true } label: {
@@ -76,7 +84,10 @@ struct IconToggleRow: View {
       }
       .buttonStyle(.plain)
       .popover(isPresented: $showSymbol, arrowEdge: .bottom) {
-        SymbolPickerPopover(selected: currentSymbol) { icon = "sf:\($0)"; showSymbol = false }
+        SymbolPickerPopover(selected: currentSymbol) {
+          icon = AppearanceIcon.sfSymbol($0).storedString
+          showSymbol = false
+        }
       }
     }
   }
@@ -91,7 +102,7 @@ struct EmojiPickerPopover: View {
   private var shown: [String] {
     let trimmedQuery = query.trimmingCharacters(in: .whitespaces).lowercased()
     if !trimmedQuery.isEmpty {
-      return EmojiCatalog.categories.flatMap(\.emoji).filter { EmojiCatalog.name(of: $0).contains(trimmedQuery) }
+      return EmojiCatalog.searchIndex.filter { $0.name.contains(trimmedQuery) }.map(\.emoji)
     }
     return EmojiCatalog.categories.first { $0.id == category }?.emoji ?? []
   }

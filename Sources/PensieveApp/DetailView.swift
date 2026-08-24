@@ -4,7 +4,8 @@ import PensieveKit
 
 struct DetailView: View {
   var model: AppModel
-  @AppStorage(AppDefaults.narrationEnabledKey) private var narrationEnabled = true
+  @AppStorage(AppDefaults.narrationEnabledKey)
+  private var narrationEnabled = AppDefaults.narrationEnabledDefault
   let node: Node
   /// When false, the detail omits its Loose Ends section (the middle column is showing this same
   /// node's loose ends — the one-home rule). Recall windows / smart-list details pass true.
@@ -12,6 +13,9 @@ struct DetailView: View {
   // Loaded once per node selection via `.task(id:)` below — NOT recomputed on every body eval
   // (calling `model.detail(for:)` in the body would hit the DB on every render).
   @State private var recentEvents: [Event] = []
+  /// `recentEvents` bucketed by day. Held rather than derived in `body`: this pane re-renders on
+  /// every ⌘F keystroke, and the bucketing is a group plus two sorts. See `ActivityDay.bucket`.
+  @State private var activityDays: [ActivityDay] = []
   @State private var looseEnds: [LooseEndView] = []
   @State private var closedLooseEnds: [LooseEndView] = []
   /// The record's disclosure. Collapsed by default (it is a record, not a worklist), but opened when
@@ -111,7 +115,7 @@ struct DetailView: View {
           if recentEvents.isEmpty {
             Text("No captured activity.").foregroundStyle(.secondary)
           } else {
-            ActivityTimeline(events: recentEvents, find: find)
+            ActivityTimeline(days: activityDays, find: find)
           }
         }
 
@@ -156,6 +160,7 @@ struct DetailView: View {
       let detail = model.detail(for: node)
       describable = model.isDescribable(node)
       recentEvents = detail.status.recentEvents
+      activityDays = ActivityDay.bucket(recentEvents)
       looseEnds = detail.looseEnds
       closedLooseEnds = model.closedLooseEnds(forNode: node.id)
       // Open the record when the pending expand names one of ITS rows, so a widened-scope search hit
@@ -308,78 +313,3 @@ struct DetailView: View {
 }
 
 private struct DetailLoadKey: Hashable { let nodeID: UUID; let token: Int; let looseEndRevision: Int }
-
-/// A GitHub-style vertical-rail timeline: events grouped by day, a colored dot per event on a rail,
-/// the source icon+color, the localized source label, and the summary. No avatars (single-user).
-private struct ActivityTimeline: View {
-  let events: [Event]
-  var find: NodeFindState?
-
-  var body: some View {
-    let groups = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.occurredAt) }
-    let days = groups.keys.sorted(by: >)
-    VStack(alignment: .leading, spacing: 16) {
-      ForEach(days, id: \.self) { day in
-        let items = (groups[day] ?? []).sorted { $0.occurredAt > $1.occurredAt }
-        VStack(alignment: .leading, spacing: 12) {
-          Text(day, format: .dateTime.weekday(.wide).month().day())
-            .font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
-          ForEach(Array(items.enumerated()), id: \.element.id) { idx, event in
-            TimelineRow(event: event, isLast: idx == items.count - 1, find: find)
-          }
-        }
-      }
-    }
-  }
-}
-
-private struct TimelineRow: View {
-  let event: Event
-  let isLast: Bool
-  var find: NodeFindState?
-
-  var body: some View {
-    let style = EventSourceStyle.style(for: event.kind)
-    let color = AppearanceStyle.color(style.colorTag)
-    HStack(alignment: .top, spacing: 10) {
-      VStack(spacing: 0) {
-        Circle().fill(color).frame(width: 8, height: 8).padding(.top, 2)
-        if !isLast { Rectangle().fill(.quaternary).frame(width: 1.5).frame(maxHeight: .infinity) }
-      }
-      .frame(width: 8)
-
-      VStack(alignment: .leading, spacing: 2) {
-        HStack(spacing: 6) {
-          sourceIcon(style).font(.caption).foregroundStyle(color)
-          Text(AppearanceStyle.sourceLabel(event.kind)).metaText()
-          Text(event.occurredAt, format: .dateTime.hour().minute())
-            .metaText().monospacedDigit()
-        }
-        summaryText
-      }
-      Spacer()
-    }
-  }
-
-  @ViewBuilder private var summaryText: some View {
-    let anchor = FindAnchor.event(event.id)
-    let runs = find?.runs(for: anchor, text: event.summary) ?? []
-    Group {
-      if runs.isEmpty {
-        Text(event.summary)
-      } else {
-        HighlightedText(runs: runs, currentOffset: find?.currentOffset(in: anchor))
-      }
-    }
-    .prose()
-    .findSite(anchor, find)
-  }
-
-  @ViewBuilder private func sourceIcon(_ sourceStyle: SourceStyle) -> some View {
-    switch AppearanceIcon.parse(sourceStyle.icon) {
-    case .sfSymbol(let symbolName): Image(systemName: symbolName)
-    case .emoji(let emoji):    Text(emoji)
-    case nil:              Image(systemName: "circle.fill")
-    }
-  }
-}

@@ -94,9 +94,7 @@ extension AppModel {
     guard let database else { return }
     do {
       let closed = try LooseEndCommands.resolveAllOpen(database, nodeID: nodeID, status: .done)
-      for id in closed {
-        searchStore.updateStatus(itemID: id.uuidString, status: LooseEndStatus.done.rawValue)
-      }
+      updateIndexStatus(closed, to: .done)
       undoManager?.registerUndo(withTarget: self) { model in
         model.setLooseEnds(closed, to: .open, undoManager: undoManager)
       }
@@ -118,13 +116,15 @@ extension AppModel {
     guard let database else { return }
     do {
       var refused = 0
+      var applied: [UUID] = []
       for id in ids {
         if try LooseEndCommands.resolve(database, id: id, status: status) {
-          searchStore.updateStatus(itemID: id.uuidString, status: status.rawValue)
+          applied.append(id)
         } else {
           refused += 1   // deleted or merged away since the action — not a failure
         }
       }
+      updateIndexStatus(applied, to: status)
       let inverse: LooseEndStatus = status == .open ? .done : .open
       undoManager?.registerUndo(withTarget: self) { model in
         model.setLooseEnds(ids, to: inverse, undoManager: undoManager)
@@ -137,6 +137,23 @@ extension AppModel {
       if refused > 0 { refuse(String(localized: "update"), String(localized: "this node")) }
     } catch {
       fail(String(localized: "update"), String(localized: "this node"), error)
+    }
+  }
+
+  /// Carry a bulk resolve into the search index, OFF the main actor.
+  ///
+  /// `updateStatus` is one write transaction per item against a pool with a 5 s busy timeout that
+  /// the daemon also writes — 288 of them on the main actor for "close all" on the busiest node in
+  /// the measured store, which is a frozen window. Detached for exactly the reason
+  /// `AppModel+Search.syncSearchIndexes` is. Ordering with the canonical write is preserved: the
+  /// caller has already committed it, and the single-row `resolveLooseEnd` path stays synchronous
+  /// because one transaction is not worth a hop.
+  private func updateIndexStatus(_ ids: [UUID], to status: LooseEndStatus) {
+    guard !ids.isEmpty else { return }
+    let store = searchStore
+    let raw = status.rawValue
+    Task.detached {
+      for id in ids { store.updateStatus(itemID: id.uuidString, status: raw) }
     }
   }
 

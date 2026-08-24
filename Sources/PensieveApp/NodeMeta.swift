@@ -16,6 +16,17 @@ import PensieveKit
 /// over already-localized runs. The app never overrides `\.locale`, so resolving through
 /// `Locale.current` here matches what the environment would have resolved.
 enum NodeMeta {
+  /// The ONE relative-date style this app speaks — "3 weeks ago" / "vor 3 Wochen".
+  ///
+  /// Five sites wrote `.relative(presentation: .named)` out by hand, and one of them shipped a
+  /// `RelativeDateTimeFormatter` with `.abbreviated` units instead, rendering German as "erfasst vor
+  /// 2 m" directly above rows reading "vor 3 Tagen". A format style is a value type, so unlike a
+  /// shared `ISO8601DateFormatter` there is no shared-mutable-static question to answer.
+  static let relativeStyle = Date.RelativeFormatStyle(presentation: .named)
+
+  /// `relativeStyle` applied, for callers joining runs of `String` rather than composing a `Text`.
+  static func relative(_ date: Date) -> String { date.formatted(relativeStyle) }
+
   /// "3 weeks ago" / "vor 3 Wochen". A node with no captured events says so, rather than claiming a
   /// zero it does not have.
   static func recency(_ date: Date?) -> Text { Text(recencyLabel(date)) }
@@ -23,14 +34,14 @@ enum NodeMeta {
   /// `recency`'s wording, as a run something else can join.
   static func recencyLabel(_ date: Date?) -> String {
     guard let date else { return String(localized: "no activity captured") }
-    return date.formatted(.relative(presentation: .named))
+    return relative(date)
   }
 
   /// "3 weeks ago · 21 Jul, 18:04" — for the detail header, which has the width for both. The
   /// absolute stamp is the one the Recent Activity timeline below repeats.
   static func recencyDetailed(_ date: Date?) -> String {
     guard let date else { return String(localized: "no activity captured") }
-    return date.formatted(.relative(presentation: .named))
+    return relative(date)
       + separator
       + date.formatted(.dateTime.day().month().hour().minute())
   }

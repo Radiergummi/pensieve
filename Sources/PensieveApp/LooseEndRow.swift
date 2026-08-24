@@ -106,7 +106,7 @@ struct LooseEndRow: View {
             + NodeMeta.separator
             + view.occurredAt.formatted(.dateTime.year().month().day())
             + NodeMeta.separator
-            + view.occurredAt.formatted(.relative(presentation: .named)))
+            + NodeMeta.relative(view.occurredAt))
             .metaText()
         }
         .padding(12)
@@ -144,16 +144,21 @@ struct LooseEndRow: View {
       }
     }
     // Swipe is a pointer affordance in the List-backed feeds; the context menu is the discoverable
-    // one everywhere; the keyboard verbs in `LooseEndCommands` are the burn-down one. All three
-    // render the same two commands so they cannot drift apart.
+    // one everywhere; the keyboard verbs in `LooseEndResolveCommands` are the burn-down one.
+    //
+    // Swipe and the context menu now genuinely share their verb list (`LooseEndResolveVerb`), which
+    // the comment here used to claim while the swipe branch restated the open-row verbs inline and
+    // gated on `status == .open` — so a closed row offered Reopen from the menu and nothing from a
+    // swipe. The commands are deliberately NOT on this list; see their own doc for why.
     //
     // NOTE: this is INERT in `DetailView`, which renders loose ends in a VStack inside a ScrollView
     // rather than a List. That is expected, not a regression — the detail pane is covered by the
     // context menu and the menu commands.
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-      if onResolve != nil, currentStatus == .open {
-        Button("Mark as done") { resolve(.done) }.tint(.green)
-        Button("Drop") { resolve(.dropped) }.tint(.orange)
+      if onResolve != nil {
+        ForEach(LooseEndResolveVerb.verbs(for: currentStatus)) { verb in
+          Button(verb.title) { resolve(verb.id) }.tint(verb.tint)
+        }
       }
     }
     // Load the surrounding transcript the first time the row is expanded (cached thereafter).
@@ -222,19 +227,21 @@ struct LooseEndRow: View {
   }
 
   @ViewBuilder private var provenanceBody: some View {
-    if let ctx = context, ctx.transcriptAvailable {
-      let cited = ctx.messages.first(where: \.isCited) ?? ctx.messages.first
-      if ctx.messages.count > 1 {
+    if let context, context.transcriptAvailable {
+      let cited = context.messages.first(where: \.isCited) ?? context.messages.first
+      if context.messages.count > 1 {
         if provenanceExpanded {
-          ForEach(Array(ctx.messages.enumerated()), id: \.element.index) { idx, msg in
-            messageRow(msg, showsRole: idx == 0 || speakerClass(for: ctx.messages[idx - 1]) != speakerClass(for: msg))
+          ForEach(Array(context.messages.enumerated()), id: \.element.index) { offset, message in
+            messageRow(message,
+                       showsRole: offset == 0
+                         || speakerClass(for: context.messages[offset - 1]) != speakerClass(for: message))
           }
         } else if let cited {
           previewRow(cited)
         }
         disclosureButton
       } else {
-        ForEach(ctx.messages, id: \.index) { messageRow($0, showsRole: true) }
+        ForEach(context.messages, id: \.index) { messageRow($0, showsRole: true) }
       }
     } else if loading {
       ProgressView().controlSize(.small)
@@ -311,22 +318,22 @@ struct LooseEndRow: View {
   }
 
   /// Collapsed preview: the cited message's first renderable segment, capped to a few lines.
-  @ViewBuilder private func previewRow(_ msg: ProvenanceMessage) -> some View {
-    TranscriptMessageView(message: msg, segments: previewSegments(for: msg), compact: true)
+  @ViewBuilder private func previewRow(_ message: ProvenanceMessage) -> some View {
+    TranscriptMessageView(message: message, segments: previewSegments(for: message), compact: true)
       .lineLimit(3)
   }
 
-  @ViewBuilder private func messageRow(_ msg: ProvenanceMessage, showsRole: Bool) -> some View {
-    let messageSegments = segments(for: msg)
-    TranscriptMessageView(message: msg, segments: messageSegments,
+  @ViewBuilder private func messageRow(_ message: ProvenanceMessage, showsRole: Bool) -> some View {
+    let messageSegments = segments(for: message)
+    TranscriptMessageView(message: message, segments: messageSegments,
                           compact: compact, showsRoleLabel: showsRole,
-                          highlights: highlights(for: msg, segments: messageSegments),
+                          highlights: highlights(for: message, segments: messageSegments),
                           // Only on a find-scoped surface: handing an anchor to the middle column or
                           // Review Suggestions would put an `.id()` on segments that never had one,
                           // changing their view identity for a scroll target nothing can reach.
                           anchorForSegment: find == nil ? nil : { ordinal in
                             .transcriptSegment(looseEndID: view.looseEnd.id,
-                                               messageIndex: msg.index, segment: ordinal)
+                                               messageIndex: message.index, segment: ordinal)
                           },
                           find: find)
   }
@@ -338,14 +345,14 @@ struct LooseEndRow: View {
 extension LooseEndRow {
   /// Highlight runs per segment ordinal — only for the segments that actually match. The ordinal is
   /// the position in the FULL segment array, the same number the document's anchors carry.
-  fileprivate func highlights(for msg: ProvenanceMessage,
+  fileprivate func highlights(for message: ProvenanceMessage,
                               segments: [TranscriptSegment]) -> [Int: SegmentHighlight] {
     guard let find, !find.query.isEmpty else { return [:] }
     var result: [Int: SegmentHighlight] = [:]
     for (ordinal, segment) in segments.enumerated() {
       guard let text = segment.findableText else { continue }
       let anchor = FindAnchor.transcriptSegment(looseEndID: view.looseEnd.id,
-                                               messageIndex: msg.index, segment: ordinal)
+                                               messageIndex: message.index, segment: ordinal)
       let runs = find.runs(for: anchor, text: text)
       guard !runs.isEmpty else { continue }
       result[ordinal] = SegmentHighlight(runs: runs, currentOffset: find.currentOffset(in: anchor))
@@ -355,33 +362,33 @@ extension LooseEndRow {
 
   /// Segments for a message, by position in the parallel `parsed` array. Falls back to a single
   /// raw markdown segment if the arrays ever disagree — never renders nothing.
-  fileprivate func segments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
-    guard let ctx = context,
-          let pos = ctx.messages.firstIndex(where: { $0.index == msg.index }),
-          pos < parsed.count
-    else { return [.markdown(msg.text)] }
-    return parsed[pos]
+  fileprivate func segments(for message: ProvenanceMessage) -> [TranscriptSegment] {
+    guard let context,
+          let messagePosition = context.messages.firstIndex(where: { $0.index == message.index }),
+          messagePosition < parsed.count
+    else { return [.markdown(message.text)] }
+    return parsed[messagePosition]
   }
 
   /// The caption shown for a message is its `SpeakerClass`, not its raw `role` — an `assistant`
   /// message that classifies `.system` (e.g. all-`<tool_uses>`) must not be conflated with a
   /// following prose `assistant` message that classifies `.claude`, or the caption is wrongly
   /// suppressed and the reader misattributes the speaker.
-  fileprivate func speakerClass(for msg: ProvenanceMessage) -> SpeakerClass {
-    .of(msg, segments: segments(for: msg))
+  fileprivate func speakerClass(for message: ProvenanceMessage) -> SpeakerClass {
+    .of(message, segments: segments(for: message))
   }
 
   /// The preview shows only the first meaningful segment — a harness envelope alone would tell the
   /// reader nothing about why this loose end exists.
-  fileprivate func previewSegments(for msg: ProvenanceMessage) -> [TranscriptSegment] {
-    let all = segments(for: msg)
-    let firstProse = all.first { segment in
+  fileprivate func previewSegments(for message: ProvenanceMessage) -> [TranscriptSegment] {
+    let messageSegments = segments(for: message)
+    let firstProse = messageSegments.first { segment in
       switch segment {
       case .markdown(let text): return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       case .callout: return true
       case .harness: return false
       }
     }
-    return [firstProse ?? all.first ?? .markdown(msg.text)]
+    return [firstProse ?? messageSegments.first ?? .markdown(message.text)]
   }
 }

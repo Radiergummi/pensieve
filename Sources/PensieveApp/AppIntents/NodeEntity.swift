@@ -31,8 +31,13 @@ struct NodeEntity: AppEntity, IndexedEntity {
     self.id = facts.node.id
     self.name = facts.node.name
     self.searchBody = facts.node.description
-    let openLooseEndCount = facts.openLooseEnds
+    // Chrome, so it is localized — built from `NodeMeta`, the app's one facts vocabulary, exactly as
+    // the detail header and the list rows are. It used to be hand-assembled English with an
+    // `s`-plural no other language can express and a `dormant Nd` form that was removed from every
+    // other surface twice, once because its `%lld` never matched its `%@` catalog key.
     let kind = String(localized: AppearanceStyle.kindLabel(facts.node.kind))
-    self.subtitle = "\(kind) · \(openLooseEndCount) open loose end\(openLooseEndCount == 1 ? "" : "s") · dormant \(facts.daysDormant)d"
+    self.subtitle = kind
+      + NodeMeta.separator + NodeMeta.openCount(facts.openLooseEnds)
+      + NodeMeta.separator + NodeMeta.recencyLabel(facts.lastActivityAt)
   }
 }

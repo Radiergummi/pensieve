@@ -2,35 +2,6 @@
 import SwiftUI
 import PensieveKit
 
-/// App-side UI mapping for the heartbeat status (kept out of PensieveKit — SF Symbol names and
-/// display words are UI concerns, like SmartListKind's title/symbol).
-extension MonitorSnapshot.Status {
-  var glyph: String {
-    switch self {
-    case .active: return "circle.fill"
-    case .idle: return "circle"
-    case .notSetUp: return "circle.slash"
-    }
-  }
-  var label: String {
-    switch self {
-    case .active: return String(localized: "Active")
-    case .idle: return String(localized: "Idle")
-    case .notSetUp: return String(localized: "Not set up")
-    }
-  }
-  /// Colour for the POPOVER orb only. The menu-bar glyph deliberately keeps no tint — it is a
-  /// template image, which is what lets macOS invert it for the wallpaper behind it and for Reduce
-  /// Transparency. Semantic system roles, like `SmartListKind.color` already uses.
-  var tint: Color {
-    switch self {
-    case .active: return .green
-    case .idle: return .secondary
-    case .notSetUp: return .orange
-    }
-  }
-}
-
 /// The menu-bar popover content: capture heartbeat + a short What's Next glance. Reads the shared
 /// AppModel and renders only — all data is from the tested MonitorSnapshot / SmartLists kernels.
 struct MenuBarView: View {
@@ -193,18 +164,11 @@ struct MenuBarView: View {
   private var statusLine: String {
     var statusLabel = model.snapshot.status.label
     if let last = model.snapshot.lastCaptureAt {
-      statusLabel += String(localized: " · captured \(Self.relativeAge(last))")
+      // `NodeMeta.relative`, so the popover carries the app's one date vocabulary rather than a
+      // second copy of the style — see that property for the German this went wrong in once.
+      statusLabel += String(localized: " · captured \(NodeMeta.relative(last))")
     }
     return statusLabel
-  }
-
-  /// The SAME Foundation relative style the rows below already use (`NodeMeta.recency`), so the
-  /// popover carries one date vocabulary instead of two. It replaced a `RelativeDateTimeFormatter`
-  /// with `.abbreviated` units, which rendered German as "erfasst vor 2 m" directly above rows
-  /// reading "vor 3 Tagen". Being a format style rather than a formatter object, there is also no
-  /// shared-mutable-static question to answer.
-  private static func relativeAge(_ date: Date) -> String {
-    date.formatted(.relative(presentation: .named))
   }
 }
 
