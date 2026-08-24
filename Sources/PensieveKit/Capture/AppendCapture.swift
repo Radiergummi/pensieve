@@ -25,9 +25,9 @@ public func appendCapture(kind: String, encoding payload: some Encodable) -> Boo
     try openSpool().append(kind: kind, payload: try encodeJSON(payload))
     return true
   } catch {
-    // `Log.ingest` rather than a `capture` category: `Log` has no capture category yet and lives in
-    // `Support/`. The capture→ingest path is the closest existing one and this is its first step.
-    Log.ingest.error("CAPTURE LOST (kind=\(kind, privacy: .public)): \(error, privacy: .public)")
+    // The sacred path has its own category, so "did the hook get my commit" is one predicate away
+    // rather than buried in ingest traffic.
+    Log.capture.error("CAPTURE LOST (kind=\(kind, privacy: .public)): \(error, privacy: .public)")
     return false
   }
 }

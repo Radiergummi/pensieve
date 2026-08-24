@@ -249,3 +249,38 @@ same literal finding 1.17 was about, and would silently stop matching a renamed 
   the word `json` followed by an array and read as prose. Only `isProseNotStructured` handled the tag.
   Now one shared `strippingCodeFence`. This is a live path — descriptions come from the same providers
   that produced the 139 JSON-array "recaps" the code comments already record.
+
+## DEFERRED (from the ingest/capture wave)
+
+### D10. Finish finding 2.10 — or do not touch it (needs two files together)
+The *visibility* half landed: a permanently-undecodable spool row now says so. The "stop
+re-attempting it" half was implemented, **caught breaking `StoreRelocator`, and reverted** — and the
+reason is worth keeping. `recoverPendingRows` infers "rows may still be stranded" from
+`pendingCount() != 0` and refuses to recycle the old folder on exactly that basis. Marking a poison
+row ingested would make a relocation report a clean migration and then **delete the folder holding
+the only copy of the data**. `anUnrecoverableRowBlocksRecycling` is what caught it.
+"Stop retrying this row" and "nothing is stranded" are two different facts and the spool stores one.
+**Decision:** add a `failed`/`attempts` column to `CaptureSpool` *and* teach `StoreRelocator` to
+distinguish discarded from recovered, in one change — or leave the row retrying forever, which is
+merely noisy rather than dangerous.
+
+### D11. Where should the degenerate-root guard live? (finding 1.12)
+One guard now sits in `Ingester.identityKey(forHookPath:)`, covering both git capture kinds. Moving it
+into `ProjectResolver.resolve` would additionally cover `pensieve track` and `SourceScanner.accept` —
+a true chokepoint — but it changes `accept`'s batch semantics. **Decision:** chokepoint or per-caller.
+
+### D12. `Event.kind` / `Source.kind` are still raw `String` columns (finding 4.1)
+Assessed and deliberately not done: converting them needs a migration-compatibility review across
+`Query/`, `Search/`, `Widget/` and the app target simultaneously. A genuine hand-off, not a skip.
+
+### D13. `strandNameCap` is not monotonic
+A strand past the per-drain naming cap keeps its branch name with no marker to revisit it, so it is
+never renamed later. Documented in the code as an accepted cost. A retry marker is a product decision.
+
+### D14. 35 test sites still build temp paths by hand
+`tempURL` now roots everything under one per-process directory removed at `atexit`, and a full suite
+run leaves **zero** test-prefixed artifacts (measured; ~25,000 had accumulated before). But 35 sites
+use `FileManager.default.temporaryDirectory` / `NSTemporaryDirectory()` directly — concentrated in
+`StoreRelocator*Tests`, `StoreOpenTests`, `PassageStoreTests`, `SyncRunnerTests`,
+`TranscriptDiscoveryTests`, `CLIToolInstallerTests` — and are not covered. Routing them through
+`tempURL` is mechanical but touches 20 files; not done during the sweep to keep the diff reviewable.

@@ -23,7 +23,11 @@ public extension Git {
   static func commonDir(in repo: String) -> String? {
     guard let raw = run(["rev-parse", "--path-format=absolute", "--git-common-dir"], in: repo)
     else { return nil }
-    return URL(fileURLWithPath: raw).resolvingSymlinksInPath().path
+    // Canonicalized through `ProjectResolver.canonical`, not by spelling the same
+    // `resolvingSymlinksInPath()` here. This was the third of three copies of that rule, and it is
+    // the one whose output becomes a `Source.key` — so a change to how paths are canonicalized that
+    // missed this site would silently re-key every repo and split it into a second node.
+    return ProjectResolver.canonical(raw)
   }
 
   /// Best-effort default branch: origin/HEAD → init.defaultBranch → probe main/master → "main".

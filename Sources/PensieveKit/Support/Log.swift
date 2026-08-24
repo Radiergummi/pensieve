@@ -11,5 +11,9 @@ enum Log {
   static let semantic   = Logger(subsystem: "me.mazetti.pensieve", category: "semantic")
   static let search     = Logger(subsystem: "me.mazetti.pensieve", category: "search")
   static let translation = Logger(subsystem: "me.mazetti.pensieve", category: "translation")
+  /// The sacred path, on its own channel. A lost capture is the one failure here that costs data
+  /// permanently, and it was previously indistinguishable from ingest noise — which is the opposite
+  /// of what you want when the question is "did the hook get my commit".
+  static let capture    = Logger(subsystem: "me.mazetti.pensieve", category: "capture")
   static let widget     = Logger(subsystem: "me.mazetti.pensieve", category: "widget")
 }
