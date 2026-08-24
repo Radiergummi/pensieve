@@ -354,3 +354,29 @@ Two extra nodes worth deciding separately:
 `pensieve group` (mechanical, reversible only by re-ingest, so do it after a store backup), inspect
 the 4 "other" nodes by hand, then decide `/` separately. Doing this *after* the fix waves land is
 correct — the code path that mints them is fixed, so the list cannot grow while you decide.
+
+## CONTRACT CHANGES (continued)
+
+- **MCP's advertised resource URI changed from `pensieve://smartlist/whats-next` to
+  `pensieve://smartlist/whatsNext`**, and the old spelling is now rejected with
+  `-32602 Invalid params: unknown resource`. This is the correct direction — the old string was
+  unparseable by `DeepLink`, the grammar every other surface (app, widget, Spotlight) uses, so a
+  client that handed the advertised URI back got nothing. But **any MCP client that hardcoded the old
+  string breaks**. Verified in both directions against the built server.
+- **Eight CLI commands now exit non-zero on failure** (`status`, `checkpoint`, `looseends`, `rename`,
+  `retype`, `nest`, `group`, `add-node`, plus `ingest`'s extraction failure): 64 + usage for
+  argument-shape errors, 1 for a well-formed but unsatisfiable request, both on stderr.
+  **Hook-invoked commands deliberately still exit 0** — `prime`, `capture-*`, and `sync` — because a
+  non-zero exit from a SessionStart or git hook is exactly what the capture path forbids. Each
+  caller was checked before the decision.
+
+## NEW findings (continued)
+
+- **`Commands/Scan.swift` prints `setup-failed` rows to stdout and exits 0** — the same defect class
+  as the eight fixed above, but it is a *partial* success (e.g. 9 of 10 sources registered), so
+  whether that should be non-zero is a product decision. **Deliberately left alone.**
+- **A vacuous test was deleted rather than patched.** `anIntegerArgumentWrittenAsAFloatStillDecodes`
+  stayed green when the `Double`→`Int` fallback it existed to cover was removed — `JSONDecoder`
+  already decodes `3.0` into `Int`. The fallback was dead speculative code, so `MCPArgument.integer`
+  was removed entirely and the test dropped. Worth remembering as a shape: a test guarding
+  speculative code passes whether or not the code is there.

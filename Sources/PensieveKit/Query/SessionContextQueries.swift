@@ -201,17 +201,37 @@ public enum SessionContextQueries {
 
   /// Races `narrate` against a timeout; returns nil if the model doesn't answer in time (FM
   /// cold-start can be ≫ a couple seconds and the caller is blocking on the result).
+  /// Narrate, or give up after `seconds` — a real wall-clock bound, not a best-effort one.
+  ///
+  /// Deliberately NOT a `withTaskGroup` race, which is the obvious shape and silently does not work:
+  /// a task group awaits ALL its children before returning, so `group.cancelAll()` bounds the call
+  /// only if the losing child actually observes cancellation. Measured with this exact shape: a
+  /// child that ignores cancellation turned a 0.5 s budget into a 3.01 s return, while a
+  /// cancellation-aware one returned in 0.50 s.
+  ///
+  /// That distinction is not academic here. `ClaudeCLIProvider` became cancellation-aware (its
+  /// `ChildProcessSlot` terminates the `claude -p` child), but the DEFAULT provider on macOS 26 is
+  /// Foundation Models, whose `LanguageModelSession.respond` is Apple's and makes no such promise —
+  /// and it sits behind its own 120 s cap. So the group shape let a 3 s narration budget block MCP's
+  /// `project_context` for up to two minutes: the caller had already decided to answer without prose.
+  ///
+  /// An `AsyncStream` lets the winner be read and the loser abandoned. The abandoned narration is
+  /// still cancelled via `onTermination` — it simply is not waited for. Nothing is lost by walking
+  /// away: on a later call the same events produce the same `NarrationCacheKey`, so a narration that
+  /// eventually finishes elsewhere is not what gets served — the next call re-narrates or hits cache.
   private static func narrateWithin(_ seconds: Double, builder: SummaryBuilder,
                                     project: Node, events: [Event]) async -> String? {
-    await withTaskGroup(of: String?.self) { group in
-      group.addTask { await builder.narrate(project: project, events: events) }
-      group.addTask {
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-        return nil
+    let answers = AsyncStream<String?> { continuation in
+      let narration = Task {
+        continuation.yield(await builder.narrate(project: project, events: events))
       }
-      let first = await group.next() ?? nil
-      group.cancelAll()
-      return first
+      let timeout = Task {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        continuation.yield(nil)
+      }
+      continuation.onTermination = { _ in narration.cancel(); timeout.cancel() }
     }
+    var iterator = answers.makeAsyncIterator()
+    return await iterator.next() ?? nil
   }
 }

@@ -124,7 +124,7 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   let (node, _) = try seedOneNode(database)
   let cache = NarrationCache(url: tempURL("narr"))
   // Pre-warm the cache with the exact key bundle() will compute (top recentLimit events, same provider).
-  let events = try ProjectQueries.status(database, node: node, limit: 8).recentEvents
+  let events = try ProjectQueries.status(database, node: node, limit: SummaryBuilder.narratableEventWindow).recentEvents
   cache.put(NarrationCacheKey.make(events: events, provider: "fm"), prose: "cached recap")
   let bundle = try #require(try await SessionContextQueries.bundle(
     forPath: "/p/one", nodeID: nil, database, now: Date(),
@@ -142,7 +142,7 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
     narration: NarrationOptions(summaryBuilder: builder, providerKind: "fm", cache: cache)))
   #expect(bundle.prose == "fresh recap")
   // Write-through: the key is now populated.
-  let events = try ProjectQueries.status(database, node: node, limit: 8).recentEvents
+  let events = try ProjectQueries.status(database, node: node, limit: SummaryBuilder.narratableEventWindow).recentEvents
   #expect(cache.get(NarrationCacheKey.make(events: events, provider: "fm")) == "fresh recap")
 }
 
@@ -265,4 +265,52 @@ private func seedRecallLooseEnd(_ database: any DatabaseWriter, transcriptURL: U
   #expect(bundle.transcriptAvailable == false)
   #expect(bundle.messages.isEmpty)
   #expect(bundle.quote == "anything")   // stored quote preserved for honest fallback
+}
+
+/// A provider that ignores cancellation, the way a blocking system call does.
+///
+/// This is not a strawman: `ClaudeCLIProvider` became cancellation-aware only when `ChildProcessSlot`
+/// was added, and the DEFAULT provider on macOS 26 is Foundation Models, whose
+/// `LanguageModelSession.respond` is Apple's code and promises nothing about cancellation.
+private struct UncancellableProvider: LLMProvider {
+  let delay: TimeInterval
+  let reply: String
+  func complete(prompt: String) async throws -> String {
+    // `usleep`, not `Thread.sleep` (unavailable in async contexts) and not `Task.sleep` (which WOULD
+    // observe cancellation and so would test the opposite of the point): a blocking syscall is
+    // exactly the behaviour being guarded against.
+    usleep(useconds_t(delay * 1_000_000))
+    return reply
+  }
+}
+
+/// The narration budget must be a real wall-clock bound, not a best-effort one.
+///
+/// `narrateWithin` used to be a `withTaskGroup` race, which silently does not bound anything: a task
+/// group awaits ALL its children before returning, so `cancelAll()` only helps when the losing child
+/// observes cancellation. Measured with that shape, a child ignoring cancellation turned a 0.5 s
+/// budget into a 3.01 s return; a cancellation-aware one returned in 0.50 s. With Foundation Models
+/// as the default provider — behind its own 120 s cap — that let a 3 s budget block MCP's
+/// `project_context` for up to two minutes after it had already decided to answer without prose.
+///
+/// The assertion is deliberately loose (under 2 s against a 4 s provider and a 0.3 s budget): it is
+/// pinning "the budget is enforced at all", not a latency figure, so it cannot go flaky on a loaded
+/// machine. Under the old shape this waited the full 4 s and failed.
+@Test func narrationBudgetIsEnforcedEvenWhenTheProviderIgnoresCancellation() async throws {
+  let database = try openCanonicalDatabase(at: tempURL("sc-timeout"))
+  _ = try seedOneNode(database)
+  let builder = SummaryBuilder(provider: UncancellableProvider(delay: 4.0, reply: "too late"))
+
+  let start = Date()
+  let bundle = try #require(try await SessionContextQueries.bundle(
+    forPath: "/p/one", nodeID: nil, database, now: Date(),
+    narration: NarrationOptions(summaryBuilder: builder, providerKind: "fm",
+                                cache: nil, timeout: 0.3)))
+  let waited = Date().timeIntervalSince(start)
+
+  #expect(waited < 2.0, "narration budget not enforced — waited \(waited)s on a 0.3s budget")
+  // And it degrades honestly: no prose rather than a fabricated one. The bundle's grounded parts
+  // (name, loose ends) must still be there — giving up on prose is not giving up on the answer.
+  #expect(bundle.prose == nil)
+  #expect(!bundle.looseEnds.isEmpty)
 }
