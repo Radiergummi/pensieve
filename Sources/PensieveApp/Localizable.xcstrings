@@ -479,17 +479,6 @@
         }
       }
     },
-    "captured" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "erfasst"
-          }
-        }
-      }
-    },
     "capturing" : {
       "extractionState" : "manual",
       "localizations" : {

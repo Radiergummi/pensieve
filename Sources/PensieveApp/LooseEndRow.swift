@@ -96,15 +96,17 @@ struct LooseEndRow: View {
       }
 
       if expanded {
-        let roleText = view.looseEnd.role.isEmpty ? String(localized: "captured") : view.looseEnd.role
         VStack(alignment: .leading, spacing: 8) {
           provenanceBody
           // Was a hand-built `%lldd ago` whose catalog key said `%@d ago`, so it never matched and
           // rendered English inside a German window. Foundation formats the date instead — no
           // interpolated Int, no key, no way to mis-author it.
-          Text(roleText
-            + NodeMeta.separator
-            + view.occurredAt.formatted(.dateTime.year().month().day())
+          //
+          // The cited message's `role` used to lead this line. It was deleted in C1: all 1076 loose
+          // ends carry "user" and structurally cannot carry otherwise (LooseEndVerifier guards
+          // isUserPrompt), so it spent a word — untranslated, under a localized speaker caption —
+          // restating what the rail already says and could never contradict.
+          Text(view.occurredAt.formatted(.dateTime.year().month().day())
             + NodeMeta.separator
             + view.occurredAt.formatted(.relative(presentation: .named)))
             .metaText()
