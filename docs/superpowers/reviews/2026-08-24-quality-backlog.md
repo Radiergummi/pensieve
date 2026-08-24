@@ -35,11 +35,12 @@ row. But "now" does make a corrupt row look like it just happened.
 `append` time so a malformed timestamp can never enter the spool. Rejecting at append touches the
 sacred path, which is why the fix sweep did not choose.
 
-### Q3. Re-sign the commit range before pushing
+### Q3. Re-sign the commit range before pushing — RESOLVED 2026-08-24
 `git commit` failed twice with `error: Couldn't get agent socket?` — the Secretive SecretAgent socket
 exists at `$SSH_AUTH_SOCK` but would not authorize non-interactively. **The fix-sweep commits on
 `quality-fix-sweep` are therefore UNSIGNED**, and `main` requires verified signatures.
-Re-sign the range before merging or pushing, e.g.
+Re-signed once the agent was unlocked, by rebasing onto `638bfe5` (NOT `main`) so the in-flight fix
+agents' base commit was not rewritten. All sweep commits now verify `G`. Original note:
 `git rebase --exec 'git commit --amend --no-edit -S' main`, with the agent unlocked.
 
 ### Q4. Merge the 9 phantom project nodes (finding 2.1)
@@ -145,3 +146,46 @@ Consequences for planning:
   cannot be named from them — the binary mix and the FSEvents frames are the evidence.
 - Recorded on macOS 26.6.1 (25G76), arm64e, against a `.debug` build, so absolute CPU numbers are not
   release-representative; the *loop* is the finding, not the constant factor.
+
+## DEFERRED — needs a product call
+
+### D1. A missing source event still yields no "unavailable" provenance entry (finding 2.26, second half)
+The swallowed read failure is now logged and the per-id queries are batched, but the asymmetry
+remains: a missing event produces no entry at all rather than an explicit "unavailable" one.
+`ProvenanceContext.sourceEvent` is non-optional, the case is schema-unreachable today
+(`NOT NULL REFERENCES … ON DELETE CASCADE`), and making it optional would degrade
+`SessionContextQueries`' non-optional `sessionOccurredAt`. **Decision:** leave it relying on the
+schema guarantee, or make the type admit absence and pay the downstream cost.
+
+### D2. The fourth "no events" rule is a type-level split, not a duplication (finding 1.4)
+Three of the four derivations were folded onto `NodeFactsQueries.activity`. The fourth cannot be
+without a visible behaviour change: `NextItem` and `BriefingCard` declare `lastActivityAt`
+**non-optional** — each documenting why — so they must skip a node with no events, whereas
+`NodeFacts` makes it optional and reports `daysDormant: 0`. **Decision:** change those two public
+types to admit absence (and decide what the UI shows), or accept two documented rules.
+The fix sweep deliberately did not force this.
+
+### D3. `Log` has no `app` category inside PensieveKit
+`CLAUDE.md` lists `app` as a category, but that is the app target's own `AppLog`; the Kit's `Log`
+enum has no such case. Kit code that wanted it (the monitor heartbeat, provenance read failures) used
+`sync` and `search` instead, following `PassageQueries`' precedent. **Decision:** add `Log.app` to the
+Kit, or accept that Kit-side app-ish logging borrows a neighbouring category.
+
+## More NEW findings (from the fix waves)
+
+- **The `SessionContextQueries.bundle` narration tests were vacuous** and are now covered. Both
+  `bundleServesCachedProseWithoutABuilder` and `bundleNarratesOnMissAndWritesThrough` passed under the
+  mutation that restored `recentLimit` to 8 — because each fixture holds fewer events than the window
+  under test, so the window never bound anything. **The pattern is the lesson**: a fixture smaller
+  than the quantity under test cannot detect a change to it. Worth grepping for elsewhere.
+- **`NodeFactsQueries.rowFacts` now also returns `(nil, 0)` for a node holding only CLOSED loose
+  ends.** Indistinguishable from a miss to every caller by construction, and documented rather than
+  special-cased — recorded here in case a future caller wants to tell the two apart.
+- **`isolation: "worktree"` branches from `main`, not from the current branch.** All four fix agents
+  were created at `b7dc69a` — the pre-sweep tip — rather than the briefed base, and each had to
+  fast-forward to `638bfe5` before it could work (the shared helpers its tasks depended on did not
+  exist at `b7dc69a`). The brief's "confirm HEAD, stop if wrong" guard is what caught it. Any future
+  worktree fan-out from a feature branch needs the same check.
+- **Five parallel SwiftPM worktrees exhausted the disk** (3.5–5.9 GB of `.build` each; the volume hit
+  100%, and one `make all` died with `ENOSPC`). Worktree isolation is not free — budget ~4 GB per
+  agent, or serialize.
