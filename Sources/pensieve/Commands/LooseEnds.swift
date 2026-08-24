@@ -19,15 +19,12 @@ struct LooseEnds: ParsableCommand {
     var nodeID: UUID?
     if let project {   // validate() guarantees --all is not also set
       guard let projectNode = try ProjectQueries.status(database, name: project, limit: 0)?.project else {
-        print("no project named '\(project)'"); return
+        throw CommandFailure("no project named '\(project)'")
       }
       nodeID = projectNode.id
     }
-    let ends = try LooseEndQueries.open(database, nodeID: nodeID, now: Date())
-    for looseEndView in ends {
-      print("\u{201C}\(looseEndView.looseEnd.quote)\u{201D}")
-      print("  \u{21B3} \(looseEndView.looseEnd.text)  [\(looseEndView.looseEnd.role), \(looseEndView.ageDays)d]")
-    }
-    print("\n\(ends.count) open loose end(s)")
+    let openLooseEnds = try LooseEndQueries.open(database, nodeID: nodeID, now: Date())
+    for view in openLooseEnds { printLooseEnd(view) }
+    print("\n\(openLooseEnds.count) open loose end(s)")
   }
 }

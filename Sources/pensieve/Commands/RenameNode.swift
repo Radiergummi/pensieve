@@ -7,7 +7,9 @@ struct RenameNode: ParsableCommand {
   @Argument var node: String
   @Argument var newName: String
   func run() throws {
-    let succeeded = try NodeCommands.rename(try openCanonical(), node: node, to: newName)
-    print(succeeded ? "renamed to \(newName)" : "unknown node '\(node)'")
+    guard try NodeCommands.rename(try openCanonical(), node: node, to: newName) else {
+      throw CommandFailure("unknown node '\(node)'")
+    }
+    print("renamed to \(newName)")
   }
 }

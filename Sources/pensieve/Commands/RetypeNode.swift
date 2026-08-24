@@ -8,10 +8,12 @@ struct RetypeNode: ParsableCommand {
   @Argument var newKind: String
   func run() throws {
     guard let kind = NodeKind(rawValue: newKind) else {
-      print("unknown kind '\(newKind)' (expected one of: \(NodeKind.all.map(\.rawValue).joined(separator: ", ")))")
-      return
+      throw ValidationError("unknown kind '\(newKind)' "
+        + "(expected one of: \(NodeKind.all.map(\.rawValue).joined(separator: ", ")))")
     }
-    let succeeded = try NodeCommands.retype(try openCanonical(), node: node, to: kind)
-    print(succeeded ? "retyped \(node) → \(newKind)" : "unknown node '\(node)'")
+    guard try NodeCommands.retype(try openCanonical(), node: node, to: kind) else {
+      throw CommandFailure("unknown node '\(node)'")
+    }
+    print("retyped \(node) → \(newKind)")
   }
 }
