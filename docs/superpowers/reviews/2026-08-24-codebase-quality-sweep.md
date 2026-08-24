@@ -368,7 +368,7 @@ The project's top interest, so this is the longest section. Every claim below sh
   with a loud warning; separately add a `claudeCLI` case to `ModelSpec.kind` so the roster can name
   the provider you actually have.
 
-#### 2.7 Every watch-driven refresh opens fresh store connections in the directory it watches — **high / certain that the rule is violated, likely that the loop fires**
+#### 2.7 Every watch-driven refresh opens fresh store connections in the directory it watches — **high / certain / OBSERVED IN THE FIELD**
 
 - **Anchors:** `AppModel.swift:309` (→ `AppIntents/SpotlightIndexer.swift:10`) and
   `AppModel+Search.swift:46` (→ `Search/SearchIndexer.swift:32-34`). Rule stated at

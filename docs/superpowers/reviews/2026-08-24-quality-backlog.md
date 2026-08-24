@@ -116,3 +116,32 @@ Carried over from the sweep verbatim; the fix sweep deliberately did not delete 
   will do real work. `pruneKeeping` reclaims the stranded rows.
 - **`docs/observability.md` gains a `translation` log category.** Translation failures previously
   logged under `search`, so a translation outage looked like a retrieval problem.
+
+## Field evidence found during the fix sweep
+
+**Finding 2.7 (the FSEvents busy-loop) is not hypothetical — it is in your MetricKit payloads.**
+
+`~/Library/Logs/Pensieve/diagnostics/` holds two **CPU-exception** payloads from 2026-08-22, 75
+minutes apart (`07:03:18Z`, `08:18:00Z`). MetricKit raises these only on sustained CPU use. Both:
+
+| | 07:03 | 08:18 |
+|---|---|---|
+| `totalCPUTime` / `totalSampledTime` | 90 s / 175 s | 90 s / 154 s |
+| effective sustained CPU | ~51% | ~58% |
+| top binaries in the sampled stacks | `Pensieve.debug.dylib` (736), `CoreFoundation` (349), `libsqlite3.dylib` (167), `libswiftDispatch` (136) | `Pensieve.debug.dylib` (644), `CoreFoundation` (307), `SwiftUICore` (164), `libsqlite3.dylib` (118) |
+
+The 08:18 payload additionally carries **`FSEvents` frames inside the sampled call stack**, which ties
+the CPU burn directly to FSEvents callbacks. That is precisely the mechanism 2.7 describes:
+`refreshFromWatch` opens fresh store connections *in the directory the watcher watches*, the
+`-wal`/`-shm` churn re-fires the watch, and each turn costs a full main-actor `refresh()`, a
+whole-corpus gather, and a Spotlight delete-and-reindex — SQLite- and SwiftUI-heavy work, exactly the
+binaries that dominate. `SwiftUICore` high in the second payload matches repeated view invalidation
+from repeated `refresh()`.
+
+Consequences for planning:
+- 2.7's confidence in the report is upgraded from "likely that the loop fires today" to **observed**.
+- It should be treated as the top app-target fix, above its original ranking.
+- Payloads are **unsymbolized** (address-only, `offsetIntoBinaryTextSegment`), so the exact function
+  cannot be named from them — the binary mix and the FSEvents frames are the evidence.
+- Recorded on macOS 26.6.1 (25G76), arm64e, against a `.debug` build, so absolute CPU numbers are not
+  release-representative; the *loop* is the finding, not the constant factor.
