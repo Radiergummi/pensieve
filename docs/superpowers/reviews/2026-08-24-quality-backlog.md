@@ -315,3 +315,42 @@ second half: removing the allowlist entry, or the allowlist keeps hiding the nex
   one-sided: every unsandboxed process constructs the container path directly and keeps working,
   while only the sandboxed widget asks the system using the *entitlement's* string, so the app
   publishes to one path and the widget reads another with nothing logged as an error.
+
+## Q4 decision data — the phantom nodes, measured
+
+The backlog previously said this list "does not exist yet". It does now. Read-only queries against
+`~/Library/Application Support/Pensieve/pensieve.sqlite`, 2026-08-24. **No data was modified.**
+
+Store totals: **198 sources** (167 `gitRepo`), **306 nodes**, **3,110 events**.
+**42 of 167 git sources have a key that is not a `.git` common-dir** — every one of them a node that
+should not exist.
+
+| origin repo | phantom nodes | events stranded | merge target | target node id |
+|---|---|---|---|---|
+| pensieve | 4 | 37 | **Pensieve** (`…/pensieve/.git`, 641 events) | `682476ee-467b-44b2-b6b2-20fd10ca4871` |
+| laravel-openapi | 34 | 52 | **Radiergummi Laravel OpenAPI** (`…/laravel-openapi/.git`, 239 events) | `b716032a-4bb6-42fe-9764-ed1d192d6781` |
+| other | 4 | 4 | — (inspect individually) | — |
+
+The mapping is mechanical: a source key containing `/pensieve/` merges into the Pensieve node, one
+containing `/laravel-openapi/` into the laravel-openapi node. Both `.claude/worktrees/…` paths and
+`/private/tmp/claude-501/…/scratchpad/wt-…` paths are covered — the latter are agent scratch
+worktrees, which is why nodes like "Weight Transfer Tool" (from `wt-550`) and "Web Trace Viewer 570"
+(from `wt-570`) exist at all. `pensieve group <primary> <absorbed…>` already does exactly this merge.
+
+Two extra nodes worth deciding separately:
+
+- **`Pensieve Signal Viewer`** — source `/Users/moritz/Projects/pensieve` (no `.git`), 1 event. This
+  is finding 1.2's live proof, sitting beside the real `Pensieve` node. Merge it.
+- **`/`** — source `/`, **427 events**, i.e. 14% of the entire store. All `cc.session`, and **all from
+  2026-07-09 to 2026-07-10** with **zero in the last 7 days**. So `ProjectResolver.isDegenerateRoot`
+  is working: this is historical residue from before that guard existed, not an ongoing leak. It is
+  also by far the largest single cleanup available, and unlike the others its events are not
+  re-attributable from the source key (cwd `/` says nothing about which project they belong to) —
+  the honest options are archive it or delete it, not merge it.
+  **Decision: archive, delete, or leave.** Nothing surfaces it today except node lists, since a
+  degenerate root has no meaningful recall value.
+
+**Recommended sequence, once you decide:** merge the 38 pensieve/laravel-openapi phantoms with
+`pensieve group` (mechanical, reversible only by re-ingest, so do it after a store backup), inspect
+the 4 "other" nodes by hand, then decide `/` separately. Doing this *after* the fix waves land is
+correct — the code path that mints them is fixed, so the list cannot grow while you decide.
