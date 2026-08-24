@@ -90,8 +90,18 @@ public struct FoundationModelsProvider: LLMProvider {
       let content = try await Self.within("classifyGenuineIndices") {
         try await LanguageModelSession().respond(to: prompt, schema: Self.genuineIndicesSchema()).content
       }
+      // Same rule as `extractCandidates`: a structure mismatch means guided generation did not
+      // answer, which is NOT the same as "none of these prompts are genuine". The distinction is
+      // load-bearing here in the worst way — `IntentClassifier.filterGenuine` trusts a structured
+      // empty set as "drop this whole batch" (deliberately, and its tests pin it), and fails open
+      // only on a throw. So returning [] here silently discarded EVERY user prompt in the batch,
+      // yielding zero extraction candidates while the watermark advanced: the same permanent loss
+      // as the extraction bug, one stage earlier. Throwing routes it to the documented fail-open
+      // branch, which keeps all prompts.
       guard case .structure(let root, _) = content.kind,
-            case .array(let items)? = root["indices"]?.kind else { return [] }
+            case .array(let items)? = root["indices"]?.kind else {
+        throw LLMError.providerFailed("guided generation returned no indices array")
+      }
       return items.compactMap { if case .number(let numberValue) = $0.kind { return Int(numberValue) } else { return nil } }
     } catch {
       Log.llm.error("FoundationModels classifyGenuineIndices failed: \(error, privacy: .public)")
@@ -104,8 +114,14 @@ public struct FoundationModelsProvider: LLMProvider {
       let content = try await Self.within("classifyNonSalientIndices") {
         try await LanguageModelSession().respond(to: prompt, schema: Self.nonSalientIndicesSchema()).content
       }
+      // One rule across all three guided-generation decoders. An empty drop-set is safe here
+      // (`SalienceClassifier` reads it as "keep everything"), so this half was never losing data —
+      // but a mismatch still is not an answer, and leaving two of the three decoders swallowing it
+      // is how the next caller inherits the bug above.
       guard case .structure(let root, _) = content.kind,
-            case .array(let items)? = root["indices"]?.kind else { return [] }
+            case .array(let items)? = root["indices"]?.kind else {
+        throw LLMError.providerFailed("guided generation returned no indices array")
+      }
       return items.compactMap { if case .number(let numberValue) = $0.kind { return Int(numberValue) } else { return nil } }
     } catch {
       Log.llm.error("FoundationModels classifyNonSalientIndices failed: \(error, privacy: .public)")

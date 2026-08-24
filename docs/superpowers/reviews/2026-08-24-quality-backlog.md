@@ -189,3 +189,63 @@ Kit, or accept that Kit-side app-ish logging borrows a neighbouring category.
 - **Five parallel SwiftPM worktrees exhausted the disk** (3.5–5.9 GB of `.build` each; the volume hit
   100%, and one `make all` died with `ENOSPC`). Worktree isolation is not free — budget ~4 GB per
   agent, or serialize.
+
+## DEFERRED (continued)
+
+### D4. The `EmbeddableItem` / `EmbeddableCorpus` rename needs one owner (finding 4.2)
+Declined during the sweep, correctly. The report claimed 2 references outside `Search/`; the real
+count is **100 across 22 files**, five outside any single agent's ownership
+(`Translation/TranslatableCorpus.swift`, `Translation/TranslationStore.swift`,
+`Intelligence/SummaryBuilder.swift`, `Query/SearchHitResolver.swift`,
+`PensieveApp/AppModel+Translation.swift`). A `typealias` bridge would leave five production files on
+the old name — two names for one type. **Decision:** do the whole rename to
+`SearchDocument`/`SearchCorpus` (including the file rename) in one commit, or keep the vector-era
+names and drop the finding. Cosmetic either way; no wire format or `CodingKeys` involved.
+
+### D5. Should `pensieve eval` validate its own judge? (finding 2.24)
+`Judge.labelGrounding`, `Agreement.rate` and `TaskScorecard.judgeAgreement` are complete and never
+invoked, so the judge every rubric score depends on is unvalidated. Deliberately not wired — it is a
+product decision. **Decision:** should a sweep spend a judge pass per gold-labelled extraction item to
+compute judge↔human agreement, and what agreement floor should invalidate the sweep?
+
+### D6. `Query/SearchHitResolver.swift:26-27`, `:40-43` still describe a live vector engine
+Doc comment only; the engine was removed. One-line fix, left because the file belonged to another
+agent's scope at the time.
+
+### D7. Two files are at their structural ceiling
+`EmbeddableCorpus.gather` hit 51 code lines against a 50-line limit during the sweep (an
+`appendEventDocuments` extraction fixed it), and `Search/SearchIndexStore.swift` sat at exactly 400
+lines — the file cap — and needed comment trimming to absorb its changes. **The next change to either
+forces a split.** Worth choosing the seam deliberately rather than under lint pressure.
+
+### D8. `decodeFrozenItem` restates the corpus task folders
+`CorpusBuilder.taskFolders` is now the single list, but `decodeFrozenItem`'s `switch` still spells the
+three names with `default: return nil`, so a folder added without a decode case loads nothing
+silently. Not statically checkable as written; noted in a comment.
+
+### D9. `Eval.Gold` keys off the literal `"extraction"` (`Commands/Eval.swift:208`)
+Harmless today — it validates a user-supplied subcommand argument, not a trust gate — but it is the
+same literal finding 1.17 was about, and would silently stop matching a renamed task id.
+
+## More NEW findings (waves B and C)
+
+- **`SSH_AUTH_SOCK` is not inherited by subagents**, so every agent-authored commit in this sweep is
+  UNSIGNED regardless of whether the agent is running. This is a new cause for the existing
+  commit-signing note: the subagent environment, not the machine. The whole branch needs one linear
+  re-sign pass before it reaches `main` (see Q3).
+- **`.build/index-build` is ~2.1 GB per worktree** — the SourceKit index store, which `swift build`
+  and `swift test` do not need. It is the bulk of a worktree's 3.5 GB. A `make clean` variant that
+  drops only `index-build`, or excluding it in worktrees, would make parallel fan-out affordable.
+- **Coverage gaps left honestly untested rather than papered over:** the 120 s Foundation Models cap
+  (asserting it needs a 120 s wall-clock wait or a clock injected into `LanguageModelSession` — a
+  design change), and the two `.attemptedEmpty` write-failure paths (forcing `database.write` to fail
+  needs a deliberately broken writer the harness has no facility for). Both were read-verified.
+- **`ExtractionRunnerTests.swift` is at 395 of the 400-line cap** and all its helpers are `private`,
+  so a sibling test file cannot reuse them. Finding 2.2's tests went into a new
+  `ExtractionWatermarkTests.swift` with a duplicated seeding helper. Promoting those five helpers to a
+  shared `ExtractionTestSupport.swift` would avoid a third copy.
+- **A real hole in `TextQuality`'s code-fence strip**, found while routing finding 1.13: the
+  `NodeDescriber` copy removed the backticks but not the language tag, so a fenced JSON array became
+  the word `json` followed by an array and read as prose. Only `isProseNotStructured` handled the tag.
+  Now one shared `strippingCodeFence`. This is a live path — descriptions come from the same providers
+  that produced the 139 JSON-array "recaps" the code comments already record.

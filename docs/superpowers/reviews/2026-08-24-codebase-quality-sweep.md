@@ -814,3 +814,42 @@ is dressed up beyond its evidence.
 Mutation testing ran in a disposable git worktree; `git status` there was verified clean after every
 revert and after a final unmutated full-suite run. **No file under `Sources/` or `Tests/` in this
 checkout was modified by this audit.**
+
+---
+
+## 6. Corrections to this report (found while fixing it)
+
+The fix waves overturned three claims above. Recorded here rather than silently edited, because the
+audit trail matters more than the report looking right.
+
+- **2.8 is not a defect. Withdrawn.** The report said a judge failure is "scored as a bad output".
+  It is not: `if let qualityScore = verdict?.quality` *skips* a nil verdict and `Aggregate.median([])`
+  is nil, so a total judge outage already yields `quality: nil` — the same shape as the sample-failure
+  path it was compared against. The genuine (smaller) problem is **observability**: a sample failure is
+  recorded in `CellSample.outcome` and persisted, a judge failure left no trace at all. A
+  `Log.llm.error` on a nil verdict was added; the scoring was correctly left alone.
+- **4.2's blast radius was understated by ~50×, and the rename was declined.** The report claimed only
+  `Translation/TranslatableCorpus.swift:42`, `:50` reference `EmbeddableItem`/`EmbeddableCorpus`
+  outside `Search/`. The real count is **100 references across 22 files**, five of them outside the
+  owning agent's scope (`TranslatableCorpus`, `TranslationStore`, `SummaryBuilder`,
+  `SearchHitResolver`, `AppModel+Translation`). A `typealias` bridge would have left five production
+  files on the old name while `Search/` used the new one — two names for one type, worse than the
+  status quo. **Still open**, and it now needs one owner doing the whole rename plus the file rename
+  in a single commit. Moved to the backlog.
+- **2.34 is real as hygiene but is not reachable as a failure.** Planting a garbage main index file
+  beside sentinel `-wal`/`-shm` files and deleting only the main file left the index opening and
+  searching correctly: SQLite validates the WAL header against the freshly created database and
+  discards a mismatched one. The enumeration was still fixed (and pinned), but no end-to-end failing
+  test exists, because the failure it was supposed to prevent does not occur. Confidence downgraded
+  from the report's implicit "this breaks" to "defensive tidiness".
+
+Two claims were also **strengthened** by evidence found while fixing:
+
+- **2.7 upgraded to observed in the field** — see the MetricKit payloads recorded in the backlog.
+- **2.2 has a sibling the report missed**, one stage earlier and worse:
+  `FoundationModelsProvider.classifyGenuineIndices` returned `[]` on a guided-generation structure
+  mismatch, and `IntentClassifier.filterGenuine` trusts a structured empty set as "drop this whole
+  batch" (deliberately — its tests pin that). So a mismatch silently discarded **every user prompt in
+  the batch**, produced zero candidates, and advanced the watermark: the same permanent loss as 2.2,
+  before extraction was even reached. All three guided decoders now throw on a mismatch, which routes
+  to the documented fail-open branch. Fixed and mutation-verified.

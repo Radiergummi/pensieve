@@ -54,3 +54,23 @@ private func msg(_ index: Int, _ text: String) -> TranscriptMessage {
   // Trailing prose containing ']' must not break the parse (regression: last-']' slice).
   #expect(IntentClassifier.decodeIndices("[0,2] because item 3 was already done ]") == Set([0, 2]))
 }
+
+/// The fail-open branch must be reachable from the STRUCTURED method, not just from `complete`.
+///
+/// `classifierHonorsStructuredEmptyAsDropAll` pins that a structured `[]` drops the batch — which is
+/// correct and deliberate. That makes the provider's contract load-bearing: a guided decoder that
+/// returns `[]` when it merely failed to READ the model's answer silently discards every prompt in
+/// the batch, so extraction finds nothing and the watermark advances over it. `FoundationModelsProvider`
+/// did exactly that until it was made to throw. This pins the other half of the pair: a throw keeps
+/// everything, so the two tests together fix the meaning of an empty structured answer.
+@Test func classifierFailsOpenWhenTheStructuredMethodThrows() async {
+  struct ThrowingStructured: LLMProvider {
+    func complete(prompt: String) async throws -> String { "[]" }   // would drop all if consulted
+    func classifyGenuineIndices(prompt: String) async throws -> [Int] {
+      throw LLMError.providerFailed("guided generation returned no indices array")
+    }
+  }
+  let messages = [msg(0, "are we ready to roll this out?"), msg(1, "what about the migration?")]
+  let kept = await IntentClassifier(provider: ThrowingStructured()).filterGenuine(messages)
+  #expect(kept.map(\.index) == [0, 1])
+}
