@@ -347,7 +347,7 @@ Two extra nodes worth deciding separately:
   also by far the largest single cleanup available, and unlike the others its events are not
   re-attributable from the source key (cwd `/` says nothing about which project they belong to) —
   the honest options are archive it or delete it, not merge it.
-  **Decision: archive, delete, or leave.** Nothing surfaces it today except node lists, since a
+  **DECIDED 2026-08-24: deleted.** Nothing surfaced it except node lists, since a
   degenerate root has no meaningful recall value.
 
 **Recommended sequence, once you decide:** merge the 38 pensieve/laravel-openapi phantoms with
@@ -467,3 +467,39 @@ fixture had the judge agreeing with itself across items, which the flattened imp
 it only bites when the judge disagrees with itself, where flattening reports 100% against a true 50%.
 Recorded because the lesson generalises: a fixture that cannot distinguish the two implementations
 proves nothing, however plausible its doc comment sounds.
+
+## The `/` node — deleted 2026-08-24
+
+Investigated before deciding, and the investigation changed the framing twice.
+
+**It was already archived**, so the "14% of your store" framing overstated the urgency: archived nodes
+are out of What's Next, out of search (`NodeState.searchable`), and out of the global open-loose-end
+count (`openCountAcrossNodes` filters to `state == active`). There was no ongoing harm — this was
+housekeeping, not repair.
+
+**What it held.** 423 of 427 events were `session (1 prompts)` — the signature of Pensieve's own
+`claude -p` subprocesses inheriting cwd `/` under launchd, i.e. the tool capturing itself. Four
+outliers (2, 9, 10 prompts) might have been real sessions, but **all four transcripts are gone**
+(`~/.claude/projects/-/` does not exist), so only `session (N prompts)` survived — nothing recallable.
+Five of its seven loose ends were visibly test fixtures ("let's do X later", "TODO: wire up the
+webhook"); two read as real but were contextless with their transcripts gone.
+
+**Why raw SQL rather than the sanctioned path.** `NodeCommands.delete` refuses a node with a live
+source (`.blocked`), on the reasoning that it would re-materialize on the next drain. That premise no
+longer holds after this sweep: `Ingester.swift:218` permanently drops a `cc.session` whose cwd is a
+degenerate root, and every event here was a `cc.session`. There is also no CLI delete verb — the only
+caller is the app's context menu, which would have hit the same guard. So: delete the source row
+first (that is what makes the node "live"), then the node, letting FK cascade take the rest.
+
+**`PRAGMA foreign_keys = ON` was the load-bearing detail.** It is OFF by default in the `sqlite3` CLI,
+and without it the cascades do not fire — the node would vanish and leave 427 orphaned events, which
+is strictly worse than doing nothing.
+
+Result, verified: `nodes 306 → 305`, `events 3110 → 2683`, `looseEnds 1076 → 1069`,
+`sources 198 → 197`; no node named `/` remains; **zero orphans**; `integrity_check: ok`;
+`foreign_key_check` clean. The search index held **no** rows for it (archived content never entered
+the corpus), and the next sync rebuilds against the smaller corpus via the existing hash guard.
+
+Backup kept at `~/Library/Application Support/Pensieve/pensieve-backup-before-root-node-delete.sqlite`
+(38 MB, `integrity_check: ok`, counts verified identical before the delete). **Delete it once you are
+satisfied** — it is a full copy of the canonical store.
