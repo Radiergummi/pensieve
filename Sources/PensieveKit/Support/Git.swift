@@ -1,10 +1,10 @@
 import Foundation
 
 public enum Git {
-  public static func run(_ args: [String], in repo: String) -> String? {
+  public static func run(_ arguments: [String], in repo: String) -> String? {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["git", "-C", repo] + args
+    process.arguments = ["git", "-C", repo] + arguments
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = FileHandle.nullDevice
@@ -28,14 +28,16 @@ public extension Git {
 
   /// Best-effort default branch: origin/HEAD → init.defaultBranch → probe main/master → "main".
   static func defaultBranch(in repo: String) -> String {
-    if let ref = run(["symbolic-ref", "refs/remotes/origin/HEAD"], in: repo) {
+    if let symbolicRef = run(["symbolic-ref", "refs/remotes/origin/HEAD"], in: repo) {
       // e.g. "refs/remotes/origin/release/prod" → "release/prod". Strip the known prefix rather than
       // splitting on "/", which would truncate a slash-containing default branch to its last segment.
       let prefix = "refs/remotes/origin/"
-      let name = ref.hasPrefix(prefix) ? String(ref.dropFirst(prefix.count)) : ref
+      let name = symbolicRef.hasPrefix(prefix) ? String(symbolicRef.dropFirst(prefix.count)) : symbolicRef
       if !name.isEmpty { return name }
     }
-    if let cfg = run(["config", "init.defaultBranch"], in: repo), !cfg.isEmpty { return cfg }
+    if let configured = run(["config", "init.defaultBranch"], in: repo), !configured.isEmpty {
+      return configured
+    }
     if run(["rev-parse", "--verify", "--quiet", "refs/heads/main"], in: repo) != nil { return "main" }
     if run(["rev-parse", "--verify", "--quiet", "refs/heads/master"], in: repo) != nil { return "master" }
     return "main"

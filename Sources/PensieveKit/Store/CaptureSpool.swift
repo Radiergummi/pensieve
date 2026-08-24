@@ -18,6 +18,17 @@ public final class CaptureSpool: Sendable {
     config.busyMode = .timeout(5)
     config.prepareDatabase { database in try database.execute(sql: "PRAGMA journal_mode = WAL") }
     self.dbQueue = try DatabaseQueue(path: url.path, configuration: config)
+    // Read before writing. This runs on **every** capture, and the capture path is sacred: a write
+    // transaction — behind a 5 s busy timeout, while the ingester may hold the write lock — is a way
+    // for a git hook to be delayed that a read simply is not. `CREATE TABLE IF NOT EXISTS` is cheap
+    // only once you already hold the write lock, and after the very first capture the answer is
+    // always "it exists".
+    let tableExists = try dbQueue.read { database in
+      try Bool.fetchOne(
+        database,
+        sql: "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'captures'") ?? false
+    }
+    guard !tableExists else { return }
     try dbQueue.write { database in
       try database.execute(sql: """
         CREATE TABLE IF NOT EXISTS captures(
@@ -31,6 +42,12 @@ public final class CaptureSpool: Sendable {
     }
   }
 
+  /// The two heartbeat queries, named once. `lastCaptureAt()`/`pendingCount()` and the read-only
+  /// `readOnlyStats(at:)` each spelled them out, and `readOnlyStats`' only test compares the two
+  /// paths to each other — so an edit to one spelling would have been reported as agreement.
+  private static let newestTimestampSQL = "SELECT max(ts) FROM captures"
+  private static let pendingCountSQL = "SELECT count(*) FROM captures WHERE ingested = 0"
+
   public func append(kind: String, payload: String, at timestamp: Date = Date()) throws {
     try dbQueue.write { database in
       try database.execute(
@@ -43,9 +60,23 @@ public final class CaptureSpool: Sendable {
     try dbQueue.read { database in
       try Row.fetchAll(database, sql: "SELECT id, ts, kind, payload FROM captures WHERE ingested = 0 ORDER BY id")
         .map { row in
-          SpoolRow(
+          let rawTimestamp = row["ts"] as String
+          let parsed = try? Date(rawTimestamp, strategy: .iso8601)
+          if parsed == nil {
+            // `Date()` is retained deliberately: this value becomes an event's `occurredAt`, so a
+            // sentinel like `.distantPast` would misdate the work and also fail the absent-transcript
+            // grace check, silently dropping the row. But the substitution was invisible, and it does
+            // make an unparseable row look like it just happened — so at minimum it is now on the
+            // record. See the quality backlog: what such a row SHOULD do is a design question.
+            let rowID = row["id"] as Int64
+            Log.ingest.error("""
+              Spool row \(rowID, privacy: .public) has an unparseable timestamp \
+              \(rawTimestamp, privacy: .public) — substituting now
+              """)
+          }
+          return SpoolRow(
             id: row["id"],
-            timestamp: (try? Date(row["ts"] as String, strategy: .iso8601)) ?? Date(),
+            timestamp: parsed ?? Date(),
             kind: row["kind"],
             payload: row["payload"])
         }
@@ -74,7 +105,7 @@ public final class CaptureSpool: Sendable {
   /// This is the real-time "last capture" heartbeat and must survive ingestion.
   public func lastCaptureAt() throws -> Date? {
     try dbQueue.read { database in
-      guard let iso = try String.fetchOne(database, sql: "SELECT max(ts) FROM captures") else { return nil }
+      guard let iso = try String.fetchOne(database, sql: Self.newestTimestampSQL) else { return nil }
       return try? Date(iso, strategy: .iso8601)
     }
   }
@@ -82,7 +113,7 @@ public final class CaptureSpool: Sendable {
   /// Count of un-ingested rows (ingested = 0) without materializing them.
   public func pendingCount() throws -> Int {
     try dbQueue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM captures WHERE ingested = 0") ?? 0
+      try Int.fetchOne(database, sql: Self.pendingCountSQL) ?? 0
     }
   }
 
@@ -97,12 +128,12 @@ public final class CaptureSpool: Sendable {
     let dbQueue = try DatabaseQueue(path: url.path, configuration: config)
     return try dbQueue.read { database in
       let lastCaptureAt: Date?
-      if let iso = try String.fetchOne(database, sql: "SELECT max(ts) FROM captures") {
+      if let iso = try String.fetchOne(database, sql: Self.newestTimestampSQL) {
         lastCaptureAt = try? Date(iso, strategy: .iso8601)
       } else {
         lastCaptureAt = nil
       }
-      let pending = try Int.fetchOne(database, sql: "SELECT count(*) FROM captures WHERE ingested = 0") ?? 0
+      let pending = try Int.fetchOne(database, sql: Self.pendingCountSQL) ?? 0
       return (lastCaptureAt, pending)
     }
   }

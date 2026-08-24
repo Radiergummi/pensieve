@@ -31,14 +31,15 @@ public final class StoreRelocationLock: @unchecked Sendable {
   /// process-global state — `setenv` is process-global and Swift Testing runs suites in parallel,
   /// the same reason `PensievePaths.indexURL(named:storeOverride:support:)` was split out.
   static func anchorURL(storeOverride: String?) -> URL {
-    guard let storeOverride else {
+    guard let normalized = PensievePaths.normalizedStoreOverride(storeOverride) else {
       return PensievePaths.homeDirectory()
         .appendingPathComponent("Library/Caches/me.mazetti.pensieve", isDirectory: true)
         .appendingPathComponent("relocation.lock")
     }
-    let store = URL(fileURLWithPath: storeOverride)
-    let prefix = store.deletingPathExtension().lastPathComponent
-    return store.deletingLastPathComponent().appendingPathComponent("\(prefix)-relocation.lock")
+    // The sidecar layout is shared with `PensievePaths.indexURL` rather than restated here; the two
+    // had identical copies, and a layout change in one would have left the other pairing with a
+    // file that no longer existed.
+    return PensievePaths.sidecarBesideStore(normalized, named: "relocation.lock")
   }
 
   /// Acquires the lock, or returns nil if it is held incompatibly. Creating the anchor is

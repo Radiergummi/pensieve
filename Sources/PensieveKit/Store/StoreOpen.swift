@@ -59,17 +59,19 @@ public func openCanonical() throws -> any DatabaseWriter {
 }
 
 /// The resolved spool path: PENSIEVE_CAPTURE_DB > custom support root > default.
+///
+/// A blank or relative override falls back rather than being honoured — see
+/// `PensievePaths.normalizedStoreOverride`. This path in particular must not resolve to the cwd: it
+/// is the capture path, and under launchd the cwd is `/`.
 public func resolvedSpoolURL() -> URL {
-  if let override = ProcessInfo.processInfo.environment["PENSIEVE_CAPTURE_DB"] {
-    return URL(fileURLWithPath: override)
-  }
-  return PensievePaths.captureURL()
+  PensievePaths.resolvedStoreURL(
+    override: ProcessInfo.processInfo.environment["PENSIEVE_CAPTURE_DB"],
+    fallback: PensievePaths.captureURL())
 }
 
-/// The resolved canonical path: PENSIEVE_DB > custom support root > default.
+/// The resolved canonical path: PENSIEVE_DB > custom support root > default. Same override rule.
 public func resolvedCanonicalURL() -> URL {
-  if let override = ProcessInfo.processInfo.environment["PENSIEVE_DB"] {
-    return URL(fileURLWithPath: override)
-  }
-  return PensievePaths.canonicalURL()
+  PensievePaths.resolvedStoreURL(
+    override: ProcessInfo.processInfo.environment["PENSIEVE_DB"],
+    fallback: PensievePaths.canonicalURL())
 }

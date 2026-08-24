@@ -124,3 +124,41 @@ import Foundation
 @Test func activeFocusContextKeyIsTheStringTheAppAlreadyWrote() {
   #expect(PensieveDefaults.activeFocusContextKey == "pensieve.activeFocusContext")
 }
+
+/// A blank or relative store override is treated as absent on EVERY path that reads one.
+///
+/// It was enforced on exactly one of four: the support root. `resolvedCanonicalURL()`,
+/// `resolvedSpoolURL()`, `indexURL(named:)` and `StoreRelocationLock.anchorURL()` all honoured `""`
+/// and relative values. That matters because `URL(fileURLWithPath: "")` is the process's cwd and a
+/// relative value stays cwd-relative — and under launchd the cwd is `/`, so a blank `PENSIEVE_DB`
+/// put the canonical store at the filesystem root instead of falling back to the real one.
+///
+/// Asserted through the pure resolvers, where the rule now lives, so no environment is mutated
+/// (`setenv` is process-global and Swift Testing runs suites in parallel).
+@Test func blankOrRelativeStoreOverrideIsTreatedAsAbsentEverywhere() {
+  let fallback = URL(fileURLWithPath: "/Volumes/Work/pensieve.sqlite")
+  let supportURL = URL(fileURLWithPath: "/Volumes/Work")
+  let cachesAnchorSuffix = "Library/Caches/me.mazetti.pensieve/relocation.lock"
+
+  for bad in ["", "   ", "\n", "relative/dir", "pensieve.sqlite", "./x.sqlite", "../up.sqlite"] {
+    #expect(PensievePaths.resolvedStoreURL(override: bad, fallback: fallback) == fallback,
+            "resolvedStoreURL honoured \(bad.debugDescription)")
+    #expect(PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: bad,
+                                   support: supportURL).path == "/Volumes/Work/search-index.sqlite",
+            "indexURL honoured \(bad.debugDescription)")
+    #expect(StoreRelocationLock.anchorURL(storeOverride: bad).path.hasSuffix(cachesAnchorSuffix),
+            "anchorURL honoured \(bad.debugDescription)")
+  }
+
+  // An absolute override is still honoured — the guard must not have swallowed the feature.
+  #expect(PensievePaths.resolvedStoreURL(override: "/tmp/x.sqlite", fallback: fallback).path
+          == "/tmp/x.sqlite")
+  #expect(PensievePaths.indexURL(named: "search-index.sqlite", storeOverride: "/tmp/x.sqlite",
+                                 support: supportURL).path == "/tmp/x-search-index.sqlite")
+  #expect(StoreRelocationLock.anchorURL(storeOverride: "/tmp/x.sqlite").path
+          == "/tmp/x-relocation.lock")
+
+  // Surrounding whitespace on a real path is trimmed rather than making the value "relative".
+  #expect(PensievePaths.resolvedStoreURL(override: "  /tmp/x.sqlite  ", fallback: fallback).path
+          == "/tmp/x.sqlite")
+}

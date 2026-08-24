@@ -17,21 +17,31 @@ public final class DirectoryWatcher {
   /// - Parameter paths: directories to watch (e.g. the canonical store's and spool's parent dirs).
   public init(paths: [String], latency: TimeInterval = 0.05, onChange: @escaping @Sendable () -> Void) {
     self.onChange = onChange
-    var ctx = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
-                                   retain: nil, release: nil, copyDescription: nil)
+    // `info` is Apple's parameter name in `FSEventStreamContext` and the callback signature — kept.
+    var streamContext = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
+                                             retain: nil, release: nil, copyDescription: nil)
     let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
       guard let info else { return }
       let watcher = Unmanaged<DirectoryWatcher>.fromOpaque(info).takeUnretainedValue()
       watcher.onChange()
     }
+    // Both failures were discarded silently, which presents as a UI that has simply gone quiet —
+    // indistinguishable from "no work has happened", the one reading this app must never give by
+    // accident. Neither is recoverable here, so log and leave the watcher inert rather than pretend.
     guard let stream = FSEventStreamCreate(
-      kCFAllocatorDefault, callback, &ctx, paths as CFArray,
+      kCFAllocatorDefault, callback, &streamContext, paths as CFArray,
       FSEventStreamEventId(kFSEventStreamEventIdSinceNow), latency,
       FSEventStreamCreateFlags(kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents)
-    ) else { return }
+    ) else {
+      Log.sync.error("FSEventStreamCreate failed for \(paths.joined(separator: ", "), privacy: .public) — live updates are off")
+      return
+    }
     self.stream = stream
     FSEventStreamSetDispatchQueue(stream, DispatchQueue(label: "com.pensieve.fswatch"))
-    FSEventStreamStart(stream)
+    guard FSEventStreamStart(stream) else {
+      Log.sync.error("FSEventStreamStart failed for \(paths.joined(separator: ", "), privacy: .public) — live updates are off")
+      return
+    }
   }
 
   deinit {

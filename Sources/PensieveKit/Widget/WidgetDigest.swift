@@ -15,8 +15,11 @@ public struct WidgetDigest: Codable, Equatable, Sendable {
   /// Published regardless of family, so each family slices what it can show without a second
   /// publish path.
   public static let maximumItems = 8
-  /// Four missed 300 s agent passes — comfortably past normal jitter, short enough to notice.
-  public static let stalenessThreshold: TimeInterval = 20 * 60
+  /// Derived from the agent's actual schedule rather than restating it: this was `20 * 60` with a
+  /// comment reading "four missed 300 s agent passes", so changing `StartInterval` would have left
+  /// the widget's idea of stale silently wrong in whichever direction the period moved.
+  public static let stalenessThreshold: TimeInterval =
+    BackgroundSyncSchedule.interval * Double(BackgroundSyncSchedule.missedPassesBeforeStale)
 
   public let schemaVersion: Int
   public let generatedAt: Date
