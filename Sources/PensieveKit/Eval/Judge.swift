@@ -85,9 +85,13 @@ public struct Judge: Sendable {
     return JudgeDecode.object(raw, as: JudgeVerdict.self)
   }
 
-  public func labelGrounding(looseEnds: [VerifiedLooseEnd], source: String) async -> [CandidateLabel]? {
-    guard !looseEnds.isEmpty else { return [] }
-    let quotes = looseEnds.enumerated().map { "\($0.offset). «\($0.element.quote)»" }.joined(separator: "\n")
+  /// Takes quotes, not `VerifiedLooseEnd`s: the only field it ever read was `quote`, and demanding
+  /// the full type forced callers to fabricate `text`/`role`/`sourceMessageIndex` values that the
+  /// prompt never sees — inventing structure to satisfy a signature. The gold-labelling flow feeds
+  /// it raw strings, which is what a quote is.
+  public func labelGrounding(quotes candidates: [String], source: String) async -> [CandidateLabel]? {
+    guard !candidates.isEmpty else { return [] }
+    let quotes = candidates.enumerated().map { "\($0.offset). «\($0.element)»" }.joined(separator: "\n")
     let prompt = """
     For each candidate quote, decide if it is genuinely grounded in the SOURCE (true) or fabricated / not supported (false).
     Return ONLY JSON: {"candidateLabels": [{"quote": "<verbatim quote>", "grounded": true|false}, ...]}.

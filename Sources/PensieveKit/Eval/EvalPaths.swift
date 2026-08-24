@@ -12,6 +12,9 @@ public enum EvalPaths {
   public static func scorecardURL() -> URL { directory().appendingPathComponent("scorecard.json") }
   public static func reportURL() -> URL { directory().appendingPathComponent("report.md") }
   public static func goldURL() -> URL { directory().appendingPathComponent("gold.json") }
+  /// Quotes models actually surfaced, accumulated across runs — the labelling queue `gold` works
+  /// from. Separate from `gold.json` because it is machine output awaiting a human, not ground truth.
+  public static func surfacedURL() -> URL { directory().appendingPathComponent("surfaced.json") }
   public static func configURL() -> URL {
     URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("eval-config.json")
   }

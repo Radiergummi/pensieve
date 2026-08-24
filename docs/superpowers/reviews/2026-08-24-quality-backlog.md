@@ -197,7 +197,7 @@ the old name — two names for one type. **Decision:** do the whole rename to
 `SearchDocument`/`SearchCorpus` (including the file rename) in one commit, or keep the vector-era
 names and drop the finding. Cosmetic either way; no wire format or `CodingKeys` involved.
 
-### D5. Should `pensieve eval` validate its own judge? (finding 2.24)
+### D5. Should `pensieve eval` validate its own judge? — RESOLVED 2026-08-24, wired
 `Judge.labelGrounding`, `Agreement.rate` and `TaskScorecard.judgeAgreement` are complete and never
 invoked, so the judge every rubric score depends on is unvalidated. Deliberately not wired — it is a
 product decision. **Decision:** should a sweep spend a judge pass per gold-labelled extraction item to
@@ -419,3 +419,51 @@ be perfectly silent while the index lives there. Correct as-is; worth knowing it
   compiling — no failure line exists when the build fails. The loop now asserts on the positive
   `Test run with N tests … passed` line instead. Same class as every vacuous test in section 8: the
   absence of a failure signal is not evidence of success.
+
+## D5 resolved — the judge calibration loop is wired (2026-08-24)
+
+The sweep recommended deleting this as dead code measuring the wrong axis. **That was wrong**, and
+tracing `GoldSet.grounding` to its consumer is what showed it: `CellScoring.goldScores` uses those
+human labels to compute extraction's `precision` and `reproducedFabrication`, so grounding labels are
+load-bearing for the fabrication gate — not a side-channel.
+
+**The real blocker was that the gold set could not be completed at all.** `goldScores` needs both
+grounded AND fabricated quotes, but `pensieve eval gold` only asked a human to type quotes they
+already knew about, and nobody can type a fabrication in advance — it does not exist until a model
+invents one. The quotes that could fill that half were already computed (`CellSample.looseEndQuotes`)
+and then thrown away when the run ended, because only `scorecard.json` and `report.md` were written.
+That is why `gold.json` has never existed on this machine and why extraction precision has never had
+data.
+
+What landed:
+- `SurfacedQuotes` (`.eval/surfaced.json`) accumulates every quote any model surfaced, per item,
+  across runs — the labelling queue. Written by `eval run`, best-effort so a recording failure cannot
+  fail a completed sweep.
+- `eval gold extraction` now labels the human's typed quotes **plus** the unlabelled surfaced ones,
+  with the judge answering first and its verdict shown as the default. The human corrects rather than
+  decides from scratch, and every correction is one datapoint of agreement earned from work that had
+  to happen anyway.
+- `GoldSet.judgeGrounding` stores the judge's labels beside the human's — the labels, not a derived
+  percentage, so agreement can be recomputed over any subset later. Only for quotes a human actually
+  adjudicated.
+- `GoldSet.judgeAgreement()` pools per item, never by flattening both sides: `Agreement.rate` keys on
+  quote TEXT, so a flattened comparison collapses the same sentence in two items into one key.
+- `judgeAgreement` is reported **only on the extraction scorecard**, where it was measured. Stamping
+  it on narration's card would read as "the judge that graded this was validated" — it grades a
+  rubric, and no human has rated those outputs.
+- `Judge.labelGrounding` now takes `[String]` quotes; it only ever read `.quote`, and demanding
+  `VerifiedLooseEnd` forced callers to invent `text`/`role`/`sourceMessageIndex` the prompt never sees.
+
+**Still open, deliberately not built:** judge-ONLY labelling of a corpus. That is the payoff, but it
+cannot be justified before an agreement number exists — which now requires only one labelling pass.
+Revisit once `judgeAgreement()` returns something.
+
+**Still true:** this needs the cloud judge, hence an API key you do not have. Without one, `gold`
+labels by hand and says so, and no agreement is measured. The shape is right; the sweep is still
+unrunnable end to end until there is a key or a `claudeCLI` judge in the roster.
+
+**A test of mine was disconfirmed by its own mutation and rewritten.** The first cross-item collision
+fixture had the judge agreeing with itself across items, which the flattened implementation passes —
+it only bites when the judge disagrees with itself, where flattening reports 100% against a true 50%.
+Recorded because the lesson generalises: a fixture that cannot distinguish the two implementations
+proves nothing, however plausible its doc comment sounds.

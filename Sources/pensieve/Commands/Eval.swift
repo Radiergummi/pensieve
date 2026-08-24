@@ -133,7 +133,7 @@ struct Eval: AsyncParsableCommand {
     /// The rubric judge, or nil. Built once but NON-fatally: the judge is a cloud model needing an
     /// API key, while the gold set is a committed file, so their availability is independent and a
     /// missing key must cost only the judge-scored tasks.
-    private static func makeJudge(_ spec: ModelSpec, keychain: KeychainSecretStore) -> Judge? {
+    static func makeJudge(_ spec: ModelSpec, keychain: KeychainSecretStore) -> Judge? {
       let apiKey = ModelProviderFactory.needsKey(spec)
         ? keychain.read(account: ModelProviderFactory.apiKeyAccount(for: spec)) : nil
       guard let provider = ModelProviderFactory.make(spec, apiKey: apiKey) else {
@@ -150,6 +150,23 @@ struct Eval: AsyncParsableCommand {
     /// cyclomatic complexity down — same statements, same order, same behavior. The per-sweep
     /// services (config, reference spec, runner, gold set, judge) are constant across every task in
     /// the loop, so they're bundled into `context` to keep this under the parameter-count limit.
+    /// Every quote any model surfaced this run, folded into `.eval/surfaced.json`.
+    ///
+    /// A fabrication only exists once a model has produced one, so this is the only place the gold
+    /// set's fabricated half can come from — see `SurfacedQuotes`. Best-effort by contract: failing
+    /// to record labelling candidates must not turn a completed sweep into a failed one.
+    private static func recordSurfaced(_ samples: [CellSample]) {
+        guard !samples.isEmpty else { return }
+        var surfaced = SurfacedQuotes.load(from: EvalPaths.surfacedURL())
+        for sample in samples {
+            guard let quotes = sample.looseEndQuotes, !quotes.isEmpty else { continue }
+            surfaced.merge(itemID: sample.itemID, quotes: quotes)
+        }
+        do { try surfaced.save(to: EvalPaths.surfacedURL()) } catch {
+            print("warning: could not record surfaced quotes for gold labelling: \(error)")
+        }
+    }
+
     private static func scoreTask(evalTask: any EvalTask, taskItems: [CorpusItem],
                                   model: String?, context: RunSweepContext) async -> TaskScorecard? {
       let (config, referenceSpec, runner) = (context.config, context.referenceSpec, context.runner)
@@ -163,6 +180,7 @@ struct Eval: AsyncParsableCommand {
         var samples: [CellSample] = []
         for item in taskItems { samples += await runner.runCell(task: evalTask, item: item, spec: spec, repeats: 1) }
         guard !samples.isEmpty else { continue }   // model unavailable for this spec — skip, don't fake a score
+        recordSurfaced(samples)
         let cellScore = await CellScoring.score(
           task: evalTask, items: taskItems, samples: samples, spec: spec,
           references: ScoringReferences(gold: context.gold, judge: context.judge))
@@ -174,7 +192,14 @@ struct Eval: AsyncParsableCommand {
       let recommendation = DecisionEngine.recommend(task: evalTask, scores: scores, bar: bar,
                                                     incumbentLabel: referenceSpec.label,
                                                     noiseMargin: config.noiseMargin)
-      return TaskScorecard(task: evalTask.id, cells: scores, recommendation: recommendation, judgeAgreement: nil)
+      // Reported ONLY on the gold-scored task the labels came from. Grounding agreement is measured
+      // on extraction quotes; stamping it on narration's card would read as "the judge that graded
+      // this scorecard was validated", which it would not be — that judge grades a rubric, and no
+      // human has rated those outputs. `nil` here is an honest "not measured", not a missing value.
+      let agreement: Double?
+      if case .extraction = evalTask.scorer { agreement = context.gold.judgeAgreement() } else { agreement = nil }
+      return TaskScorecard(task: evalTask.id, cells: scores, recommendation: recommendation,
+                           judgeAgreement: agreement)
     }
   }
 
@@ -204,6 +229,63 @@ struct Eval: AsyncParsableCommand {
   struct Gold: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "gold", abstract: "Label recall + grounding for judge calibration.")
     @Argument var task: String
+    /// One item: the human's recall quotes, then a grounded/fabricated verdict on every quote that
+    /// needs one — the human's typed quotes plus whatever models surfaced here and nobody has
+    /// judged yet.
+    private func label(item: ExtractionCorpusItem, gold: inout GoldSet,
+                       surfaced: SurfacedQuotes, judge: Judge?) async {
+      print("\n--- item \(item.id) (\(item.shape)) ---")
+      for message in item.messages where message.isUserPrompt {
+        print("[\(message.index)] \(message.text.prefix(200))")
+      }
+      print("Known loose-end quotes for this item, one per line, blank line to finish:")
+      var quotes: [String] = []
+      while let line = readLine(), !line.isEmpty { quotes.append(line) }
+      gold.recall[item.id] = quotes
+
+      // Anything a model surfaced for this item that carries no human label yet. THIS is where a
+      // fabricated quote enters the gold set: nobody can type one in advance, because it does not
+      // exist until a model invents it. Without these, `grounding` holds only quotes the human
+      // already believed in, so `precision` is always 1 and `reproducedFabrication` never fires.
+      let candidates = surfaced.unlabelled(itemID: item.id, gold: gold).filter { !quotes.contains($0) }
+      if !candidates.isEmpty {
+        print("\(candidates.count) quote(s) surfaced by models here and not yet labelled.")
+      }
+      let toLabel = quotes + candidates
+      guard !toLabel.isEmpty else { return }
+
+      // The judge answers first, on the same quotes, against the same source the models saw. Shown
+      // as the default so the human is CORRECTING rather than deciding from scratch — and every
+      // correction is one datapoint of agreement, earned from work that had to happen anyway.
+      let source = item.messages.map { "[\($0.index)] \($0.text)" }.joined(separator: "\n")
+      var judgeLabels: [CandidateLabel] = []
+      if let judge {
+        judgeLabels = await judge.labelGrounding(quotes: toLabel, source: source) ?? []
+        if judgeLabels.isEmpty { print("note: the judge did not answer for this item.") }
+      }
+      let judgeByQuote = Dictionary(judgeLabels.map { ($0.quote, $0.grounded) },
+                                    uniquingKeysWith: { existing, _ in existing })
+
+      var labels: [CandidateLabel] = []
+      for quote in toLabel {
+        let suggestion = judgeByQuote[quote]
+        let hint = suggestion.map { $0 ? " [judge: grounded]" : " [judge: FABRICATED]" } ?? ""
+        let fallback = suggestion ?? true
+        print("Is «\(quote)» genuinely grounded?\(hint) [y/n, Enter = \(fallback ? "y" : "n")]: ",
+              terminator: "")
+        let answer = readLine()?.lowercased() ?? ""
+        labels.append(CandidateLabel(quote: quote,
+                                     grounded: answer.isEmpty ? fallback : answer != "n"))
+      }
+      gold.grounding[item.id] = labels
+      // Only the judge labels a human actually adjudicated. An unanswered quote would otherwise
+      // count toward agreement without anyone having checked it.
+      if !judgeLabels.isEmpty {
+        let answered = Set(labels.map(\.quote))
+        gold.judgeGrounding[item.id] = judgeLabels.filter { answered.contains($0.quote) }
+      }
+    }
+
     func run() async throws {
       // Compared against the enum case, not the bare literal `"extraction"`. It is only a
       // user-supplied argument check rather than a trust gate, so nothing breaks today — but it is
@@ -221,26 +303,23 @@ struct Eval: AsyncParsableCommand {
         return
       }
       var gold = GoldSet.load(from: EvalPaths.goldURL())
-      for item in extractionItems {
-        print("\n--- item \(item.id) (\(item.shape)) ---")
-        for message in item.messages where message.isUserPrompt {
-          print("[\(message.index)] \(message.text.prefix(200))")
-        }
-        print("Known loose-end quotes for this item, one per line, blank line to finish:")
-        var quotes: [String] = []
-        while let line = readLine(), !line.isEmpty { quotes.append(line) }
-        gold.recall[item.id] = quotes
+      let surfaced = SurfacedQuotes.load(from: EvalPaths.surfacedURL())
+      // The same judge the sweep would use, built the same way — so the agreement measured here is
+      // agreement for the judge that actually scores, not for some other model.
+      let judge = Run.makeJudge(loadEvalConfig().judge, keychain: KeychainSecretStore())
+      if judge == nil {
+        print("note: labelling by hand — no agreement will be measured without a judge.")
+      }
 
-        var labels: [CandidateLabel] = []
-        for quote in quotes {
-          print("Is «\(quote)» genuinely grounded? [y/n]: ", terminator: "")
-          let answer = readLine()?.lowercased() ?? "y"
-          labels.append(CandidateLabel(quote: quote, grounded: answer != "n"))
-        }
-        gold.grounding[item.id] = labels
+      for item in extractionItems {
+        await label(item: item, gold: &gold, surfaced: surfaced, judge: judge)
       }
       try gold.save(to: EvalPaths.goldURL())
       print("Gold labeling for \(task) → \(EvalPaths.goldURL().path)")
+      if let agreement = gold.judgeAgreement() {
+        print(String(format: "Judge-vs-human agreement: %.0f%% (across every labelled quote so far)",
+                     agreement * 100))
+      }
     }
   }
 }
