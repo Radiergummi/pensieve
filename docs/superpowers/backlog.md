@@ -1562,7 +1562,7 @@ testable. This unlocks every future transcript-rendering change, not just C2.
 
 **The correctness rule, and the trap under it.** A folded or chipped block **must auto-open when a
 find match is inside it** — `NodeFindDocument` indexes harness bodies through `findableText` and
-counts those matches, and `TranscriptSegmentView.swift:92` already drops its `lineLimit` while
+counts those matches, and `TranscriptSegmentView.swift:96` already drops its `lineLimit` while
 highlighting for precisely that reason. Two things the draft left unspecified and a plan must not:
 
 - **Precedence.** A user-toggled disclosure and the find signal are two sources of truth. Derive,
@@ -1570,7 +1570,7 @@ highlighting for precisely that reason. Two things the draft left unspecified an
   re-expand. The natural alternative — `@State` plus `.onChange(of: highlight != nil)` — **fails on
   first render**, because `.onChange` does not fire for the initial value: the block mounts folded,
   `findSite`'s `.onAppear` scrolls a 20pt disclosure line to centre, and only then does the body
-  unfold beneath it, off-screen. `TranscriptSegmentView.swift:91-98` already models the correct
+  unfold beneath it, off-screen. `TranscriptSegmentView.swift:95-102` already models the correct
   pattern as a pure derivation with zero state, which is why it has never had an ordering bug.
 - **Blast radius.** `LooseEndRow.highlights(for:segments:)` computes runs for *every* matching
   segment, not just the current match, so auto-open unfolds all matching blocks at once. A
@@ -1583,6 +1583,16 @@ into highlighting text that isn't on screen", so any derivation belongs in Kit a
 indexes. And `interrupted` *does* need a special case under a `▸ label · n lines` renderer: its
 `displayBody` is `nil`, so it would render `▸ Interrupted · 0 lines` with a chevron disclosing
 nothing.
+
+**Filed, not fixed: criterion 1 is not literally true today.** `CalloutView`
+(`Sources/PensieveApp/TranscriptSegmentView.swift:72`) fills with `callout.severity.tint.opacity(0.10)`,
+and `CalloutSeverity.neutral` maps to `.secondary`. `TranscriptCallout.forTagName` returns `.neutral`
+for any matched ALL-CAPS paired tag outside the caution/important token sets, so a `.you` message
+containing e.g. `<PROJECT_CONTEXT>…</PROJECT_CONTEXT>` still renders provenance card (secondary 0.08)
+→ bubble (secondary 0.10) → callout (secondary 0.10): three nested near-identical grays, the exact
+defect this slice exists to remove. It predates the branch and no C1 task touched it — filed here
+because C2 already rewrites this file. Until C2 addresses it, the spec's success criterion 1 ("at
+most one fill nests inside the provenance card") is false in the general case.
 
 *Revisit trigger:* now, but behind the two prerequisites. Neither is optional and neither is large.
 
