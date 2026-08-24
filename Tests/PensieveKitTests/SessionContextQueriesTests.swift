@@ -276,10 +276,17 @@ private struct UncancellableProvider: LLMProvider {
   let delay: TimeInterval
   let reply: String
   func complete(prompt: String) async throws -> String {
-    // `usleep`, not `Thread.sleep` (unavailable in async contexts) and not `Task.sleep` (which WOULD
-    // observe cancellation and so would test the opposite of the point): a blocking syscall is
-    // exactly the behaviour being guarded against.
-    usleep(useconds_t(delay * 1_000_000))
+    // Suspends on a continuation that cancellation cannot resume — NOT `Task.sleep` (which would
+    // observe cancellation and test the opposite of the point), and NOT a blocking `usleep` (which
+    // occupies a cooperative-pool thread and made this test flaky under the full parallel suite:
+    // 0.44 s alone, 2.39 s contended).
+    //
+    // This is also the more faithful model. The real hazard is not a thread that will not yield, it
+    // is a suspension nothing can wake — exactly what `Server.listRoots` does, and what Apple's
+    // `LanguageModelSession.respond` gives no guarantee against.
+    await withCheckedContinuation { continuation in
+      DispatchQueue.global().asyncAfter(deadline: .now() + delay) { continuation.resume() }
+    }
     return reply
   }
 }
@@ -293,13 +300,21 @@ private struct UncancellableProvider: LLMProvider {
 /// as the default provider — behind its own 120 s cap — that let a 3 s budget block MCP's
 /// `project_context` for up to two minutes after it had already decided to answer without prose.
 ///
-/// The assertion is deliberately loose (under 2 s against a 4 s provider and a 0.3 s budget): it is
-/// pinning "the budget is enforced at all", not a latency figure, so it cannot go flaky on a loaded
-/// machine. Under the old shape this waited the full 4 s and failed.
+/// **The margins are wide on purpose.** A first attempt asserted `< 2 s` against a 4 s provider and
+/// was flaky in roughly half of full-suite runs (2.09 s, 2.33 s, 2.39 s observed) while passing in
+/// 0.41 s alone. The budget was being enforced correctly every time; what varies is *scheduling* —
+/// with 879 tests running in parallel the cooperative pool is saturated, so the timeout's own
+/// `Task.sleep` is delivered late and the measured wall-clock absorbs that delay.
+///
+/// So the provider is given a 20 s delay against a 0.3 s budget and the assertion allows 8 s: over
+/// 3x the worst scheduling noise observed, and still 2.5x below the 20 s a regression would take.
+/// It pins "the budget is enforced at all", never a latency figure. A tighter bound here would be a
+/// test of the machine's load, not of this code.
 @Test func narrationBudgetIsEnforcedEvenWhenTheProviderIgnoresCancellation() async throws {
   let database = try openCanonicalDatabase(at: tempURL("sc-timeout"))
   _ = try seedOneNode(database)
-  let builder = SummaryBuilder(provider: UncancellableProvider(delay: 4.0, reply: "too late"))
+  let providerDelay: TimeInterval = 20
+  let builder = SummaryBuilder(provider: UncancellableProvider(delay: providerDelay, reply: "too late"))
 
   let start = Date()
   let bundle = try #require(try await SessionContextQueries.bundle(
@@ -308,7 +323,9 @@ private struct UncancellableProvider: LLMProvider {
                                 cache: nil, timeout: 0.3)))
   let waited = Date().timeIntervalSince(start)
 
-  #expect(waited < 2.0, "narration budget not enforced — waited \(waited)s on a 0.3s budget")
+  // Costs nothing while passing: the abandoned narration is never awaited, so the 20 s elapses in
+  // the background of a test that has already returned.
+  #expect(waited < 8, "narration budget not enforced — waited \(waited)s on a 0.3s budget against a \(providerDelay)s provider")
   // And it degrades honestly: no prose rather than a fabricated one. The bundle's grounded parts
   // (name, loose ends) must still be there — giving up on prose is not giving up on the answer.
   #expect(bundle.prose == nil)

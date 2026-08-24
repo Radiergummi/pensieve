@@ -380,3 +380,42 @@ correct — the code path that mints them is fixed, so the list cannot grow whil
   already decodes `3.0` into `Int`. The fallback was dead speculative code, so `MCPArgument.integer`
   was removed entirely and the test dropped. Worth remembering as a shape: a test guarding
   speculative code passes whether or not the code is there.
+
+## Finding 2.7 — measured before and after (the busy loop is closed)
+
+Measured against the UI-test fixture, 9 app launches each way, with
+`/usr/bin/log stream … category == "app" --level debug`, reverting the two hunks to obtain the
+"before".
+
+| | before | after |
+|---|---|---|
+| `Canonical watcher fired -> refresh` lines | 27 | 19 |
+| self-triggered pairs (~210 ms apart) | **9 — one per launch** | **1** |
+
+Every "before" instance showed the pair: a refresh, then a second fire ~210 ms later that is the
+refresh's *own* connection-opening churn re-arming the watch. That is the feedback edge. The single
+remaining "after" pair follows a real `SearchIndexStore.rebuild`, which genuinely writes into the
+watched directory and is hash-guarded, so it is rare and legitimate.
+
+On the tiny fixture store the loop self-terminates (the app quits after ~5 s); on the real 306-node
+store each turn is a full `refresh()` plus a whole-corpus gather, which is what produced the two
+MetricKit CPU-exception payloads still sitting in `~/Library/Logs/Pensieve/diagnostics/`.
+
+**Known floor:** `SearchIndexStore.rebuild` writes beside the canonical store, so the watch can never
+be perfectly silent while the index lives there. Correct as-is; worth knowing it is the floor.
+
+## NEW findings (continued)
+
+- **Parallel worktree fan-out pollutes LaunchServices, and it broke `make uitest`.** Every worktree
+  `xcodebuild` registers another bundle under `me.mazetti.pensieve` — CLAUDE.md warns about this for
+  `make run`, and it bites the UI tests too. After this sweep there were **13** registrations, five
+  from the fix agents, three of them dangling because their worktrees had been deleted. `make uitest`
+  then failed with `Failed to activate application … (current state: Running Background)` on every
+  case — an environment failure that reads exactly like a UI regression. Fixed with
+  `lsregister -u <path>` per stale bundle; UI tests then passed 9/9 unchanged.
+  **If you fan out worktrees again, unregister their bundles afterwards.**
+- **A verification loop can be vacuous too.** While stabilising the narration-budget test, a check
+  that grepped for `recorded an issue` reported five consecutive "passes" for a test that was not
+  compiling — no failure line exists when the build fails. The loop now asserts on the positive
+  `Test run with N tests … passed` line instead. Same class as every vacuous test in section 8: the
+  absence of a failure signal is not evidence of success.

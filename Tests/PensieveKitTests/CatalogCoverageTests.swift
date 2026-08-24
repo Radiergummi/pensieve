@@ -205,9 +205,13 @@ struct CatalogTarget: Sendable {
 private let targets = [
   CatalogTarget(name: "PensieveApp", sources: "Sources/PensieveApp",
          catalog: "Sources/PensieveApp/Localizable.xcstrings",
-         allowedDeadKeys: [],
-         // "Briefing" is an established German loanword; leaving it untranslated reads naturally.
-         allowedMissingKeys: ["Briefing"]),
+         // "Briefing" was allowlisted here rather than keyed, on the reasoning that it is an
+         // established German loanword. The reasoning was right and the mechanism was wrong: the
+         // allowlist made the topmost sidebar row invisible to this test, so nothing would have
+         // caught the next literal that genuinely needed translating. The key now exists with the
+         // loanword as its German value — same rendered output, and the reasoning lives beside the
+         // string it applies to instead of inside the test that was supposed to police it.
+         allowedDeadKeys: [], allowedMissingKeys: []),
   CatalogTarget(name: "PensieveWidget", sources: "Sources/PensieveWidget",
          catalog: "Sources/PensieveWidget/Localizable.xcstrings",
          allowedDeadKeys: [], allowedMissingKeys: []),
