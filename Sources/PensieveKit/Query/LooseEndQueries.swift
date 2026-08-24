@@ -17,9 +17,42 @@ public enum LooseEndQueries {
       } else {
         ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
       }
-      return try attachEvents(ends, database, now: now)
-        .sorted { $0.occurredAt < $1.occurredAt }   // oldest source first
+      return try attachEvents(ends, database, now: now).sorted(by: oldestSourceFirst)
     }
+  }
+
+  /// Each node's single most-outstanding open loose end: the one whose SOURCE EVENT is oldest.
+  /// One call for every node, and ONE definition of "the node's top open loose end".
+  ///
+  /// It was two, and they disagreed. The Briefing card took `open(nodeID:).first` — oldest source
+  /// event — while MCP's `SessionContextQueries.rankedContext` ordered by `LooseEnd.createdAt`, which
+  /// is *ingest* time and therefore arbitrary within a single drain: every end mined from one
+  /// session is written in the same pass. So the app and MCP cited different loose ends for the same
+  /// node, and MCP's choice carried no meaning at all. Source-event order is the meaningful one —
+  /// it is what "most outstanding" means everywhere else in this file.
+  public static func topOpen(_ database: any DatabaseReader, now: Date) throws -> [UUID: LooseEndView] {
+    try database.read { database in
+      let ends = try LooseEnd.where { LooseEnd.isOpen($0) }.fetchAll(database)
+      var top: [UUID: LooseEndView] = [:]
+      for view in try attachEvents(ends, database, now: now) {
+        guard let incumbent = top[view.looseEnd.nodeID] else { top[view.looseEnd.nodeID] = view; continue }
+        if oldestSourceFirst(view, incumbent) { top[view.looseEnd.nodeID] = view }
+      }
+      return top
+    }
+  }
+
+  /// Oldest source event first — "most outstanding". Shared by `open` and `topOpen` so the feed's
+  /// first row and the card's cited end can never be different loose ends.
+  static func oldestSourceFirst(_ left: LooseEndView, _ right: LooseEndView) -> Bool {
+    left.occurredAt < right.occurredAt
+  }
+
+  /// Most recently resolved first — the Completed feeds' order. Extracted for the same reason this
+  /// file already extracted `suggestedSalientFirstThenOldest`: `closedAcrossNodes` and
+  /// `closed(nodeID:)` each carried a byte-identical copy.
+  static func mostRecentlyResolvedFirst(_ left: LooseEndView, _ right: LooseEndView) -> Bool {
+    (left.looseEnd.resolvedAt ?? .distantPast) > (right.looseEnd.resolvedAt ?? .distantPast)
   }
 
   /// The burn-down triage feed: every open loose end in an ACTIVE, Focus-visible node, ordered
@@ -86,7 +119,7 @@ public enum LooseEndQueries {
   public static func closedAcrossNodes(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>,
                                        now: Date) throws -> [LooseEndView] {
     try closedViews(database, visibleNodeIDs: visibleNodeIDs, now: now)
-      .sorted { ($0.looseEnd.resolvedAt ?? .distantPast) > ($1.looseEnd.resolvedAt ?? .distantPast) }
+      .sorted(by: mostRecentlyResolvedFirst)
   }
 
   /// One node's closed loose ends, most recently resolved first — the detail pane's collapsed record.
@@ -96,11 +129,9 @@ public enum LooseEndQueries {
                             now: Date) throws -> [LooseEndView] {
     try database.read { database in
       let ends = try LooseEnd
-        .where { $0.nodeID.eq(nodeID) && $0.status.neq(LooseEndStatus.open)
-                 && $0.label.neq(LooseEndLabel.noise) }
+        .where { $0.nodeID.eq(nodeID) && LooseEnd.isClosedAndReal($0) }
         .fetchAll(database)
-      return try attachEvents(ends, database, now: now)
-        .sorted { ($0.looseEnd.resolvedAt ?? .distantPast) > ($1.looseEnd.resolvedAt ?? .distantPast) }
+      return try attachEvents(ends, database, now: now).sorted(by: mostRecentlyResolvedFirst)
     }
   }
 
@@ -122,9 +153,7 @@ public enum LooseEndQueries {
   private static func closedViews(_ database: any DatabaseReader, visibleNodeIDs: Set<UUID>,
                                   now: Date) throws -> [LooseEndView] {
     try database.read { database in
-      let ends = try LooseEnd
-        .where { $0.status.neq(LooseEndStatus.open) && $0.label.neq(LooseEndLabel.noise) }
-        .fetchAll(database)
+      let ends = try LooseEnd.where { LooseEnd.isClosedAndReal($0) }.fetchAll(database)
       return try attachEvents(scoped(ends, visibleNodeIDs: visibleNodeIDs, database),
                               database, now: now)
     }
@@ -174,8 +203,8 @@ public enum LooseEndQueries {
     // defence, not a case any test can construct honestly.
     return ends.compactMap { looseEnd in
       guard let event = eventsByID[looseEnd.sourceEventID] else { return nil }
-      let days = Calendar.current.dateComponents([.day], from: event.occurredAt, to: now).day ?? 0
-      return LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt, ageDays: days)
+      return LooseEndView(looseEnd: looseEnd, occurredAt: event.occurredAt,
+                          ageDays: dayCount(from: event.occurredAt, to: now))
     }
   }
 }

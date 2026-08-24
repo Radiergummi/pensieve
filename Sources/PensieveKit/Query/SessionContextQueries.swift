@@ -148,15 +148,15 @@ public enum SessionContextQueries {
   public static func rankedContext(limit: Int, context: String?,
                                    _ database: any DatabaseReader, now: Date) throws -> [WhatsNextItem] {
     let filtered = try NextQueries.whatsNext(database, now: now, context: context ?? "")
-    return try database.read { database in
-      try filtered.prefix(limit).map { item in
-        let top = try LooseEnd.where { $0.nodeID.eq(item.project.id) && LooseEnd.isOpen($0) }
-          .order { $0.createdAt }.limit(1).fetchOne(database)
-        return WhatsNextItem(
-          nodeID: item.project.id, name: item.project.name, kind: item.project.kind,
-          openLooseEnds: item.openLooseEnds, daysDormant: item.daysDormant, score: item.score,
-          topLooseEnd: top?.quote)
-      }
+    // `LooseEndQueries.topOpen` rather than a local `order { $0.createdAt }`: `createdAt` is INGEST
+    // time, so within one drain it picked an arbitrary end and MCP cited a different loose end than
+    // the Briefing card did for the same node. One definition, source-event order.
+    let topLooseEnds = try LooseEndQueries.topOpen(database, now: now)
+    return filtered.prefix(limit).map { item in
+      WhatsNextItem(
+        nodeID: item.project.id, name: item.project.name, kind: item.project.kind,
+        openLooseEnds: item.openLooseEnds, daysDormant: item.daysDormant, score: item.score,
+        topLooseEnd: topLooseEnds[item.project.id]?.looseEnd.quote)
     }
   }
 
@@ -169,13 +169,14 @@ public enum SessionContextQueries {
     guard let looseEnd = try database.read({ database in
       try LooseEnd.where { $0.id.eq(looseEndID) }.fetchOne(database)
     }) else { return nil }
-    let ctx = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: radius)
+    let provenance = try ProvenanceQueries.context(database, looseEnd: looseEnd, radius: radius)
     return RecallBundle(
       looseEndText: looseEnd.text, quote: looseEnd.quote,
-      transcriptAvailable: ctx.transcriptAvailable,
-      sessionOccurredAt: ctx.sourceEvent.occurredAt,
-      messages: ctx.messages.map { RecallMessage(index: $0.index, role: $0.role, text: $0.text,
-                                                 isCited: $0.isCited, isUserPrompt: $0.isUserPrompt) })
+      transcriptAvailable: provenance.transcriptAvailable,
+      sessionOccurredAt: provenance.sourceEvent.occurredAt,
+      messages: provenance.messages.map { RecallMessage(index: $0.index, role: $0.role, text: $0.text,
+                                                        isCited: $0.isCited,
+                                                        isUserPrompt: $0.isUserPrompt) })
   }
 
   /// `recall`, keyed by a passage instead of a loose end. Reuses `RecallBundle` unchanged: the shape

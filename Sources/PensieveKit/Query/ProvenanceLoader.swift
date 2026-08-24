@@ -90,15 +90,27 @@ public actor ProvenanceLoader {
     return result
   }
 
-  /// Resolves every pending loose end's source event in ONE read.
+  /// Resolves every pending loose end's source event in ONE read, and ONE query — a single `IN`
+  /// rather than a point query per id, the shape `LooseEndQueries.attachEvents` measured at ~7-8x.
+  ///
+  /// A failure is LOGGED rather than swallowed. Returning an empty dictionary here makes
+  /// `groupByPath` drop every loose end, so a broken read rendered as "this loose end has no
+  /// provenance" on every row at once, with nothing anywhere saying why.
   private func resolveEvents(for pending: [LooseEnd]) async -> [UUID: Event] {
     let eventIDs = Set(pending.map(\.sourceEventID))
-    let events = (try? await database.read { database in
-      try eventIDs.map { eventID in
-        try Event.where { $0.id.eq(eventID) }.fetchOne(database)
-      }.compactMap { $0 }
-    }) ?? []
-    return Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
+    guard !eventIDs.isEmpty else { return [:] }
+    do {
+      let events = try await database.read { database in
+        try Event.where { $0.id.in(Array(eventIDs)) }.fetchAll(database)
+      }
+      return Dictionary(events.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    } catch {
+      Log.search.error("""
+        ProvenanceLoader: source-event read failed for \(eventIDs.count, privacy: .public) \
+        events: \(error, privacy: .public)
+        """)
+      return [:]
+    }
   }
 
   /// Groups pending loose ends by transcript path. A loose end whose event has no resolvable
@@ -108,6 +120,10 @@ public actor ProvenanceLoader {
     -> [String: [(looseEnd: LooseEnd, event: Event)]] {
     var byPath: [String: [(looseEnd: LooseEnd, event: Event)]] = [:]
     for looseEnd in pending {
+      // No event → no entry, because `ProvenanceContext.sourceEvent` is non-optional and an
+      // "unavailable" entry cannot be built without one. Unreachable through the schema
+      // (`sourceEventID` is `NOT NULL REFERENCES events(id) ON DELETE CASCADE`); the reachable way
+      // to get here is a failed read, which `resolveEvents` now logs.
       guard let event = eventsByID[looseEnd.sourceEventID] else { continue }
       guard let path = ProvenanceQueries.transcriptPath(in: event) else {
         let loaded = LoadedProvenance(context: unavailable(looseEnd, event), segments: [])

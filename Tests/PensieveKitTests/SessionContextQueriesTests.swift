@@ -74,6 +74,51 @@ private func seedOneNode(_ database: any DatabaseWriter) throws -> (node: Node, 
   #expect(bundle == nil)
 }
 
+/// `pensieve prime` must be able to HIT an entry the app wrote — i.e. the app's narration cache key
+/// for a node and `bundle`'s key for the same node must be the same string.
+///
+/// This agreement was broken for the entire life of the feature and nothing pinned it. The key is
+/// `NarrationCacheKey.make(events: status.recentEvents, …)`, so it depends on how many recent events
+/// the caller asked for: the app asked `ProjectQueries.status` for 15 while `bundle` defaulted
+/// `recentLimit` to 8, and a lookup built from 8 events can never match an entry keyed on 15. The
+/// SessionStart hook that exists to hand a session warm context was therefore permanently cold.
+///
+/// **The fixture seeds MORE events than the window** on purpose. The sibling tests in this file use
+/// `limit: 8` literals and pass only because their fixture has one event, so 8 and 15 select the
+/// same set — exactly the vacuity that let the bug live. With 20 events the window size is load-
+/// bearing, and this test reproduces the APP's spelling of the key
+/// (`SummaryBuilder.narratableEventWindow`, which is what `AppModel+Recall`/`DetailView` pass) rather
+/// than restating a number.
+@Test func primeCanHitTheNarrationEntryTheAppWrote() async throws {
+  let database = try openCanonicalDatabase(at: tempURL("sc-narration-key"))
+  let (node, source) = try ProjectResolver(database: database)
+    .resolve(path: "/p/window", kind: SourceKind.claudeCode)
+  try await database.write { database in
+    for index in 0..<20 {
+      let occurredAt = Calendar.current.date(byAdding: .hour, value: -index, to: Date())!
+      try Event.insert {
+        Event(nodeID: node.id, sourceID: source.id, occurredAt: occurredAt,
+              kind: CaptureKind.ccSession, summary: "work \(index)", detailJSON: "{}",
+              fingerprint: "win-\(index)", workSummary: "work \(index)")
+      }.execute(database)
+    }
+  }
+
+  // THE APP's path, verbatim: `ProjectQueries.status(node:limit:)` at the shared window, then
+  // `NarrationCacheKey.make`. This is what `AppModel.narration(for:events:)` stores under.
+  let appEvents = try ProjectQueries.status(database, node: node,
+                                            limit: SummaryBuilder.narratableEventWindow).recentEvents
+  #expect(appEvents.count == SummaryBuilder.narratableEventWindow)   // the window really is clamping
+  let cache = NarrationCache(url: tempURL("narr-window"))
+  cache.put(NarrationCacheKey.make(events: appEvents, provider: "fm"), prose: "the app wrote this")
+
+  // MCP / `pensieve prime`: no builder, so a MISS yields nil prose and cannot be mistaken for a hit.
+  let bundle = try #require(try await SessionContextQueries.bundle(
+    forPath: "/p/window", nodeID: nil, database, now: Date(),
+    narration: NarrationOptions(summaryBuilder: nil, providerKind: "fm", cache: cache)))
+  #expect(bundle.prose == "the app wrote this")
+}
+
 @Test func bundleServesCachedProseWithoutABuilder() async throws {
   let database = try openCanonicalDatabase(at: tempURL("sc"))
   let (node, _) = try seedOneNode(database)

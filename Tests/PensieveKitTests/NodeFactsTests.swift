@@ -180,6 +180,45 @@ import SQLiteData
   #expect(batched[testNode.id]?.openLooseEnds == typedCount)   // the two spellings must never diverge
 }
 
+/// `LooseEnd.closedAndRealSQLPredicate` must stay logically identical to `isClosedAndReal` — the
+/// sibling of `looseEndOpenPredicatesAgree`, and for the same reason: the batched aggregate that
+/// feeds `NextQueries.ranked` can only be expressed in raw SQL, so the rule is now spelled twice and
+/// only a test can hold the two spellings together.
+///
+/// Goes through the production batched path (`activity`) rather than re-issuing the SQL here, which
+/// is what `looseEndOpenPredicatesAgree` does and why it tests the code that ships. The fixture is
+/// the one from `looseEndClosedPredicateExcludesConfirmedNoise`: `.done + noise` is the single row
+/// that separates a correct closed-count (4) from one that forgot the 👎 exclusion (5).
+@Test func looseEndClosedPredicatesAgree() throws {
+  let database = try openCanonicalDatabase(at: tempURL("closed-predicate-agreement"))
+  let resolver = ProjectResolver(database: database)
+  let (testNode, testNodeSource) = try resolver.resolve(path: "/p/closed-agree", kind: SourceKind.claudeCode)
+  let testEvent = Event(nodeID: testNode.id, sourceID: testNodeSource.id, occurredAt: Date(),
+                        kind: CaptureKind.ccSession, summary: "s", detailJSON: "{}", fingerprint: "ca1")
+  try database.write { database in
+    try Event.insert { testEvent }.execute(database)
+    for (status, label) in [
+      (LooseEndStatus.open, ""), (.open, LooseEndLabel.salient), (.open, LooseEndLabel.noise),
+      (.done, ""), (.done, LooseEndLabel.salient), (.done, LooseEndLabel.noise),
+      (.dropped, ""), (.dropped, LooseEndLabel.salient), (.dropped, LooseEndLabel.noise),
+    ] {
+      try LooseEnd.insert {
+        LooseEnd(nodeID: testNode.id, sourceEventID: testEvent.id, text: "t", quote: "q",
+                 status: status, label: label)
+      }.execute(database)
+    }
+  }
+  let typedCount = try database.read { database in
+    try LooseEnd.where { LooseEnd.isClosedAndReal($0) }.fetchCount(database)
+  }
+  let activity = try #require(try NodeFactsQueries.activity(database)[testNode.id])
+  #expect(typedCount == 4)   // done+unlabeled, done+salient, dropped+unlabeled, dropped+salient
+  #expect(activity.closedLooseEnds == typedCount)   // the two spellings must never diverge
+  // And the open half of the same aggregate, so a mutation that swapped the two predicates cannot
+  // pass by making both counts wrong in the same direction.
+  #expect(activity.openLooseEnds == 2)
+}
+
 /// The 👎 exclusion is the half that was missing from "closed", and `isActionable` reads it.
 ///
 /// `label` and `status` are orthogonal, so a 👎'd end is excluded from `isOpen`. A closed-count that

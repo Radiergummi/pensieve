@@ -180,3 +180,22 @@ import SQLiteData
   #expect(snap.status == .notSetUp)
   #expect(snap.eventCount == 0 && snap.spoolPending == 0 && snap.looseEndCount == 0)
 }
+
+/// A canonical store that EXISTS but will not open must not report `.notSetUp`.
+///
+/// "Not set up" is a claim about the machine, and it is the one reading that tells the user there is
+/// nothing to do — so a corrupt or permission-denied store rendering as a fresh install is the worst
+/// available answer. The counts have no honest value and stay zero; the status degrades to `.idle`,
+/// which says "something is here, it just isn't moving".
+///
+/// The fixture is a real file of garbage at the canonical path, with no spool — the exact shape that
+/// used to be indistinguishable from `gatherMissingStoresIsNotSetUp` above.
+@Test func gatherUnreadableCanonicalStoreIsNotReportedAsNotSetUp() throws {
+  let canonicalURL = tempURL("unreadable-canon")
+  try Data("this is not a sqlite database".utf8).write(to: canonicalURL)
+  let snapshot = MonitorSnapshot.gather(canonicalURL: canonicalURL,
+                                        spoolURL: tempURL("absent-spool"), now: Date())
+  #expect(snapshot.status != .notSetUp)
+  #expect(snapshot.status == .idle)
+  #expect(snapshot.eventCount == 0)   // no honest count to report
+}

@@ -23,40 +23,33 @@ public struct BriefingCard: Sendable, Identifiable {
   }
 }
 
-private struct NodeActivity {
-  let node: Node
-  let movedSince: Int
-  let latestSummary: String
-  let daysDormant: Int
-  let lastActivityAt: Date
-}
-
 public enum BriefingQueries {
+  /// Four grouped aggregates plus one loose-end pass for the WHOLE store, however many nodes there
+  /// are. This used to fetch every `Event` row of every active node just to take `.first` and count
+  /// (~3,110 materialized structs on the measured store), then open one more read transaction per
+  /// node for its loose ends — 305 of them.
+  ///
+  /// `openLooseEnds` is the aggregate's COUNT rather than the length of the fetched feed, so it no
+  /// longer drops an end whose source event has vanished. That is the same deliberate difference
+  /// `LooseEndQueries.openCountAcrossNodes` already documents between a count and a feed, and the
+  /// case is unreachable through the schema (`sourceEventID` is `NOT NULL REFERENCES events(id)`).
   public static func cards(_ database: any DatabaseReader, since: Date, now: Date) throws -> [BriefingCard] {
-    // Collect per-node activity inside one `database.read`, then fetch loose ends afterward — `LooseEndQueries.open`
-    // opens its own `database.read`, which can't be called with the `Database` handed to a closure already
-    // inside a read transaction.
-    let activity: [NodeActivity] = try database.read { database in
-      let actives = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
-      var result: [NodeActivity] = []
-      for node in actives {
-        let events = try Event.where { $0.nodeID.eq(node.id) }
-          .order { $0.occurredAt.desc() }.fetchAll(database)
-        guard let latest = events.first else { continue }   // no captured activity → nothing grounded
-        let moved = events.filter { $0.occurredAt > since }.count
-        let dormant = Calendar.current.dateComponents([.day], from: latest.occurredAt, to: now).day ?? 0
-        result.append(NodeActivity(node: node, movedSince: moved, latestSummary: latest.summary,
-                                   daysDormant: dormant, lastActivityAt: latest.occurredAt))
-      }
-      return result
+    let nodes = try database.read { database in
+      try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
     }
+    let activity = try NodeFactsQueries.activity(database, since: since)
+    let topLooseEnds = try LooseEndQueries.topOpen(database, now: now)
+
     var cards: [BriefingCard] = []
-    for nodeActivity in activity {
-      let ends = try LooseEndQueries.open(database, nodeID: nodeActivity.node.id, now: now)
+    for node in nodes {
+      // No captured activity → nothing grounded, so skip the node. `BriefingCard.lastActivityAt` is
+      // non-optional and documents this; the same reading of the one no-events rule as
+      // `NextQueries.ranked`.
+      guard let facts = activity[node.id], let lastActivityAt = facts.lastActivityAt else { continue }
       cards.append(BriefingCard(
-        node: nodeActivity.node, movedSince: nodeActivity.movedSince, latestSummary: nodeActivity.latestSummary,
-        openLooseEnds: ends.count, topLooseEnd: ends.first?.looseEnd.text,
-        daysDormant: nodeActivity.daysDormant, lastActivityAt: nodeActivity.lastActivityAt))
+        node: node, movedSince: facts.movedSince, latestSummary: facts.latestSummary,
+        openLooseEnds: facts.openLooseEnds, topLooseEnd: topLooseEnds[node.id]?.looseEnd.text,
+        daysDormant: dayCount(from: lastActivityAt, to: now), lastActivityAt: lastActivityAt))
     }
     // Moved-since-last-visit first (most movement first); then the quiet ones, least-dormant first.
     return cards.sorted {

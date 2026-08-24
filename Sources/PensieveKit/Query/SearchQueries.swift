@@ -45,6 +45,14 @@ public enum SearchQueries {
   /// magic number that would silently diverge.
   static let maxFetch = 2000
 
+  /// The grow-`k` over-fetch SCHEDULE, shared with `PassageQueries` for exactly the reason
+  /// `maxFetch` above already is: the two run the same loop over different tables, and the cap was
+  /// deliberately shared while the schedule that walks up to it was restated. Widen the first window
+  /// or change the growth factor in one place and the ranked list and the passage section start
+  /// disagreeing about how hard they try.
+  static func firstFetchCount(limit: Int) -> Int { max(limit * 8, 50) }
+  static func nextFetchCount(after current: Int) -> Int { min(current * 4, maxFetch) }
+
   public static func search(query rawQuery: String,
                             file: String? = nil,
                             scope: SearchScope,
@@ -62,7 +70,7 @@ public enum SearchQueries {
     // Over-fetch, and grow the window if post-index filtering (Focus-muting, exclusions, a stale
     // row) starved the result below `limit`. With no floor there is no early exit to be had: the
     // honest termination is "the index has no more rows" or the hard cap.
-    var fetchCount = max(scope.limit * 8, 50)
+    var fetchCount = firstFetchCount(limit: scope.limit)
     while true {
       let candidates = store.search(ftsQuery, limit: fetchCount,
                                     includeArchived: scope.includeArchived,
@@ -72,7 +80,7 @@ public enum SearchQueries {
       if hits.count >= scope.limit || candidates.count < fetchCount || fetchCount >= maxFetch {
         return hits
       }
-      fetchCount = min(fetchCount * 4, maxFetch)
+      fetchCount = nextFetchCount(after: fetchCount)
     }
   }
 

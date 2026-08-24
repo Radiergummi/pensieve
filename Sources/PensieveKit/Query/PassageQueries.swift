@@ -47,7 +47,7 @@ public enum PassageQueries {
     // one more reason the text path does not: several chunks of one turn collapse into a single hit,
     // so the candidate:hit ratio is structurally worse than 1:1. Termination is the sibling's: enough
     // hits, the index has no more rows, or the hard cap.
-    var fetchCount = max(scope.limit * 8, 50)
+    var fetchCount = SearchQueries.firstFetchCount(limit: scope.limit)
     // Carried ACROSS grow iterations. Each iteration re-resolves the whole page from candidate 0
     // rather than only the newly-arrived tail — the index re-runs `ORDER BY bm25 LIMIT k`, whose
     // ordering of tied scores is not guaranteed stable across `k`, so skipping a prefix could skip
@@ -75,7 +75,7 @@ public enum PassageQueries {
           || fetchCount >= SearchQueries.maxFetch {
         return hits
       }
-      fetchCount = min(fetchCount * 4, SearchQueries.maxFetch)
+      fetchCount = SearchQueries.nextFetchCount(after: fetchCount)
     }
   }
 

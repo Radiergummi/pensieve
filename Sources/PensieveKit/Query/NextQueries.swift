@@ -60,19 +60,22 @@ public enum NextQueries {
   public static func ranked(_ database: any DatabaseReader, now: Date) throws -> [NextItem] {
     try database.read { database in
       let projects = try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database)
+      // Three grouped aggregates for the whole store, replacing three queries PER node. The closed
+      // count now goes through `LooseEnd.closedAndRealSQLPredicate`, so a 👎'd end no longer counts
+      // as closed work — which is what silently made `isActionable` false forever.
+      let activity = try NodeFactsQueries.activity(database, since: nil)
       var items: [NextItem] = []
       for project in projects {
-        let latest = try Event.where { $0.nodeID.eq(project.id) }
-          .order { $0.occurredAt.desc() }.limit(1).fetchOne(database)
-        guard let latest else { continue }   // no captured activity → nothing grounded (matches BriefingQueries)
-        let dormant = Calendar.current.dateComponents([.day], from: latest.occurredAt, to: now).day ?? 0
-        let open = try LooseEnd.where { $0.nodeID.eq(project.id) && LooseEnd.isOpen($0) }.fetchCount(database)
-        let closed = try LooseEnd.where { $0.nodeID.eq(project.id)
-                                          && $0.status.neq(LooseEndStatus.open) }
-          .fetchCount(database)
-        let score = groundedScore(openLooseEnds: open, daysDormant: dormant)
-        items.append(NextItem(project: project, openLooseEnds: open, closedLooseEnds: closed,
-                              lastActivityAt: latest.occurredAt, daysDormant: dormant, score: score))
+        // No captured activity → nothing grounded, so skip the node. `NextItem.lastActivityAt` is
+        // non-optional and documents this; the same reading of the one no-events rule as
+        // `BriefingQueries.cards`.
+        guard let facts = activity[project.id], let lastActivityAt = facts.lastActivityAt else { continue }
+        let dormant = dayCount(from: lastActivityAt, to: now)
+        items.append(NextItem(project: project, openLooseEnds: facts.openLooseEnds,
+                              closedLooseEnds: facts.closedLooseEnds,
+                              lastActivityAt: lastActivityAt, daysDormant: dormant,
+                              score: groundedScore(openLooseEnds: facts.openLooseEnds,
+                                                   daysDormant: dormant)))
       }
       return items.sorted { $0.score > $1.score }
     }
