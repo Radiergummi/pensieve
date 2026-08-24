@@ -42,7 +42,38 @@ extension Ingester {
   public static func replacePassages(_ database: Database, eventID: UUID,
                                      with passages: [Passage]) throws {
     guard !passages.isEmpty else { return }
+    // Skip the rewrite entirely when the stored set is already exactly this set. The `SessionEnd`
+    // hook re-spools a session as it grows, so once an event exists EVERY drain re-ingests it and
+    // re-derives its passages — and a session that has not grown since the last pass would
+    // otherwise pay a full delete plus up to 464 inserts every cycle, forever, to arrive at the
+    // rows it already had.
+    //
+    // The comparison is exact rather than a count or byte-size heuristic on purpose: compaction can
+    // rewrite a transcript's content without changing how many passages it yields, and skipping
+    // THAT would leave a stale verbatim copy standing as provenance.
+    let stored = try Passage.where { $0.eventID.eq(eventID) }.fetchAll(database)
+    guard stored.map(contentKey).sorted() != passages.map(contentKey).sorted() else { return }
+
     try Passage.where { $0.eventID.eq(eventID) }.delete().execute(database)
-    for passage in passages { try Passage.insert { passage }.execute(database) }
+    // One multi-row INSERT per chunk instead of one statement per row. Chunked because every column
+    // of every row is a bound parameter, and SQLite caps those per statement
+    // (`SQLITE_LIMIT_VARIABLE_NUMBER`); a chunk of 200 rows is ~1.8k parameters, comfortably inside
+    // the limit no matter how long the session was.
+    for chunk in stride(from: 0, to: passages.count, by: passageInsertChunk) {
+      let batch = Array(passages[chunk..<min(chunk + passageInsertChunk, passages.count)])
+      try Passage.insert { batch }.execute(database)
+    }
+  }
+
+  private static let passageInsertChunk = 200
+
+  /// The identity of a passage's CONTENT — everything except `id` and `createdAt`, which every
+  /// extraction mints afresh and which therefore always differ even when the text is identical.
+  /// Used only to decide whether a rewrite would be a no-op.
+  private static func contentKey(_ passage: Passage) -> String {
+    """
+    \(passage.nodeID)|\(passage.turnIndex)|\(passage.messageIndex)|\(passage.role.rawValue)|\
+    \(passage.occurredAt.timeIntervalSince1970)|\(passage.text)
+    """
   }
 }

@@ -12,22 +12,37 @@ public enum SourceKind {
   public static let claudeCode = "claudeCode"
 }
 
+/// `commonDir` on both git payloads below is the repo-identity key resolved at CAPTURE time.
+///
+/// `repoPath` alone is not enough to attribute a git capture. The identity key is the git common
+/// dir, and it can only be resolved by asking git *inside* the directory — so resolving it at drain
+/// time asks about a directory that may no longer exist. In a worktree-heavy workflow it usually
+/// does not: the drain then fell back to the raw path and minted a phantom project per deleted
+/// worktree (9 of them in the live store, holding ~42 events that belong to one repo).
+///
+/// The field is optional because it is additive: spool rows written by an older CLI carry no
+/// `commonDir` and must still decode. `Ingester.identityKey(forHookPath:capturedCommonDir:)` is the
+/// one place that decides what to do when it is absent.
 public struct GitCommitPayload: Codable, Sendable {
   public var repoPath: String; public var hash: String; public var branch: String
-  public init(repoPath: String, hash: String, branch: String) {
-    self.repoPath = repoPath; self.hash = hash; self.branch = branch
+  public var commonDir: String?
+  public init(repoPath: String, hash: String, branch: String, commonDir: String? = nil) {
+    self.repoPath = repoPath; self.hash = hash; self.branch = branch; self.commonDir = commonDir
   }
 }
 
 public struct GitCheckoutPayload: Codable, Sendable {
   public var repoPath: String; public var fromRef: String; public var toRef: String; public var branch: String
-  public init(repoPath: String, from fromRef: String, to toRef: String, branch: String) {
+  public var commonDir: String?
+  public init(repoPath: String, from fromRef: String, to toRef: String, branch: String,
+              commonDir: String? = nil) {
     self.repoPath = repoPath; self.fromRef = fromRef; self.toRef = toRef; self.branch = branch
+    self.commonDir = commonDir
   }
 
   // The JSON keys are the on-disk spool contract: rows written by an older CLI must still decode.
   enum CodingKeys: String, CodingKey {
-    case repoPath, branch
+    case repoPath, branch, commonDir
     case fromRef = "from"
     case toRef = "to"
   }

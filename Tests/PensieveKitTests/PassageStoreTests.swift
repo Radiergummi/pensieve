@@ -128,6 +128,44 @@ private func passageTexts(_ database: any DatabaseWriter) async throws -> [Strin
   #expect(events.count == 1, "still one event")
 }
 
+/// A re-ingest of a transcript that has NOT grown must not rewrite its passages at all.
+///
+/// The `SessionEnd` hook re-spools a session as it grows, so once the event exists every drain
+/// re-derives its passages — and the rewrite was unconditional: a full delete plus up to 464 inserts
+/// every cycle, forever, to arrive at exactly the rows already stored. Row identity is the probe: the
+/// passages are minted with fresh UUIDs on every extraction, so if a rewrite happened the ids change.
+@Test func reIngestingAnUnchangedTranscriptDoesNotRewriteItsPassages() async throws {
+  let (repo, _) = try makeCommittedRepo()
+  let spool = try CaptureSpool(at: tempURL("passage-unchanged-spool"))
+  let database = try openCanonicalDatabase(at: tempURL("passage-unchanged-canon"))
+
+  let sessionID = UUID().uuidString
+  let transcript = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("\(sessionID).jsonl")
+  let lines = [userLine("first real question about the sync agent", sessionID: sessionID, cwd: repo.path),
+               assistantLine("First substantive answer about launchd.", sessionID: sessionID)]
+  try lines.joined(separator: "\n").write(to: transcript, atomically: true, encoding: .utf8)
+
+  try await spoolAndDrain(transcript: transcript, spool: spool, database: database)
+  func passageIDs() async throws -> Set<UUID> {
+    Set(try await database.read { database in try Passage.all.fetchAll(database) }.map(\.id))
+  }
+  let before = try await passageIDs()
+  #expect(before.count == 2)
+
+  // Same transcript, byte for byte, re-spooled and re-drained.
+  try await spoolAndDrain(transcript: transcript, spool: spool, database: database)
+
+  #expect(try await passageIDs() == before, "unchanged content must not be deleted and reinserted")
+
+  // The pairing half: once it really grows, the rewrite DOES happen and the new turns land.
+  let grown = lines + [userLine("second question about the search index", sessionID: sessionID, cwd: repo.path),
+                       assistantLine("Second substantive answer about FTS5.", sessionID: sessionID)]
+  try grown.joined(separator: "\n").write(to: transcript, atomically: true, encoding: .utf8)
+  try await spoolAndDrain(transcript: transcript, spool: spool, database: database)
+  #expect(try await passageTexts(database).count == 4)
+}
+
 /// A re-ingest whose transcript has lost its conversation content (compaction, rewrite,
 /// truncation) must NOT wipe the durable copy already stored — that copy may be the only one left,
 /// since the transcript it came from may no longer exist. `writePassages` must check whether

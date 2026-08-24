@@ -321,14 +321,20 @@ func expectVerificationFailed(_ operation: () async throws -> Void) async {
   var relocator = StoreRelocator(
     source: source, destination: destination, anchor: anchor, defaults: defaults,
     recycle: { _ in true })
-  // Simulates the hook: append to the OLD spool after the copy, before the flip. Uses a real
-  // GitCommitPayload shape (repoPath/hash/branch) so the ingester actually decodes and creates
-  // an event — the brief's placeholder `{"sha":"deadbeef"}` doesn't match `GitCommitPayload`'s
-  // required keys and would silently fail to decode, leaving the row un-recovered.
+  // Simulates the hook: append to the OLD spool after the copy, before the flip. The payload must
+  // name a repo that REALLY EXISTS. It used to point at a fabricated `/tmp/reloc-test-repo`, which
+  // only produced an event because the ingester's old identity-key fallback invented a project keyed
+  // on that dead path — i.e. this test was passing on the strength of the phantom-project defect.
+  // With that fallback gone, a git capture whose directory cannot be resolved stays pending, so the
+  // fixture has to be a genuine repo for "the row is recovered" to mean anything.
+  let (repo, hash) = try makeCommittedRepo()
+  defer { try? FileManager.default.removeItem(at: repo) }
   relocator.afterCopyForTesting = { oldSource in
     let spool = try CaptureSpool(at: PensievePaths.captureURL(in: oldSource))
     try spool.append(kind: CaptureKind.gitCommit,
-                     payload: #"{"repoPath":"/tmp/reloc-test-repo","hash":"deadbeef","branch":""}"#)
+                     payload: try encodeJSON(GitCommitPayload(
+                       repoPath: repo.path, hash: hash, branch: "main",
+                       commonDir: ProjectResolver.identityKey(forRepoPath: repo.path))))
   }
 
   let report = try await relocator.run(progress: { _ in })

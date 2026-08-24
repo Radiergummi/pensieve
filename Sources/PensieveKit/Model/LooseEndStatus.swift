@@ -24,6 +24,23 @@ public enum LooseEndStatus: String, QueryBindable, Sendable {
   /// Anything that is not `open`. Named rather than spelled `!= .open` at call sites so the
   /// per-node and Completed feeds cannot disagree about what "closed" means.
   public var isClosed: Bool { self != .open }
+
+  /// Decodes one stored status, degrading an unrecognized raw value to `dropped` instead of
+  /// throwing.
+  ///
+  /// The synthesized `RawRepresentable` decoder throws `DataCorruptedError` on an unknown string,
+  /// and because decoding happens per column while fetching, that one bad cell fails the ENTIRE
+  /// query — so a single unexpected value (a status written by a newer build, a hand-edited row,
+  /// a partially-restored store) turns every loose-end surface in the app blank rather than
+  /// dropping one row. Degrading per row is the rule this codebase applies to a garbage transcript
+  /// line and a foreign spool kind; the status column is the same problem.
+  ///
+  /// `dropped` and not `open` on purpose: `open` is the state that counts, ranks and surfaces, so
+  /// guessing it would promote a row whose writer had closed it. `dropped` — "was real, will not be
+  /// handled" — keeps an unreadable status out of every active feed while still admitting it existed.
+  public init(decoder: inout some QueryDecoder) throws {
+    self = LooseEndStatus(rawValue: try String(decoder: &decoder)) ?? .dropped
+  }
 }
 
 extension LooseEndStatus {

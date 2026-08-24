@@ -90,7 +90,12 @@ private struct NamingProvider: LLMProvider {
   let database = try openCanonicalDatabase(at: tmp("sync-canon", ext: "sqlite"))
 
   // A committed repo + one spooled commit → a project node born with the verbatim dir name.
+  // The README is required, not decoration: the refine pass now applies the same
+  // `ProjectContext.hasMeaningfulSignal` gate `NodeDescriber` does, and a repo with only a directory
+  // name is deliberately left unnamed rather than given something the model made up.
   let (repo, hash) = try makeCommittedRepo()
+  try "# App\nRow-level security for Eloquent models, enforced at the database layer."
+    .write(to: repo.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
   try spool.append(kind: CaptureKind.gitCommit,
                    payload: try encodeJSON(GitCommitPayload(repoPath: repo.path, hash: hash, branch: "main")))
 

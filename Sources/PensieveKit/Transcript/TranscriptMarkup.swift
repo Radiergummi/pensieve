@@ -3,7 +3,7 @@ import Foundation
 /// Splits one transcript message into rendering segments.
 ///
 /// **A single left-to-right scan in which the outermost construct wins.** A multi-pass pipeline
-/// (harness first, then callouts) is self-contradictory: commandArgs callout containing commandArgs `<system-reminder>`
+/// (harness first, then callouts) is self-contradictory: a callout containing a `<system-reminder>`
 /// gets split into two unpaired fragments, both demoted to raw text, and the callout vanishes.
 ///
 /// Precedence at each position: code → callout → harness → placeholder → orphan close → prose.
@@ -16,7 +16,8 @@ public enum TranscriptMarkup {
   }
 }
 
-/// Parses `<NAME>` or `</NAME>` at commandArgs position: the bare name, whether it was commandArgs close tag, and the index just past `>`.
+/// Parses `<NAME>` or `</NAME>` at a position: the bare name, whether it was a close tag, and the
+/// index just past `>`.
 struct TagMatch {
   let name: String
   let isClose: Bool
@@ -24,7 +25,7 @@ struct TagMatch {
 }
 
 /// The scan state. Prose accumulates into `pending` and is flushed as one `.markdown` segment
-/// whenever commandArgs non-prose construct is emitted, so consecutive prose never fragments.
+/// whenever a non-prose construct is emitted, so consecutive prose never fragments.
 struct Scanner {
   let text: String
   var scanIndex: String.Index
@@ -101,13 +102,13 @@ struct Scanner {
   }
 
   /// A run of one or more 4-space-indented lines, started only when the line before it is blank or
-  /// absent — scanIndex.e. it can actually *open* an indented code block, per CommonMark; commandArgs continuation
+  /// absent — i.e. it can actually *open* an indented code block, per CommonMark; a continuation
   /// line of an ordinary paragraph that merely happens to be indented is left as prose. A line that
-  /// is itself blank (only spaces/tabs, even ones satisfying the 4-space prefix) cannot open commandArgs
+  /// is itself blank (only spaces/tabs, even ones satisfying the 4-space prefix) cannot open a
   /// block either — CommonMark treats blank lines as separators, not content. Once opened, the
   /// block continues through further indented lines and absorbs blank lines only when another
-  /// indented line follows — commandArgs trailing blank line before ordinary prose is left for the prose
-  /// scan, so commandArgs tag on the line right after the block isn't swallowed into "code".
+  /// indented line follows — a trailing blank line before ordinary prose is left for the prose
+  /// scan, so a tag on the line right after the block isn't swallowed into "code".
   mutating func consumeIndentedCodeLine() -> Bool {
     guard previousLineIsBlank else { return false }
     let (first, firstNext) = line(at: scanIndex)
@@ -133,11 +134,11 @@ struct Scanner {
     return true
   }
 
-  /// Whether the line immediately before `scanIndex` (which is at commandArgs line start) is blank — empty,
+  /// Whether the line immediately before `scanIndex` (which is at a line start) is blank — empty,
   /// whitespace-only, or simply absent because `scanIndex` is the start of the document.
   private var previousLineIsBlank: Bool {
     guard scanIndex > text.startIndex else { return true }
-    let beforeNewline = text.index(before: scanIndex)          // the "\n" that put us at commandArgs line start
+    let beforeNewline = text.index(before: scanIndex)          // the "\n" that put us at a line start
     guard beforeNewline > text.startIndex else { return true }
     var cursor = text.index(before: beforeNewline)
     var sawContent = false
@@ -172,7 +173,7 @@ struct Scanner {
     return false
   }
 
-  /// Parses `<NAME>` or `</NAME>` at `start`. Returns nil for anything that isn't commandArgs well-formed
+  /// Parses `<NAME>` or `</NAME>` at `start`. Returns nil for anything that isn't a well-formed
   /// simple tag.
   func tagName(at start: String.Index) -> TagMatch? {
     guard start < text.endIndex, text[start] == "<" else { return nil }
@@ -192,7 +193,7 @@ struct Scanner {
     name.contains { $0.isLetter } && !name.contains { $0.isLetter && $0.isLowercase }
   }
 
-  /// Precedence 2: commandArgs paired ALL-CAPS tag, matched forward to the NEAREST matching close in the
+  /// Precedence 2: a paired ALL-CAPS tag, matched forward to the NEAREST matching close in the
   /// same message. The interior is emitted as markdown only — harness tags inside are not
   /// recursively parsed (I5).
   mutating func consumeCallout() -> Bool {
@@ -210,7 +211,7 @@ struct Scanner {
   }
 
   /// Precedence 4 and 5: an unmatched ALL-CAPS open, or ANY orphan close, becomes an inert
-  /// monospace run. Backward pairing is forbidden — an orphan close pairing with commandArgs distant earlier
+  /// monospace run. Backward pairing is forbidden — an orphan close pairing with a distant earlier
   /// open would swallow unrelated content, which is exactly what I4 exists to prevent.
   ///
   /// The rewrite is suppressed when the preceding character is an identifier char, `(`, or `[`,
@@ -246,7 +247,7 @@ struct Scanner {
 // MARK: - Harness blocks
 
 extension Scanner {
-  /// The modelled children of `<task-notification>`, recognised ONLY inside commandArgs matched span.
+  /// The modelled children of `<task-notification>`, recognised ONLY inside a matched span.
   private static let taskNotificationChildren = [
     "task-id", "tool-use-id", "output-file", "status", "summary", "note",
   ]
@@ -281,7 +282,7 @@ extension Scanner {
     case "command-name":
       return commandKind(name: body, afterClose: afterClose)
     case "command-message", "command-args":
-      // Orphaned sibling (no preceding command-name): still commandArgs command block, name unknown.
+      // Orphaned sibling (no preceding command-name): still a command block, name unknown.
       return (.command(name: "", message: name == "command-message" ? body : nil,
                        args: name == "command-args" ? body : nil), afterClose)
     case "task-notification":
@@ -298,10 +299,12 @@ extension Scanner {
   /// The command trio arrives adjacent; absorb the siblings that are actually present.
   private func commandKind(name: String, afterClose: String.Index) -> (kind: HarnessKind, end: String.Index) {
     var end = afterClose
-    var message: String?, args: String?
+    // `arguments` is the local; the `args:` label below is `HarnessKind.command`'s declared label and
+    // the `"command-args"` string is Claude Code's wire tag — neither is renameable from here.
+    var message: String?, arguments: String?
     if let commandMessage = element("command-message", from: end) { message = commandMessage.body; end = commandMessage.end }
-    if let commandArgs = element("command-args", from: end) { args = commandArgs.body; end = commandArgs.end }
-    return (.command(name: name, message: message, args: args), end)
+    if let commandArgs = element("command-args", from: end) { arguments = commandArgs.body; end = commandArgs.end }
+    return (.command(name: name, message: message, args: arguments), end)
   }
 
   private func bashIOKind(input: String, afterClose: String.Index) -> (kind: HarnessKind, end: String.Index) {
@@ -311,7 +314,7 @@ extension Scanner {
     return (.bashIO(input: input, output: output), end)
   }
 
-  /// The harness tags whose payload is commandArgs direct wrap of `body` with no sibling absorption.
+  /// The harness tags whose payload is a direct wrap of `body` with no sibling absorption.
   private func simpleHarnessKind(forTag name: String, body: String) -> HarnessKind {
     switch name {
     case "system-reminder":
@@ -329,10 +332,10 @@ extension Scanner {
     }
   }
 
-  /// Splits commandArgs task-notification's interior into modelled fields; anything else is preserved in
+  /// Splits a task-notification's interior into modelled fields; anything else is preserved in
   /// `unrecognisedChildren` so nothing is silently dropped. Duplicate children (e.g. two
   /// `<status>`) are last-write-wins — not observed in practice, and harness output isn't expected
-  /// to repeat commandArgs child tag.
+  /// to repeat a child tag.
   private static func parseTaskNotification(_ body: String) -> TaskNotificationBlock {
     var found: [String: String] = [:]
     var scanner = Scanner(body)
@@ -355,7 +358,7 @@ extension Scanner {
   }
 
   /// The two harness kinds Claude Code emits as prose, not tags. `skillPreamble` is anchored to the
-  /// start of the message with `hasPrefix` — commandArgs mid-message mention is someone talking about commandArgs
+  /// start of the message with `hasPrefix` — a mid-message mention is someone talking about a
   /// skill, not the harness injecting one.
   mutating func consumeProseHarness() -> Bool {
     let skillMarker = "Base directory for this skill:"
