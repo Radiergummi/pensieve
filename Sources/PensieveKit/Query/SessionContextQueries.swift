@@ -102,7 +102,7 @@ public enum SessionContextQueries {
   public static func bundle(
     forPath path: String?, nodeID explicitID: UUID?,
     _ database: any DatabaseReader, now: Date,
-    recentLimit: Int = 8,
+    recentLimit: Int = SummaryBuilder.narratableEventWindow,
     narration: NarrationOptions
   ) async throws -> ProjectContextBundle? {
     // 1. Resolve the node.

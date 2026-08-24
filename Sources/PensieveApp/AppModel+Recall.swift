@@ -8,7 +8,7 @@ extension AppModel {
     let fallback = ProjectStatus(project: node, recentEvents: [])
     guard let database else { return (fallback, []) }
     let now = Date()
-    let status = (try? ProjectQueries.status(database, node: node, limit: 15)) ?? fallback
+    let status = (try? ProjectQueries.status(database, node: node, limit: SummaryBuilder.narratableEventWindow)) ?? fallback
     let ends = (try? LooseEndQueries.open(database, nodeID: node.id, now: now)) ?? []
     return (status, ends)
   }
