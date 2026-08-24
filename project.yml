@@ -161,6 +161,15 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.sync
+        # This agent ships *inside* the app (Contents/Library/Helpers), never on its own. Xcode's
+        # default INSTALL_PATH for a `tool` is /usr/local/bin, so without this an archive build also
+        # installs a second copy at Products/usr/local/bin — and an archive holding products beside
+        # the app gets no ApplicationProperties, i.e. it is a *generic* Xcode archive. Xcode then
+        # offers zero distribution methods, and every export dies on `exportOptionsPlist error for
+        # key "method" expected one {}`. That is what kept Xcode Cloud red: the archive succeeded and
+        # the export could not run. SKIP_INSTALL does not touch BUILT_PRODUCTS_DIR, so the app's
+        # embed phase still finds this binary.
+        SKIP_INSTALL: "YES"
         # A `tool` target has no Info.plist, so `codesign` names the binary after the FILE
         # (Identifier=PensieveSyncAgent) and `otool -s __TEXT __info_plist` finds nothing —
         # PRODUCT_BUNDLE_IDENTIFIER above does NOT reach the binary on its own. Every working
@@ -196,6 +205,9 @@ targets:
       base:
         PRODUCT_NAME: pensieve
         PRODUCT_BUNDLE_IDENTIFIER: me.mazetti.pensieve.cli
+        # Same reason as PensieveSyncAgent: the CLI ships inside the app at Contents/Helpers, and a
+        # second installed copy at Products/usr/local/bin turns the archive generic and breaks export.
+        SKIP_INSTALL: "YES"
         CODE_SIGN_IDENTITY: "Apple Development"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_ALLOWED: "YES"
