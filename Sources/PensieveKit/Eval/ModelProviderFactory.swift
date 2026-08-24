@@ -3,10 +3,12 @@ import Foundation
 public enum ModelProviderFactory {
   public static func apiKeyAccount(for spec: ModelSpec) -> String { spec.label }
 
+  /// `claudeCLI` authenticates through the Claude subscription, so it needs no key — the same reason
+  /// on-device and a local endpoint need none.
   public static func needsKey(_ spec: ModelSpec) -> Bool {
-    guard !spec.isOnDevice else { return false }
-    let cfg = cloudConfig(spec)
-    return !(cfg?.isLocalEndpoint ?? false)
+    guard !spec.isOnDevice, spec.kind != ModelSpec.claudeCLIKind else { return false }
+    let cloudConfiguration = cloudConfig(spec)
+    return !(cloudConfiguration?.isLocalEndpoint ?? false)
   }
 
   public static func make(_ spec: ModelSpec, apiKey: String?) -> (any LLMProvider)? {
@@ -16,13 +18,16 @@ public enum ModelProviderFactory {
       #endif
       return nil
     }
-    guard let cfg = cloudConfig(spec), cfg.isUsable else { return nil }
-    if needsKey(spec) && (apiKey == nil || apiKey!.isEmpty) { return nil }
-    return CloudLLMProvider(config: cfg, apiKey: apiKey ?? "")
+    // No `baseURL`/`model`/`flavor`: `claude -p` picks its own model from the CLI's configuration,
+    // so a roster entry is just a label and (zero) prices.
+    if spec.kind == ModelSpec.claudeCLIKind { return ClaudeCLIProvider() }
+    guard let cloudConfiguration = cloudConfig(spec), cloudConfiguration.isUsable else { return nil }
+    if needsKey(spec), apiKey?.isEmpty ?? true { return nil }
+    return CloudLLMProvider(config: cloudConfiguration, apiKey: apiKey ?? "")
   }
 
   private static func cloudConfig(_ spec: ModelSpec) -> CloudConfig? {
-    guard let flavor = spec.flavor, let base = spec.baseURL, let model = spec.model else { return nil }
-    return CloudConfig(flavor: flavor, baseURL: base, model: model)
+    guard let flavor = spec.flavor, let baseURL = spec.baseURL, let model = spec.model else { return nil }
+    return CloudConfig(flavor: flavor, baseURL: baseURL, model: model)
   }
 }

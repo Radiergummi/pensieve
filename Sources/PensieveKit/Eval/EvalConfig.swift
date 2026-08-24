@@ -1,14 +1,27 @@
 import Foundation
 
 public struct ModelSpec: Codable, Sendable, Equatable {
+  /// The three providers a roster can name. Kept as raw `String` on the wire (not a `Codable` enum)
+  /// so an unrecognised `kind` in `eval-config.json` degrades to "cannot build this model, skip the
+  /// spec" instead of failing the whole decode and taking the sweep down with it.
+  public static let foundationModelsKind = "foundationModels"
+  public static let cloudKind = "cloud"
+  /// `claude -p` through the Claude *subscription* — no API key. This machine has a subscription and
+  /// no key, and the project rule is that a new LLM-backed task takes its default model from
+  /// `pensieve eval`, so the provider that actually exists here has to be nameable in a roster.
+  public static let claudeCLIKind = "claudeCLI"
+
   public var label: String
-  public var kind: String            // "foundationModels" | "cloud"
+  public var kind: String            // one of the three `*Kind` constants above
   public var flavor: CloudFlavor?
   public var baseURL: String?
   public var model: String?
   public var inputPricePerM: Double
   public var outputPricePerM: Double
-  public var isOnDevice: Bool { kind == "foundationModels" }
+  /// `claudeCLI` is deliberately NOT on-device: it is a local *process*, but the inference happens
+  /// in the cloud. `isOnDevice` drives `DecisionEngine`'s local-first ranking, which is a privacy
+  /// and offline-availability claim, not a "costs nothing" claim.
+  public var isOnDevice: Bool { kind == Self.foundationModelsKind }
 
   // Explicit (Swift only synthesizes an *internal* memberwise init for a public struct) so callers
   // outside PensieveKit can build a spec in code instead of decoding a JSON literal.

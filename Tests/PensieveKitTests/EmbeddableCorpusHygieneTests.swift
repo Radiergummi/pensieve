@@ -101,6 +101,76 @@ import SQLiteData
     #expect(corpus.first { $0.text.contains("worked on the parser") }?.files == "")
   }
 
+  /// Finding 2.17. The dedup is a TEXT rule. Two commits sharing a message but touching different
+  /// files must BOTH contribute their paths, or `files:` search cannot find the second commit's
+  /// files at all — while `documents` still holds exactly one row for the repeated text.
+  @Test func aRepeatedEventTextStillIndexesTheLaterCommitsPaths() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("gather-dedup-files"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
+    let firstID = UUID(), secondID = UUID()
+    try await database.write { database in
+      try Node.insert { node }.execute(database)
+      try Source.insert { source }.execute(database)
+      try Event.insert {
+        Event(id: firstID, nodeID: node.id, sourceID: source.id,
+              occurredAt: Date(timeIntervalSince1970: 1_000), kind: CaptureKind.gitCommit,
+              summary: "fix ci", detailJSON: #"{"files":"Sources/First.swift"}"#, fingerprint: "a")
+      }.execute(database)
+      try Event.insert {
+        Event(id: secondID, nodeID: node.id, sourceID: source.id,
+              occurredAt: Date(timeIntervalSince1970: 2_000), kind: CaptureKind.gitCommit,
+              summary: "fix ci", detailJSON: #"{"files":"Sources/Second.swift"}"#, fingerprint: "b")
+      }.execute(database)
+    }
+    let events = try EmbeddableCorpus.gather(database).filter { $0.kind == "event" }
+    #expect(Set(events.map(\.files)) == ["Sources/First.swift", "Sources/Second.swift"])
+    // The repeat carries the paths and NO text, so the text index keeps one row for "fix ci".
+    #expect(events.filter { !$0.text.isEmpty }.map(\.itemID) == [firstID.uuidString])
+    #expect(events.first { $0.itemID == secondID.uuidString }?.text == "")
+
+    // End to end: the second commit's file is findable, and the repeated text is not duplicated.
+    let store = tempSearchStore()
+    store.rebuild(items: events, corpusHash: "h")
+    #expect(store.search(FTSQueryBuilder.build("second.swift ")!, limit: 10,
+                         includeArchived: false).map(\.itemID) == [secondID.uuidString])
+    #expect(store.search(FTSQueryBuilder.build("fix ci ")!, limit: 10,
+                         includeArchived: false).map(\.itemID) == [firstID.uuidString])
+  }
+
+  /// Finding 1.5. `SearchQueries.buildHits` parses the stored `kind` back through
+  /// `SearchHit.Kind(rawValue:)`, so a producer literal that stopped matching would index fine and
+  /// resolve to nothing. Every kind the producer writes must round-trip through that enum.
+  @Test func everyProducedKindRoundTripsThroughSearchHitKind() async throws {
+    let database = try openCanonicalDatabase(at: tempURL("gather-kinds"))
+    let node = Node(name: "Pensieve", kind: NodeKind.project)
+    let source = Source(nodeID: node.id, kind: SourceKind.gitRepo, key: "/p/\(node.id)")
+    let eventID = UUID()
+    try await database.write { database in
+      try Node.insert { node }.execute(database)
+      try Source.insert { source }.execute(database)
+      try Event.insert {
+        Event(id: eventID, nodeID: node.id, sourceID: source.id, occurredAt: Date(),
+              kind: CaptureKind.gitCommit, summary: "add the parser", detailJSON: "{}",
+              fingerprint: "c1")
+      }.execute(database)
+      try LooseEnd.insert {
+        LooseEnd(nodeID: node.id, sourceEventID: eventID, text: "wire up the retry",
+                 quote: "we should wire up the retry")
+      }.execute(database)
+    }
+    let corpus = try EmbeddableCorpus.gather(database)
+    #expect(!corpus.isEmpty)
+    for item in corpus {
+      #expect(SearchHit.Kind(rawValue: item.kind) != nil, "unresolvable kind '\(item.kind)'")
+    }
+    #expect(Set(corpus.map(\.kind)) == ["node", "loose_end", "event"])
+    // `loose_end` is a STORED index value: changing it orphans every existing index row.
+    #expect(SearchHit.Kind.looseEnd.rawValue == "loose_end")
+    // Passages are produced separately, from `Passage.searchKind`, and resolve the same way.
+    #expect(SearchHit.Kind(rawValue: Passage.searchKind) == nil)   // not a SearchHit kind, by design
+  }
+
   @Test func contentHashIgnoresFilesSoPathsNeverForceAReEmbed() {
     let withoutFiles = EmbeddableItem(itemID: "i", kind: "event", nodeID: "n", state: "active",
                                       text: "same text")

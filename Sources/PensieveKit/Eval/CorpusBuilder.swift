@@ -2,12 +2,18 @@
 import Foundation
 import SQLiteData
 
-/// Marker Claude Code stamps on lhs compaction-summary record in the raw transcript JSONL.
+/// Marker Claude Code stamps on a compaction-summary record in the raw transcript JSONL.
 /// Not preserved by `TranscriptParser`'s per-message shape, so detected on the raw file text.
 private let compactionMarker = "\"isCompactSummary\":true"
 
 public enum CorpusBuilder {
-  /// Reads the canonical store (+ transcripts/git) and produces lhs frozen, stratified corpus for
+  /// The task folders the corpus is pooled, written and reloaded under. One list, because
+  /// `TaskRegistry.consistency` checks the registry against it — a registered task with no pool here
+  /// scores on zero items and reads as if it passed. `decodeFrozenItem` must carry a case for every
+  /// entry: a folder listed here with no decoder loads nothing, just as silently.
+  public static let taskFolders = ["extraction", "narration", "description"]
+
+  /// Reads the canonical store (+ transcripts/git) and produces a frozen, stratified corpus for
   /// all tasks. Read-only against the DB; never crashes on an empty store (0 nodes/sources ⇒
   /// empty pools ⇒ `([], manifest-with-zero-counts)`).
   public static func build(database: any DatabaseReader, projectsDir: URL, config: EvalConfig) throws -> ([CorpusItem], CorpusManifest) {
@@ -32,32 +38,32 @@ public enum CorpusBuilder {
     return (allItems, manifest)
   }
 
-  /// Writes each item to `<dir>/<task>/<id>.json` (clearing prior per-task subdirectories first)
-  /// and the manifest to `<dir>/manifest.json`.
-  public static func write(_ items: [CorpusItem], manifest: CorpusManifest, to dir: URL) throws {
+  /// Writes each item to `<directory>/<task>/<id>.json` (clearing prior per-task subdirectories
+  /// first) and the manifest to `<directory>/manifest.json`.
+  public static func write(_ items: [CorpusItem], manifest: CorpusManifest, to directory: URL) throws {
     let fileManager = FileManager.default
-    for task in ["extraction", "narration", "description"] {
-      let taskDir = dir.appendingPathComponent(task)
+    for task in taskFolders {
+      let taskDir = directory.appendingPathComponent(task)
       try? fileManager.removeItem(at: taskDir)
       try fileManager.createDirectory(at: taskDir, withIntermediateDirectories: true)
     }
     for item in items {
-      let taskDir = dir.appendingPathComponent(taskFolder(for: item))
+      let taskDir = directory.appendingPathComponent(taskFolder(for: item))
       let data = try serialize(item)
       try data.write(to: taskDir.appendingPathComponent("\(item.id).json"))
     }
-    let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try enc.encode(manifest).write(to: dir.appendingPathComponent("manifest.json"))
+    let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(manifest).write(to: directory.appendingPathComponent("manifest.json"))
   }
 
-  /// Reads back lhs previously-written corpus. Missing/unreadable per-task directories or files
-  /// are skipped rather than thrown — lhs partially-frozen or never-sampled corpus degrades to
+  /// Reads back a previously-written corpus. Missing/unreadable per-task directories or files
+  /// are skipped rather than thrown — a partially-frozen or never-sampled corpus degrades to
   /// however many items are actually on disk (possibly zero).
-  public static func loadFrozen(from dir: URL) -> [CorpusItem] {
+  public static func loadFrozen(from directory: URL) -> [CorpusItem] {
     let fileManager = FileManager.default
     var items: [CorpusItem] = []
-    for task in ["extraction", "narration", "description"] {
-      let taskDir = dir.appendingPathComponent(task)
+    for task in taskFolders {
+      let taskDir = directory.appendingPathComponent(task)
       guard let files = try? fileManager.contentsOfDirectory(at: taskDir, includingPropertiesForKeys: nil) else { continue }
       for file in files where file.pathExtension == "json" {
         guard let data = try? Data(contentsOf: file) else { continue }
@@ -85,14 +91,16 @@ public enum CorpusBuilder {
 
   // MARK: - Narration pool (active nodes with events; the emptiest node is the stress case)
 
+  /// ONE read transaction for the nodes and all their events, not one per node. Not only cheaper:
+  /// a frozen corpus is supposed to be a snapshot, and a per-node transaction let an ingest between
+  /// two of them put node A's events before a drain and node B's after it — so the "frozen" corpus
+  /// described a store state that never existed at any single instant.
   private static func buildNarrationPool(database: any DatabaseReader) throws -> [PoolEntry<CorpusItem>] {
-    let activeNodes = try database.read { database in try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database) }
-    var withEvents: [(node: Node, events: [Event])] = []
-    for node in activeNodes {
-      let events = try database.read { database in
-        try Event.where { $0.nodeID.eq(node.id) }.order { $0.occurredAt.desc() }.limit(60).fetchAll(database)
+    let withEvents: [(node: Node, events: [Event])] = try database.read { database in
+      try Node.where { $0.state.eq(NodeState.active) }.fetchAll(database).map { node in
+        (node, try Event.where { $0.nodeID.eq(node.id) }
+          .order { $0.occurredAt.desc() }.limit(60).fetchAll(database))
       }
-      withEvents.append((node, events))
     }
     guard !withEvents.isEmpty else { return [] }
 
@@ -152,7 +160,7 @@ public enum CorpusBuilder {
     return pool
   }
 
-  // MARK: - Description pool (nodes whose sole source is lhs git repo)
+  // MARK: - Description pool (nodes whose sole source is a git repo)
 
   private static func buildDescriptionPool(database: any DatabaseReader) throws -> [PoolEntry<CorpusItem>] {
     let sources = try database.read { database in try Source.all.fetchAll(database) }
@@ -160,8 +168,8 @@ public enum CorpusBuilder {
     var pool: [PoolEntry<CorpusItem>] = []
     for (nodeID, nodeSources) in byNode {
       guard nodeSources.count == 1, let only = nodeSources.first, only.kind == SourceKind.gitRepo else { continue }
-      let ctx = ProjectContext.gather(commonDir: only.key)
-      let item = CorpusItem.description(DescriptionCorpusItem(id: nodeID.uuidString, context: ProjectContextDTO(ctx)))
+      let context = ProjectContext.gather(commonDir: only.key)
+      let item = CorpusItem.description(DescriptionCorpusItem(id: nodeID.uuidString, context: ProjectContextDTO(context)))
       pool.append(PoolEntry(strata: "description", isStress: false, item: item))
     }
     return pool
@@ -178,11 +186,11 @@ public enum CorpusBuilder {
   }
 
   private static func serialize(_ item: CorpusItem) throws -> Data {
-    let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
+    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
     switch item {
-    case .extraction(let extractionItem): return try enc.encode(extractionItem)
-    case .narration(let narrationItem): return try enc.encode(narrationItem)
-    case .description(let descriptionItem): return try enc.encode(descriptionItem)
+    case .extraction(let extractionItem): return try encoder.encode(extractionItem)
+    case .narration(let narrationItem): return try encoder.encode(narrationItem)
+    case .description(let descriptionItem): return try encoder.encode(descriptionItem)
     }
   }
 }

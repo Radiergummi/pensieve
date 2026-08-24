@@ -24,7 +24,7 @@ private func score(
   let scores = [score("apple/fm", onDevice: true, quality: 0.80, cost: 0, lat: 900),
                 score("openai/nano", onDevice: false, quality: 0.95, cost: 0.001, lat: 300)]
   let bar = EffectiveBar(precision: nil, recall: nil, quality: 0.70)
-  let rec = DecisionEngine.recommend(task: "narration", scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  let rec = DecisionEngine.recommend(task: NarrationTask(), scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
   #expect(rec.winner == "apple/fm")
 }
 
@@ -33,7 +33,7 @@ private func score(
   let scores = [score("apple/fm", onDevice: true, quality: 0.60, cost: 0, lat: 900),
                 score("openai/nano", onDevice: false, quality: 0.90, cost: 0.001, lat: 300)]
   let bar = EffectiveBar(precision: nil, recall: nil, quality: 0.85)
-  let rec = DecisionEngine.recommend(task: "narration", scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  let rec = DecisionEngine.recommend(task: NarrationTask(), scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
   #expect(rec.winner == "openai/nano")     // FM (0.60) excluded; nano (0.90) clears 0.85 by margin
   #expect(rec.clearedBar == ["openai/nano"])
 }
@@ -42,7 +42,7 @@ private func score(
   let scores = [score("apple/fm", onDevice: true, quality: 0.50, cost: 0, lat: 900),
                 score("openai/nano", onDevice: false, quality: 0.55, cost: 0.001, lat: 300)]
   let bar = EffectiveBar(precision: nil, recall: nil, quality: 0.90)
-  let rec = DecisionEngine.recommend(task: "narration", scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  let rec = DecisionEngine.recommend(task: NarrationTask(), scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
   #expect(rec.winner == "apple/fm")        // nobody cleared → incumbent fallback
 }
 
@@ -53,17 +53,48 @@ private func score(
   let scores = [score("apple/fm", onDevice: true, quality: 0, cost: 0, lat: 900, prec: 1.0, rec: 0.9),
                 score("grok/fast", onDevice: false, quality: 0, cost: 0.001, lat: 200, fab: true, prec: 1.0, rec: 0.9)]
   let bar = EffectiveBar(precision: 1.0, recall: 0.8, quality: nil)
-  let rec = DecisionEngine.recommend(task: "extraction", scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  let rec = DecisionEngine.recommend(task: ExtractionTask(), scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
   #expect(rec.clearedBar.contains("grok/fast") == false) // reproduced fabrication → excluded despite clearing the ordinary bar
   #expect(rec.clearedBar.contains("apple/fm") == true)   // apple/fm clears cleanly
   #expect(rec.winner == "apple/fm")
+}
+
+/// A task whose id is NOT "extraction" but whose scorer still is. The hard-gate used to be keyed off
+/// the literal id, so renaming the task would have silently switched the trust gate off.
+private struct RenamedExtractionTask: EvalTask {
+  let id = "loose-end-extraction-v2"
+  let scorer: ScorerKind = .extraction
+  func run(item: CorpusItem, model: any LLMProvider, reference: any LLMProvider) async throws -> TaskOutput {
+    TaskOutput(text: "", looseEnds: nil)
+  }
+}
+
+@Test func fabricationHardGateFollowsTheScorerNotTheTaskID() {
+  let scores = [score("apple/fm", onDevice: true, quality: 0, cost: 0, lat: 900, prec: 1.0, rec: 0.9),
+                score("grok/fast", onDevice: false, quality: 0, cost: 0.001, lat: 200, fab: true, prec: 1.0, rec: 0.9)]
+  let bar = EffectiveBar(precision: 1.0, recall: 0.8, quality: nil)
+  let rec = DecisionEngine.recommend(task: RenamedExtractionTask(), scores: scores, bar: bar,
+                                     incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  #expect(rec.task == "loose-end-extraction-v2")
+  #expect(rec.clearedBar.contains("grok/fast") == false)   // the gate still applies
+  #expect(rec.winner == "apple/fm")
+}
+
+/// The mirror image: a rubric-scored task must NOT be hard-gated on `reproducedFabrication`, so the
+/// gate is genuinely keyed off the scorer rather than applied to everything.
+@Test func fabricationHardGateDoesNotApplyToRubricScoredTasks() {
+  let scores = [score("openai/nano", onDevice: false, quality: 0.95, cost: 0.001, lat: 300, fab: true)]
+  let bar = EffectiveBar(precision: nil, recall: nil, quality: 0.70)
+  let rec = DecisionEngine.recommend(task: NarrationTask(), scores: scores, bar: bar,
+                                     incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  #expect(rec.clearedBar == ["openai/nano"])
 }
 
 @Test func qualityWithinNoiseMarginDoesNotClear() {
   // quality 0.72 is above the bar (0.70) but NOT above bar+noiseMargin (0.73) → must NOT clear.
   let scores = [score("openai/nano", onDevice: false, quality: 0.72, cost: 0.001, lat: 300)]
   let bar = EffectiveBar(precision: nil, recall: nil, quality: 0.70)
-  let rec = DecisionEngine.recommend(task: "narration", scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
+  let rec = DecisionEngine.recommend(task: NarrationTask(), scores: scores, bar: bar, incumbentLabel: "apple/fm", noiseMargin: 0.03)
   #expect(rec.clearedBar.isEmpty)      // 0.72 < 0.70+0.03 → does not robustly clear
   #expect(rec.winner == "apple/fm")    // nobody cleared → incumbent fallback
 }
@@ -73,6 +104,6 @@ private func score(
   let scores = [score("apple/fm", onDevice: true, quality: 0.95, cost: 0, lat: 900),
                 score("openai/nano", onDevice: false, quality: 0.97, cost: 0.001, lat: 200)]
   let bar = EffectiveBar(precision: nil, recall: nil, quality: 0.70)
-  let rec = DecisionEngine.recommend(task: "narration", scores: scores, bar: bar, incumbentLabel: "zzz-not-in-set", noiseMargin: 0.03)
+  let rec = DecisionEngine.recommend(task: NarrationTask(), scores: scores, bar: bar, incumbentLabel: "zzz-not-in-set", noiseMargin: 0.03)
   #expect(rec.winner == "apple/fm") // locality first among bar-clearing models
 }

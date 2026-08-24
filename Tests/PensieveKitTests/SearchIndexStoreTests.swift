@@ -147,6 +147,51 @@ import Foundation
     #expect(store.search(stillWorks, limit: 10, includeArchived: false).map(\.itemID) == ["a"])
   }
 
+  /// Finding 1.15. The tokenizer spec was written out once per `CREATE VIRTUAL TABLE`; only
+  /// `documents` was covered by a test (`diacriticsAreFoldedBothWays`), so a change to one table's
+  /// spelling could leave the other two behind unnoticed. All three tables must fold diacritics —
+  /// which is also the property `FindMatcher.options` is coupled to.
+  @Test func allThreeTablesShareTheTokenizer() throws {
+    let store = tempSearchStore()
+    // `documents` (text) and `document_files` (paths) live in the same rebuild.
+    store.rebuild(items: [item("text", "Lösung für Umlaute"),
+                          item("path", "unrelated subject", files: "Sources/Lösung/Übersicht.swift")],
+                  corpusHash: "h")
+    store.rebuildPassages(items: [item("passage", "die Lösung war einfach")], passagesHash: "p")
+
+    let folded = try #require(FTSQueryBuilder.build("losung "))
+    let accented = try #require(FTSQueryBuilder.build("Lösung "))
+    // documents + document_files: the merged text-then-path list, both spellings.
+    #expect(Set(store.search(folded, limit: 10, includeArchived: false).map(\.itemID)) == ["text", "path"])
+    #expect(Set(store.search(accented, limit: 10, includeArchived: false).map(\.itemID)) == ["text", "path"])
+    // document_passages, its own table and its own query path.
+    #expect(store.searchPassages(folded, limit: 10, includeArchived: false).map(\.itemID) == ["passage"])
+    #expect(store.searchPassages(accented, limit: 10, includeArchived: false).map(\.itemID) == ["passage"])
+  }
+
+  /// Finding 2.34. The delete-and-retry must clear the whole index — a WAL-mode SQLite database is
+  /// three files, the same enumeration `StoreRelocator.canonicalStoreFileNames` makes for the
+  /// canonical store. Asserted on the removal itself rather than end to end: SQLite validates a WAL
+  /// header against its database and discards a mismatched one, so an orphaned sidecar could not be
+  /// made to change the retry's outcome (see `removeIndexFiles`).
+  @Test func deleteAndRetryClearsTheWalAndShmSiblingsToo() throws {
+    let url = tempURL("stale-sidecar-index")
+    let sidecars = [url.path + "-wal", url.path + "-shm"]
+    try Data("this is not a sqlite database at all".utf8).write(to: url)
+    for path in sidecars { try Data("STALE".utf8).write(to: URL(fileURLWithPath: path)) }
+
+    SearchIndexStore.removeIndexFiles(at: url)
+    #expect(!FileManager.default.fileExists(atPath: url.path))
+    for path in sidecars {
+      #expect(!FileManager.default.fileExists(atPath: path), "\(path) survived the delete")
+    }
+
+    // And the corrupt file is still recovered into a usable, freshly-built index.
+    let store = SearchIndexStore(url: url)
+    #expect(store.isAvailable)
+    #expect(store.state() == .absent)
+  }
+
   @Test func limitCapsResults() {
     let store = tempSearchStore()
     let items = (0..<20).map { item("i\($0)", "common word \($0)") }

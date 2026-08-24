@@ -41,16 +41,16 @@ public enum CorpusSampler {
     for entry in pool where !entry.isStress { byStrata[entry.strata, default: []].append(entry.item) }
     let strataOrder = byStrata.keys.sorted()
     var queues = strataOrder.map { key -> [T] in
-      var arr = byStrata[key]!
-      arr.shuffle(using: &rng)
-      return arr
+      var stratum = byStrata[key]!
+      stratum.shuffle(using: &rng)
+      return stratum
     }
     // Round-robin across strata until we hit `size` or exhaust the pool.
-    var idx = 0
+    var cursor = 0
     while remaining > 0 && queues.contains(where: { !$0.isEmpty }) {
-      let queueIndex = idx % queues.count
+      let queueIndex = cursor % queues.count
       if !queues[queueIndex].isEmpty { chosen.append(queues[queueIndex].removeLast()); remaining -= 1 }
-      idx += 1
+      cursor += 1
     }
     return chosen
   }

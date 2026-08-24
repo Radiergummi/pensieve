@@ -45,6 +45,11 @@ public struct EmbeddableItem: Sendable {
 /// `muted` is never indexed. The seam future producers (transcript chunks, etc.) extend.
 /// Event hygiene (spec P1): `git.checkout` events are dropped (no work content), and identical
 /// event texts within a node are de-duplicated, keeping the earliest by (occurredAt, id).
+///
+/// Every `kind` this producer writes comes from `SearchHit.Kind`'s raw values (passages from
+/// `Passage.searchKind`), never from a literal: `SearchQueries.buildHits` parses the stored string
+/// back through that same enum, so a hand-written literal that stopped matching would index fine
+/// and resolve to nothing — a silently partial search rather than a compile error.
 public enum EmbeddableCorpus {
   /// Degenerate LLM output ("[]", "/", stray punctuation) is not searchable content — it tokenises
   /// to noise and renders as an empty-looking result row. Applies ONLY to model-generated text;
@@ -112,7 +117,8 @@ public enum EmbeddableCorpus {
       let nodes = try Self.corpusNodes(database)
       let stateByNodeID = Self.statesByNodeID(nodes)
       for node in nodes {
-        out.append(.init(itemID: node.id.uuidString, kind: "node", nodeID: node.id.uuidString,
+        out.append(.init(itemID: node.id.uuidString, kind: SearchHit.Kind.node.rawValue,
+                         nodeID: node.id.uuidString,
                          state: node.state.rawValue, text: [node.name, node.description].filter { !$0.isEmpty }.joined(separator: " — ")))
         appendTranslatedNodeDocument(for: node, into: &out, translations: translations, language: language)
       }
@@ -122,40 +128,65 @@ public enum EmbeddableCorpus {
       let ends = try Self.corpusLooseEnds(database)
       for looseEnd in ends {
         guard let state = stateByNodeID[looseEnd.nodeID] else { continue }
-        out.append(.init(itemID: looseEnd.id.uuidString, kind: "loose_end", nodeID: looseEnd.nodeID.uuidString,
+        out.append(.init(itemID: looseEnd.id.uuidString, kind: SearchHit.Kind.looseEnd.rawValue,
+                         nodeID: looseEnd.nodeID.uuidString,
                          state: state, text: [looseEnd.text, looseEnd.quote].filter { !$0.isEmpty }.joined(separator: " — "),
                          status: looseEnd.status.rawValue))
         // Text ONLY — never the quote. The original document is "text — quote"; a translated
         // document that re-appended the English quote would manufacture a duplicate hit, and the
         // quote is verbatim provenance that must never be adjacent to a translation.
-        appendTranslatedLooseEnd(.looseEndText, of: looseEnd.text, kind: "loose_end",
+        appendTranslatedLooseEnd(.looseEndText, of: looseEnd.text,
+                                 kind: SearchHit.Kind.looseEnd.rawValue,
                                  from: looseEnd, state: state)
       }
-      // Hygiene (spec P1). Two rules, both bounded to events:
-      //  1. `git.checkout` carries no work content — 261 of 1,686 rows were bare "checkout <branch>",
-      //     84 of them literally "checkout HEAD". They only ever occupied top-k slots.
-      //  2. De-duplicate identical texts WITHIN a node, keeping the earliest by (occurredAt, id).
-      //     Deliberately not global: collapsing "fix ci" across three projects would silently pick
-      //     which project owns the only findable copy — a grounding call, not hygiene. Ordering is
-      //     explicit because `Event.all` has none, so "the first occurrence" would otherwise be
-      //     whatever SQLite happened to return, and could differ between rebuilds.
-      let events = try Event.order { ($0.occurredAt, $0.id) }.fetchAll(database)
-      var seenTextsByNode: [UUID: Set<String>] = [:]
-      for event in events where event.kind != CaptureKind.gitCheckout {
-        guard let state = stateByNodeID[event.nodeID] else { continue }
-        let text: String?
-        switch event.kind {
-        // LLM-enriched prose — gate it: degenerate model output ("[]", a bare "/") is not content.
-        case CaptureKind.ccSession: text = event.workSummary.flatMap { isSearchable($0) ? $0 : nil }
-        // Human-authored (a git commit subject). NOT gated — "wip" and "fix ci" are real, short work.
-        default: text = event.summary.isEmpty ? nil : event.summary
-        }
-        guard let text else { continue }
-        guard seenTextsByNode[event.nodeID, default: []].insert(text).inserted else { continue }
-        out.append(.init(itemID: event.id.uuidString, kind: "event", nodeID: event.nodeID.uuidString,
-                         state: state, text: text, files: Self.changedFiles(in: event.detailJSON)))
-      }
+      try Self.appendEventDocuments(database, stateByNodeID: stateByNodeID, into: &out)
       return out
+    }
+  }
+
+  /// The event slice of the corpus, with the spec-P1 hygiene rules. Extracted from `gather` rather
+  /// than inlined so each producer's rules stay readable (and `gather` stays inside the
+  /// function-body limit); it reads the same `stateByNodeID` map, so eligibility cannot diverge.
+  ///
+  /// Hygiene (spec P1). Two rules, both bounded to events:
+  ///  1. `git.checkout` carries no work content — 261 of 1,686 rows were bare "checkout <branch>",
+  ///     84 of them literally "checkout HEAD". They only ever occupied top-k slots.
+  ///  2. De-duplicate identical texts WITHIN a node, keeping the earliest by (occurredAt, id).
+  ///     Deliberately not global: collapsing "fix ci" across three projects would silently pick
+  ///     which project owns the only findable copy — a grounding call, not hygiene. Ordering is
+  ///     explicit because `Event.all` has none, so "the first occurrence" would otherwise be
+  ///     whatever SQLite happened to return, and could differ between rebuilds.
+  private static func appendEventDocuments(_ database: Database, stateByNodeID: [UUID: String],
+                                           into out: inout [EmbeddableItem]) throws {
+    let events = try Event.order { ($0.occurredAt, $0.id) }.fetchAll(database)
+    var seenTextsByNode: [UUID: Set<String>] = [:]
+    for event in events where event.kind != CaptureKind.gitCheckout {
+      guard let state = stateByNodeID[event.nodeID] else { continue }
+      let text: String?
+      switch event.kind {
+      // LLM-enriched prose — gate it: degenerate model output ("[]", a bare "/") is not content.
+      case CaptureKind.ccSession: text = event.workSummary.flatMap { isSearchable($0) ? $0 : nil }
+      // Human-authored (a git commit subject). NOT gated — "wip" and "fix ci" are real, short work.
+      default: text = event.summary.isEmpty ? nil : event.summary
+      }
+      guard let text else { continue }
+      // Rule 2 is a TEXT rule, not an item rule. Two commits can share a message ("fix ci") and
+      // touch different files; dropping the whole item meant the later commit's paths were never
+      // indexed, so `files:` search could not find those files at all. A repeat is therefore still
+      // emitted whenever it carries paths, with `text: ""` — so `documents` holds one row per
+      // distinct text (the crowding rule 2 exists to prevent) while `document_files` holds one row
+      // per event (correct per-commit path attribution). `SearchIndexStore.rebuild` skips an empty
+      // text the same way it already skips empty files.
+      //
+      // The one thing a text-less repeat cannot satisfy is `.textRestrictedByPath`, which JOINs the
+      // two tables on `item_id`: "this text AND that path" still resolves through the FIRST
+      // occurrence only. That is a strictly smaller gap than the paths being absent outright.
+      let files = Self.changedFiles(in: event.detailJSON)
+      let isFirstOccurrence = seenTextsByNode[event.nodeID, default: []].insert(text).inserted
+      guard isFirstOccurrence || !files.isEmpty else { continue }
+      out.append(.init(itemID: event.id.uuidString, kind: SearchHit.Kind.event.rawValue,
+                       nodeID: event.nodeID.uuidString, state: state,
+                       text: isFirstOccurrence ? text : "", files: files))
     }
   }
 
@@ -176,7 +207,8 @@ public enum EmbeddableCorpus {
     guard translatedName != nil || translatedDescription != nil else { return }
     let text = [translatedName ?? node.name, translatedDescription ?? node.description]
       .filter { !$0.isEmpty }.joined(separator: " — ")
-    items.append(EmbeddableItem(itemID: node.id.uuidString, kind: "node", nodeID: node.id.uuidString,
+    items.append(EmbeddableItem(itemID: node.id.uuidString, kind: SearchHit.Kind.node.rawValue,
+                                nodeID: node.id.uuidString,
                                 state: node.state.rawValue, text: text, language: language))
   }
 
