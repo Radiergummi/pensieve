@@ -16,8 +16,19 @@ public enum StructuralNoiseFilter {
     messages.filter { !isBrief($0.text) }
   }
 
+  /// A brief needs the length AND enough template signals — but "enough" depends on whether the
+  /// message opens like a generated brief, because the two weakest signals co-occur in ordinary
+  /// human writing. A long design brief the developer types himself routinely contains a
+  /// meta-instruction ("Do not touch the schema") and two bold labels ("**Goal:**", "**Scope:**"),
+  /// and at two signals flat that was classified as harness noise and dropped before mining — the
+  /// single message most likely to *contain* loose ends. So: an opener (the one signal no human
+  /// message produces by accident — `hasOpener` matches only this project's own brief preambles,
+  /// and only as a prefix) buys the old threshold; without one, the message must show three of the
+  /// four signals before we call it generated.
   static func isBrief(_ text: String) -> Bool {
-    text.count >= minBriefLength && templateSignals(in: text) >= 2
+    guard text.count >= minBriefLength else { return false }
+    let signals = templateSignals(in: text)
+    return hasOpener(text) ? signals >= 2 : signals >= 3
   }
 
   /// Distinct generated-brief signals present in `text` (max 4).

@@ -31,8 +31,12 @@ struct LabelSuggest: AsyncParsableCommand {
       return
     }
 
-    let modelName = model
-    let provider = ClaudeCLIProvider(run: { try Self.claudeRun($0, model: modelName) })
+    // The shared provider, not a local spawn: it carries the cwd pin. An unpinned `claude -p`
+    // inherits this command's cwd — a real project directory, since `label-suggest` is run from a
+    // terminal inside one — becomes a Claude Code session there, is captured by the SessionEnd hook
+    // and is re-ingested as work. One bootstrap run over the backlog is one phantom session per
+    // batch, all attributed to whatever repo you were standing in.
+    let provider = ClaudeCLIProvider(model: model)
     let result = try await SalienceSuggester(provider: provider).run(database, limit: limit, force: force)
     print("""
     Suggested \(result.suggested)/\(result.candidates) candidates: \(result.salient) salient / \(result.noise) noise \
@@ -47,41 +51,5 @@ struct LabelSuggest: AsyncParsableCommand {
     return try JSONDecoder().decode([Entry].self, from: data).map {
       (quote: $0.quote, label: $0.salient ? LooseEndLabel.salient : LooseEndLabel.noise)
     }
-  }
-
-  /// Wall-clock cap on a single `claude -p` invocation, mirroring `ClaudeCLIProvider.shellRun`: a
-  /// hung child is terminated and the call throws rather than stalling the sequential batch run.
-  static let timeout: TimeInterval = 120
-
-  /// Runs `claude -p --model <model>` with the prompt on stdin; trimmed stdout. Mirrors the eval
-  /// harness's helper (salience prompts are small, so writing stdin before draining can't deadlock).
-  static func claudeRun(_ prompt: String, model: String) throws -> String {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["claude", "-p", "--model", model]
-    let stdin = Pipe(), stdout = Pipe()
-    process.standardInput = stdin; process.standardOutput = stdout; process.standardError = FileHandle.nullDevice
-    try process.run()
-    DispatchQueue.global().async {
-      try? stdin.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
-      try? stdin.fileHandleForWriting.close()
-    }
-    nonisolated(unsafe) var outData = Data()
-    let ioGroup = DispatchGroup()
-    ioGroup.enter()
-    DispatchQueue.global().async {
-      outData = stdout.fileHandleForReading.readDataToEndOfFile(); ioGroup.leave()
-    }
-    if ioGroup.wait(timeout: .now() + timeout) == .timedOut {
-      process.terminate()
-      _ = ioGroup.wait(timeout: .now() + 5)
-      throw LLMError.providerFailed("claude -p timed out after \(Int(timeout))s")
-    }
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else { throw LLMError.providerFailed("claude -p exit \(process.terminationStatus)") }
-    guard let output = String(bytes: outData, encoding: .utf8) else {
-      throw LLMError.providerFailed("claude -p returned non-UTF8 output")
-    }
-    return output.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

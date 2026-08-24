@@ -52,11 +52,12 @@ public struct SalienceSuggester {
     for (eventID, group) in byEvent {
       let messages = try messages(database, eventID: eventID)
       for looseEnd in group {
-        let vle = VerifiedLooseEnd(text: looseEnd.text, quote: looseEnd.quote, role: looseEnd.role,
-                                   sourceMessageIndex: looseEnd.sourceMessageIndex)
-        let ctx = messages.isEmpty ? "" : SalienceClassifier.contextWindow(for: vle, messages: messages)
+        let verifiedLooseEnd = VerifiedLooseEnd(text: looseEnd.text, quote: looseEnd.quote, role: looseEnd.role,
+                                               sourceMessageIndex: looseEnd.sourceMessageIndex)
+        let context = messages.isEmpty
+          ? "" : SalienceClassifier.contextWindow(for: verifiedLooseEnd, messages: messages)
         if messages.isEmpty { quoteOnly += 1 }
-        items.append(Item(id: looseEnd.id, quote: looseEnd.quote, context: ctx))
+        items.append(Item(id: looseEnd.id, quote: looseEnd.quote, context: context))
       }
     }
 
@@ -64,14 +65,17 @@ public struct SalienceSuggester {
     var suggested = 0, salient = 0, noise = 0, skipped = 0
     for batch in Self.batches(items, budget: batchCharBudget) {
       let prompt = SalienceClassifier.buildPrompt(batch.map { (quote: $0.quote, context: $0.context) })
-      guard let dropIdx = try? await provider.classifyNonSalientIndices(prompt: prompt) else {
+      guard let dropIndices = try? await provider.classifyNonSalientIndices(prompt: prompt) else {
         skipped += batch.count
         continue
       }
-      let dropSet = Set(dropIdx)
+      let dropSet = Set(dropIndices)
       for (index, item) in batch.enumerated() {
         let label = dropSet.contains(index) ? LooseEndLabel.noise : LooseEndLabel.salient
-        _ = try? LooseEndCommands.suggest(database, id: item.id, label: label)
+        // Not `try?`: a swallowed write error still counted the item as suggested, so the run
+        // reported labels it had not stored — and a re-run would not retry them either, because
+        // candidacy is decided by the labelSuggestion that was never written.
+        try LooseEndCommands.suggest(database, id: item.id, label: label)
         suggested += 1
         if label == LooseEndLabel.salient { salient += 1 } else { noise += 1 }
       }

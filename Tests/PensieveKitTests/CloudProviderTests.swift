@@ -125,6 +125,40 @@ private func httpResponse(_ status: Int) -> HTTPURLResponse {
   }
 }
 
+// MARK: - Truncation at maxTokens
+
+@Test func parseCompletionRefusesATruncatedAnthropicReply() throws {
+  // Completions are capped at maxTokens. A reply cut off at the cap is half a sentence, and every
+  // caller stores what it gets — narration is written to the node AND to the narration cache, so a
+  // truncated one is served as complete from then on. Refuse it here, where the vendor still says so.
+  let truncated = Data(#"{"content":[{"text":"The work so far has been"}],"stop_reason":"max_tokens"}"#.utf8)
+  #expect(throws: LLMError.self) { try CloudHTTP.parseCompletion(flavor: .anthropic, truncated) }
+
+  // A normal stop reason, and an absent one (a gateway that omits it), both parse.
+  let complete = Data(#"{"content":[{"text":"done"}],"stop_reason":"end_turn"}"#.utf8)
+  #expect(try CloudHTTP.parseCompletion(flavor: .anthropic, complete) == "done")
+  #expect(try CloudHTTP.parseCompletion(flavor: .anthropic, Data(#"{"content":[{"text":"done"}]}"#.utf8)) == "done")
+}
+
+@Test func parseCompletionRefusesATruncatedOpenAIReply() throws {
+  let truncated = Data(#"{"choices":[{"message":{"content":"The work so far"},"finish_reason":"length"}]}"#.utf8)
+  #expect(throws: LLMError.self) { try CloudHTTP.parseCompletion(flavor: .openAICompatible, truncated) }
+
+  let complete = Data(#"{"choices":[{"message":{"content":"done"},"finish_reason":"stop"}]}"#.utf8)
+  #expect(try CloudHTTP.parseCompletion(flavor: .openAICompatible, complete) == "done")
+  #expect(try CloudHTTP.parseCompletion(
+    flavor: .openAICompatible, Data(#"{"choices":[{"message":{"content":"done"}}]}"#.utf8)) == "done")
+}
+
+@Test func completeThrowsRatherThanReturningATruncatedNarration() async {
+  let cfg = CloudConfig(flavor: .anthropic, baseURL: "https://api.anthropic.com", model: "m")
+  let provider = CloudLLMProvider(config: cfg, apiKey: "k") { _ in
+    (Data(#"{"content":[{"text":"half a sen"}],"stop_reason":"max_tokens"}"#.utf8), httpResponse(200))
+  }
+  // Nothing is returned, so nothing downstream can store or cache it.
+  await #expect(throws: LLMError.self) { try await provider.complete(prompt: "hi") }
+}
+
 @Test func isLocalEndpointDetectsLoopback() {
   #expect(CloudConfig(flavor: .openAICompatible, baseURL: "http://localhost:11434/v1", model: "m").isLocalEndpoint)
   #expect(CloudConfig(flavor: .openAICompatible, baseURL: "http://127.0.0.1:11434/v1", model: "m").isLocalEndpoint)

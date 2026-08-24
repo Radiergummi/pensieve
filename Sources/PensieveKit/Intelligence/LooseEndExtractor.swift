@@ -105,38 +105,21 @@ public struct LooseEndExtractor {
     return chunks
   }
 
-  /// Splits `text` into consecutive character-windows of at most `budget` characters,
-  /// each tagged with the owning message's real index.
+  /// The shared whitespace-boundary windows, each tagged with the owning message's real index.
   private static func splitIntoFragments(index: Int, text: String, budget: Int) -> [PromptFragment] {
-    guard budget > 0, text.count > budget else { return [PromptFragment(index: index, text: text)] }
-    var fragments: [PromptFragment] = []
-    var start = text.startIndex
-    while start < text.endIndex {
-      var end = text.index(start, offsetBy: budget, limitedBy: text.endIndex) ?? text.endIndex
-      // Back up to the last whitespace in the window so we never cut mid-word (which
-      // yields verbatim-but-truncated quotes). If the window is one giant token with no
-      // whitespace, keep the hard cut — it can't be avoided.
-      if end < text.endIndex, let whitespaceIndex = text[start..<end].lastIndex(where: { $0.isWhitespace }) {
-        end = text.index(after: whitespaceIndex)
-      }
-      fragments.append(PromptFragment(index: index, text: String(text[start..<end])))
-      start = end
-    }
-    return fragments
+    let windows = whitespaceBoundedWindows(text, budget: budget)
+    // An empty message still occupies its slot as one empty fragment (windows yields none).
+    guard !windows.isEmpty else { return [PromptFragment(index: index, text: text)] }
+    return windows.map { PromptFragment(index: index, text: $0) }
   }
 
   static func buildPrompt(_ chunk: [PromptFragment]) -> String {
     let body = chunk.map { "[\($0.index)] \($0.text)" }.joined(separator: "\n\n")
     return """
-    Extract LOOSE ENDS from a developer's own messages: DEFERRED, PARKED, or DECISION work they \
-    left OPEN for later — e.g. "we should also migrate the auth tables", "let's do X later", \
-    "TODO: wire up the webhook", "don't forget the rate limiter", "let's go with A instead of B". \
-    Only use the text below.
+    Extract LOOSE ENDS from a developer's own messages. A LOOSE END is \
+    \(LooseEndDefinition.isDeferredWork). Only use the text below.
 
-    Do NOT extract in-the-moment requests the assistant simply carries out now (e.g. "read the \
-    spec", "can you help me fix this?", "run the tests", "subagent-driven, let's go"), nor \
-    acknowledgements, approvals, status checks, checklist items, or agent task briefs ("looks \
-    good", "carry on", "are you done") — those are not loose ends.
+    A LOOSE END is \(LooseEndDefinition.isNotInTheMoment). Do NOT extract those.
 
     Return ONLY a JSON array. Each element: {"text": <short paraphrase>, "quote": <a VERBATIM \
     substring copied exactly from one message, including its original wording and casing>, \
@@ -148,12 +131,18 @@ public struct LooseEndExtractor {
     """
   }
 
-  /// Extracts the first complete top-level JSON array from arbitrary model output, decoding
-  /// element-by-element so one malformed element drops only itself, not the whole chunk.
-  public static func decodeCandidates(_ raw: String) -> [LooseEndCandidate] {
+  /// The candidates in the model's reply, or **nil when the reply contains no complete top-level
+  /// JSON array at all** — a refusal, a "Here are the loose ends:" preamble, a truncated answer.
+  ///
+  /// That nil is the whole point of this overload. An unparseable reply and a genuinely empty one
+  /// are different facts, and collapsing them cost real loose ends: `ExtractionRunner` advanced its
+  /// watermark over a slice the model never actually answered about, and the byte-size gate then
+  /// skipped that slice forever. Mirrors `IntentClassifier.decodeIndices`, which has always drawn
+  /// the same line. Elements are decoded one by one, so one malformed element drops only itself.
+  public static func decodeCandidatesIfParseable(_ raw: String) -> [LooseEndCandidate]? {
     guard let slice = firstJSONArray(in: raw), let data = slice.data(using: .utf8),
           let elements = (try? JSONSerialization.jsonObject(with: data)) as? [Any]
-    else { return [] }
+    else { return nil }
     let decoder = JSONDecoder()
     return elements.compactMap { element in
       guard let elementData = try? JSONSerialization.data(withJSONObject: element),
@@ -161,5 +150,11 @@ public struct LooseEndExtractor {
       else { return nil }
       return candidate
     }
+  }
+
+  /// `decodeCandidatesIfParseable`, flattening "no array" to "no candidates". For callers that have
+  /// no watermark to protect and genuinely cannot tell the two apart (the eval harness, tests).
+  public static func decodeCandidates(_ raw: String) -> [LooseEndCandidate] {
+    decodeCandidatesIfParseable(raw) ?? []
   }
 }

@@ -2,6 +2,115 @@ import Foundation
 import Testing
 @testable import PensieveKit
 
+// MARK: - What the factory actually RETURNS
+//
+// Everything below this mark asserts on the concrete type `makeDefaultLLMProvider` hands back. The
+// tests further down assert on `resolvedProviderKind`, the pure resolver BESIDE the factory — and
+// for a long time that was all any of them did. Replacing the factory body with "always return a
+// remote cloud provider" left the entire suite green: "extraction stays on-device" and "no API key"
+// are the project's privacy guarantees, and nothing checked them. These do.
+
+/// Runs `body` against a throwaway defaults domain, removed afterwards, so nothing here reads or
+/// writes the real user's provider selection.
+private func withThrowawayDefaults(_ body: (UserDefaults) -> Void) {
+  let suite = "pensieve-test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suite)!
+  defer { defaults.removePersistentDomain(forName: suite) }
+  body(defaults)
+}
+
+/// The local provider the factory must return: on-device when this machine has it, `claude -p`
+/// otherwise. Asserted as a *type*, which is the whole point — a kind string can agree with a
+/// factory that returns something else entirely.
+private func expectLocalProvider(_ provider: any LLMProvider, _ comment: Comment) {
+  #expect(!(provider is CloudLLMProvider), comment)
+  #if canImport(FoundationModels)
+  if #available(macOS 26.0, *), FoundationModelsProbe.isAvailable() {
+    #expect(provider is FoundationModelsProvider, comment)
+    return
+  }
+  #endif
+  #expect(provider is ClaudeCLIProvider, comment)
+}
+
+/// A fully usable remote cloud config — everything except a *selection* of cloud.
+private let configuredRemoteCloud = CloudConfig(flavor: .anthropic,
+                                               baseURL: "https://api.anthropic.com",
+                                               model: "claude-sonnet-5")
+
+@Test func factoryReturnsTheOnDeviceProviderForTheDefaultSelection() {
+  // An untouched domain ⇒ `.auto`, which is what every CLI/daemon extraction run uses.
+  withThrowawayDefaults { defaults in
+    expectLocalProvider(makeDefaultLLMProvider(defaults: defaults), "auto must resolve on-device-first")
+  }
+}
+
+@Test func factoryHonorsEachPreferenceWithTheMatchingConcreteType() {
+  for preference in [ProviderPreference.auto, .foundationModels] {
+    withThrowawayDefaults { defaults in
+      defaults.set(preference.rawValue, forKey: PensieveDefaults.llmProviderKey)
+      expectLocalProvider(makeDefaultLLMProvider(defaults: defaults), "\(preference) must stay local")
+    }
+  }
+  withThrowawayDefaults { defaults in
+    defaults.set(ProviderPreference.claudeCLI.rawValue, forKey: PensieveDefaults.llmProviderKey)
+    // An explicit CLI choice is never upgraded to on-device, even on a capable machine.
+    #expect(makeDefaultLLMProvider(defaults: defaults) is ClaudeCLIProvider)
+  }
+}
+
+@Test func noConfigurationReachableWithoutAnExplicitCloudOptInReturnsTheCloudProvider() {
+  // Every way to reach the factory short of "select Cloud AND finish configuring it". None may
+  // return CloudLLMProvider: there is no API key on this machine, and extraction stays on-device.
+  for preference in [ProviderPreference.auto, .foundationModels] {
+    withThrowawayDefaults { defaults in
+      defaults.set(preference.rawValue, forKey: PensieveDefaults.llmProviderKey)
+      // Even WITH a fully configured cloud sitting there, a non-cloud selection must not use it.
+      expectLocalProvider(
+        makeDefaultLLMProvider(defaults: defaults, cloudConfig: configuredRemoteCloud, apiKey: "sk-test"),
+        "\(preference) selected: a configured cloud must not be reached")
+    }
+  }
+  withThrowawayDefaults { defaults in
+    defaults.set(ProviderPreference.claudeCLI.rawValue, forKey: PensieveDefaults.llmProviderKey)
+    #expect(makeDefaultLLMProvider(defaults: defaults,
+                                   cloudConfig: configuredRemoteCloud, apiKey: "sk-test") is ClaudeCLIProvider)
+  }
+
+  // Cloud *selected*, but not usable: no config, no key, no model, no base URL. Each degrades local.
+  let unusable: [(CloudConfig?, String?)] = [
+    (nil, nil),
+    (nil, "sk-test"),
+    (configuredRemoteCloud, nil),
+    (configuredRemoteCloud, ""),
+    (CloudConfig(flavor: .anthropic, baseURL: "https://api.anthropic.com", model: ""), "sk-test"),
+    (CloudConfig(flavor: .anthropic, baseURL: "", model: "claude-sonnet-5"), "sk-test"),
+  ]
+  for (config, key) in unusable {
+    withThrowawayDefaults { defaults in
+      defaults.set(ProviderPreference.cloud.rawValue, forKey: PensieveDefaults.llmProviderKey)
+      expectLocalProvider(makeDefaultLLMProvider(defaults: defaults, cloudConfig: config, apiKey: key),
+                          "cloud selected but unconfigured must degrade to local")
+    }
+  }
+}
+
+@Test func factoryReturnsTheCloudProviderOnlyForADeliberatelyConfiguredCloudSelection() {
+  // The presence half: "never cloud" above is only meaningful if the opt-in path genuinely works,
+  // otherwise it would pass by the factory simply never returning cloud at all.
+  withThrowawayDefaults { defaults in
+    defaults.set(ProviderPreference.cloud.rawValue, forKey: PensieveDefaults.llmProviderKey)
+    #expect(makeDefaultLLMProvider(defaults: defaults,
+                                   cloudConfig: configuredRemoteCloud, apiKey: "sk-test") is CloudLLMProvider)
+
+    // And the keyless-localhost case (Ollama), which `resolvedProviderKind` already calls "cloud".
+    let localEndpoint = CloudConfig(flavor: .openAICompatible, baseURL: "http://localhost:11434/v1", model: "llama3")
+    #expect(makeDefaultLLMProvider(defaults: defaults, cloudConfig: localEndpoint, apiKey: "") is CloudLLMProvider)
+  }
+}
+
+// MARK: - The resolver beside it
+
 @Test func factoryFallsBackToLocalWithoutCloudInputs() {
   // An empty throwaway domain ⇒ selection == .auto ⇒ a usable local provider (never cloud).
   let suite = "pensieve-test-\(UUID().uuidString)"

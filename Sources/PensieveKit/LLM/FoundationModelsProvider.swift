@@ -17,13 +17,42 @@ import FoundationModels
 public struct FoundationModelsProvider: LLMProvider {
   public init() {}
 
+  /// Wall-clock cap on a single on-device call, the same 120 s `ClaudeCLIProvider` gives `claude -p`
+  /// and for the same reason: an unbounded `session.respond` has no cap of its own, and a stall
+  /// (model asset reload, resource pressure) parks the caller forever. That is how the background
+  /// sync agent hung — launchd will not start a second instance while one is still running, so a
+  /// single stalled respond stopped background sync until logout, with a frozen log as the only
+  /// evidence. A timeout turns "silent forever" into a logged error and a retry next pass.
+  static let timeout: TimeInterval = 120
+
+  /// Races `work` against `timeout`. On timeout the group's exit cancels the model task, which is
+  /// how the stalled `respond` is actually abandoned rather than merely ignored.
+  private static func within<Value: Sendable>(
+    _ label: String, _ work: @escaping @Sendable () async throws -> Value
+  ) async throws -> Value {
+    try await withThrowingTaskGroup(of: Value.self) { group in
+      group.addTask { try await work() }
+      group.addTask {
+        try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+        Log.llm.error("FoundationModels \(label, privacy: .public) timed out after \(Int(timeout), privacy: .public)s")
+        throw LLMError.providerFailed("FoundationModels \(label) timed out after \(Int(timeout))s")
+      }
+      guard let first = try await group.next() else {
+        throw LLMError.providerFailed("FoundationModels \(label) produced no result")
+      }
+      group.cancelAll()
+      return first
+    }
+  }
+
   public func complete(prompt: String) async throws -> String {
     Log.llm.debug("LLM prompt dispatched (len=\(prompt.count, privacy: .public), provider=foundationModels)")
-    let session = LanguageModelSession()
     do {
-      let response = try await session.respond(to: prompt)
-      Log.llm.debug("LLM completion received (len=\(response.content.count, privacy: .public))")
-      return response.content
+      let content = try await Self.within("complete") {
+        try await LanguageModelSession().respond(to: prompt).content
+      }
+      Log.llm.debug("LLM completion received (len=\(content.count, privacy: .public))")
+      return content
     } catch {
       Log.llm.error("FoundationModels complete failed: \(error, privacy: .public)")
       throw LLMError.providerFailed("FoundationModels: \(error)")
@@ -31,17 +60,23 @@ public struct FoundationModelsProvider: LLMProvider {
   }
 
   public func extractCandidates(prompt: String) async throws -> [LooseEndCandidate] {
-    let session = LanguageModelSession()
     do {
-      let content = try await session.respond(to: prompt, schema: Self.candidateListSchema()).content
+      let content = try await Self.within("extractCandidates") {
+        try await LanguageModelSession().respond(to: prompt, schema: Self.candidateListSchema()).content
+      }
+      // A structure mismatch means guided generation did not answer the question — NOT that there
+      // are no loose ends. Reporting it as an empty array let `ExtractionRunner` advance its
+      // watermark over a slice nothing had mined, retiring those messages for good.
       guard case .structure(let root, _) = content.kind,
-            case .array(let items)? = root["candidates"]?.kind else { return [] }
+            case .array(let items)? = root["candidates"]?.kind else {
+        throw LLMError.providerFailed("guided generation returned no candidates array")
+      }
       return items.compactMap { item in
         guard case .structure(let fields, _) = item.kind,
               case .string(let text)? = fields["text"]?.kind,
               case .string(let quote)? = fields["quote"]?.kind,
-              case .number(let idx)? = fields["messageIndex"]?.kind else { return nil }
-        return LooseEndCandidate(text: text, quote: quote, messageIndex: Int(idx))
+              case .number(let messageIndex)? = fields["messageIndex"]?.kind else { return nil }
+        return LooseEndCandidate(text: text, quote: quote, messageIndex: Int(messageIndex))
       }
     } catch {
       // Preserve the wrapped description so the extractor's context-overflow re-split fires.
@@ -51,9 +86,10 @@ public struct FoundationModelsProvider: LLMProvider {
   }
 
   public func classifyGenuineIndices(prompt: String) async throws -> [Int] {
-    let session = LanguageModelSession()
     do {
-      let content = try await session.respond(to: prompt, schema: Self.genuineIndicesSchema()).content
+      let content = try await Self.within("classifyGenuineIndices") {
+        try await LanguageModelSession().respond(to: prompt, schema: Self.genuineIndicesSchema()).content
+      }
       guard case .structure(let root, _) = content.kind,
             case .array(let items)? = root["indices"]?.kind else { return [] }
       return items.compactMap { if case .number(let numberValue) = $0.kind { return Int(numberValue) } else { return nil } }
@@ -64,9 +100,10 @@ public struct FoundationModelsProvider: LLMProvider {
   }
 
   public func classifyNonSalientIndices(prompt: String) async throws -> [Int] {
-    let session = LanguageModelSession()
     do {
-      let content = try await session.respond(to: prompt, schema: Self.nonSalientIndicesSchema()).content
+      let content = try await Self.within("classifyNonSalientIndices") {
+        try await LanguageModelSession().respond(to: prompt, schema: Self.nonSalientIndicesSchema()).content
+      }
       guard case .structure(let root, _) = content.kind,
             case .array(let items)? = root["indices"]?.kind else { return [] }
       return items.compactMap { if case .number(let numberValue) = $0.kind { return Int(numberValue) } else { return nil } }
@@ -113,8 +150,8 @@ public struct FoundationModelsProvider: LLMProvider {
   private static func nonSalientIndicesSchema() throws -> GenerationSchema {
     let root = DynamicGenerationSchema(name: "NonSalientIndices", properties: [
       .init(name: "indices",
-            description: "The [n] indices of items that are clearly in-the-moment requests the assistant simply " +
-              "carried out — NOT deferred/parked/decision work left open. These will be dropped. Empty when every " +
+            description: "The [n] indices of items that are NOT loose ends. A loose end is " +
+              LooseEndDefinition.isDeferredWork + ". These will be dropped. Empty when every " +
               "item is a genuine loose end; when unsure about an item, do NOT include it.",
             schema: DynamicGenerationSchema(arrayOf: DynamicGenerationSchema(type: Int.self))),
     ])

@@ -31,7 +31,12 @@ public struct ExtractionRunner {
 
     var results: [ExtractionResult] = []
     for event in events {
-      if let result = await extractLooseEnds(from: event) {
+      // Cancellation (app quit, a cancelled sync pass) ends the batch as a cancellation. Without
+      // this check the loop ran to the end, and each session's provider call surfaced its
+      // CancellationError through the per-session catch below — so quitting mid-pass was logged
+      // as N extraction *failures*, which is a different and alarming thing.
+      try Task.checkCancellation()
+      if let result = try await extractLooseEnds(from: event) {
         results.append(result)
       }
     }
@@ -42,8 +47,9 @@ public struct ExtractionRunner {
   /// Processes one cc.session event: skip (unreadable/unchanged), legacy-init (watermark only),
   /// or extract + verify + insert. Returns nil whenever there is nothing to report for the
   /// batch summary (skip, legacy-init, or a caught failure) — a single bad session must never
-  /// abort the batch or silently advance the watermark.
-  private func extractLooseEnds(from event: Event) async -> ExtractionResult? {
+  /// abort the batch or silently advance the watermark. Throws ONLY for cancellation, which is
+  /// not a per-session failure and must end the whole pass.
+  private func extractLooseEnds(from event: Event) async throws -> ExtractionResult? {
     do {
       let detail = (try? JSONDecoder().decode([String: String].self,
                                               from: Data(event.detailJSON.utf8))) ?? [:]
@@ -122,9 +128,14 @@ public struct ExtractionRunner {
       Log.extraction.info("Extracted session \(sessionID, privacy: .public): \(extractionCounts, privacy: .public)")
       return ExtractionResult(sessionID: session.sessionID,
         proposed: candidates.count, verified: verified.count, inserted: inserted)
+    } catch is CancellationError {
+      // Not a failure of this session: the caller gave up. Rethrow so the pass ends as a
+      // cancellation instead of logging one "extraction failed" line per remaining session.
+      Log.extraction.info("Extraction cancelled at session \(event.id, privacy: .public)")
+      throw CancellationError()
     } catch {
-      // A single bad session (provider error, etc.) must never abort the batch or
-      // silently advance the watermark — leave it unset so it retries next run.
+      // A single bad session (provider error, unparseable model reply, etc.) must never abort the
+      // batch or silently advance the watermark — leave it unset so it retries next run.
       Log.extraction.error("Extraction failed for session \(event.id, privacy: .public): \(error, privacy: .public)")
       return nil
     }

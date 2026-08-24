@@ -79,15 +79,26 @@ private struct AnthropicBody: Encodable {
 
 /// Response shapes for `parseCompletion`/`parseModelList`. Lives at file scope, not nested in
 /// `CloudHTTP`, so no type is more than one level deep.
+///
+/// `stopReason` is how the vendor says "I stopped because I hit `max_tokens`". Optional because a
+/// gateway may omit it; absent is read as "not truncated", the same as any other reason.
 private struct AnthropicResp: Decodable {
   struct Block: Decodable { let text: String? }
   let content: [Block]
+  let stopReason: String?
+  // `stop_reason` is the Anthropic API's wire key; the Swift property stays camelCase.
+  enum CodingKeys: String, CodingKey { case content, stopReason = "stop_reason" }
 }
 
 /// Lives at file scope for the same reason as `AnthropicResp`. `Choice`/`OpenAIMessage` are hoisted
 /// out too (rather than nested in `OpenAIResp`) so neither exceeds the one-level nesting limit.
 private struct OpenAIMessage: Decodable { let content: String }
-private struct OpenAIChoice: Decodable { let message: OpenAIMessage }
+private struct OpenAIChoice: Decodable {
+  let message: OpenAIMessage
+  let finishReason: String?
+  // `finish_reason` is the OpenAI API's wire key; the Swift property stays camelCase.
+  enum CodingKeys: String, CodingKey { case message, finishReason = "finish_reason" }
+}
 private struct OpenAIResp: Decodable { let choices: [OpenAIChoice] }
 
 /// Lives at file scope for the same reason as `AnthropicResp`. `ModelEntry` names what it is: one
@@ -150,21 +161,37 @@ public enum CloudHTTP {
     return request
   }
 
+  /// Parses a completion, **throwing when the model was cut off at `maxTokens`**.
+  ///
+  /// A truncated completion is not a shorter answer, it is half a sentence — and every caller here
+  /// stores what it gets: narration is written to the node and to the narration cache, so one
+  /// truncated reply is cached as if complete and served from then on. Nothing downstream can tell
+  /// the difference after the fact, so the only place to catch it is here, where the vendor is still
+  /// telling us. Throwing means no narration rather than a mutilated one, and the deterministic
+  /// fallback summary takes over — the honest outcome.
   public static func parseCompletion(flavor: CloudFlavor, _ data: Data) throws -> String {
     switch flavor {
     case .anthropic:
-      guard let text = (try? JSONDecoder().decode(AnthropicResp.self, from: data))?
-        .content.compactMap({ $0.text }).first else {
+      guard let response = try? JSONDecoder().decode(AnthropicResp.self, from: data),
+            let text = response.content.compactMap({ $0.text }).first else {
         throw LLMError.providerFailed("no text in Anthropic response")
       }
+      try refuseTruncated(response.stopReason, truncatedValue: "max_tokens")
       return text
     case .openAICompatible:
-      guard let text = (try? JSONDecoder().decode(OpenAIResp.self, from: data))?
-        .choices.first?.message.content else {
+      guard let choice = (try? JSONDecoder().decode(OpenAIResp.self, from: data))?.choices.first else {
         throw LLMError.providerFailed("no content in OpenAI response")
       }
-      return text
+      try refuseTruncated(choice.finishReason, truncatedValue: "length")
+      return choice.message.content
     }
+  }
+
+  /// Throws when the vendor's stop/finish reason says the output hit the token ceiling.
+  private static func refuseTruncated(_ reason: String?, truncatedValue: String) throws {
+    guard reason == truncatedValue else { return }
+    Log.llm.error("Cloud completion truncated at maxTokens=\(maxTokens, privacy: .public); discarding")
+    throw LLMError.providerFailed("completion truncated at maxTokens=\(maxTokens)")
   }
 
   public static func parseModelList(_ data: Data) throws -> [String] {
