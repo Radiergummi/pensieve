@@ -1524,6 +1524,15 @@ detection as a later spike.*
 
 ## Transcript reading C2 — harness folding (2026-08-24, split out of C1)
 
+**Prerequisite 0 — split `LooseEndRow.swift` before writing any code.** C1 left it at **395 lines**
+against SwiftLint's 400 cap (`--strict`, no override in `.swiftlint.yml`), so there are five lines of
+headroom and both C2 and C3 add to this file. C1's plan predicted 385 and was wrong — it counted the
+two deleted `role` lines but not the doc comments its own briefs prescribed. The seam is already
+chosen and should not be re-litigated: **`LooseEndRow+Provenance.swift`**, taking `provenanceBody`,
+`quoteFallback`, `previewRow`, `messageRow` and the existing transcript-helper extension. The comment
+at `LooseEndRow.swift:344-345` already records that those helpers were moved to an extension to stay under
+`type_body_length`, so the file is telling you where it wants to be cut.
+
 **C1 removes the harness card's fill; it does not fold anything.** Folding is a behaviour change with
 a find-correctness rule attached, and an adversarial review of the C1 draft established that its
 policy had no evidence behind it and its verification could not be run. Both are prerequisites, and
