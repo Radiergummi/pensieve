@@ -40,7 +40,7 @@ now an ordinary unbuilt feature wanting its own brainstorm, and was never actual
 is same-device, CloudKit is cross-device. Both detailed under "Widgets" below.
 
 **Tier 2 — Quality, measurement & known defects**
-- Claude Design review — slice C (transcript reading) is **specced 2026-08-24** (`specs/2026-08-24-transcript-reading-slice-c-design.md`, branch `worktree-transcript-reading`); slice D has five items left, each its own brainstorm (`Du` vs `user` is closed by slice C).
+- Claude Design review — slice C split on adversarial review into **C1** (hierarchy; specced 2026-08-24, `specs/2026-08-24-transcript-reading-c1-design.md`, branch `worktree-transcript-reading`), **C2** (harness folding — two prerequisites) and **C3** (the venue — needs the `DetailView` measure-cap restructure); slice D has five items left (`Du` vs `user` is closed by C1).
 - Contextify scan — open items: honest staleness on the retrieval path, `pensieve doctor`, Live Recall, skill + researcher subagent.
 - P3 retrieval harness — **blocked on the user** writing 30–50 paraphrase queries.
 - Follow-ups from the popover + harness session — the dropped node-scoped Loose Ends surface, plus three verification-practice findings.
@@ -63,7 +63,7 @@ is same-device, CloudKit is cross-device. Both detailed under "Widgets" below.
   unverified and neither is code:** the App Group entitlement still has no provisioning profile (only an
   interactive Xcode build can mint one), so the widget has never been *seen* rendering; and the sync
   agent's publish call, though reviewed, was never observed completing.
-- The transcript's own venue — its own window · an `.inspector` retrial · chipping the skill body. All three deferred out of slice C, 2026-08-24.
+- Transcript reading **C2** (harness folding) and **C3** (the venue: breakout · own window · an `.inspector` retrial), plus the unreachable skill-body chip. All split out of C1, 2026-08-24.
 - Spike: statistical theme discovery across strands (`NLEmbedding`).
 - Talk to the system, **stage 2** — the conversational agent (stage 1 shipped 2026-08-13).
 - Forks as first-class — the capture backend; the long pole gating app slice 6.
@@ -592,7 +592,7 @@ an ellipsis `Menu` holding Refresh and Quit, at a 320pt popover, so German canno
 *Trigger for the two carries: the scroll-edge hoist wants the next GUI session; the `NextItem` field
 wants the next pass that touches `NextQueries`.*
 
-**C — Transcript reading: one rail, no nested cards.** **SPECCED 2026-08-24** — `specs/2026-08-24-transcript-reading-slice-c-design.md`, branch `worktree-transcript-reading`. The proposal below is preserved as the input; the spec supersedes it where they differ (notably: the skill chip is smaller than this text assumes, and the venue question was reopened and settled — see Tier 3 ▸ "The transcript's own venue"). The provenance transcript currently nests
+**C — Transcript reading: one rail, no nested cards.** **SPLIT ON REVIEW, 2026-08-24 → C1 / C2 / C3.** C1 (hierarchy) is specced: `specs/2026-08-24-transcript-reading-c1-design.md`, branch `worktree-transcript-reading`. C2 (folding) and C3 (the venue) are in Tier 3, each with the evidence that sized it. The proposal below is preserved as the *input* and is superseded where they differ — notably: the skill chip is unreachable as written, folding needs corpus measurement plus UI-fixture work first, and the venue needs the `DetailView` measure-cap restructure before any breakout can span the pane. The provenance transcript currently nests
 three near-identical gray surfaces (message card inside system card inside HINWEIS/BEFEHL card) with
 the speaker as an 11pt label *outside* the outermost one — it reads as a log, not a conversation.
 Proposal: a **speaker column** carries the structure; only user messages get a filled bubble (they
@@ -648,7 +648,7 @@ revisit it. *Trigger: live now.*
   non-git/session source is built; premature before then.
 
 **Rejected on the evidence: "move Recent Activity into a trailing `.inspector`."** The proposal reads
-the empty margin beside the 680pt measure cap as dead space to fill. But the `.inspector` was
+the empty margin beside the 760pt measure cap as dead space to fill. But the `.inspector` was
 **deliberately removed** in the 2026-07-08 inline-provenance rework (`RootView.swift:41-43`) and in-node
 find (shipped 2026-08-12) builds on that decision. The underlying complaint — a wide window wastes its
 surplus — is legitimate and belongs to slice A as a layout question, but re-adding an inspector is not
@@ -1522,44 +1522,121 @@ detection as a later spike.*
 
 ---
 
-## The transcript's own venue — three ways, all deferred out of slice C (2026-08-24)
+## Transcript reading C2 — harness folding (2026-08-24, split out of C1)
 
-Split out of `specs/2026-08-24-transcript-reading-slice-c-design.md` during brainstorming. Slice C
-chose the **full-width inline breakout** and deferred the other two. The shared intuition behind all
-three is sound and worth restating: the provenance transcript should have *its own surface* rather
-than being a guest inside the loose-end card.
+**C1 removes the harness card's fill; it does not fold anything.** Folding is a behaviour change with
+a find-correctness rule attached, and an adversarial review of the C1 draft established that its
+policy had no evidence behind it and its verification could not be run. Both are prerequisites, and
+both are cheap — which is exactly why they should happen before the code, not during it.
+
+**Prerequisite 1 — measure the corpus.** The draft's policy was "fold everything, except
+`toolUseError` (visible) and `skillPreamble` (chip)", justified by the word *bulk*. The predecessor's
+parser-visible counts suggest that is wrong for the commonest kinds: `taskNotification` 969
+(`displayBody` = `summary · status`, one line), `command` 649 (`name — message — args`, one line),
+`commandCaveat` 457 (short) — against `toolUses` 759 and `systemReminder` 157, which are genuinely
+bulky. Folding a one-line command behind `▸ Command · 1 lines` swaps one line of *content* for one
+line of *chrome* plus a click, ~1100 times over. **Measure `displayBody` line counts per kind over
+the live corpus** (the predecessor's method), then either confirm a per-kind table or — more likely —
+replace it with a `lineCount > N` threshold, which needs no taxonomy, adapts to a `command` with long
+`args`, and dissolves the next item.
+
+**Prerequisite 2 — the UI fixture cannot render a transcript.** `UITestFixture` seeds four loose ends
+against three events and writes **no `.jsonl` anywhere**; the events carry `{"files":[…]}`, so
+`ProvenanceQueries.transcriptPath` finds nothing, every fixture loose end resolves
+`transcriptAvailable == false`, and the pane degrades to `quoteFallback`. `make uitest` therefore
+cannot render a single transcript message — let alone a harness block, let alone a folded one. The
+only transcript-adjacent UI test, `DetailOrderTests.testCitedQuoteRendersVerbatim`, asserts the quote
+for exactly this reason. **Budget the fixture work**: write a synthetic transcript into the fixture's
+temp store, point a `cc.session` event's `detailJSON.transcriptPath` at it, and include a
+`system-reminder` body whose phrase appears nowhere else. `UITestFixture` is in PensieveKit, so it is
+testable. This unlocks every future transcript-rendering change, not just C2.
+
+**The correctness rule, and the trap under it.** A folded or chipped block **must auto-open when a
+find match is inside it** — `NodeFindDocument` indexes harness bodies through `findableText` and
+counts those matches, and `TranscriptSegmentView.swift:92` already drops its `lineLimit` while
+highlighting for precisely that reason. Two things the draft left unspecified and a plan must not:
+
+- **Precedence.** A user-toggled disclosure and the find signal are two sources of truth. Derive,
+  don't store: `isFolded = userOverride ?? (highlight == nil)`, `userOverride` reset to `nil` on
+  re-expand. The natural alternative — `@State` plus `.onChange(of: highlight != nil)` — **fails on
+  first render**, because `.onChange` does not fire for the initial value: the block mounts folded,
+  `findSite`'s `.onAppear` scrolls a 20pt disclosure line to centre, and only then does the body
+  unfold beneath it, off-screen. `TranscriptSegmentView.swift:91-98` already models the correct
+  pattern as a pure derivation with zero state, which is why it has never had an ordering bug.
+- **Blast radius.** `LooseEndRow.highlights(for:segments:)` computes runs for *every* matching
+  segment, not just the current match, so auto-open unfolds all matching blocks at once. A
+  three-letter query pops every fold in every force-expanded row. Own the behaviour or scope the
+  runs; do not discover it.
+
+**Two smaller carries.** A chip showing a *derived* skill name is a second projection of
+`findableText` — `TranscriptSegment.swift:113` warns in writing that "two copies of this would drift
+into highlighting text that isn't on screen", so any derivation belongs in Kit and must be what find
+indexes. And `interrupted` *does* need a special case under a `▸ label · n lines` renderer: its
+`displayBody` is `nil`, so it would render `▸ Interrupted · 0 lines` with a chevron disclosing
+nothing.
+
+*Revisit trigger:* now, but behind the two prerequisites. Neither is optional and neither is large.
+
+---
+
+## Transcript reading C3 — the transcript's own venue (2026-08-24, split out of C1)
+
+Three mechanisms for the same sound intuition: the provenance transcript should have **its own
+surface** rather than being a guest inside the loose-end card. C1 deliberately keeps the transcript
+inside the card and fixes only the nesting; the venue question is here.
+
+- **Full-width inline breakout — C1's original plan, moved here because its mechanism does not
+  work.** The draft specified "negative horizontal insets against the row's padding" producing a
+  transcript spanning the detail pane. But `DetailView.swift:127-129` caps the **whole section stack**
+  at `Prose.measure` (760) and then *centres* it, so the distance from a segment to the pane's leading
+  edge is `(paneWidth − 760)/2 + 24 + 18 + 12` — a function of window width, not a constant. A fixed
+  negative inset under-reaches on a wide window (a breakout stopping 200pt short is just a wider card)
+  and **over-reaches and clips on a narrow one**: at the app's floor the detail pane is around 420pt,
+  the cap is inactive, and there is no surplus to reclaim. `ClosedLooseEndsRecord.swift:37` also nests
+  the row behind a `LooseEndStatusBadge` in an `HStack`, so one constant is wrong at one of the two
+  sites regardless. **The real work is moving the measure cap off the container and onto each
+  section** so the transcript can opt out — which touches every section in `DetailView`, a file at 385
+  of 400 permitted lines. That is the prerequisite; the insets are the easy part.
 
 - **The transcript in its own window.** `RecallWindowView` + ⌘⌥N already open secondary recall
   windows, so "open this transcript in its own window" is a small verb on shipped machinery — no
-  tiling risk, and a wide window can be devoted entirely to reading. Deferred only because it is a
-  **navigation** feature, and folding it into a readability slice would have made slice C an IA
-  change. *Revisit trigger:* the next pass that touches recall windows or detail-pane navigation —
-  and note the standing related ask, previous/next node navigation (Tier 2 ▸ Claude Design ▸ D).
+  tiling risk, and a wide window devoted entirely to reading. Deferred from C1 only because it is a
+  **navigation** feature. *Related standing ask:* previous/next node navigation (Tier 2 ▸ Claude
+  Design ▸ D).
 
 - **Retry the trailing `.inspector`, properly researched.** Retired 2026-07-08 after three failed
   patches and an AppKit crash (`_updateSidebarPositionIfNeeded` → `_tileTitlebarAndRedisplay`, from
   toggling the sidebar with it open), root-caused then as *four resizable regions is more than macOS
   reliably fits/tiles*. **That verdict deserves a retrial, and this entry exists to say so.** The
   session that produced it was bug-fix-driven, not design-driven — no spec, no plan, an architecture
-  pivot taken under crash pressure — which is not the same as researched-and-found-unworkable. Three
-  things have changed or were never isolated: the app now has a **macOS 26.0 floor** (the crash
-  predates it); the inspector was attached at **window level over the 3-column split** rather than
-  scoped to the detail column; and the crash trigger was **one specific interaction**, not the panel
-  as such. `.inspector` remains the platform-suggested answer to exactly this layout problem, which
-  by "platform primitives first" makes it the path we should be able to justify *not* taking.
-  *Revisit trigger:* a session that can afford real research plus a GUI verification pass — not a
-  slice with other goals.
+  pivot under crash pressure — which is not the same as researched-and-found-unworkable. Three things
+  have changed or were never isolated: the app now has a **macOS 26.0 floor** (the crash predates it);
+  the inspector was attached at **window level over the 3-column split** rather than scoped to the
+  detail column; and the crash trigger was **one specific interaction**, not the panel as such.
+  `.inspector` remains the platform-suggested answer to exactly this layout problem, which by
+  "platform primitives first" makes it the path we should be able to justify *not* taking. *Revisit
+  trigger:* a session that can afford real research plus a GUI verification pass — not a slice with
+  other goals.
 
-- **Chipping the skill-document body — unreachable at the render layer.** The Claude Design item
-  reads "attached skill documents become a chip, not an embedded article". Only the preamble half is
-  reachable: `HarnessKind.skillPreamble(path:)` captures the *"Base directory for this skill: …"*
-  line and its `displayBody` returns the path alone, so slice C's chip collapses a bare path, not an
-  article. The actual embedded article is skill **content arriving as ordinary markdown**, inside no
-  harness tag at all. Reaching it needs a parser change whose detection would be **heuristic on
-  content** rather than allowlisted on tags — which is what `TranscriptVocabulary` is deliberately
-  structured to avoid, and it sits adjacent to the trust gate. *Revisit trigger:* a decision that
-  content-shaped detection is acceptable in the parser — which should be its own brainstorm, because
-  the answer has so far always been no.
+**What a panel costs that inline does not.** `NodeFindDocument` indexes the transcript segments of
+*every* loose end in a node and force-expands rows to reveal matches, so ⌘F today finds text inside a
+transcript the user never opened. A panel showing one transcript at a time either loses that reach or
+must drive the panel per match. And three of the six rendering sites are the middle column at ~180pt,
+where no panel can exist — so a panel *adds* a surface rather than replacing one.
+
+---
+
+## Chipping the skill-document body — unreachable at the render layer (2026-08-24)
+
+The Claude Design item reads "attached skill documents become a chip, not an embedded article". Only
+the preamble half is reachable: `HarnessKind.skillPreamble(path:)` captures the *"Base directory for
+this skill: …"* line and its `displayBody` returns the path alone
+(`TranscriptSegment.swift:83`, `:127`), so a chip there collapses a bare path, not an article. The
+actual embedded article is skill **content arriving as ordinary markdown**, inside no harness tag at
+all. Reaching it needs a parser change whose detection would be **heuristic on content** rather than
+allowlisted on tags — which is what `TranscriptVocabulary` is deliberately structured to avoid, and it
+sits adjacent to the trust gate. *Revisit trigger:* a decision that content-shaped detection is
+acceptable in the parser — its own brainstorm, because the answer has so far always been no.
 
 ---
 
