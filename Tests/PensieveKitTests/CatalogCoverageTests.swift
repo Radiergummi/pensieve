@@ -220,6 +220,11 @@ func everyCatalogKeyIsRenderedBySomeLiteral(target: CatalogTarget) throws {
   // runtime lookup (`NodeContext.displayKey`), so its literals are this target's literals.
   let present = allLiteralShapes(inSourcesUnder: repositoryRoot.appendingPathComponent(target.sources))
     .union(allLiteralShapes(inSourcesUnder: repositoryRoot.appendingPathComponent("Sources/PensieveKit")))
+  // Same vacuity guard as the sibling test, in the other direction: `dead` is also empty when the
+  // literal scan finds nothing.
+  #expect(!keys.isEmpty, "\(target.name): read 0 keys from \(target.catalog) — the catalog reader is broken, not the catalog")
+  #expect(!present.isEmpty, "\(target.name): the literal scan found 0 shapes — the scan is broken, not the source")
+
   let dead = Set(keys.map(shape(catalogKey:))).subtracting(present)
     .subtracting(target.allowedDeadKeys.map(shape(catalogKey:)))
   #expect(dead.isEmpty, """
@@ -232,6 +237,13 @@ func everyCatalogKeyIsRenderedBySomeLiteral(target: CatalogTarget) throws {
 func everyRenderedLiteralHasACatalogKey(target: CatalogTarget) throws {
   let keys = try catalogKeys(at: repositoryRoot.appendingPathComponent(target.catalog))
   let rendered = localizedShapes(inSourcesUnder: repositoryRoot.appendingPathComponent(target.sources))
+  // Guard the guard. `missing` is a set subtraction, so it is empty both when every literal has a
+  // key AND when the SCAN found no literals at all — a refactor that moved views, renamed a
+  // directory, or broke the literal regex would turn this into a permanently green no-op. Assert the
+  // inputs exist before trusting the difference between them.
+  #expect(!keys.isEmpty, "\(target.name): read 0 keys from \(target.catalog) — the catalog reader is broken, not the catalog")
+  #expect(!rendered.isEmpty, "\(target.name): the literal scan under \(target.sources) found 0 shapes — the scan is broken, not the source")
+
   let missing = rendered.subtracting(keys.map(shape(catalogKey:)))
     .subtracting(target.allowedMissingKeys)
   #expect(missing.isEmpty, """

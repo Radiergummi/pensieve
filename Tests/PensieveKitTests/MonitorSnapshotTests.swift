@@ -75,11 +75,25 @@ import SQLiteData
   try spool.append(kind: CaptureKind.gitCommit, payload: "{}", at: timestamp)
   try spool.append(kind: CaptureKind.ccSession, payload: "{}", at: timestamp.addingTimeInterval(60))
 
+  // Mark the NEWEST row ingested, which is what makes this fixture able to tell the two spellings
+  // apart at all. With both rows pending, `pending` equalled the total, so the `WHERE ingested = 0`
+  // clause was unobservable — deleting it from `readOnlyStats` left the whole suite green
+  // (mutation-proven during the 2026-08-24 sweep). Ingesting the newest row also pins the other half
+  // of the contract: `lastCaptureAt` is documented as "across ALL rows … must survive ingestion", so
+  // it must still report the ingested one.
+  let newestID = try #require(try spool.pending().last?.id)
+  try spool.markIngested([newestID])
+
   let writePathLast = try spool.lastCaptureAt()
   let writePathPending = try spool.pendingCount()
   let (roLast, roPending) = try CaptureSpool.readOnlyStats(at: spoolURL)
+
+  // Absolute values, not just agreement between the two paths: two implementations of the same
+  // mistake agree with each other perfectly.
+  #expect(writePathPending == 1)                                    // one of two rows is ingested
   #expect(roPending == writePathPending)
   #expect(roLast != nil && writePathLast != nil)
+  #expect(abs(roLast!.timeIntervalSince(timestamp.addingTimeInterval(60))) < 1)   // the INGESTED row
   #expect(abs(roLast!.timeIntervalSince(writePathLast!)) < 1)
 
   // A genuinely read-only connection to the same file must refuse to write.
@@ -112,7 +126,10 @@ import SQLiteData
 
   let snap = MonitorSnapshot.gather(canonicalURL: canonURL, spoolURL: spoolURL, now: timestamp.addingTimeInterval(120))
   #expect(snap.eventCount == 1)
-  #expect(snap.spoolPending == 2)
+  // 1, not 2: one of the two spool rows above is marked ingested, which is what lets this fixture
+  // distinguish "pending" from "all rows". `gather` must report the un-ingested count, so this
+  // assertion now also covers the clause it used to be blind to.
+  #expect(snap.spoolPending == 1)
 }
 
 @Test func gatherExcludesConfirmedNoiseFromOpenLooseEndCount() throws {

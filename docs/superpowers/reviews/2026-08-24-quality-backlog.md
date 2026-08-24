@@ -284,3 +284,20 @@ use `FileManager.default.temporaryDirectory` / `NSTemporaryDirectory()` directly
 `StoreRelocator*Tests`, `StoreOpenTests`, `PassageStoreTests`, `SyncRunnerTests`,
 `TranscriptDiscoveryTests`, `CLIToolInstallerTests` — and are not covered. Routing them through
 `tempURL` is mechanical but touches 20 files; not done during the sweep to keep the diff reviewable.
+
+## Test-quality wave — one finding withdrawn
+
+### Finding 8.11 is not fixable by a test. Withdrawn.
+`NarrationCacheKeyRuleTests` was flagged for pinning the rule token's *presence* while nothing pins
+it being *bumped*. On inspection the test is already stronger than the report credited: it asserts
+`key != "\(id)|none|local"`, the exact pre-rule format, which proves every entry written before the
+rule existed now misses rather than being silently reused.
+The residual gap — "someone edits the fact-sheet rule and forgets to bump `factSheetRule`" — cannot
+be detected by a test without hashing the fact-sheet-producing code, which would fail on every
+unrelated edit and teach people to bump the token meaninglessly. The real guard is the doc comment on
+`factSheetRule`, which already states the obligation. **No change made, deliberately.**
+
+### Also corrected: finding 7 of the app wave (`"Briefing"`)
+`"Briefing"` is not merely missing a catalog key — it is an explicit `allowedMissingKeys: ["Briefing"]`
+entry in `CatalogCoverageTests`, which is why the suite passes today. Adding the key therefore has a
+second half: removing the allowlist entry, or the allowlist keeps hiding the next regression.

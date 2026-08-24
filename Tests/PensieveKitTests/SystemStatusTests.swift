@@ -24,7 +24,15 @@ private func throwawayDefaults() -> (UserDefaults, String) {
   #expect(status.lastSyncAt == nil)
   #expect(status.lastEventAt == nil)                  // store has no events
   #expect(status.providerKind == "foundationModels" || status.providerKind == "claudeCLI")
-  #expect(status.foundationModelsAvailable == FoundationModelsProbe.isAvailable())
+  // Was `status.foundationModelsAvailable == FoundationModelsProbe.isAvailable()`, i.e. `f(x) == f(x)`
+  // against the very probe the implementation calls — it could not fail on any machine, and on a CI
+  // box where the probe returns false it was doubly vacuous. What is worth pinning is the RELATION
+  // the two fields must satisfy: with no explicit preference the resolver picks Foundation Models
+  // only when they are actually available, so reporting that kind while reporting them unavailable is
+  // a contradiction the UI would render as a working on-device setup that cannot run.
+  if status.providerKind == "foundationModels" {
+    #expect(status.foundationModelsAvailable)
+  }
 }
 
 @Test func gatherReportsEnabledSyncAndSyncLogMtime() throws {
