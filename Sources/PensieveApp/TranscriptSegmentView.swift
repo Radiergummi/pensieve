@@ -76,7 +76,11 @@ private struct CalloutView: View {
   }
 }
 
-/// A machine envelope, rendered as a quiet card so it reads as "the harness", not "a person".
+/// A machine envelope. Reads as "the harness" rather than "a person" through its kind label,
+/// monospace body and secondary colour — NOT through a fill. It had a gray card until C1, which made
+/// it the third of three nested surfaces (provenance box → message bubble → this) all within 3% of
+/// each other's opacity. The label is what tells the reader what the block is; the card only told
+/// them there was a box.
 private struct HarnessCardView: View {
   let block: HarnessBlock
   var highlight: SegmentHighlight?
@@ -104,9 +108,7 @@ private struct HarnessCardView: View {
           .textSelection(.enabled)
       }
     }
-    .padding(8)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
     .fixedSize(horizontal: false, vertical: true)
   }
 }
