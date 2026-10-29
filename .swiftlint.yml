@@ -25,7 +25,7 @@ line_length:
   ignores_urls: true
   ignores_comments: false
 
-# Names must be explicit — see CLAUDE.md. This rule is intentionally strict, and
+# Names must be explicit (`database`, not `db`). This rule is intentionally strict:
 # the short names still in the tree are being renamed rather than accommodated.
 identifier_name:
   min_length: 3
@@ -34,3 +34,16 @@ identifier_name:
 type_name:
   min_length: 3
   max_length: 50
+
+custom_rules:
+  hardcoded_kind_string:
+    included: "/Sources/"
+    excluded: "CapturePayloads\\.swift$"
+    regex: '"(git\.commit|git\.checkout|cc\.session|cc\.session\.start|gitRepo|claudeCode)"'
+    match_kinds: [string]
+    message: "Use the CaptureKind / SourceKind constants instead of a kind string literal."
+    severity: error
+  shared_iso8601_formatter:
+    regex: 'static\s+(let|var)\s+\w+\s*(:\s*ISO8601DateFormatter\s*)?=\s*ISO8601DateFormatter\('
+    message: "No shared static ISO8601DateFormatter (Swift 6 concurrency); use a local instance or Date.ISO8601FormatStyle."
+    severity: error
