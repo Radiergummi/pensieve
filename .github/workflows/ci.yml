@@ -33,6 +33,10 @@ jobs:
       - name: Run SwiftLint
         run: swiftlint lint --strict --reporter github-actions-logging
 
+      # Swift only, by design.
+      - name: No Python
+        run: test -z "$(git ls-files '*.py')"
+
   test:
     name: PensieveKit tests
     runs-on: macos-26
